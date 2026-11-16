@@ -514,8 +514,19 @@ pointer is precision, not bulk DPS.*
 | M2 | salvage economy, build phase, three towers | done |
 | M3 | clicking, kill attribution, pointer upgrades | done — `npm run smoke` proves the 1.5× rule |
 | M4 | Windows chrome, three-column layout | done |
-| M5 | mazing, flyers, route length | in progress (0.2) |
-| M6 | six towers, branches, selling | not started (0.3) |
-| M7 | pop-ups, combo, prestige | not started (0.4) |
-| M8 | waves 11–100, bosses, modifiers, endless | not started (0.5) |
-| M9 | audio, polish, onboarding | not started (0.6) |
+| M5 | mazing, flyers, route length | done (0.2) — probe: 22 tiles open, 28 behind a wall, seal refused |
+| M6 | six towers, branches, selling | done (0.3) — six towers, five tiers, exclusive tier-3 branches, 70 % refund |
+| M7 | pop-ups, combo, prestige | done (0.4) — weak points, ×2 combo, six pop-ups with a Blue Screen trap, specs, ten achievements, save |
+| M8 | waves 11–100, bosses, modifiers, endless | done (0.5) — generated from the wave number, bosses at 10/25/50/75/100, modifiers from 51, victory and endless |
+| M9 | audio, polish, onboarding | done (0.6) — WebAudio sfx, pause, ×2/×3 speed, first-run hints |
+| M10 | controls, targeting, player docs | done (0.7) — keys 1-6/Esc/U/X/Enter, per-tower targeting, README |
+| M11 | every tower earns its slot | done (0.8) — retuned against the harness; a no-support control run dies at wave 40 |
+
+### What is not built
+
+- **A second map.** One board, one spawn and one exit. More maps are content, but the maze is the game,
+  so a second board should change the spawn geometry rather than the palette.
+- **Save mid-run.** The profile persists; a run in progress does not. Reloading restarts the wave you
+  are on.
+- **Touch input.** Mouse and keyboard only.
+- **Difficulty selection.** The curve is the curve; prestige is the difficulty knob.
