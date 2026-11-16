@@ -27,7 +27,7 @@ import {
 import { TOWER_STATS, effectiveStats, upgradeCost, createTower } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
-import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, waveDef, waveEnemyCount, waveModifiers } from '../src/core/waves.ts';
+import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField } from '../src/core/pathfield.ts';
 import { createGrid, SPAWN, EXIT, COLS, ROWS, tileAt } from '../src/core/grid.ts';
@@ -593,11 +593,11 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 }
 
 {
-  // 17b. The bonus is a fraction of the called wave's clear bonus: bounded by it, non-increasing
+  // 17b. The bonus is a fraction of the called wave's kill value: bounded by it, non-increasing
   // in elapsed ticks, floored at 5, and growing with the wave number at the same elapsed time.
   const start = earlyCallBonus(0, 3);
-  check(start === Math.round(0.5 * waveClearBonus(3)),
-    `early call: wave 3 starts at half its clear bonus (${start} = ${Math.round(0.5 * waveClearBonus(3))})`);
+  check(start === Math.round(0.25 * waveKillValue(3)),
+    `early call: wave 3 starts at a quarter of its kill value (${start} = ${Math.round(0.25 * waveKillValue(3))})`);
   let prev = start;
   let monotone = true;
   for (let t = 0; t <= 5000; t += 10) {
@@ -609,7 +609,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(prev === 5, `early call: bonus bottoms out at 5 (${prev})`);
   for (const w of [2, 30, 60, 100]) {
     const b = earlyCallBonus(0, w);
-    check(b <= waveClearBonus(w), `early call: wave ${w} bonus ${b} <= clear bonus ${waveClearBonus(w)}`);
+    check(b <= waveKillValue(w), `early call: wave ${w} bonus ${b} <= kill value ${waveKillValue(w)}`);
   }
   check(
     earlyCallBonus(0, 10) > earlyCallBonus(0, 3) && earlyCallBonus(0, 60) > earlyCallBonus(0, 10),

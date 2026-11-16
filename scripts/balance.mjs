@@ -644,8 +644,9 @@ function waveSpan(wave) {
 /**
  * The --call-sweep strategy: call the next wave when the current wave has burned `timing` of its
  * spawn window, measured by the same span earlyCallBonus uses. Unlike --call, this line spends the
- * bonus (extra Guns, branches, tiers and pointer) instead of banking it. Returns the bonus actually
- * paid by startWave alongside the usual run result.
+ * bonus (extra Guns, branches, tiers and pointer) instead of banking it. `timing === null` is the
+ * control: the same build policy with no early calls. Returns the bonus actually paid by startWave
+ * alongside the usual run result.
  */
 function playRunSweep(profile, label, timing) {
   const s = createRunState(profile);
@@ -666,7 +667,7 @@ function playRunSweep(profile, label, timing) {
     while (s.phase === 'wave') {
       if (s.enemies.length > 0 && clicks % clickInterval === 0) doClick(s);
       tick(s);
-      if (s.phase === 'wave' && s.wave < to) {
+      if (timing !== null && s.phase === 'wave' && s.wave < to) {
         if (spanWave !== s.wave) {
           span = waveSpan(s.wave);
           spanWave = s.wave;
@@ -781,7 +782,7 @@ function callSweepTable(rows) {
   console.log('\n=== call sweep ===');
   console.log('  timing   bonus earned   waves cleared   last started   integrity   salvage');
   for (const row of rows) {
-    const timing = `${Math.round(row.timing * 100)}%`;
+    const timing = row.timing === null ? 'control' : `${Math.round(row.timing * 100)}%`;
     console.log(
       `  ${timing.padStart(6)}   ${String(row.bonusPaid).padStart(12)}   ` +
         `${String(row.final.clearedWaves).padStart(13)}   ${String(row.final.wave).padStart(12)}   ` +
@@ -827,8 +828,16 @@ if (callAllMode) {
 }
 
 if (callSweepMode) {
-  // The trade curve: one run per timing, each paying the real early-call bonus and spending it.
+  // The trade curve: one run per timing, each paying the real early-call bonus and spending it,
+  // plus a control leg using the same build policy with no early calls.
   const sweep = [0.25, 0.5, 0.75].map((timing) => runSessionSweep(timing));
+  sweep.push({
+    timing: null,
+    final: playRunSweep(defaultProfile(), 'call sweep control', null),
+    bonusPaid: 0,
+    totalSpecs: 0,
+    reboots: 0,
+  });
   callSweepTable(sweep);
 }
 

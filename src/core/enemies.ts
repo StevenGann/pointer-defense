@@ -98,6 +98,11 @@ export function waveValueScale(wave: number): number {
   return 3.94 * Math.pow(1.012, w - 50);
 }
 
+/** The base salvage an enemy of `kind` pays when killed at `wave`, before source bonuses. */
+export function enemyKillValue(kind: EnemyKind, wave: number): number {
+  return Math.round(ENEMY_STATS[kind].value * waveValueScale(wave));
+}
+
 export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Tile, exit: Tile): Enemy {
   const s = ENEMY_STATS[kind];
   const hp = Math.round(s.hp * waveHpScale(wave));
@@ -128,7 +133,7 @@ export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Ti
     row: spawn.row,
     targetCol: isFlyer ? exit.col : -1,
     targetRow: isFlyer ? exit.row : -1,
-    value: Math.round(s.value * waveValueScale(wave)),
+    value: enemyKillValue(kind, wave),
     slowFactor: 1,
     slowUntilTick: 0,
     stunUntilTick: 0,

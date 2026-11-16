@@ -262,20 +262,21 @@ when every run is cleared and no enemies remain; **victory** still lands on the 
 are counted **per wave number**, so an early call can neither poison nor rescue another wave's
 no-leak record.
 
-**Bonus.** Calling early pays, at the moment of the call, a fraction of the *called* wave's clear
-bonus:
+**Bonus.** Calling early pays, at the moment of the call, a fraction of the *called* wave's kill
+value — the salvage that wave would pay if every enemy in it died:
 
 ```
 span     = last spawn tick of the wave that just started        (min 60 ticks)
 fraction = clamp(1 − elapsedTicks / span, 0, 1)
-bonus    = clamp(round(0.5 × waveClearBonus(nextWave) × fraction), 5, waveClearBonus(nextWave))
+bonus    = clamp(round(0.25 × waveKillValue(nextWave) × fraction), 5, waveKillValue(nextWave))
 ```
 
-`nextWave` is the wave being called, not the one currently running; `span` is measured from the wave
-that just started (the current one, `nextWave − 1`). The 0.5 coefficient means a full-early call pays
-half of the next wave's clear bonus — 10 at wave 2, 80 at wave 30, 155 at wave 60, 255 at wave 100 —
-and later calls decay to a floor of 5. The HUD shows the live value counting down. The formula has no
-randomness.
+`waveKillValue(wave)` sums each enemy's base value scaled to that wave — the same per-enemy value
+`createEnemy` assigns, so the bonus cannot drift from the economy. `nextWave` is the wave being called,
+not the one currently running; `span` is measured from the wave that just started (the current one,
+`nextWave − 1`). The 0.25 coefficient means a full-early call pays a quarter of the next wave's worth —
+12 at wave 2, 181 at wave 30, 276 at wave 60, 1,272 at wave 100 — and later calls decay to a floor of
+5. The HUD shows the live value counting down. The formula has no randomness.
 
 **Harness.** `scripts/balance.mjs` runs five scenarios and reports waves cleared, last wave started,
 integrity, salvage, specs, leaks and reboots for each:
@@ -288,8 +289,20 @@ integrity, salvage, specs, leaks and reboots for each:
 | call-all | `--call-all` | chain every remaining wave at tick zero, as a stress test of overlapping waves |
 | call-sweep | `--call-sweep` | call each next wave at 25%, 50% and 75% of the current spawn window, and spend the bonus instead of banking it |
 
-The sweep prints one table per timing: bonus actually paid, waves cleared, last wave started,
-integrity and salvage. Its timing uses the same spawn-window span as the bonus itself.
+The sweep prints one table: a row per timing (25%, 50%, 75%) plus a **control** row — the same build
+policy with no early calls — so the comparison sits in the table rather than in prose. Its timing uses
+the same spawn-window span as the bonus itself.
+
+| timing | bonus earned | waves cleared | last started | integrity | salvage |
+|---|---|---|---|---|---|
+| 25% | 308 | 3 | 10 | 0 | 744 |
+| 50% | 438 | 11 | 16 | 0 | 3,879 |
+| 75% | 8,108 | 100 | 100 | 11 | 179,945 |
+| control | 0 | 100 | 100 | 17 | 171,661 |
+
+The 75% line clears while 50% stays fatal, so the bonus is a lever for a strong board rather than a
+free win. The 75% line still lands a little below the control (11 vs 17 integrity): a late call is
+close to break-even but not free.
 
 Waves cleared counts waves actually cleared, not the wave counter: the separate last wave started line
 is the counter, so an early call cannot inflate the result. The call scenario exists to *measure* the
