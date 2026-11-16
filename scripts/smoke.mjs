@@ -27,7 +27,7 @@ import {
 import { TOWER_STATS, effectiveStats, upgradeCost, createTower } from '../src/core/towers.ts';
 import { killReward } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
-import { waveEnemyCount } from '../src/core/waves.ts';
+import { buildSchedule, isBossWave, MODIFIER_POOL, waveDef, waveEnemyCount, waveModifiers } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField } from '../src/core/pathfield.ts';
 import { createGrid, SPAWN, EXIT, COLS, ROWS, tileAt } from '../src/core/grid.ts';
@@ -35,7 +35,7 @@ import { createEnemy } from '../src/core/enemies.ts';
 import { spawnPopup, dismissPopup } from '../src/core/popups.ts';
 import { comboMultiplier } from '../src/core/pointer.ts';
 import { loadProfile, saveProfile, defaultProfile } from '../src/core/save.ts';
-import { restartWindows, checkAchievements } from '../src/core/state.ts';
+import { restartWindows, checkAchievements, enterEndless } from '../src/core/state.ts';
 
 let failures = 0;
 function check(cond, msg) {
@@ -463,6 +463,58 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(first.includes('first-blood'), 'first kill unlocks first-blood');
   const again = checkAchievements(s);
   check(!again.includes('first-blood'), 'first-blood does not fire twice');
+}
+
+// --- 16. The hundred: generator, bosses, modifiers, victory, endless ---------------------------
+{
+  check(waveEnemyCount(1) === 8, 'wave 1 is unchanged (8 grunts)');
+
+  const d100 = waveDef(100);
+  check(d100 !== null && d100.groups.length > 0, 'wave 100 exists');
+  check(buildSchedule(100).length > 0, 'wave 100 produces a spawn schedule');
+
+  for (const w of [10, 25, 50, 75, 100]) {
+    const bosses = buildSchedule(w).filter((sp) => sp.kind === 'boss');
+    check(bosses.length === 1, `wave ${w} has exactly one boss (${bosses.length})`);
+    check(isBossWave(w), `wave ${w} is marked a boss wave`);
+  }
+
+  check(waveModifiers(50).length === 0, 'no modifier before wave 51');
+  const m51a = waveModifiers(51);
+  const m51b = waveModifiers(51);
+  check(m51a.length === 1 && MODIFIER_POOL.includes(m51a[0]), `wave 51 has one modifier (${m51a[0]})`);
+  check(m51a.join(',') === m51b.join(','), 'modifiers are deterministic (same wave, same modifier)');
+  check(waveModifiers(120).length === 2, 'endless wave 120 stacks two modifiers');
+  check(
+    JSON.stringify(buildSchedule(51)) === JSON.stringify(buildSchedule(51)),
+    'wave generation is deterministic',
+  );
+}
+
+{
+  const s = createRunState();
+  s.wave = 99;
+  s.phase = 'build';
+  check(startWave(s), 'wave 100 starts');
+  s.schedule = [];
+  s.enemies = [];
+  tick(s);
+  check(s.phase === 'victory', 'clearing wave 100 sets victory');
+}
+
+{
+  const s = createRunState();
+  s.wave = 99;
+  s.phase = 'build';
+  startWave(s);
+  s.schedule = [];
+  s.enemies = [];
+  tick(s);
+  check(s.phase === 'victory', 'endless setup: victory reached');
+  enterEndless(s);
+  check(s.endless && s.phase === 'build', 'endless returns to build phase');
+  check(startWave(s), 'endless starts wave 101');
+  check(s.wave === 101, 'endless continues at 101');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

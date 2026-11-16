@@ -1,6 +1,6 @@
 import type { Application } from 'pixi.js';
 import { menuItemAt, pixelToWorld, pointInRect, type Layout } from '../view/chrome.ts';
-import { hudButtonAt, modalRestartAt, type HudAction } from '../view/hud.ts';
+import { hudButtonAt, modalRestartAt, victoryButtonAt, type HudAction } from '../view/hud.ts';
 import { popupCloseRect } from '../view/popup.ts';
 import { menuEntryAt, type OpenMenu } from '../view/menu.ts';
 import { dialogButtonAt, type DialogModel } from '../view/dialog.ts';
@@ -55,6 +55,8 @@ export interface MouseContext {
   menu: () => OpenMenu | null;
   dialog: () => DialogModel | null;
   restart: () => void;
+  restartWindows: () => void;
+  startEndless: () => void;
   newRun: () => void;
   openMenu: (name: 'file' | 'help' | null) => void;
   menuAction: (id: string) => void;
@@ -66,6 +68,9 @@ export interface MouseContext {
 
 function refusalReason(s: RunState, kind: TowerKind, col: number, row: number): string {
   if (tileAt(s.grid, col, row) !== 'buildable') return 'That tile is blocked.';
+  if (s.modifiers.includes('no-build') && s.phase === 'wave' && s.noBuildRow === row) {
+    return 'That row is offline for this wave.';
+  }
   if (towerAt(s, col, row)) return 'There is already a tower there.';
   if (!canAfford(s.economy, TOWER_STATS[kind].cost)) return 'Not enough salvage for that tower.';
   return 'That would seal the route.';
@@ -173,7 +178,13 @@ export class MouseController {
       return;
     }
 
-    if (s.phase === 'halted' || s.phase === 'victory') {
+    if (s.phase === 'victory') {
+      const vb = victoryButtonAt(l, s, x, y);
+      if (vb === 'endless') this.ctx.startEndless();
+      else if (vb === 'restart') this.ctx.restartWindows();
+      return;
+    }
+    if (s.phase === 'halted') {
       if (modalRestartAt(l, s, x, y)) this.ctx.restart();
       return;
     }

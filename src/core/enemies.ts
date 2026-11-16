@@ -1,7 +1,7 @@
 import type { Tile } from './grid.ts';
 import { TICK_HZ } from './time.ts';
 
-export type EnemyKind = 'grunt' | 'runner' | 'shielded' | 'flyer';
+export type EnemyKind = 'grunt' | 'runner' | 'shielded' | 'flyer' | 'armoured' | 'saboteur' | 'boss';
 
 export interface EnemyStats {
   readonly name: string;
@@ -36,6 +36,9 @@ export const ENEMY_STATS: Readonly<Record<EnemyKind, EnemyStats>> = {
   runner: { name: 'Runner', hp: 10, speed: GRUNT_SPEED * 2.2, radius: 0.18, armour: 0, shield: 0, value: 6 },
   shielded: { name: 'Shielded', hp: 30, speed: 1.2, radius: 0.36, armour: 2, shield: 15, value: 10 },
   flyer: { name: 'Flyer', hp: 8, speed: GRUNT_SPEED * 1.5, radius: 0.22, armour: 0, shield: 0, value: 5 },
+  armoured: { name: 'Armoured', hp: 45, speed: 1.0, radius: 0.34, armour: 8, shield: 0, value: 12 },
+  saboteur: { name: 'Saboteur', hp: 25, speed: 1.5, radius: 0.28, armour: 0, shield: 0, value: 11 },
+  boss: { name: 'Boss', hp: 900, speed: 0.8, radius: 0.55, armour: 6, shield: 120, value: 120 },
 };
 
 export interface Enemy {
@@ -75,13 +78,21 @@ export interface Enemy {
   dead: boolean;
 }
 
-/** Enemies get tougher each wave; salvage grows more slowly so towers stay a real investment. */
+/**
+ * Enemies get tougher each wave; salvage grows more slowly so towers stay a real investment.
+ * Piecewise per docs/design.md §8.3: linear to wave 20, then exponential — HP outgrows value on
+ * purpose so the curve visibly bends around wave 60 and the player starts thinking about a reboot.
+ */
 export function waveHpScale(wave: number): number {
-  return 1 + 0.18 * (wave - 1);
+  const w = Math.max(1, wave);
+  if (w <= 20) return 1 + 0.18 * (w - 1);
+  return 4.42 * Math.pow(1.06, w - 20);
 }
 
 export function waveValueScale(wave: number): number {
-  return 1 + 0.1 * (wave - 1);
+  const w = Math.max(1, wave);
+  if (w <= 50) return 1 + 0.1 * (w - 1);
+  return 5.9 * Math.pow(1.03, w - 50);
 }
 
 export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Tile, exit: Tile): Enemy {
@@ -95,7 +106,7 @@ export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Ti
   return {
     id,
     kind,
-    isBoss: false,
+    isBoss: kind === 'boss',
     towerDamaged: false,
     hp,
     maxHp: hp,

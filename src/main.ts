@@ -3,6 +3,7 @@ import './style.css';
 import {
   buySpec,
   createRunState,
+  enterEndless,
   restartWindows,
   step,
   type RunState,
@@ -99,6 +100,14 @@ function syncAchievements(): void {
     }
   }
   if (changed) saveProfile(profile);
+}
+
+/** Record the highest wave reached, persisted to the profile as soon as it moves. */
+function syncBestWave(): void {
+  if (state.wave > profile.bestWave) {
+    profile.bestWave = state.wave;
+    saveProfile(profile);
+  }
 }
 
 function doRestartWindows(): void {
@@ -218,6 +227,10 @@ const mouse = new MouseController(app, {
     state = createRunState(profile);
     syncViewport();
   },
+  restartWindows: doRestartWindows,
+  startEndless: () => {
+    enterEndless(state);
+  },
   newRun: doNewRun,
   openMenu,
   menuAction,
@@ -235,6 +248,7 @@ const mouse = new MouseController(app, {
 app.ticker.add((ticker) => {
   const alpha = step(state, ticker.deltaMS);
   syncAchievements();
+  syncBestWave();
   chrome.draw(layout, mouse.hover.menuItem);
   menuView.draw(layout.menu, menu, mouse.hover.menuHover);
   board.draw(state, layout, alpha, { col: mouse.hover.col, row: mouse.hover.row, onBoard: mouse.hover.onBoard });

@@ -1,12 +1,18 @@
 import type { EnemyKind } from './enemies.ts';
 import { secondsToTicks } from './time.ts';
+import { ROWS } from './grid.ts';
 
 /**
- * Waves 1..10: one lane, towers teach, clicking is a nudge (docs/design.md, band 1–10).
+ * Wave generation (docs/design.md §8).
  *
- * Each wave is a list of groups. A group spawns `count` enemies of one kind, `interval` ticks
- * apart, starting `delay` ticks after the wave begins. Groups may overlap, which is how mixed
- * waves are made without listing every enemy.
+ * A wave is a list of spawn groups. A group spawns `count` enemies of one kind, `interval` ticks
+ * apart, starting `delay` ticks after the wave begins. Groups may overlap, which is how mixed waves
+ * are made without listing every enemy.
+ *
+ * Waves 1..10 are the hand-written tutorial and are kept exactly as authored. Waves 11..100 are
+ * produced by a deterministic generator: the wave number is the seed, so there is no `Math.random`
+ * in the table and every player sees the same hundred waves. Bosses ride waves 10, 25, 50, 75 and
+ * 100, and modifiers begin at wave 51.
  */
 
 export interface SpawnGroup {
@@ -27,6 +33,27 @@ export interface Spawn {
   readonly kind: EnemyKind;
 }
 
+/** A run is a hundred waves. Endless (101+) uses the same generator with a seed offset. */
+export const WAVE_COUNT = 100;
+
+/** Fixed offset mixed into the seed for endless waves, so 101+ is not a repeat of 1..100. */
+export const ENDLESS_SEED_OFFSET = 1_000_000;
+
+/** Per-wave enemy cap: late waves are won by damage and maze, not by attrition. */
+export const WAVE_ENEMY_CAP = 70;
+
+export type ModifierId = 'fog' | 'no-build' | 'fast' | 'blackout' | 'rush';
+
+export const MODIFIER_POOL: readonly ModifierId[] = ['fog', 'no-build', 'fast', 'blackout', 'rush'];
+
+export const MODIFIER_NAMES: Readonly<Record<ModifierId, string>> = {
+  fog: 'Fog',
+  'no-build': 'No-Build Row',
+  fast: 'Fast Forward',
+  blackout: 'Blackout',
+  rush: 'Rush',
+};
+
 const g = (kind: EnemyKind, count: number, intervalS: number, delayS = 0): SpawnGroup => ({
   kind,
   count,
@@ -34,7 +61,8 @@ const g = (kind: EnemyKind, count: number, intervalS: number, delayS = 0): Spawn
   delay: delayS === 0 ? 0 : secondsToTicks(delayS),
 });
 
-export const WAVES: readonly WaveDef[] = [
+/** Waves 1..10: one lane, towers teach, clicking is a nudge. Kept verbatim for the tutorial. */
+const TUTORIAL_WAVES: readonly WaveDef[] = [
   /* 1 */ { groups: [g('grunt', 8, 1.2)] },
   /* 2 */ { groups: [g('grunt', 12, 0.9)] },
   /* 3 */ { groups: [g('grunt', 10, 0.9), g('runner', 3, 1.5, 6)] },
@@ -47,19 +75,210 @@ export const WAVES: readonly WaveDef[] = [
   /* 10 */ { groups: [g('grunt', 21, 0.4), g('runner', 10, 0.6, 4), g('shielded', 4, 2.5, 6), g('flyer', 8, 1.5, 10)] },
 ];
 
-export const WAVE_COUNT = WAVES.length;
+// ---------------------------------------------------------------------------------------------
+// Determinism
+
+/** SplitMix32-style integer hash: deterministic across platforms and builds. */
+function hashInt(seed: number): number {
+  let x = seed | 0;
+  x = Math.imul(x ^ (x >>> 16), 0x45d9f3b);
+  x = Math.imul(x ^ (x >>> 16), 0x45d9f3b);
+  x = x ^ (x >>> 16);
+  return x >>> 0;
+}
+
+/** Endless waves shift the seed so the sequence does not just restart at wave 1. */
+function seedFor(wave: number): number {
+  return wave > WAVE_COUNT ? wave + ENDLESS_SEED_OFFSET : wave;
+}
+
+/** A fresh mulberry32 stream seeded by the wave number (pure; no shared state). */
+function waveRng(wave: number): () => number {
+  let state = hashInt((seedFor(wave) ^ 0x9e3779b9) | 0);
+  return () => {
+    const a = (state + 0x6d2b79f5) | 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    state = a;
+    return ((t ^ (t >>> 14)) >>> 0) / 0x100000000;
+  };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Bosses
+
+const BOSS_WAVES: ReadonlySet<number> = new Set([10, 25, 50, 75, 100]);
+
+export function isBossWave(wave: number): boolean {
+  return BOSS_WAVES.has(wave);
+}
+
+/** Ground enemies available in a band for boss escorts (flyers are the dedicated air group). */
+function escortKinds(wave: number): readonly EnemyKind[] {
+  return wave >= 21 ? ['grunt', 'runner', 'shielded', 'armoured'] : ['grunt', 'runner', 'shielded'];
+}
+
+/** The boss group plus a small escort, timed so escorts straddle the boss's spawn. */
+function bossGroups(wave: number): readonly SpawnGroup[] {
+  const rnd = waveRng(wave);
+  const escortCount = 6 + Math.floor(rnd() * 7); // 6..12
+  const kinds = escortKinds(wave);
+  const escortKind = kinds[hashInt(seedFor(wave) + 7) % kinds.length];
+  const bossDelay = secondsToTicks(2);
+  const escortInterval = secondsToTicks(0.45);
+  const escortDelay = Math.max(0, bossDelay - Math.floor(escortCount / 2) * escortInterval);
+  return [
+    { kind: escortKind, count: escortCount, interval: escortInterval, delay: escortDelay },
+    { kind: 'boss', count: 1, interval: 1, delay: bossDelay },
+  ];
+}
+
+// ---------------------------------------------------------------------------------------------
+// Modifiers
+
+/** The modifiers for a wave: one from 51, two (distinct) from 120 in endless. Empty before 51. */
+export function waveModifiers(wave: number): readonly ModifierId[] {
+  if (wave < 51) return [];
+  const first = MODIFIER_POOL[hashInt(wave) % MODIFIER_POOL.length];
+  if (wave < 120) return [first];
+  const idx = MODIFIER_POOL.indexOf(first);
+  const offset = 1 + (hashInt(wave ^ 0x51ab3) % (MODIFIER_POOL.length - 1));
+  return [first, MODIFIER_POOL[(idx + offset) % MODIFIER_POOL.length]];
+}
+
+/** The row locked by the no-build modifier, seeded by the wave number (0..ROWS-1). */
+export function noBuildRow(wave: number): number {
+  return hashInt(wave ^ 0x7f4a7c15) % ROWS;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The generator
+
+/** Per-band baseline enemy count; deterministic jitter is added, then the whole thing is capped. */
+function totalCount(wave: number): number {
+  let base: number;
+  if (wave <= 20) base = 30;
+  else if (wave <= 40) base = 42;
+  else if (wave <= 60) base = 52;
+  else if (wave <= 80) base = 60;
+  else base = 66;
+  const jitter = Math.floor(waveRng(wave)() * 7) - 3; // -3..+3
+  return Math.min(WAVE_ENEMY_CAP, Math.max(8, base + jitter));
+}
+
+/** Spawn spacing (seconds) per kind; single-spawn groups ignore it. */
+const KIND_INTERVAL_S: Readonly<Record<EnemyKind, number>> = {
+  grunt: 0.6,
+  runner: 0.7,
+  flyer: 1.5,
+  shielded: 2.5,
+  armoured: 2.0,
+  saboteur: 3.0,
+  boss: 0,
+};
+
+/** Assemble ordered groups, staggering each group to start partway through the previous one. */
+function withStagger(items: readonly { kind: EnemyKind; count: number }[]): SpawnGroup[] {
+  const groups: SpawnGroup[] = [];
+  let delay = 0;
+  for (const it of items) {
+    const interval = secondsToTicks(KIND_INTERVAL_S[it.kind]);
+    groups.push({ kind: it.kind, count: it.count, interval, delay });
+    delay += Math.round(interval * it.count * 0.5);
+  }
+  return groups;
+}
+
+/**
+ * Deterministic composition for waves 11..100. Always four groups:
+ *   flyer (15-25%) · tank (shielded early, armoured late) · chaff (grunt/runner) · saboteur (21+)
+ * Wave 11..20 has no saboteur, so the two chaff kinds both appear. Flyers stay 15-25% after wave 6;
+ * the shielded share shrinks after wave 40 as armoured takes over the "towers cannot do this" role.
+ */
+function generateWave(wave: number): WaveDef {
+  const rnd = waveRng(wave);
+  const total = totalCount(wave);
+
+  const flyers = Math.min(
+    Math.floor(total * 0.25),
+    Math.max(Math.ceil(total * 0.15), Math.round(total * (0.15 + rnd() * 0.1))),
+  );
+
+  const saboteurs = wave >= 21 ? 1 + Math.floor(rnd() * 3) : 0;
+
+  let tank: EnemyKind;
+  let tankCount: number;
+  if (wave >= 21) {
+    const armouredBias = wave <= 40 ? 0.55 : 0.85;
+    if (rnd() < armouredBias) {
+      tank = 'armoured';
+      tankCount = Math.round(total * (0.12 + rnd() * 0.1));
+    } else {
+      tank = 'shielded';
+      tankCount = Math.round(total * (wave <= 40 ? 0.15 : 0.04));
+    }
+  } else {
+    tank = 'shielded';
+    tankCount = Math.round(total * (0.12 + rnd() * 0.1));
+  }
+
+  const rest = Math.max(1, total - flyers - saboteurs - tankCount);
+
+  let ordered: { kind: EnemyKind; count: number }[];
+  if (wave < 21) {
+    const runners = Math.round(rest * (0.25 + rnd() * 0.25));
+    const grunts = rest - runners;
+    ordered = [
+      { kind: 'grunt', count: grunts },
+      { kind: 'runner', count: runners },
+      { kind: tank, count: tankCount },
+      { kind: 'flyer', count: flyers },
+    ];
+  } else {
+    const chaff: EnemyKind = rnd() < 0.7 ? 'grunt' : 'runner';
+    ordered = [
+      { kind: chaff, count: rest },
+      { kind: tank, count: tankCount },
+      { kind: 'flyer', count: flyers },
+      { kind: 'saboteur', count: saboteurs },
+    ];
+  }
+
+  return { groups: withStagger(ordered) };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Public surface
+
+/** The wave definition for any wave, or null below wave 1. Tutorial waves are hand-written. */
+export function waveDef(wave: number): WaveDef | null {
+  if (wave < 1) return null;
+  if (wave <= TUTORIAL_WAVES.length) return TUTORIAL_WAVES[wave - 1];
+  return generateWave(wave);
+}
 
 /** Flatten a wave into a tick-ordered spawn schedule. Ties keep group order (stable sort). */
 export function buildSchedule(wave: number): Spawn[] {
-  const def = WAVES[wave - 1];
+  const def = waveDef(wave);
   if (!def) return [];
+  const groups = [...def.groups];
+  if (isBossWave(wave)) groups.push(...bossGroups(wave));
+  const rush = waveModifiers(wave).includes('rush');
+  const intervalScale = rush ? 0.75 : 1;
   const out: Spawn[] = [];
-  for (const grp of def.groups) {
-    for (let i = 0; i < grp.count; i++) out.push({ tick: grp.delay + i * grp.interval, kind: grp.kind });
+  for (const grp of groups) {
+    const interval = Math.max(1, Math.round(grp.interval * intervalScale));
+    for (let i = 0; i < grp.count; i++) out.push({ tick: grp.delay + i * interval, kind: grp.kind });
   }
   return out.sort((a, b) => a.tick - b.tick);
 }
 
+/** Total enemies in a wave, including a boss and its escorts on boss waves. */
 export function waveEnemyCount(wave: number): number {
-  return WAVES[wave - 1]?.groups.reduce((n, grp) => n + grp.count, 0) ?? 0;
+  const def = waveDef(wave);
+  if (!def) return 0;
+  let n = def.groups.reduce((sum, grp) => sum + grp.count, 0);
+  if (isBossWave(wave)) n += bossGroups(wave).reduce((sum, grp) => sum + grp.count, 0);
+  return n;
 }

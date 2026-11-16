@@ -6,6 +6,7 @@ import {
   towerAt,
   currentPath,
   selectedTower,
+  towerRangeMult,
   type RunState,
 } from '../core/state.ts';
 import { radiusOf, type Enemy, type EnemyKind } from '../core/enemies.ts';
@@ -34,6 +35,9 @@ const ENEMY_COLOR: Record<EnemyKind, number> = {
   runner: PAL.purple,
   shielded: PAL.maroon,
   flyer: 0x8000ff,
+  armoured: 0x406080,
+  saboteur: 0x808000,
+  boss: 0x806000,
 };
 
 const AURA_COLOR = 0x6699ff;
@@ -94,12 +98,13 @@ export class BoardView {
         .stroke({ width: 2, color: TOWER_COLOR.laser });
     }
 
+    const rangeMult = towerRangeMult(state);
     const hoveredTower = hover.onBoard ? towerAt(state, hover.col, hover.row) : undefined;
-    if (hoveredTower) drawTowerRange(this.overlay, hoveredTower, board, cell);
+    if (hoveredTower) drawTowerRange(this.overlay, hoveredTower, board, cell, rangeMult);
 
     const inspected = selectedTower(state);
     if (inspected) {
-      if (inspected !== hoveredTower) drawTowerRange(this.overlay, inspected, board, cell);
+      if (inspected !== hoveredTower) drawTowerRange(this.overlay, inspected, board, cell, rangeMult);
       const sx = board.x + inspected.col * cell + 0.5;
       const sy = board.y + inspected.row * cell + 0.5;
       this.overlay
@@ -117,6 +122,10 @@ export class BoardView {
       const cy = board.y + (hover.row + 0.5) * cell;
       drawTowerShape(this.overlay, state.selected, cx, cy, cell, 0.5);
       dashedCircle(this.overlay, cx, cy, TOWER_STATS[state.selected].range * cell, PAL.navy, 1);
+    }
+
+    if (state.modifiers.includes('no-build') && state.phase === 'wave' && state.noBuildRow !== null) {
+      drawNoBuildRow(this.overlay, state.noBuildRow, board, cell);
     }
 
     if (state.pointer.stage >= 2 && state.phase === 'wave') {
@@ -186,6 +195,20 @@ function edgeRect(g: Graphics, x: number, y: number, s: number, color: number): 
   vline(g, x + s - 0.5, y, y + s, color);
 }
 
+function drawNoBuildRow(
+  g: Graphics,
+  row: number,
+  board: { x: number; y: number; cell: number },
+  cell: number,
+): void {
+  const y0 = board.y + row * cell;
+  const y1 = y0 + cell;
+  g.rect(board.x, y0, COLS * cell, cell).fill({ color: PAL.dark, alpha: 0.18 });
+  for (let x = board.x; x < board.x + COLS * cell; x += cell * 0.6) {
+    g.moveTo(x, y1).lineTo(x + cell * 0.6, y0).stroke({ width: 1, color: PAL.dark });
+  }
+}
+
 function dashedLine(
   g: Graphics,
   x0: number,
@@ -240,12 +263,13 @@ function drawTowerRange(
   t: Tower,
   board: { x: number; y: number; cell: number },
   cell: number,
+  rangeMult: number,
 ): void {
   const st = effectiveStats(t);
   const cx = board.x + (t.col + 0.5) * cell;
   const cy = board.y + (t.row + 0.5) * cell;
-  dashedCircle(g, cx, cy, (st.range + t.auraRange) * cell, PAL.navy, 1);
-  if (t.kind === 'beacon') dashedCircle(g, cx, cy, st.range * cell, AURA_COLOR, 1);
+  dashedCircle(g, cx, cy, (st.range + t.auraRange) * rangeMult * cell, PAL.navy, 1);
+  if (t.kind === 'beacon') dashedCircle(g, cx, cy, st.range * rangeMult * cell, AURA_COLOR, 1);
 }
 
 function drawTowerShape(g: Graphics, kind: TowerKind, cx: number, cy: number, cell: number, alpha: number): void {
@@ -295,6 +319,15 @@ function drawEnemy(
   const fill = { color };
   const outline = { width: 1, color: PAL.dark };
 
+  const hexPts = (radius: number): number[] => {
+    const pts: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i + Math.PI / 6;
+      pts.push(ex + Math.cos(a) * radius, ey + Math.sin(a) * radius);
+    }
+    return pts;
+  };
+
   if (e.kind === 'grunt') {
     g.circle(ex, ey, r).fill(fill).stroke(outline);
   } else if (e.kind === 'runner') {
@@ -319,13 +352,20 @@ function drawEnemy(
     g.moveTo(bx + px, by + py).lineTo(tipX, tipY);
     g.moveTo(bx - px, by - py).lineTo(tipX, tipY);
     g.stroke({ width: 2, color });
+  } else if (e.kind === 'armoured') {
+    const s = r * 1.6;
+    g.rect(ex - s / 2, ey - s / 2, s, s).fill(fill).stroke({ width: 3, color: PAL.dark });
+  } else if (e.kind === 'saboteur') {
+    g.circle(ex, ey, r).fill(fill).stroke(outline);
+    const sy = ey - r - 2;
+    g.moveTo(ex - r * 0.4, sy).lineTo(ex + r * 0.1, sy + r * 0.7).lineTo(ex - r * 0.1, sy + r * 0.7).lineTo(ex + r * 0.4, sy + r * 1.4).stroke({ width: 1, color: PAL.amber });
+  } else if (e.kind === 'boss') {
+    g.poly(hexPts(r)).fill(fill).stroke({ width: 2, color: PAL.dark });
+    g.circle(ex, ey, r + 3).stroke({ width: 1, color: PAL.dark });
+    g.circle(ex, ey, r + 5).stroke({ width: 1, color: PAL.dark });
+    if (e.shield > 0) g.circle(ex, ey, r + 7).stroke({ width: 1, color: PAL.teal });
   } else {
-    const pts: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      const a = (Math.PI / 3) * i + Math.PI / 6;
-      pts.push(ex + Math.cos(a) * r, ey + Math.sin(a) * r);
-    }
-    g.poly(pts).fill(fill).stroke(outline);
+    g.poly(hexPts(r)).fill(fill).stroke(outline);
     if (e.shield > 0) {
       g.circle(ex, ey, r + 3).stroke({ width: 1, color: PAL.teal });
     }

@@ -38,6 +38,7 @@ export const PAL = {
   olive: 0x808000,
   navy: 0x000080,
   purple: 0x800080,
+  amber: 0x806000,
 } as const;
 
 export const FONT = 'Tahoma, Verdana, Geneva, sans-serif';

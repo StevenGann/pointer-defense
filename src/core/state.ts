@@ -48,7 +48,14 @@ import {
   type PointerStage,
   type PointerState,
 } from './pointer.ts';
-import { buildSchedule, WAVE_COUNT, type Spawn } from './waves.ts';
+import {
+  buildSchedule,
+  noBuildRow,
+  WAVE_COUNT,
+  waveModifiers,
+  type ModifierId,
+  type Spawn,
+} from './waves.ts';
 import { tickPopups, type Popup } from './popups.ts';
 import { TICK_MS } from './time.ts';
 import {
@@ -117,6 +124,12 @@ export interface RunState {
   schedule: Spawn[];
   /** Ticks since the current wave started. */
   waveTick: number;
+  /** Modifiers active for the current wave (empty outside a wave). */
+  modifiers: readonly ModifierId[];
+  /** Row locked by the no-build modifier, or null. */
+  noBuildRow: number | null;
+  /** True once the player chose Endless after clearing wave 100. */
+  endless: boolean;
   /** Total ticks simulated this run. */
   tick: number;
   /** Leftover real time not yet simulated (ms); see step(). */
@@ -185,6 +198,9 @@ export function createRunState(profile: Profile = defaultProfile()): RunState {
     selectedTowerId: null,
     schedule: [],
     waveTick: 0,
+    modifiers: [],
+    noBuildRow: null,
+    endless: false,
     tick: 0,
     accumulator: 0,
     nextId: 1,
@@ -227,6 +243,7 @@ export function selectedTower(s: RunState): Tower | undefined {
 export function canPlace(s: RunState, kind: TowerKind, col: number, row: number): boolean {
   if (s.phase !== 'build' && s.phase !== 'wave') return false;
   if (!inBounds(col, row) || tileAt(s.grid, col, row) !== 'buildable') return false;
+  if (s.modifiers.includes('no-build') && s.phase === 'wave' && s.noBuildRow === row) return false;
   if (towerAt(s, col, row)) return false;
   if (!canAfford(s.economy, TOWER_STATS[kind].cost)) return false;
   const idx = row * s.grid.cols + col;
@@ -248,7 +265,12 @@ export function enemyAt(s: RunState, x: number, y: number, slack = CLICK_SLACK):
 }
 
 export function isFinalWave(s: RunState): boolean {
-  return s.wave >= WAVE_COUNT;
+  return !s.endless && s.wave >= WAVE_COUNT;
+}
+
+/** Tower range multiplier from the fog modifier (docs/design.md §8.3). */
+export function towerRangeMult(s: RunState): number {
+  return s.modifiers.includes('fog') ? 0.8 : 1;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -325,14 +347,26 @@ export function sellTower(s: RunState, col: number, row: number): boolean {
 }
 
 export function startWave(s: RunState): boolean {
-  if (s.phase !== 'build' || s.wave >= WAVE_COUNT) return false;
+  if (s.phase !== 'build') return false;
+  if (s.wave >= WAVE_COUNT && !s.endless) return false;
   s.wave += 1;
   s.phase = 'wave';
   s.schedule = buildSchedule(s.wave);
   s.waveTick = 0;
   s.leaksThisWave = 0;
+  s.modifiers = waveModifiers(s.wave);
+  s.noBuildRow = s.modifiers.includes('no-build') ? noBuildRow(s.wave) : null;
   recomputeAuras(s.towers);
   return true;
+}
+
+/** After clearing wave 100, the player may continue into endless instead of rebooting. */
+export function enterEndless(s: RunState): void {
+  if (s.phase !== 'victory') return;
+  s.endless = true;
+  s.phase = 'build';
+  s.selected = null;
+  s.selectedTowerId = null;
 }
 
 export function upgradePointer(s: RunState): boolean {
@@ -516,13 +550,14 @@ function spawnDue(s: RunState): void {
 
 function moveEnemies(s: RunState): void {
   const globalSlow = s.enemySlowTicks > 0 ? 0.5 : 1;
+  const speedMult = s.modifiers.includes('fast') ? 1.15 : 1;
   for (const e of s.enemies) {
     if (e.dead) continue;
     e.prevX = e.x;
     e.prevY = e.y;
     if (s.tick < e.stunUntilTick) continue; // stunned: stand still this tick
     const slow = s.tick < e.slowUntilTick ? Math.min(globalSlow, e.slowFactor) : globalSlow;
-    let remaining = speedPerTick(e.kind) * slow;
+    let remaining = speedPerTick(e.kind) * slow * speedMult;
     while (remaining > 0 && !e.dead) {
       if (e.targetCol < 0) {
         const next = stepToward(s.field, e.col, e.row);
@@ -562,7 +597,7 @@ function moveEnemies(s: RunState): void {
 function leak(s: RunState, e: Enemy): void {
   e.dead = true;
   s.leaksThisWave++;
-  s.integrity = Math.max(0, s.integrity - 1);
+  s.integrity = Math.max(0, s.integrity - (e.isBoss ? 3 : 1));
   s.events.push({ type: 'leak', x: e.x, y: e.y });
   if (s.pointer.targetId === e.id) s.pointer.targetId = null;
   if (s.integrity === 0) {
@@ -699,7 +734,7 @@ function fireTowers(s: RunState): void {
     }
     const st = effectiveStats(t);
     if (st.damage <= 0 || st.fireInterval <= 0) continue; // beacon never fires
-    const range = st.range + t.auraRange;
+    const range = (st.range + t.auraRange) * towerRangeMult(s);
     const dmg = st.damage * t.auraDamage * buff * towerDamageMult(s.specs);
 
     if (st.beams > 1) {
@@ -777,10 +812,11 @@ function damageEnemy(
     e.hp = 0;
     e.dead = true;
     if (e.isBoss && source === 'pointer' && !e.towerDamaged) s.bossKilledByPointer = true;
+    const value = e.value * (s.modifiers.includes('rush') ? 1.1 : 1);
     const reward =
       source === 'pointer' && weak
-        ? recordKillAt(s.economy, e.value, source, WEAK_POINT_KILL_BONUS)
-        : recordKill(s.economy, e.value, source);
+        ? recordKillAt(s.economy, value, source, WEAK_POINT_KILL_BONUS)
+        : recordKill(s.economy, value, source);
     if (tower) {
       tower.kills++;
       tower.earned += reward;
@@ -797,5 +833,7 @@ function endWave(s: RunState): void {
   if (s.wave >= 40 && s.leaksThisWave === 0) s.clearedWaveNoLeaks = true;
   s.pointer.held = false;
   s.pointer.targetId = null;
-  s.phase = s.wave >= WAVE_COUNT ? 'victory' : 'build';
+  s.modifiers = [];
+  s.noBuildRow = null;
+  s.phase = s.wave >= WAVE_COUNT && !s.endless ? 'victory' : 'build';
 }

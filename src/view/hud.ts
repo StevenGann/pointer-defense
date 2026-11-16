@@ -13,7 +13,7 @@ import {
   type Branch,
   type TowerKind,
 } from '../core/towers.ts';
-import { WAVES, WAVE_COUNT } from '../core/waves.ts';
+import { MODIFIER_NAMES, waveDef, WAVE_COUNT, waveModifiers } from '../core/waves.ts';
 import { SPEC_CAPS, SPEC_KINDS, SPEC_NAMES, specEffectText, type SpecKind } from '../core/save.ts';
 
 /**
@@ -230,8 +230,46 @@ function restartRect(m: Rect): Rect {
 }
 
 export function modalRestartAt(l: Layout, s: RunState, px: number, py: number): boolean {
-  if (s.phase !== 'halted' && s.phase !== 'victory') return false;
+  if (s.phase !== 'halted') return false;
   return pointInRect(restartRect(modalRect(l)), px, py);
+}
+
+function victoryModalRect(l: Layout): Rect {
+  const w = 320;
+  const h = 172;
+  return {
+    x: l.client.x + Math.floor((l.client.w - w) / 2),
+    y: l.client.y + Math.floor((l.client.h - h) / 2),
+    w,
+    h,
+  };
+}
+
+interface VictoryButtons {
+  endless: Rect;
+  restart: Rect;
+}
+
+function victoryButtons(m: Rect): VictoryButtons {
+  const bh = 24;
+  const pad = 10;
+  const gap = 6;
+  const restartW = 110;
+  const endlessW = 64;
+  const y = m.y + m.h - bh - pad;
+  const restart: Rect = { x: m.x + m.w - pad - restartW, y, w: restartW, h: bh };
+  const endless: Rect = { x: restart.x - gap - endlessW, y, w: endlessW, h: bh };
+  return { endless, restart };
+}
+
+export type VictoryAction = 'endless' | 'restart';
+
+export function victoryButtonAt(l: Layout, s: RunState, px: number, py: number): VictoryAction | null {
+  if (s.phase !== 'victory') return null;
+  const b = victoryButtons(victoryModalRect(l));
+  if (pointInRect(b.endless, px, py)) return 'endless';
+  if (pointInRect(b.restart, px, py)) return 'restart';
+  return null;
 }
 
 function hintFor(s: RunState): string {
@@ -282,8 +320,9 @@ export class HudView {
   private readonly modalTitle = makeText('', true);
   private readonly modalMessage = makeText('');
   private readonly modalRestart = makeText('Restart');
+  private readonly modalButton2 = makeText('');
   private readonly nextWaveTitle = makeText('NEXT WAVE', true);
-  private readonly nextWaveRows: Text[] = [makeText(''), makeText(''), makeText('')];
+  private readonly nextWaveRows: Text[] = [makeText(''), makeText(''), makeText(''), makeText(''), makeText('')];
   private readonly killsTitle = makeText('KILLS', true);
   private readonly killsRows: Text[] = [makeText(''), makeText(''), makeText('')];
   private readonly comboText = makeText('', true);
@@ -333,12 +372,13 @@ export class HudView {
       t.anchor.set(0.5, 0.5);
     }
     this.root.addChild(this.modalG);
-    for (const t of [this.modalTitle, this.modalMessage, this.modalRestart]) {
+    for (const t of [this.modalTitle, this.modalMessage, this.modalRestart, this.modalButton2]) {
       t.anchor.set(0, 0.5);
       this.root.addChild(t);
     }
     this.modalTitle.style.fill = PAL.titleInverse;
     this.modalRestart.anchor.set(0.5, 0.5);
+    this.modalButton2.anchor.set(0.5, 0.5);
     this.comboText.style.fill = PAL.title;
   }
 
@@ -357,9 +397,11 @@ export class HudView {
     if (this.notice !== '' && s.tick >= this.noticeUntilTick) this.notice = '';
     this.statusHint.text = this.notice || hintFor(s);
     this.statusHint.position.set(sp.left.x + 4, sp.left.y + Math.floor(sp.left.h / 2));
-    this.statusWave.text = `Wave ${s.phase === 'build' ? s.wave + 1 : s.wave} / ${WAVE_COUNT}`;
+    const displayWave = s.phase === 'build' ? s.wave + 1 : s.wave;
+    this.statusWave.text = s.endless ? `Wave ${displayWave}` : `Wave ${displayWave} / ${WAVE_COUNT}`;
     this.statusWave.position.set(sp.middle.x + 4, sp.middle.y + Math.floor(sp.middle.h / 2));
-    this.statusSalvage.text = `$${formatNumber(s.economy.salvage)}`;
+    this.statusSalvage.text =
+      s.modifiers.includes('blackout') && s.phase === 'wave' ? '---' : `$${formatNumber(s.economy.salvage)}`;
     this.statusSalvage.position.set(sp.right.x + 4, sp.right.y + Math.floor(sp.right.h / 2));
 
     // Toolbar.
@@ -413,6 +455,7 @@ export class HudView {
       this.modalTitle.text = '';
       this.modalMessage.text = '';
       this.modalRestart.text = '';
+      this.modalButton2.text = '';
     }
   }
 
@@ -560,8 +603,10 @@ export class HudView {
     }
 
     const wave = s.phase === 'build' ? s.wave + 1 : s.wave;
-    const def = WAVES[wave - 1];
+    const def = waveDef(wave);
     const composition = def ? def.groups.map((grp) => `${grp.count} x ${grp.kind}`) : [];
+    const mods = waveModifiers(wave);
+    if (mods.length > 0) composition.unshift(`mod: ${mods.map((m) => MODIFIER_NAMES[m]).join(' + ')}`);
     y = this.drawInfoBox(g, this.nextWaveTitle, this.nextWaveRows, x, y, w, composition);
 
     const kills = [
@@ -616,22 +661,54 @@ export class HudView {
 
   private drawModal(s: RunState, l: Layout): void {
     const g = this.modalG;
+    if (s.phase === 'victory') {
+      this.drawVictoryModal(s, l);
+      return;
+    }
     const m = modalRect(l);
     g.rect(l.client.x, l.client.y, l.client.w, l.client.h).fill({ color: PAL.dark, alpha: 0.4 });
 
     bevel(g, m, true, PAL.face);
     g.rect(m.x + 2, m.y + 2, m.w - 4, 18).fill(PAL.title);
-    this.modalTitle.text = s.phase === 'victory' ? 'Victory' : 'Game Over';
+    this.modalTitle.text = 'Game Over';
     this.modalTitle.position.set(m.x + 6, m.y + 2 + 9);
 
-    this.modalMessage.text =
-      s.phase === 'victory' ? 'You cleared all ten waves.' : `The lane broke at wave ${s.wave}.`;
+    this.modalMessage.text = `The lane broke at wave ${s.wave}.`;
     this.modalMessage.position.set(m.x + 12, m.y + 2 + 18 + 16);
+    this.modalButton2.text = '';
 
     const r = restartRect(m);
     bevel(g, r, true, PAL.face);
     this.modalRestart.text = 'Restart';
     this.modalRestart.position.set(r.x + r.w / 2, r.y + r.h / 2);
+  }
+
+  private drawVictoryModal(s: RunState, l: Layout): void {
+    const g = this.modalG;
+    const m = victoryModalRect(l);
+    g.rect(l.client.x, l.client.y, l.client.w, l.client.h).fill({ color: PAL.dark, alpha: 0.4 });
+
+    bevel(g, m, true, PAL.face);
+    g.rect(m.x + 2, m.y + 2, m.w - 4, 18).fill(PAL.title);
+    this.modalTitle.text = 'Victory';
+    this.modalTitle.position.set(m.x + 6, m.y + 2 + 9);
+
+    this.modalMessage.text = [
+      'All one hundred waves cleared.',
+      `Kills — towers ${s.economy.kills.tower} · pointer ${s.economy.kills.pointer}`,
+      `Salvage earned: $${formatNumber(s.economy.earned)}`,
+      `Integrity remaining: ${s.integrity}`,
+    ].join('\n');
+    this.modalMessage.position.set(m.x + 12, m.y + 2 + 18 + 14);
+
+    const b = victoryButtons(m);
+    bevel(g, b.endless, true, PAL.face);
+    this.modalButton2.text = 'Endless';
+    this.modalButton2.position.set(b.endless.x + b.endless.w / 2, b.endless.y + b.endless.h / 2);
+
+    bevel(g, b.restart, true, PAL.face);
+    this.modalRestart.text = 'Restart Windows';
+    this.modalRestart.position.set(b.restart.x + b.restart.w / 2, b.restart.y + b.restart.h / 2);
   }
 }
 
