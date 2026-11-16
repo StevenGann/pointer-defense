@@ -19,6 +19,7 @@ import {
   currentPath,
   upgradeTower,
   upgradePointer,
+  chooseBranch,
   towerAt,
   restartWindows,
 } from '../src/core/state.ts';
@@ -27,6 +28,7 @@ import { radiusOf } from '../src/core/enemies.ts';
 import { buildField, isSealed, pathTiles } from '../src/core/pathfield.ts';
 import { COLS, ROWS, SPAWN, EXIT, tileAt } from '../src/core/grid.ts';
 import { defaultProfile, SPEC_CAPS } from '../src/core/save.ts';
+import { buildSchedule } from '../src/core/waves.ts';
 import { TICK_HZ } from '../src/core/time.ts';
 
 // --- CLI flags --------------------------------------------------------------------------------
@@ -51,8 +53,10 @@ const support = !hasFlag('--no-support');
 const noBuild = hasFlag('--no-build');
 // --call: run normally, calling the next wave once the current spawn queue is exhausted and enemies
 // are still on the board. --call-all: chain every remaining wave at tick zero (a stress test).
+// --call-sweep: call every wave at 25%, 50% and 75% of its spawn window, one run per timing.
 const callMode = hasFlag('--call');
 const callAllMode = hasFlag('--call-all');
+const callSweepMode = hasFlag('--call-sweep');
 
 // --- Deterministic PRNG (mulberry32), independent of the sim's own stream ----------------------
 function makeRng(seed) {
@@ -84,6 +88,8 @@ const WALL_PLAN = [
 
 /** Cap on towers: the maze walls plus a full ring of route coverage, a competent-not-expert board. */
 const MAX_TOWERS = 45;
+/** The sweep has no reboot to bank for, so it may keep spending bonus salvage on extra Guns. */
+const SWEEP_MAX_TOWERS = 60;
 
 // --- Build policy -----------------------------------------------------------------------------
 
@@ -296,6 +302,17 @@ function cannonTarget(wave) {
   return wave >= 4 ? Math.min(5, 1 + Math.floor((wave - 4) / 15)) : 0;
 }
 
+/** Specialist slots still needed to reach wave 100's roster, so extra Guns never crowd them out. */
+function futureSpecialistSlots(counts) {
+  return (
+    Math.max(0, frostTarget(100) - counts.frost) +
+    Math.max(0, beaconTarget(100) - counts.beacon) +
+    Math.max(0, laserTarget(100) - counts.laser) +
+    Math.max(0, taserTarget(100) - counts.taser) +
+    Math.max(0, cannonTarget(100) - counts.cannon)
+  );
+}
+
 /** Pick the tower kind for a coverage placement, per the build policy. */
 function decideKind(counts, wave) {
   if (counts.frost < frostTarget(wave)) return 'frost';
@@ -324,7 +341,7 @@ function upgradePass(s) {
 }
 
 /** Build-phase policy: finish the maze, upgrade cheaply, then place coverage towers. */
-function buildPhase(s, wave, wallIdx, counts, useSupport) {
+function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, maxTowers = MAX_TOWERS) {
   if (noBuild) {
     // Click-only player: no towers, spend salvage on the pointer when it is affordable.
     while (upgradePointer(s)) {
@@ -333,7 +350,7 @@ function buildPhase(s, wave, wallIdx, counts, useSupport) {
     return wallIdx;
   }
   let nextWall = wallIdx;
-  while (nextWall < WALL_PLAN.length && s.towers.length < MAX_TOWERS && s.economy.salvage >= TOWER_STATS.gun.cost) {
+  while (nextWall < WALL_PLAN.length && s.towers.length < maxTowers && s.economy.salvage >= TOWER_STATS.gun.cost) {
     const t = WALL_PLAN[nextWall];
     if (!placeTower(s, 'gun', t.col, t.row)) break;
     nextWall++;
@@ -341,7 +358,7 @@ function buildPhase(s, wave, wallIdx, counts, useSupport) {
   upgradePass(s);
   const path = currentPath(s);
   for (let guard = 0; guard < 400; guard++) {
-    if (s.towers.length >= MAX_TOWERS) break;
+    if (s.towers.length >= maxTowers) break;
     const kind = decideKind(counts, wave);
     // Coverage slots are reserved for the specialists; the maze walls already provide the Guns.
     if (kind === 'gun') break;
@@ -356,6 +373,37 @@ function buildPhase(s, wave, wallIdx, counts, useSupport) {
     if (placedKind === 'frost' || placedKind === 'beacon') {
       const t = towerAt(s, tile.col, tile.row);
       if (t && t.tier === 1 && s.economy.salvage >= upgradeCost(t)) upgradeTower(s, tile.col, tile.row);
+    }
+  }
+  if (spendSurplus) {
+    // The normal policy stops once every specialist slot is filled, so its early-call bonus sits in
+    // the bank. The sweep spends it: take every tower up its branch and tier ladder, buy the pointer,
+    // then add extra Guns only where they will not crowd out a specialist the roster still needs.
+    for (let guard = 0; guard < 20000; guard++) {
+      let acted = false;
+      for (const t of s.towers) {
+        const cost = upgradeCost(t);
+        if (cost === null || s.economy.salvage < cost) continue;
+        if (t.tier === 2 && t.branch === null) {
+          if (chooseBranch(s, t.col, t.row, 'A')) {
+            acted = true;
+            break;
+          }
+        } else if (upgradeTower(s, t.col, t.row)) {
+          acted = true;
+          break;
+        }
+      }
+      if (!acted) break;
+    }
+    while (upgradePointer(s)) {
+      /* spend what is left on the pointer */
+    }
+    const reserve = futureSpecialistSlots(counts);
+    for (let guard = 0; guard < 400; guard++) {
+      if (s.towers.length + reserve >= maxTowers || s.economy.salvage < TOWER_STATS.gun.cost) break;
+      const tile = chooseCoverageTile(s, currentPath(s));
+      if (!tile || !placeTower(s, 'gun', tile.col, tile.row)) break;
     }
   }
   return nextWall;
@@ -586,6 +634,104 @@ function runSessionCall(label, allAtOnce) {
   return { final, totalSpecs: 0, reboots: 0 };
 }
 
+/** The spawn-window span earlyCallBonus uses for a wave: its last spawn tick, floored at 60. */
+function waveSpan(wave) {
+  const schedule = buildSchedule(wave);
+  const last = schedule.length > 0 ? schedule[schedule.length - 1].tick : 0;
+  return Math.max(60, last);
+}
+
+/**
+ * The --call-sweep strategy: call the next wave when the current wave has burned `timing` of its
+ * spawn window, measured by the same span earlyCallBonus uses. Unlike --call, this line spends the
+ * bonus (extra Guns, branches, tiers and pointer) instead of banking it. Returns the bonus actually
+ * paid by startWave alongside the usual run result.
+ */
+function playRunSweep(profile, label, timing) {
+  const s = createRunState(profile);
+  const counts = { gun: 0, cannon: 0, taser: 0, frost: 0, laser: 0, beacon: 0 };
+  let wallIdx = 0;
+  let bonusPaid = 0;
+  let spanWave = -1;
+  let span = 0;
+  const leakList = [];
+  if (!quiet) console.log(`--- ${label} ---`);
+
+  for (;;) {
+    wallIdx = buildPhase(s, s.wave + 1, wallIdx, counts, true, true, SWEEP_MAX_TOWERS);
+    if (!startWave(s)) break;
+    const clickInterval = Math.max(1, Math.round(TICK_HZ / cps));
+    let clicks = 0;
+    let guard = 0;
+    while (s.phase === 'wave') {
+      if (s.enemies.length > 0 && clicks % clickInterval === 0) doClick(s);
+      tick(s);
+      if (s.phase === 'wave' && s.wave < to) {
+        if (spanWave !== s.wave) {
+          span = waveSpan(s.wave);
+          spanWave = s.wave;
+        }
+        const threshold = Math.max(1, Math.round(span * timing));
+        if (s.waveTick >= threshold) {
+          wallIdx = buildPhase(s, s.wave + 1, wallIdx, counts, true, true, SWEEP_MAX_TOWERS);
+          const before = s.economy.salvage;
+          if (startWave(s)) {
+            bonusPaid += s.economy.salvage - before;
+            // Spend the bonus that was just paid, so the timing is tested rather than banked.
+            wallIdx = buildPhase(s, s.wave, wallIdx, counts, true, true, SWEEP_MAX_TOWERS);
+          }
+        }
+      }
+      clicks++;
+      if (++guard > TICK_HZ * 900) break; // safety; a call run is over in well under 15 min
+    }
+    for (const [wave, leaks] of s.leaksByWave) {
+      if (leaks > 0 && !leakList.some((l) => l.wave === wave)) leakList.push({ wave, leaks });
+    }
+    if (s.phase === 'halted') {
+      return {
+        reached: false,
+        wave: s.wave,
+        clearedWaves: s.clearedWaves,
+        integrity: s.integrity,
+        earned: s.economy.earned,
+        bonusPaid,
+        state: s,
+        leakList,
+      };
+    }
+    if (s.phase === 'victory' || s.wave >= to) {
+      return {
+        reached: true,
+        wave: s.wave,
+        clearedWaves: s.clearedWaves,
+        integrity: s.integrity,
+        earned: s.economy.earned,
+        bonusPaid,
+        state: s,
+        leakList,
+      };
+    }
+  }
+  return {
+    reached: false,
+    wave: s.wave,
+    clearedWaves: s.clearedWaves,
+    integrity: s.integrity,
+    earned: s.economy.earned,
+    bonusPaid,
+    state: s,
+    leakList,
+  };
+}
+
+/** One sweep leg from a fresh profile; no reboot, because the early-call line has no checkpoint. */
+function runSessionSweep(timing) {
+  const label = `call sweep ${Math.round(timing * 100)}%`;
+  const final = playRunSweep(defaultProfile(), label, timing);
+  return { timing, final, bonusPaid: final.bonusPaid, totalSpecs: 0, reboots: 0 };
+}
+
 // --- Reporting --------------------------------------------------------------------------------
 
 function towerTable(final, label) {
@@ -631,6 +777,19 @@ function runSummary(final, totalSpecs, reboots, label) {
   return towerTable(final, label);
 }
 
+function callSweepTable(rows) {
+  console.log('\n=== call sweep ===');
+  console.log('  timing   bonus earned   waves cleared   last started   integrity   salvage');
+  for (const row of rows) {
+    const timing = `${Math.round(row.timing * 100)}%`;
+    console.log(
+      `  ${timing.padStart(6)}   ${String(row.bonusPaid).padStart(12)}   ` +
+        `${String(row.final.clearedWaves).padStart(13)}   ${String(row.final.wave).padStart(12)}   ` +
+        `${String(row.final.integrity).padStart(9)}   ${String(row.final.earned).padStart(7)}`,
+    );
+  }
+}
+
 // --- Main -------------------------------------------------------------------------------------
 
 const mainSupport = support;
@@ -665,6 +824,12 @@ if (callAllMode) {
   // The stress test: chain every remaining wave at tick zero to exercise heavy overlap.
   const callAll = runSessionCall('call-all run (--call-all)', true);
   runSummary(callAll.final, callAll.totalSpecs, callAll.reboots, 'call-all run (--call-all)');
+}
+
+if (callSweepMode) {
+  // The trade curve: one run per timing, each paying the real early-call bonus and spending it.
+  const sweep = [0.25, 0.5, 0.75].map((timing) => runSessionSweep(timing));
+  callSweepTable(sweep);
 }
 
 process.exit(main.final.reached ? 0 : 1);

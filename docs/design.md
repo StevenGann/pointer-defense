@@ -277,7 +277,7 @@ half of the next wave's clear bonus — 10 at wave 2, 80 at wave 30, 155 at wave
 and later calls decay to a floor of 5. The HUD shows the live value counting down. The formula has no
 randomness.
 
-**Harness.** `scripts/balance.mjs` runs four scenarios and reports waves cleared, last wave started,
+**Harness.** `scripts/balance.mjs` runs five scenarios and reports waves cleared, last wave started,
 integrity, salvage, specs, leaks and reboots for each:
 
 | Scenario | Flag | Strategy |
@@ -286,6 +286,10 @@ integrity, salvage, specs, leaks and reboots for each:
 | control | `--no-support` | the same policy with Frost and Beacon replaced by Guns |
 | call | `--call` | run normally; call the next wave once every spawn queue is exhausted while enemies remain |
 | call-all | `--call-all` | chain every remaining wave at tick zero, as a stress test of overlapping waves |
+| call-sweep | `--call-sweep` | call each next wave at 25%, 50% and 75% of the current spawn window, and spend the bonus instead of banking it |
+
+The sweep prints one table per timing: bonus actually paid, waves cleared, last wave started,
+integrity and salvage. Its timing uses the same spawn-window span as the bonus itself.
 
 Waves cleared counts waves actually cleared, not the wave counter: the separate last wave started line
 is the counter, so an early call cannot inflate the result. The call scenario exists to *measure* the
@@ -529,8 +533,9 @@ One master volume, remembered in `localStorage`. No music at launch.
 
 The **balance harness** matters more than the rest of the tests: a headless scripted player — builds
 greedily, clicks at a fixed rate, reboots at wave 60 — printing leaks, salvage and route length per
-wave across four scenarios (standard, a no-support control, the early-call run, and an all-at-once
-call stress test, §8.5). Balance changes are judged by its output, not by feel.
+wave across five scenarios (standard, a no-support control, the early-call run, an all-at-once call
+stress test, and the 25/50/75% early-call sweep, §8.5). Balance changes are judged by its output, not
+by feel.
 
 ---
 
