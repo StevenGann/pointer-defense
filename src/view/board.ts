@@ -136,9 +136,10 @@ export class BoardView {
   private drawFirstRunNote(l: Layout): void {
     const w = 190;
     const h = 26;
+    const gap = 6;
     const rect = {
       x: l.board.x + Math.floor((l.boardW - w) / 2),
-      y: l.board.y + Math.floor((l.boardH - h) / 2),
+      y: l.board.y - h - gap,
       w,
       h,
     };

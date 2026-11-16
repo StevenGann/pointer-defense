@@ -18,6 +18,7 @@ import {
   upgradeCost,
   type Branch,
   type EffectiveStats,
+  type TargetMode,
   type Tier,
   type Tower,
   type TowerKind,
@@ -378,6 +379,13 @@ export function sellTower(s: RunState, col: number, row: number): boolean {
   return true;
 }
 
+/** Cycle a tower's targeting priority First -> Strong -> Close -> First. */
+export function cycleTargetMode(s: RunState, col: number, row: number): void {
+  const t = towerAt(s, col, row);
+  if (!t) return;
+  t.targetMode = t.targetMode === 'first' ? 'strong' : t.targetMode === 'strong' ? 'close' : 'first';
+}
+
 export function startWave(s: RunState): boolean {
   if (s.phase !== 'build') return false;
   if (s.wave >= WAVE_COUNT && !s.endless) return false;
@@ -668,20 +676,8 @@ function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: n
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
-/** Target "first": the hurtable enemy furthest along the lane, the one about to leak. */
-function acquireTarget(s: RunState, t: Tower, st: EffectiveStats, range: number): Enemy | undefined {
-  let target: Enemy | undefined;
-  for (const e of s.enemies) {
-    if (!towerCanHurt(e)) continue;
-    if (st.targetsFlyersOnly && e.kind !== 'flyer') continue;
-    if (!inRange(t, e, range)) continue;
-    if (!target || e.dist > target.dist) target = e;
-  }
-  return target;
-}
-
-/** Up to `limit` targets, most-threatened first (furthest along the lane). */
-function acquireTargets(s: RunState, t: Tower, st: EffectiveStats, range: number, limit: number): Enemy[] {
+/** All hurtable enemies in range this tower may target. */
+function towerCandidates(s: RunState, t: Tower, st: EffectiveStats, range: number): Enemy[] {
   const out: Enemy[] = [];
   for (const e of s.enemies) {
     if (!towerCanHurt(e)) continue;
@@ -689,7 +685,66 @@ function acquireTargets(s: RunState, t: Tower, st: EffectiveStats, range: number
     if (!inRange(t, e, range)) continue;
     out.push(e);
   }
-  out.sort((a, b) => b.dist - a.dist);
+  return out;
+}
+
+/** Frost and Beacon affect everything in range, so their mode is meaningless — always First. */
+function targetModeFor(t: Tower): TargetMode {
+  return t.kind === 'frost' || t.kind === 'beacon' ? 'first' : t.targetMode;
+}
+
+/** First: the hurtable enemy furthest along the route, the one about to leak. */
+function firstTarget(enemies: Enemy[]): Enemy | undefined {
+  let target: Enemy | undefined;
+  for (const e of enemies) if (!target || e.dist > target.dist) target = e;
+  return target;
+}
+
+/** Strong: the enemy with the most current HP. */
+function strongTarget(enemies: Enemy[]): Enemy | undefined {
+  let target: Enemy | undefined;
+  for (const e of enemies) if (!target || e.hp > target.hp) target = e;
+  return target;
+}
+
+/** Close: the enemy nearest to the tower. */
+function closeTarget(t: Tower, enemies: Enemy[]): Enemy | undefined {
+  let target: Enemy | undefined;
+  let best = Infinity;
+  for (const e of enemies) {
+    const d2 = dist2(e, t.col + 0.5, t.row + 0.5);
+    if (d2 < best) {
+      best = d2;
+      target = e;
+    }
+  }
+  return target;
+}
+
+function pickTarget(t: Tower, enemies: Enemy[]): Enemy | undefined {
+  switch (targetModeFor(t)) {
+    case 'strong':
+      return strongTarget(enemies);
+    case 'close':
+      return closeTarget(t, enemies);
+    default:
+      return firstTarget(enemies);
+  }
+}
+
+function acquireTarget(s: RunState, t: Tower, st: EffectiveStats, range: number): Enemy | undefined {
+  return pickTarget(t, towerCandidates(s, t, st, range));
+}
+
+/** Up to `limit` targets, ordered by the tower's targeting mode. */
+function acquireTargets(s: RunState, t: Tower, st: EffectiveStats, range: number, limit: number): Enemy[] {
+  const out = towerCandidates(s, t, st, range);
+  const mode = targetModeFor(t);
+  out.sort((a, b) => {
+    if (mode === 'strong') return b.hp - a.hp;
+    if (mode === 'close') return dist2(a, t.col + 0.5, t.row + 0.5) - dist2(b, t.col + 0.5, t.row + 0.5);
+    return b.dist - a.dist;
+  });
   return out.slice(0, limit);
 }
 
@@ -839,6 +894,7 @@ function damageEnemy(
   if (dmg <= 0) return;
   e.hp -= dmg;
   s.economy.damage[source] += dmg;
+  if (source === 'tower' && tower) tower.damageDealt += dmg;
   s.events.push({ type: 'damage', x: e.x, y: e.y, amount: dmg, weak: source === 'pointer' && weak });
   if (e.hp <= 1e-9) {
     e.hp = 0;

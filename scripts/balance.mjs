@@ -19,7 +19,7 @@ import {
   upgradeTower,
   restartWindows,
 } from '../src/core/state.ts';
-import { TOWER_STATS, upgradeCost } from '../src/core/towers.ts';
+import { TOWER_KINDS, TOWER_STATS, upgradeCost } from '../src/core/towers.ts';
 import { radiusOf } from '../src/core/enemies.ts';
 import { buildField, isSealed, pathTiles } from '../src/core/pathfield.ts';
 import { COLS, ROWS, SPAWN, EXIT, tileAt } from '../src/core/grid.ts';
@@ -330,5 +330,19 @@ console.log(`total salvage: ${final.earned}`);
 console.log(`specs earned: ${totalSpecs}`);
 console.log(`leaks per wave: ${leakSummary || 'none'}`);
 console.log(`reboots: ${reboots}`);
+
+const dmgByKind = new Map(TOWER_KINDS.map((kind) => [kind, 0]));
+const killsByKind = new Map(TOWER_KINDS.map((kind) => [kind, 0]));
+for (const t of final.state.towers) {
+  dmgByKind.set(t.kind, dmgByKind.get(t.kind) + t.damageDealt);
+  killsByKind.set(t.kind, killsByKind.get(t.kind) + t.kills);
+}
+const totalTowerDmg = [...dmgByKind.values()].reduce((a, b) => a + b, 0);
+const shareLine = TOWER_KINDS.map((kind, i) => {
+  const pct = totalTowerDmg > 0 ? Math.round((dmgByKind.get(kind) / totalTowerDmg) * 100) : 0;
+  const kills = killsByKind.get(kind);
+  return i === 0 ? `${kind} ${pct}% dmg / ${kills} kills` : `${kind} ${pct}% / ${kills}`;
+}).join('  ');
+console.log(shareLine);
 
 process.exit(final.reached ? 0 : 1);

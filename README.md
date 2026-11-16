@@ -1,33 +1,57 @@
 # Pointer Defense
 
-A tower defense game where clicking is the economy and towers are the time to click.
+A hybrid tower defense and clicking game: towers build a maze that holds the lane, and your mouse
+is the weapon that turns every kill into salvage.
 
-Towers hold the lane. You click the leaks. Every kill pays better if you landed the blow, so the
-shipment of upgrades depends on how well you shoot, and the survival of the lane depends on how well
-you built.
+## How to play
 
-**Play:** https://stevengann.github.io/pointer-defense/
+Enemies stream from the left edge to the right edge along the shortest open route. Placing towers
+blocks and bends that route, so a good maze keeps enemies inside your tower ranges for longer.
+You have 20 integrity; every enemy that leaks off the right edge costs some. At zero, the run ends.
 
-Browser game. TypeScript, Vite, PixiJS. Everything is drawn as vectors at runtime; there are no sprite
-sheets. The chrome is Windows 95 and the board is Desktop Tower Defense.
+You are not just building — you are also shooting. Click enemies to deal damage directly. Every kill
+pays salvage, the currency for towers, upgrades and pointer upgrades, and a kill pays more when you
+land the finishing blow yourself (1.5x). Aim for an enemy's **weak spot**, the small notch on its
+leading edge, for double damage and a growing combo multiplier.
 
-## Status
+Between waves, spend your salvage. Desktop pop-ups appear during waves and offer free salvage, a
+free tower, or a buff — but they expire if you ignore them. Clearing waves builds lifetime salvage;
+choose **Restart Windows** from the File menu to bank it as **specs**, permanent upgrades that carry
+into every future run.
 
-Pre-alpha, playable. Ten waves, three towers, three enemy types, the click economy and pointer
-upgrades all run. Art and sound are unfinished.
+## Controls
 
-## Develop
+| Key | Action |
+| --- | --- |
+| Mouse | Click to place towers and shoot enemies; right-click cancels a selection |
+| `1`–`6` | Select the six tower kinds, in palette order (also works during a wave) |
+| `Esc` | Clear the current selection and close any open menu |
+| `U` | Upgrade the selected tower |
+| `X` | Sell the selected tower |
+| `Enter` | Start the next wave (in the build phase) |
+| `P` | Pause / resume |
+| `Space` | Cycle the simulation speed |
+
+## Development
+
+Requires Node 22.18 or later (TypeScript types are stripped natively, no build step for the scripts).
 
 ```
 npm install
-npm run dev      # http://localhost:5173
-npm run build    # type-check and bundle to dist/
+npm run dev                     # local dev server
+npm run build                   # type-check and bundle to dist/
+npm run smoke                   # headless simulation checks
+npm run balance -- --to 100     # headless balance harness
 ```
 
-## Design
+Flags after `--` are passed through to the script, because `npm` would swallow them otherwise.
 
-- [`docs/design.md`](docs/design.md) — the game.
-- [`docs/architecture.md`](docs/architecture.md) — how the code is laid out.
+## Technical notes
+
+Browser game built with TypeScript, Vite and PixiJS. Everything is drawn as vectors at runtime —
+there are no sprite sheets. The simulation core in `src/core` is deterministic and side-effect free,
+so `scripts/smoke.mjs` and `scripts/balance.mjs` run it headlessly on Node. See
+[`docs/design.md`](docs/design.md) and [`docs/architecture.md`](docs/architecture.md).
 
 ## Licence
 

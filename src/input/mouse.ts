@@ -12,6 +12,7 @@ import { type SpecKind } from '../core/save.ts';
 import {
   cancelSelection,
   chooseBranch,
+  cycleTargetMode,
   enemyAt,
   placeTower,
   pointerDown,
@@ -261,6 +262,11 @@ export class MouseController {
         if (tower) sellTower(s, tower.col, tower.row);
         break;
       }
+      case 'target': {
+        const tower = selectedTower(s);
+        if (tower) cycleTargetMode(s, tower.col, tower.row);
+        break;
+      }
       case 'buyCpu':
         this.ctx.buySpec('cpu');
         break;
@@ -286,32 +292,55 @@ export class MouseController {
   };
 
   private onKey = (e: KeyboardEvent): void => {
+    if (e.repeat) return;
+    if (this.isTypingTarget(e.target)) return;
+
     if (e.key === 'Escape') {
-      if (this.ctx.menu()) {
-        this.ctx.openMenu(null);
-        return;
-      }
-      if (this.ctx.dialog()) {
-        this.ctx.closeDialog();
-        return;
-      }
+      this.ctx.openMenu(null);
+      this.ctx.closeDialog();
       cancelSelection(this.ctx.state());
       return;
     }
+
+    const s = this.ctx.state();
+    if (this.ctx.menu() || this.ctx.dialog()) return;
+
     if (e.key === 'p' || e.key === 'P') {
-      if (this.ctx.menu() || this.ctx.dialog()) return;
-      togglePause(this.ctx.state());
+      togglePause(s);
       return;
     }
     if (e.key === ' ') {
-      if (this.ctx.menu() || this.ctx.dialog()) return;
       e.preventDefault();
-      toggleSpeed(this.ctx.state());
+      toggleSpeed(s);
+      return;
+    }
+    if (e.key === 'u' || e.key === 'U') {
+      const tower = selectedTower(s);
+      if (tower) upgradeTower(s, tower.col, tower.row);
+      return;
+    }
+    if (e.key === 'x' || e.key === 'X') {
+      const tower = selectedTower(s);
+      if (tower) sellTower(s, tower.col, tower.row);
+      return;
+    }
+    if (e.key === 'Enter') {
+      if (s.phase === 'build') startWave(s);
       return;
     }
     const n = Number(e.key);
     if (Number.isInteger(n) && n >= 1 && n <= TOWER_KINDS.length) {
-      selectTower(this.ctx.state(), TOWER_KINDS[n - 1]);
+      selectTower(s, TOWER_KINDS[n - 1]);
     }
   };
+
+  private isTypingTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    return (
+      target.isContentEditable ||
+      target.tagName === 'INPUT' ||
+      target.tagName === 'TEXTAREA' ||
+      target.tagName === 'SELECT'
+    );
+  }
 }

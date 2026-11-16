@@ -6,6 +6,8 @@ export type Branch = 'A' | 'B';
 
 export type Tier = 1 | 2 | 3 | 4 | 5;
 
+export type TargetMode = 'first' | 'strong' | 'close';
+
 export interface TowerStats {
   readonly name: string;
   readonly blurb: string;
@@ -146,6 +148,10 @@ export interface Tower {
   kills: number;
   /** Salvage this tower earned from those kills. */
   earned: number;
+  /** HP damage this tower has actually dealt, for the balance harness's damage share. */
+  damageDealt: number;
+  /** Which enemy in range this tower prefers. */
+  targetMode: TargetMode;
 }
 
 export function createTower(id: number, kind: TowerKind, col: number, row: number): Tower {
@@ -162,6 +168,8 @@ export function createTower(id: number, kind: TowerKind, col: number, row: numbe
     cooldown: 0,
     kills: 0,
     earned: 0,
+    damageDealt: 0,
+    targetMode: 'first',
   };
 }
 

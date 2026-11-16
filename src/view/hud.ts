@@ -11,6 +11,7 @@ import {
   TOWER_STATS,
   upgradeCost,
   type Branch,
+  type TargetMode,
   type TowerKind,
 } from '../core/towers.ts';
 import { MODIFIER_NAMES, waveDef, WAVE_COUNT, waveModifiers } from '../core/waves.ts';
@@ -28,6 +29,7 @@ export type HudAction =
   | 'wave'
   | 'upgrade'
   | 'sell'
+  | 'target'
   | 'branchA'
   | 'branchB'
   | 'buyCpu'
@@ -53,6 +55,12 @@ const BRANCH_NAMES: Readonly<Record<TowerKind, Readonly<Record<Branch, string>>>
   beacon: { A: 'Command', B: 'Relay' },
 };
 
+const TARGET_LABEL: Readonly<Record<TargetMode, string>> = {
+  first: 'First',
+  strong: 'Strong',
+  close: 'Close',
+};
+
 interface BranchButton {
   branch: Branch;
   rect: Rect;
@@ -63,6 +71,7 @@ interface TowerDetailLayout {
   name: Rect;
   stats: Rect;
   route: Rect;
+  target: Rect;
   upgrade: Rect | null;
   branches: BranchButton[];
   sell: Rect;
@@ -129,6 +138,9 @@ function computeHud(l: Layout, s: RunState): HudLayout {
     const routeRow: Rect = { x: x + 6, y: cy, w: w - 12, h: 14 };
     cy += 14 + 4;
 
+    const target: Rect = { x: innerX, y: cy, w: innerW, h: 20 };
+    cy += 20 + 4;
+
     const cost = upgradeCost(tower);
     let upgrade: Rect | null = null;
     if (tower.tier !== 2 && cost !== null) {
@@ -151,7 +163,7 @@ function computeHud(l: Layout, s: RunState): HudLayout {
     const sell: Rect = { x: innerX, y: cy, w: innerW, h: 20 };
     cy += 20;
     const box: Rect = { x, y: boxTop, w, h: cy - boxTop + 6 };
-    detail = { box, name, stats, route: routeRow, upgrade, branches, sell };
+    detail = { box, name, stats, route: routeRow, target, upgrade, branches, sell };
     cy = box.y + box.h + 6;
   }
 
@@ -189,6 +201,7 @@ export function hudButtonAt(l: Layout, s: RunState, px: number, py: number): Hud
   if (h.detail && tower) {
     const upgradePrice = upgradeCost(tower);
     const affordable = upgradePrice !== null && canAfford(s.economy, upgradePrice);
+    if (pointInRect(h.detail.target, px, py)) return 'target';
     if (h.detail.upgrade && affordable && pointInRect(h.detail.upgrade, px, py)) return 'upgrade';
     for (const b of h.detail.branches) {
       if (affordable && pointInRect(b.rect, px, py)) return b.branch === 'A' ? 'branchA' : 'branchB';
@@ -312,6 +325,7 @@ export class HudView {
   private readonly upgradeButton = makeText('');
   private readonly branchButtons: Text[] = [makeText(''), makeText('')];
   private readonly sellButton = makeText('');
+  private readonly targetButton = makeText('');
   private readonly pointerLabel = makeText('');
   private notice = '';
   private noticeUntilTick = 0;
@@ -351,6 +365,7 @@ export class HudView {
       this.upgradeButton,
       ...this.branchButtons,
       this.sellButton,
+      this.targetButton,
       this.pointerLabel,
       this.pointerButton,
       ...this.towerButtons,
@@ -494,6 +509,7 @@ export class HudView {
       this.towerRoute.visible = true;
       this.upgradeButton.visible = true;
       this.sellButton.visible = true;
+      this.targetButton.visible = true;
       for (const text of this.branchButtons) text.visible = true;
 
       const branch = tower.branch === null ? '' : ` - ${BRANCH_NAMES[tower.kind][tower.branch]}`;
@@ -508,6 +524,11 @@ export class HudView {
 
       this.towerRoute.text = `Route: ${currentPath(s).length} tiles`;
       this.towerRoute.position.set(d.route.x, d.route.y + Math.floor(d.route.h / 2));
+
+      drawButton(g, d.target, true, hoverHud === 'target');
+      this.targetButton.text = `Target: ${TARGET_LABEL[tower.targetMode]}`;
+      this.targetButton.style.fill = PAL.text;
+      this.targetButton.position.set(d.target.x + 6, d.target.y + Math.floor(d.target.h / 2));
 
       const price = upgradeCost(tower);
       if (d.upgrade && price !== null) {
@@ -546,11 +567,13 @@ export class HudView {
     this.towerRoute.text = '';
     this.upgradeButton.text = '';
     this.sellButton.text = '';
+    this.targetButton.text = '';
     this.towerName.visible = false;
     this.towerStats.visible = false;
     this.towerRoute.visible = false;
     this.upgradeButton.visible = false;
     this.sellButton.visible = false;
+    this.targetButton.visible = false;
     for (const text of this.branchButtons) {
       text.text = '';
       text.visible = false;
