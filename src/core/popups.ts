@@ -2,7 +2,8 @@ import type { RunState } from './state.ts';
 import { earn, recordKill } from './economy.ts';
 import { secondsToTicks } from './time.ts';
 import { createTower, recomputeAuras } from './towers.ts';
-import { COLS, EXIT, ROWS, SPAWN, tileAt } from './grid.ts';
+import { COLS, ROWS, tileAt } from './grid.ts';
+import { levelById } from './levels.ts';
 import { buildField, isSealed } from './pathfield.ts';
 import { rngNext } from './rng.ts';
 
@@ -207,6 +208,9 @@ function applyEffect(s: RunState, kind: PopupKind): void {
 
 /** Freeware: place a free Gun on a random legal tile, respecting the seal rule. */
 function placeFreeGun(s: RunState): void {
+  const level = levelById(s.levelId);
+  const spawn = level.starts[0];
+  const exit = level.exits[0];
   const candidates: { col: number; row: number }[] = [];
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
@@ -214,7 +218,7 @@ function placeFreeGun(s: RunState): void {
       const idx = r * COLS + c;
       if (s.blocked.has(idx)) continue;
       s.blocked.add(idx);
-      const sealed = isSealed(s.grid, s.blocked, SPAWN, EXIT);
+      const sealed = isSealed(s.grid, s.blocked, spawn, exit);
       s.blocked.delete(idx);
       if (!sealed) candidates.push({ col: c, row: r });
     }
@@ -223,7 +227,7 @@ function placeFreeGun(s: RunState): void {
   const pick = candidates[Math.floor(nextFloat(s) * candidates.length) % candidates.length];
   s.blocked.add(pick.row * COLS + pick.col);
   s.towers.push(createTower(s.nextId++, 'gun', pick.col, pick.row));
-  s.field = buildField(s.grid, s.blocked);
+  s.field = buildField(s.grid, s.blocked, exit);
   recomputeAuras(s.towers);
 }
 

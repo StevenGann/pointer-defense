@@ -22,11 +22,15 @@ import {
   chooseBranch,
   towerAt,
   restartWindows,
+  spawnTile,
+  exitTile,
+  cycleLevel,
 } from '../src/core/state.ts';
 import { TOWER_KINDS, TOWER_STATS, upgradeCost } from '../src/core/towers.ts';
 import { radiusOf } from '../src/core/enemies.ts';
 import { buildField, isSealed, pathTiles } from '../src/core/pathfield.ts';
-import { COLS, ROWS, SPAWN, EXIT, tileAt } from '../src/core/grid.ts';
+import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
+import { LEVELS, levelById } from '../src/core/levels.ts';
 import { defaultProfile, SPEC_CAPS } from '../src/core/save.ts';
 import { buildSchedule } from '../src/core/waves.ts';
 import { TICK_HZ } from '../src/core/time.ts';
@@ -57,6 +61,12 @@ const noBuild = hasFlag('--no-build');
 const callMode = hasFlag('--call');
 const callAllMode = hasFlag('--call-all');
 const callSweepMode = hasFlag('--call-sweep');
+// --level <id> selects one authored map; the default runs all three and prints one line each.
+const levelFlag = flag('--level', null);
+const activeLevels = levelFlag ? [levelById(levelFlag)] : [...LEVELS];
+const singleLevel = activeLevels.length === 1;
+// Suppresses the per-wave and per-run chatter while the map loop runs; the map lines are the point.
+let silent = false;
 
 // --- Deterministic PRNG (mulberry32), independent of the sim's own stream ----------------------
 function makeRng(seed) {
@@ -71,25 +81,51 @@ function makeRng(seed) {
 }
 const rng = makeRng(0x9e3779b9 ^ (Math.round(accuracy * 1000) << 8) ^ Math.round(cps * 10));
 
+/** A fresh run on a specific authored map, reached by cycling from the default level. */
+function createStateOn(profile, levelId) {
+  const s = createRunState(profile);
+  while (s.levelId !== levelId) cycleLevel(s);
+  return s;
+}
+
 // --- The maze ---------------------------------------------------------------------------------
-// A fixed serpentine of three partial walls (top-anchored, bottom-anchored, top-anchored). Single
-// towers cannot maze an open board; only contiguous walls force the route around their end. This
-// plan lengthens the route from 22 to 40 tiles and never seals at any prefix. Each wall is built
-// from the spawn/exit row outward so every early tower both blocks the route and covers it.
+// A serpentine of full-height walls (top- or bottom-anchored), one plan per authored map. Single
+// towers cannot maze an open board; only contiguous walls force the route around their end. Each
+// wall is built from the spawn/exit row outward so every early tower both blocks the route and
+// covers it.
 function wallOutward(col, rows) {
   const sorted = [...rows].sort((a, b) => Math.abs(a - 6) - Math.abs(b - 6) || a - b);
   return sorted.map((row) => ({ col, row }));
 }
-const WALL_PLAN = [
-  ...wallOutward(6, [0, 1, 2, 3, 4, 5, 6, 7, 8]), // wall 1, gap at bottom
-  ...wallOutward(10, [3, 4, 5, 6, 7, 8, 9, 10, 11]), // wall 2, gap at top
-  ...wallOutward(14, [0, 1, 2, 3, 4, 5, 6, 7, 8]), // wall 3, gap at bottom
-];
+
+/** Per-map maze plans. Open Field and Corridor share the classic three-wall serpentine; Dumbbell
+ *  forces its route up through the halls by walling the bottom corridors and one neck-adjacent
+ *  column. */
+const WALL_PLANS = {
+  corridor: [
+    ...wallOutward(6, [0, 1, 2, 3, 4, 5, 6, 7, 8]), // wall 1, gap at bottom
+    ...wallOutward(10, [3, 4, 5, 6, 7, 8, 9, 10, 11]), // wall 2, gap at top
+    ...wallOutward(14, [0, 1, 2, 3, 4, 5, 6, 7, 8]), // wall 3, gap at bottom
+  ],
+  dumbbell: [
+    ...wallOutward(1, [3, 4, 5, 6, 7, 8, 9, 10, 11]), // left column, gap at top
+    ...wallOutward(7, [3, 4, 5, 6, 7, 8, 9, 10, 11]), // left hall, gap at top
+    ...wallOutward(10, [0, 1, 2, 3, 4, 5, 6, 7, 8]), // across the neck, gap at bottom
+    ...wallOutward(18, [3, 4, 5, 6, 7, 8, 9, 10, 11]), // right column, gap at top
+  ],
+  'open-field': [
+    ...wallOutward(6, [0, 1, 2, 3, 4, 5, 6, 7, 8]), // wall 1, gap at bottom
+    ...wallOutward(10, [3, 4, 5, 6, 7, 8, 9, 10, 11]), // wall 2, gap at top
+    ...wallOutward(14, [0, 1, 2, 3, 4, 5, 6, 7, 8]), // wall 3, gap at bottom
+  ],
+};
 
 /** Cap on towers: the maze walls plus a full ring of route coverage, a competent-not-expert board. */
 const MAX_TOWERS = 45;
 /** The sweep has no reboot to bank for, so it may keep spending bonus salvage on extra Guns. */
 const SWEEP_MAX_TOWERS = 60;
+/** The map-summary loop plays a stronger board so every authored map is beatable. */
+const MAP_MAX_TOWERS = 60;
 
 // --- Build policy -----------------------------------------------------------------------------
 
@@ -163,8 +199,8 @@ function legalPlacement(s, path, c, r) {
   if (s.blocked.has(i)) return false;
   const blocked = new Set(s.blocked);
   blocked.add(i);
-  if (isSealed(s.grid, blocked, SPAWN, EXIT)) return false;
-  return pathTiles(buildField(s.grid, blocked), SPAWN).length === path.length;
+  if (isSealed(s.grid, blocked, spawnTile(s), exitTile(s))) return false;
+  return pathTiles(buildField(s.grid, blocked, exitTile(s)), spawnTile(s)).length === path.length;
 }
 
 function adjacentCandidates(s, path) {
@@ -341,7 +377,7 @@ function upgradePass(s) {
 }
 
 /** Build-phase policy: finish the maze, upgrade cheaply, then place coverage towers. */
-function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, maxTowers = MAX_TOWERS) {
+function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, maxTowers = MAX_TOWERS, coverage = false) {
   if (noBuild) {
     // Click-only player: no towers, spend salvage on the pointer when it is affordable.
     while (upgradePointer(s)) {
@@ -349,9 +385,10 @@ function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, 
     }
     return wallIdx;
   }
+  const plan = WALL_PLANS[s.levelId] ?? WALL_PLANS['open-field'];
   let nextWall = wallIdx;
-  while (nextWall < WALL_PLAN.length && s.towers.length < maxTowers && s.economy.salvage >= TOWER_STATS.gun.cost) {
-    const t = WALL_PLAN[nextWall];
+  while (nextWall < plan.length && s.towers.length < maxTowers && s.economy.salvage >= TOWER_STATS.gun.cost) {
+    const t = plan[nextWall];
     if (!placeTower(s, 'gun', t.col, t.row)) break;
     nextWall++;
   }
@@ -375,6 +412,21 @@ function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, 
       if (t && t.tier === 1 && s.economy.salvage >= upgradeCost(t)) upgradeTower(s, tile.col, tile.row);
     }
   }
+
+  // Coverage guns come only after the maze is fully built, so they never crowd a wall tile out, and
+  // only into slots the future specialist roster does not need. The map-summary loop asks for them
+  // outright so every authored map is beatable; the single-level support comparison leaves them out
+  // to keep the maze walls the only Guns. A short route after the maze also falls back to coverage.
+  if (nextWall >= plan.length && (coverage || currentPath(s).length < 30)) {
+    const reserve = futureSpecialistSlots(counts);
+    for (let guard = 0; guard < 400; guard++) {
+      if (s.towers.length + reserve >= maxTowers) break;
+      if (s.economy.salvage < TOWER_STATS.gun.cost) break;
+      const tile = chooseCoverageTile(s, currentPath(s));
+      if (!tile || !placeTower(s, 'gun', tile.col, tile.row)) break;
+    }
+  }
+
   if (spendSurplus) {
     // The normal policy stops once every specialist slot is filled, so its early-call bonus sits in
     // the bank. The sweep spends it: take every tower up its branch and tier ladder, buy the pointer,
@@ -468,7 +520,7 @@ function playWave(s, wave, leakList) {
   const towerPct = total > 0 ? Math.round((towerDmg / total) * 100) : 0;
   const leaks = s.leaksByWave.get(wave) ?? 0;
   leakList.push({ wave, leaks });
-  if (!quiet) {
+  if (!quiet && !silent) {
     const w = String(wave).padStart(2, '0');
     console.log(
       `w ${w} leaks ${leaks} hp ${s.integrity} sal ${s.economy.salvage} ` +
@@ -482,14 +534,14 @@ function playWave(s, wave, leakList) {
 }
 
 /** Play one full run from a fresh state; returns the outcome. */
-function playRun(profile, rebootAtWave, label, useSupport) {
-  const s = createRunState(profile);
+function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = MAX_TOWERS, coverage = false) {
+  const s = createStateOn(profile, levelId);
   const leakList = [];
   const counts = { gun: 0, cannon: 0, taser: 0, frost: 0, laser: 0, beacon: 0 };
   let wallIdx = 0;
-  if (!quiet) console.log(`--- ${label} ---`);
+  if (!quiet && !silent) console.log(`--- ${label} ---`);
   for (let wave = 1; ; wave++) {
-    wallIdx = buildPhase(s, wave, wallIdx, counts, useSupport);
+    wallIdx = buildPhase(s, wave, wallIdx, counts, useSupport, false, maxTowers, coverage);
     const result = playWave(s, wave, leakList);
     if (result.status === 'died') {
       return {
@@ -529,14 +581,14 @@ function playRun(profile, rebootAtWave, label, useSupport) {
 }
 
 /** Play a full session (reboot at --reboot-at, then run to completion) with a given support policy. */
-function runSession(useSupport, label) {
+function runSession(useSupport, label, levelId, maxTowers = MAX_TOWERS, coverage = false) {
   let profile = defaultProfile();
   let totalSpecs = 0;
   let reboots = 0;
   let final = null;
 
   for (let run = 1; ; run++) {
-    const result = playRun(profile, run === 1 ? rebootAt : 0, `${label} run ${run}`, useSupport);
+    const result = playRun(profile, run === 1 ? rebootAt : 0, `${label} run ${run}`, useSupport, levelId, maxTowers, coverage);
     reboots = run - 1;
     if (result.reached || !result.reboot) {
       final = result;
@@ -546,7 +598,7 @@ function runSession(useSupport, label) {
     totalSpecs += gained;
     allocateSpecs(nextProfile);
     profile = nextProfile;
-    if (!quiet) console.log(`reboot at wave ${result.wave} -> ${gained} specs`);
+    if (!quiet && !silent) console.log(`reboot at wave ${result.wave} -> ${gained} specs`);
   }
 
   return { final, totalSpecs, reboots };
@@ -793,26 +845,60 @@ function callSweepTable(rows) {
 
 // --- Main -------------------------------------------------------------------------------------
 
-const mainSupport = support;
-const main = runSession(mainSupport, mainSupport ? 'standard run' : 'control run (--no-support)');
-const mainTable = runSummary(main.final, main.totalSpecs, main.reboots, mainSupport ? 'standard run' : 'control run');
+// One standard run per selected map (the control replaces it under --no-support), kept quiet so
+// the map table is the whole output. Runtime stays sane because each authored map already forces a
+// long route, so the scripted player reaches wave 100 without the extra control comparison.
+const mapRows = [];
+let allReached = true;
 
-if (mainSupport) {
-  // The control: identical policy, but Frost and Beacon are replaced by Guns.
-  const control = runSession(false, 'control run');
-  const controlTable = runSummary(control.final, control.totalSpecs, control.reboots, 'control run (no support)');
+// A multi-map run plays a stronger board (coverage guns + a higher tower cap) so every authored map
+// is beatable; a single --level run keeps the original maze-only policy for the support comparison.
+silent = !singleLevel;
+const loopMaxTowers = singleLevel ? MAX_TOWERS : MAP_MAX_TOWERS;
+const loopCoverage = !singleLevel;
+for (const level of activeLevels) {
+  const std = runSession(support, `${support ? 'standard' : 'control'} run [${level.id}]`, level.id, loopMaxTowers, loopCoverage);
+  mapRows.push({ level, std });
+  if (!std.final.reached) allReached = false;
+}
+silent = false;
 
-  const stdTotal = mainTable.total;
-  const ctrlTotal = controlTable.total;
-  const stdWave = main.final.clearedWaves;
-  const ctrlWave = control.final.clearedWaves;
-  const stdPerWave = stdWave > 0 ? stdTotal / stdWave : 0;
-  const ctrlPerWave = ctrlWave > 0 ? ctrlTotal / ctrlWave : 0;
-  const delta = ctrlTotal > 0 ? ((stdTotal - ctrlTotal) / ctrlTotal) * 100 : Infinity;
-  console.log(`\nenabling effect (Frost + Beacon vs. Guns in their slots):`);
-  console.log(`  total tower damage:  standard ${Math.round(stdTotal)}  control ${Math.round(ctrlTotal)}  (${delta >= 0 ? '+' : ''}${delta.toFixed(1)}%)`);
-  console.log(`  per wave:            standard ${stdPerWave.toFixed(0)}  control ${ctrlPerWave.toFixed(0)}`);
-  console.log(`  (control ${ctrlWave < 100 ? `died at wave ${ctrlWave}` : 'reached ' + ctrlWave})`);
+console.log('\n=== maps ===');
+console.log('  map          waves cleared   integrity   salvage');
+for (const { level, std } of mapRows) {
+  console.log(
+    `  ${level.id.padEnd(11)}  ${String(std.final.clearedWaves).padStart(13)}  ` +
+      `${String(std.final.integrity).padStart(9)}  ${String(std.final.earned).padStart(7)}`,
+  );
+}
+
+// A single-map run keeps the original detailed summary, tower table and support comparison.
+if (singleLevel) {
+  const main = mapRows[0].std;
+  const mainTable = runSummary(
+    main.final,
+    main.totalSpecs,
+    main.reboots,
+    `${support ? 'standard' : 'control'} run [${mapRows[0].level.id}]`,
+  );
+
+  if (support) {
+    // The control: identical policy, but Frost and Beacon are replaced by Guns.
+    const control = runSession(false, 'control run', mapRows[0].level.id);
+    const controlTable = runSummary(control.final, control.totalSpecs, control.reboots, 'control run (no support)');
+
+    const stdTotal = mainTable.total;
+    const ctrlTotal = controlTable.total;
+    const stdWave = main.final.clearedWaves;
+    const ctrlWave = control.final.clearedWaves;
+    const stdPerWave = stdWave > 0 ? stdTotal / stdWave : 0;
+    const ctrlPerWave = ctrlWave > 0 ? ctrlTotal / ctrlWave : 0;
+    const delta = ctrlTotal > 0 ? ((stdTotal - ctrlTotal) / ctrlTotal) * 100 : Infinity;
+    console.log(`\nenabling effect (Frost + Beacon vs. Guns in their slots):`);
+    console.log(`  total tower damage:  standard ${Math.round(stdTotal)}  control ${Math.round(ctrlTotal)}  (${delta >= 0 ? '+' : ''}${delta.toFixed(1)}%)`);
+    console.log(`  per wave:            standard ${stdPerWave.toFixed(0)}  control ${ctrlPerWave.toFixed(0)}`);
+    console.log(`  (control ${ctrlWave < 100 ? `died at wave ${ctrlWave}` : 'reached ' + ctrlWave})`);
+  }
 }
 
 if (callMode) {
@@ -841,4 +927,4 @@ if (callSweepMode) {
   callSweepTable(sweep);
 }
 
-process.exit(main.final.reached ? 0 : 1);
+process.exit(allReached ? 0 : 1);

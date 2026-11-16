@@ -1,4 +1,4 @@
-import { COLS, EXIT, ROWS, inBounds, type Grid, type Tile } from './grid.ts';
+import { COLS, ROWS, inBounds, type Grid, type Tile } from './grid.ts';
 
 /**
  * Free pathing: a distance field over the board, rebuilt whenever towers change the maze.
@@ -21,7 +21,7 @@ const DIRS: readonly (readonly [number, number])[] = [
  * tiles to the exit. `-1` marks tiles the exit cannot be reached from. All edges cost one tile, so a
  * FIFO queue of buckets (one per distance) is a valid Dijkstra without a priority queue.
  */
-export function buildField(grid: Grid, blocked: ReadonlySet<number>): Int32Array {
+export function buildField(grid: Grid, blocked: ReadonlySet<number>, exit: Tile): Int32Array {
   const { cols, rows, tiles } = grid;
   const n = cols * rows;
   const field = new Int32Array(n).fill(-1);
@@ -29,7 +29,7 @@ export function buildField(grid: Grid, blocked: ReadonlySet<number>): Int32Array
   let head = 0;
   let tail = 0;
 
-  const start = EXIT.row * cols + EXIT.col;
+  const start = exit.row * cols + exit.col;
   field[start] = 0;
   queue[tail++] = start;
 

@@ -3,7 +3,8 @@ import { bevel, FONT, PAL, pointInRect, type Layout, type Rect } from './chrome.
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
 import { comboMultiplier, nextStageCost, pointerInfo } from '../core/pointer.ts';
-import { currentPath, isFinalWave, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
+import { canCycleLevel, currentPath, isFinalWave, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
+import { levelById } from '../core/levels.ts';
 import {
   effectiveStats,
   sellValue,
@@ -34,6 +35,7 @@ export type HudAction =
   | TowerKind
   | 'pointer'
   | 'wave'
+  | 'map'
   | 'upgrade'
   | 'sell'
   | 'target'
@@ -156,6 +158,11 @@ interface SpecShopLayout {
   rows: SpecRow[];
 }
 
+interface MapRow {
+  row: Rect;
+  next: Rect;
+}
+
 interface HudLayout {
   integrity: Rect;
   route: Rect | null;
@@ -164,6 +171,7 @@ interface HudLayout {
   pointerUpgrade: Rect;
   towers: ReadonlyArray<{ kind: TowerKind; rect: Rect }>;
   wave: Rect;
+  map: MapRow | null;
   specs: SpecShopLayout | null;
 }
 
@@ -238,6 +246,16 @@ function computeHud(l: Layout, s: RunState): HudLayout {
   const pointerPanel: Rect = { x, y: cy, w, h: 44 };
   const pointerUpgrade: Rect = { x: x + 4, y: cy + 22, w: w - 8, h: 18 };
   cy += 44 + 8;
+
+  let map: MapRow | null = null;
+  if (canCycleLevel(s)) {
+    const row: Rect = { x, y: cy, w, h: 18 };
+    const nextW = 40;
+    const next: Rect = { x: row.x + row.w - nextW, y: row.y + 1, w: nextW, h: 16 };
+    map = { row, next };
+    cy += 18 + 6;
+  }
+
   const wave: Rect = { x, y: cy, w, h: 28 };
   cy += 28 + 8;
 
@@ -279,7 +297,7 @@ function computeHud(l: Layout, s: RunState): HudLayout {
     specs = { header, rows };
   }
 
-  return { integrity, route, detail, pointerPanel, pointerUpgrade, towers, wave, specs };
+  return { integrity, route, detail, pointerPanel, pointerUpgrade, towers, wave, map, specs };
 }
 
 /**
@@ -316,6 +334,8 @@ export function hudButtonAt(l: Layout, s: RunState, px: number, py: number): Hud
       if (canAfford(s.economy, TOWER_STATS[t.kind].cost) && pointInRect(t.rect, px, py)) return t.kind;
     }
   }
+
+  if (h.map && pointInRect(h.map.next, px, py)) return 'map';
 
   if ((s.phase === 'build' || s.phase === 'wave') && !isFinalWave(s) && pointInRect(h.wave, px, py)) return 'wave';
 
@@ -439,6 +459,8 @@ export class HudView {
   private readonly pointerButton = makeText('');
   private readonly towerButtons: Text[];
   private readonly waveButton = makeText('', true);
+  private readonly mapLabel = makeText('');
+  private readonly mapNext = makeText('');
   private readonly modalTitle = makeText('', true);
   private readonly modalMessage = makeText('');
   private readonly modalRestart = makeText('Restart');
@@ -476,6 +498,8 @@ export class HudView {
       this.pointerButton,
       ...this.towerButtons,
       this.waveButton,
+      this.mapLabel,
+      this.mapNext,
       this.nextWaveTitle,
       ...this.nextWaveRows,
       this.killsTitle,
@@ -491,6 +515,7 @@ export class HudView {
       this.root.addChild(t);
     }
     for (const t of this.branchButtons) t.anchor.set(0.5, 0.5);
+    this.mapNext.anchor.set(0.5, 0.5);
     for (const t of this.specLabels) t.style.fontSize = 10;
     for (const t of this.specButtons) {
       t.style.fontSize = 10;
@@ -573,6 +598,19 @@ export class HudView {
       h.pointerUpgrade.x + 6,
       h.pointerUpgrade.y + Math.floor(h.pointerUpgrade.h / 2),
     );
+
+    if (h.map) {
+      const name = levelById(s.levelId).name;
+      drawButton(g, h.map.next, true, hoverHud === 'map');
+      this.mapNext.text = 'Next';
+      this.mapNext.style.fill = PAL.text;
+      this.mapNext.position.set(h.map.next.x + h.map.next.w / 2, h.map.next.y + Math.floor(h.map.next.h / 2));
+      this.mapLabel.text = `MAP  ${name}`;
+      this.mapLabel.position.set(h.map.row.x + 6, h.map.row.y + Math.floor(h.map.row.h / 2));
+    } else {
+      this.mapLabel.text = '';
+      this.mapNext.text = '';
+    }
 
     if (s.phase === 'build' || s.phase === 'wave') {
       const enabled = !isFinalWave(s);

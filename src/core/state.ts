@@ -1,12 +1,10 @@
 import {
-  createGrid,
-  EXIT,
   inBounds,
-  SPAWN,
   tileAt,
   type Grid,
   type Tile,
 } from './grid.ts';
+import { createGrid, DEFAULT_LEVEL, LEVELS, levelById } from './levels.ts';
 import { buildField, isSealed, pathTiles, stepToward } from './pathfield.ts';
 import { createEnemy, ENEMY_STATS, isWeakPointHit, radiusOf, speedPerTick, type Enemy, type EnemyKind } from './enemies.ts';
 import {
@@ -115,7 +113,9 @@ export interface WaveRun {
 }
 
 export interface RunState {
-  readonly grid: Grid;
+  grid: Grid;
+  /** Authored map id (see levels.ts); carried in state so a cycle rebuilds the board. */
+  levelId: string;
   /** Distance-in-tiles to the exit for every walkable, unblocked tile; -1 unreachable. */
   field: Int32Array;
   /** Tower tiles (blocked for pathing), by index row * COLS + col. */
@@ -201,7 +201,8 @@ export interface RunState {
 }
 
 export function createRunState(profile: Profile = defaultProfile()): RunState {
-  const grid = createGrid();
+  const level = DEFAULT_LEVEL;
+  const grid = createGrid(level);
   const blocked = new Set<number>();
   const specs: SpecLevels = {
     cpu: profile.specs.cpu,
@@ -211,7 +212,8 @@ export function createRunState(profile: Profile = defaultProfile()): RunState {
   };
   return {
     grid,
-    field: buildField(grid, blocked),
+    levelId: level.id,
+    field: buildField(grid, blocked, level.exits[0]),
     blocked,
     phase: 'build',
     wave: 0,
@@ -264,6 +266,33 @@ export function createRunState(profile: Profile = defaultProfile()): RunState {
 // ---------------------------------------------------------------------------------------------
 // Queries
 
+/** The single spawn tile of the current level; the gate accessor every end-of-route read uses. */
+export function spawnTile(s: RunState): Tile {
+  return levelById(s.levelId).starts[0];
+}
+
+/** The single exit tile of the current level. */
+export function exitTile(s: RunState): Tile {
+  return levelById(s.levelId).exits[0];
+}
+
+/** Map selection is only offered before wave 1, with no towers placed. */
+export function canCycleLevel(s: RunState): boolean {
+  return s.phase === 'build' && s.wave === 0 && s.towers.length === 0;
+}
+
+/** Advance to the next authored map, rebuilding the grid and path field. Refused after the run starts. */
+export function cycleLevel(s: RunState): boolean {
+  if (!canCycleLevel(s)) return false;
+  const idx = LEVELS.findIndex((l) => l.id === s.levelId);
+  const next = LEVELS[(idx + 1 + LEVELS.length) % LEVELS.length];
+  s.levelId = next.id;
+  s.grid = createGrid(next);
+  s.blocked = new Set();
+  s.field = buildField(s.grid, s.blocked, next.exits[0]);
+  return true;
+}
+
 export function towerAt(s: RunState, col: number, row: number): Tower | undefined {
   return s.towers.find((t) => t.col === col && t.row === row);
 }
@@ -281,7 +310,7 @@ export function canPlace(s: RunState, kind: TowerKind, col: number, row: number)
   if (!canAfford(s.economy, TOWER_STATS[kind].cost)) return false;
   const idx = row * s.grid.cols + col;
   s.blocked.add(idx);
-  const sealed = isSealed(s.grid, s.blocked, SPAWN, EXIT);
+  const sealed = isSealed(s.grid, s.blocked, spawnTile(s), exitTile(s));
   s.blocked.delete(idx);
   return !sealed;
 }
@@ -349,11 +378,11 @@ export function togglePause(s: RunState): void {
 
 /** The route creeps will take right now, for drawing. */
 export function currentPath(s: RunState): Tile[] {
-  return pathTiles(s.field, SPAWN);
+  return pathTiles(s.field, spawnTile(s));
 }
 
 function rebuildField(s: RunState): void {
-  s.field = buildField(s.grid, s.blocked);
+  s.field = buildField(s.grid, s.blocked, exitTile(s));
 }
 
 export function upgradeTower(s: RunState, col: number, row: number): boolean {
@@ -615,7 +644,7 @@ function spawnDue(s: RunState): void {
   for (const run of s.runs) {
     while (run.spawns.length > 0 && run.startTick + run.spawns[0].tick <= s.clock) {
       const sp = run.spawns.shift()!;
-      s.enemies.push(createEnemy(s.nextId++, sp.kind, run.wave, SPAWN, EXIT));
+      s.enemies.push(createEnemy(s.nextId++, sp.kind, run.wave, spawnTile(s), exitTile(s)));
     }
   }
 }
@@ -623,6 +652,7 @@ function spawnDue(s: RunState): void {
 function moveEnemies(s: RunState): void {
   const globalSlow = s.enemySlowTicks > 0 ? 0.5 : 1;
   const speedMult = s.modifiers.includes('fast') ? 1.15 : 1;
+  const exit = exitTile(s);
   for (const e of s.enemies) {
     if (e.dead) continue;
     e.prevX = e.x;
@@ -650,7 +680,7 @@ function moveEnemies(s: RunState): void {
         remaining -= d;
         e.col = e.targetCol;
         e.row = e.targetRow;
-        if (e.col === EXIT.col && e.row === EXIT.row) {
+        if (e.col === exit.col && e.row === exit.row) {
           leak(s, e);
           break;
         }

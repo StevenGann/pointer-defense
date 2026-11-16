@@ -49,8 +49,8 @@ A run to prestige is **45–90 minutes**. Waves 1–10 are a tutorial; a hundred
 ### 5.1 Geometry
 
 - **20 × 12 tiles**, integer cell size, board centred in its client column.
-- **Spawn** on the left edge, **exit** on the right edge, both on row 6.
-- Roughly ten **blocked** tiles: desk objects sitting on the field, impassable and never buildable.
+- **Spawn** on the left edge, **exit** on the right edge, both on row 6 (per map — see §5.5).
+- **Blocked** tiles are desk objects and authored walls, impassable and never buildable.
 - The board sits in a 2px sunken well inside the window's client area.
 
 ### 5.2 Mazing
@@ -79,6 +79,42 @@ Sealing is detected by flood fill from the spawn after a hypothetical placement.
 From wave 6, part of each wave flies **straight from spawn to exit**, ignoring the maze and the blocked
 tiles. This is the answer to an over-mazed board and the reason mazing cannot be the whole strategy.
 Flyers are purple chevrons with motion ticks, and the next-wave preview names them.
+
+### 5.5 Authored maps
+
+The board is a small library of authored maps rather than one fixed lane. Before wave 1, with no
+towers placed, the left panel shows `MAP <name>  [Next]`; clicking cycles the map, rebuilding the
+grid, the path field and the route-length readout. The row disappears once the run starts. The level
+id is carried in the run state and survives a restart only as the default.
+
+| id | Name | Walls | Route (tiles) |
+|---|---|---|---|
+| `corridor` | The Corridor | four baffles forcing four switchbacks | 48 |
+| `dumbbell` | Dumbbell | two 6-wide halls joined by a 2-tile neck | 28 |
+| `open-field` | Open Field | the ten decorative desk-object tiles | 22 |
+
+Legend: `#` wall, `.` buildable, `S` start, `X` exit.
+
+```
+The Corridor                      Dumbbell                          Open Field
+....#.......#.......              ....................              ...........##.......
+....#.......#.......              ....................              ..................#.
+....#.......#.......              ..#####......#####..              ....................
+....#...#...#...#...              ..#..............#..              ....................
+....#...#...#...#...              ..#..............#..              ....................
+....#...#...#...#...              ..#.....#..#.....#..              ....................
+S...#...#...#...#..X              S.......#..#.......X              S..........##......X
+...#...#...#...#...              ..#.....#..#.....#..              ....................
+...#...#...#...#...              ..#..............#..              ....................
+........#.......#...              ..#####......#####..              .##.................
+........#.......#...              ....................              .#..................
+........#.......#...              ....................              ......##............
+```
+
+The Corridor's baffles are column 4 rows 0-8, column 8 rows 3-11, column 12 rows 0-8 and column 16
+rows 3-11. Dumbbell's walls are columns 2 and 17 rows 2-9, row 2 and row 9 columns 2-6 and 13-17, and
+the neck walls at columns 8 and 11 rows 5-7. Open Field keeps the ten decorative tiles from the
+original board. All three spawn at (0,6) and exit at (19,6).
 
 ---
 
@@ -581,7 +617,7 @@ by feel.
 
 | Question | Default |
 |---|---|
-| One map or several? | one board at launch; wallpapers reskin it, they do not change the layout |
+| One map or several? | three authored maps ship; the level id is chosen before wave 1 and carries through the run |
 | Co-op? | no. A shared board with two pointers is a different game |
 | Mobile? | no. Mazing and clicking both want a mouse |
 | Leaderboard? | no server; a local best-run table only |
@@ -631,8 +667,8 @@ pointer is precision, not bulk DPS.*
 
 ### What is not built
 
-- **A second map.** One board, one spawn and one exit. More maps are content, but the maze is the game,
-  so a second board should change the spawn geometry rather than the palette.
+- **Map authoring beyond the three shipped maps.** The Corridor, Dumbbell and Open Field ship; more
+  maps are content, and a new board should change the spawn geometry rather than the palette.
 - **Save mid-run.** The profile persists; a run in progress does not. Reloading restarts the wave you
   are on.
 - **Touch input.** Mouse and keyboard only.

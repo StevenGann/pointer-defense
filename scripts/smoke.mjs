@@ -23,19 +23,33 @@ import {
   chooseBranch,
   sellTower,
   towerAt,
+  cycleLevel,
+  canCycleLevel,
 } from '../src/core/state.ts';
 import { TOWER_STATS, effectiveStats, upgradeCost, createTower } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
-import { buildField } from '../src/core/pathfield.ts';
-import { createGrid, SPAWN, EXIT, COLS, ROWS, tileAt } from '../src/core/grid.ts';
+import { buildField, pathTiles } from '../src/core/pathfield.ts';
+import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
+import { LEVELS, DEFAULT_LEVEL, createGrid, levelById } from '../src/core/levels.ts';
 import { createEnemy } from '../src/core/enemies.ts';
 import { spawnPopup, dismissPopup } from '../src/core/popups.ts';
 import { comboMultiplier } from '../src/core/pointer.ts';
 import { loadProfile, saveProfile, defaultProfile } from '../src/core/save.ts';
 import { restartWindows, checkAchievements, enterEndless } from '../src/core/state.ts';
+
+// All v0.10b levels share a single spawn and exit, so the older maze checks keep a local gate.
+const SPAWN = DEFAULT_LEVEL.starts[0];
+const EXIT = DEFAULT_LEVEL.exits[0];
+
+/** A fresh run on a specific level, reached by cycling from the default. */
+function stateOnLevel(id) {
+  const s = createRunState();
+  while (s.levelId !== id) cycleLevel(s);
+  return s;
+}
 
 let failures = 0;
 function check(cond, msg) {
@@ -45,7 +59,7 @@ function check(cond, msg) {
 
 // --- 1. Towers alone clear wave 1 -------------------------------------------------------------
 {
-  const s = createRunState();
+  const s = stateOnLevel('open-field');
   const start = s.economy.salvage;
   // (3,6) sits on the spawn row, so the gun covers the route and forces a small detour.
   check(placeTower(s, 'gun', 3, 6), 'gun placed on a buildable tile');
@@ -72,7 +86,7 @@ function check(cond, msg) {
 
 // --- 2. Kill attribution: a click kill pays 1.5x ---------------------------------------------
 {
-  const s = createRunState();
+  const s = stateOnLevel('open-field');
   startWave(s);
   while (s.enemies.length === 0) tick(s);
   const e = s.enemies[0];
@@ -129,7 +143,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 
   // 5b. A legal wall measurably lengthens the route. Extending the two decorative obstacles at
   // (11,6)/(12,6) into a three-tall barrier forces creeps around it instead of over it.
-  const s2 = createRunState();
+  const s2 = stateOnLevel('open-field');
   const before = currentPath(s2).length;
   s2.economy.salvage = 10000;
   for (const [c, r] of [[11, 5], [12, 5], [11, 7], [12, 7]]) {
@@ -139,12 +153,12 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(after > before, `detour lengthens the route (${before} -> ${after} tiles)`);
 
   // 5c. buildField: finite at the exit, -1 once the board is sealed.
-  const grid = createGrid();
-  const open = buildField(grid, new Set());
+  const grid = createGrid(DEFAULT_LEVEL);
+  const open = buildField(grid, new Set(), EXIT);
   check(open[EXIT.row * COLS + EXIT.col] === 0, 'buildField gives the exit a finite distance (0)');
   const wall = new Set();
   for (let r = 0; r < ROWS; r++) wall.add(r * COLS + 10);
-  const sealed = buildField(grid, wall);
+  const sealed = buildField(grid, wall, EXIT);
   check(sealed[SPAWN.row * COLS + SPAWN.col] === -1, 'buildField gives -1 at spawn on a sealed board');
 
   // 5d. A flyer crosses the board in fewer ticks than a grunt on the same wave.
@@ -162,6 +176,65 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   const gruntTicks = ticksToLeak('grunt');
   const flyerTicks = ticksToLeak('flyer');
   check(flyerTicks < gruntTicks, `flyer crosses in fewer ticks than a grunt (${flyerTicks} < ${gruntTicks})`);
+}
+
+// --- 5e. Authored levels: walkable ends, expected route length, sealing, mazing, cycling -------
+{
+  // Every level loads with a walkable start and exit and a route of the documented length.
+  const ROUTE_TOLERANCE = 2;
+  const ROUTE_LENGTHS = { corridor: 48, dumbbell: 28, 'open-field': 22 };
+  for (const level of LEVELS) {
+    const grid = createGrid(level);
+    const field = buildField(grid, new Set(), level.exits[0]);
+    const spawnIdx = level.starts[0].row * COLS + level.starts[0].col;
+    const exitIdx = level.exits[0].row * COLS + level.exits[0].col;
+    check(field[spawnIdx] >= 0, `${level.id}: spawn is walkable at load`);
+    check(field[exitIdx] === 0, `${level.id}: exit is walkable at load`);
+    const route = pathTiles(field, level.starts[0]);
+    const expected = ROUTE_LENGTHS[level.id];
+    check(Math.abs(route.length - expected) <= ROUTE_TOLERANCE,
+      `${level.id}: route is ${route.length} tiles (expected ~${expected})`);
+  }
+
+  // Sealing a level's only route is refused: a tower on the spawn or exit tile never goes down.
+  {
+    const s = createRunState();
+    for (let i = 0; i < LEVELS.length; i++) {
+      const level = levelById(s.levelId);
+      const exit = level.exits[0];
+      const spawn = level.starts[0];
+      check(!canPlace(s, 'gun', exit.col, exit.row), `${level.id}: exit placement is refused`);
+      check(!canPlace(s, 'gun', spawn.col, spawn.row), `${level.id}: spawn placement is refused`);
+      cycleLevel(s);
+    }
+  }
+
+  // The Corridor: blocking the gaps of three baffles (and one extra tower) pushes the route around
+  // the longer wrap, growing it by well over six tiles.
+  {
+    const s = createRunState(); // default = corridor
+    const before = currentPath(s).length;
+    s.economy.salvage = 10000;
+    for (const [c, r] of [[4, 9], [4, 10], [12, 9], [12, 10], [8, 2], [8, 1], [16, 2]]) {
+      check(placeTower(s, 'gun', c, r), `corridor wall tower placed at ${c},${r}`);
+    }
+    const after = currentPath(s).length;
+    check(after - before >= 6, `corridor mazing grows the route by at least 6 tiles (${before} -> ${after})`);
+  }
+
+  // Cycling before wave 1 changes the route; it is refused once a tower exists.
+  {
+    const s = createRunState();
+    const first = currentPath(s).length;
+    check(canCycleLevel(s), 'map cycling is available before wave 1');
+    check(cycleLevel(s), 'cycle to the next map');
+    check(s.levelId !== 'corridor', 'cycling changes the level id');
+    check(currentPath(s).length !== first, 'cycling changes the route length');
+    s.economy.salvage = 10000;
+    placeTower(s, 'gun', 5, 5);
+    check(!canCycleLevel(s), 'map cycling is refused once a tower exists');
+    check(!cycleLevel(s), 'cycleLevel returns false once a tower exists');
+  }
 }
 
 // --- 6. Tier ladder, branches, selling -------------------------------------------------------
@@ -198,7 +271,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(branched2.tier === 3 && branched2.branch === 'B', `tower is tier 3 branch ${branched2.branch}`);
 
   // 6c. Selling refunds floor(spent * 0.7) and restores the route length.
-  const s3 = createRunState();
+  const s3 = stateOnLevel('open-field');
   s3.economy.salvage = 10000;
   const routeBefore = currentPath(s3).length;
   for (const [c, r] of [[11, 5], [12, 5], [11, 7], [12, 7]]) placeTower(s3, 'gun', c, r);

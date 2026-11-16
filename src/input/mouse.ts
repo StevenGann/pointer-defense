@@ -12,6 +12,7 @@ import { type SpecKind } from '../core/save.ts';
 import {
   cancelSelection,
   chooseBranch,
+  cycleLevel,
   cycleTargetMode,
   enemyAt,
   placeTower,
@@ -245,6 +246,9 @@ export class MouseController {
         break;
       case 'wave':
         startWave(s);
+        break;
+      case 'map':
+        cycleLevel(s);
         break;
       case 'upgrade': {
         const tower = selectedTower(s);
