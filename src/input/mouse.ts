@@ -1,6 +1,8 @@
 import type { Application } from 'pixi.js';
-import { menuItemAt, pixelToWorld, type Layout } from '../view/chrome.ts';
+import { menuItemAt, pixelToWorld, pointInRect, type Layout } from '../view/chrome.ts';
 import { hudButtonAt, modalRestartAt, type HudAction } from '../view/hud.ts';
+import { popupCloseRect } from '../view/popup.ts';
+import { dismissPopup } from '../core/popups.ts';
 import { canAfford } from '../core/economy.ts';
 import { tileAt } from '../core/grid.ts';
 import { TOWER_KINDS, TOWER_STATS, type TowerKind } from '../core/towers.ts';
@@ -116,6 +118,12 @@ export class MouseController {
     const s = this.ctx.state();
     const l = this.ctx.layout();
     const { x, y } = this.localPoint(e);
+
+    // A desktop pop-up's close box, drawn outside the board window.
+    if (s.popup && pointInRect(popupCloseRect(s.popup), x, y)) {
+      dismissPopup(s, s.popup.id);
+      return;
+    }
 
     if (s.phase === 'halted' || s.phase === 'victory') {
       if (modalRestartAt(l, s, x, y)) this.ctx.restart();

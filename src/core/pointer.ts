@@ -36,10 +36,22 @@ export interface PointerState {
   /** Last known cursor position in world units (tiles). */
   x: number;
   y: number;
+  /** Consecutive weak-point hits in a row. */
+  combo: number;
+  /** Ticks remaining before the combo expires (refreshed on every weak-point hit). */
+  comboTicks: number;
 }
 
 export function createPointer(): PointerState {
-  return { stage: 1, targetId: null, held: false, x: -10, y: -10 };
+  return { stage: 1, targetId: null, held: false, x: -10, y: -10, combo: 0, comboTicks: 0 };
+}
+
+/** A weak-point hit keeps the combo alive this many ticks (5 s). */
+export const COMBO_TICKS = 300;
+
+/** Click/reticle damage multiplier from the combo: 1 + 0.1 per hit, capped at 2. */
+export function comboMultiplier(p: PointerState): number {
+  return Math.min(2, 1 + 0.1 * p.combo);
 }
 
 /** Distance (tiles) the cursor may drift off a locked target before the reticle lets go. */

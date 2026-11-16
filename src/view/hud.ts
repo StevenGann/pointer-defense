@@ -2,7 +2,7 @@ import { Container, Graphics, Text } from 'pixi.js';
 import { bevel, FONT, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
-import { nextStageCost, pointerInfo } from '../core/pointer.ts';
+import { comboMultiplier, nextStageCost, pointerInfo } from '../core/pointer.ts';
 import { currentPath, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
 import {
   effectiveStats,
@@ -237,6 +237,7 @@ export class HudView {
   private readonly nextWaveRows: Text[] = [makeText(''), makeText(''), makeText('')];
   private readonly killsTitle = makeText('KILLS', true);
   private readonly killsRows: Text[] = [makeText(''), makeText(''), makeText('')];
+  private readonly comboText = makeText('', true);
   private readonly pointerTitle = makeText('POINTER', true);
   private readonly pointerRows: Text[] = [makeText(''), makeText(''), makeText(''), makeText('')];
 
@@ -265,6 +266,7 @@ export class HudView {
       ...this.killsRows,
       this.pointerTitle,
       ...this.pointerRows,
+      this.comboText,
     ]) {
       t.anchor.set(0, 0.5);
       this.root.addChild(t);
@@ -277,6 +279,7 @@ export class HudView {
     }
     this.modalTitle.style.fill = PAL.titleInverse;
     this.modalRestart.anchor.set(0.5, 0.5);
+    this.comboText.style.fill = PAL.title;
   }
 
   showNotice(message: string): void {
@@ -448,6 +451,18 @@ export class HudView {
     const x = l.rightPanel.x + pad;
     const w = l.rightPanel.w - pad * 2;
     let y = l.rightPanel.y + pad;
+
+    // Combo readout: visible while the multiplier is above x1, so the timer ticking down is legible.
+    const mult = comboMultiplier(s.pointer);
+    if (mult > 1) {
+      this.comboText.text = `COMBO x${mult.toFixed(1)}`;
+      this.comboText.position.set(x + 2, y + 8);
+      this.comboText.visible = true;
+      y += 16;
+    } else {
+      this.comboText.text = '';
+      this.comboText.visible = false;
+    }
 
     const wave = s.phase === 'build' ? s.wave + 1 : s.wave;
     const def = WAVES[wave - 1];

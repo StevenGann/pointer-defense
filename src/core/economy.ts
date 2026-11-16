@@ -13,6 +13,9 @@ export type DamageSource = 'tower' | 'pointer';
 /** Multiplier applied to a kill's base value when the pointer landed the killing blow. */
 export const POINTER_KILL_BONUS = 1.5;
 
+/** Multiplier applied when the pointer landed the killing blow on the enemy's weak point. */
+export const WEAK_POINT_KILL_BONUS = 2;
+
 export const STARTING_SALVAGE = 60;
 
 /** Flat bonus paid when a wave is cleared, scaled by wave number. */
@@ -44,7 +47,17 @@ export function killReward(baseValue: number, source: DamageSource): number {
 }
 
 export function recordKill(eco: Economy, baseValue: number, source: DamageSource): number {
-  const reward = killReward(baseValue, source);
+  return recordKillAt(eco, baseValue, source, source === 'pointer' ? POINTER_KILL_BONUS : 1);
+}
+
+/** Record a kill paid at an explicit multiplier (used for the 2x weak-point bonus). */
+export function recordKillAt(
+  eco: Economy,
+  baseValue: number,
+  source: DamageSource,
+  multiplier: number,
+): number {
+  const reward = Math.round(baseValue * multiplier);
   eco.salvage += reward;
   eco.earned += reward;
   eco.kills[source] += 1;

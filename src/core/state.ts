@@ -8,10 +8,11 @@ import {
   type Tile,
 } from './grid.ts';
 import { buildField, isSealed, pathTiles, stepToward } from './pathfield.ts';
-import { createEnemy, ENEMY_STATS, radiusOf, speedPerTick, type Enemy } from './enemies.ts';
+import { createEnemy, ENEMY_STATS, isWeakPointHit, radiusOf, speedPerTick, type Enemy } from './enemies.ts';
 import {
   createTower,
   effectiveStats,
+  recomputeAuras,
   TOWER_STATS,
   sellValue,
   upgradeCost,
@@ -26,13 +27,17 @@ import {
   createEconomy,
   earn,
   recordKill,
+  recordKillAt,
   spend,
+  WEAK_POINT_KILL_BONUS,
   waveClearBonus,
   type DamageSource,
   type Economy,
 } from './economy.ts';
 import {
   CLICK_SLACK,
+  COMBO_TICKS,
+  comboMultiplier,
   createPointer,
   holdDamagePerTick,
   MAX_POINTER_STAGE,
@@ -43,6 +48,7 @@ import {
   type PointerState,
 } from './pointer.ts';
 import { buildSchedule, WAVE_COUNT, type Spawn } from './waves.ts';
+import { tickPopups, type Popup } from './popups.ts';
 import { TICK_MS } from './time.ts';
 
 /**
@@ -63,6 +69,7 @@ export type GameEvent =
   | { type: 'leak'; x: number; y: number }
   | { type: 'shot'; towerId: number; x: number; y: number; splash: number }
   | { type: 'click'; x: number; y: number; hit: boolean }
+  | { type: 'damage'; x: number; y: number; amount: number; weak: boolean }
   | { type: 'waveCleared'; wave: number; bonus: number };
 
 export interface RunState {
@@ -94,6 +101,20 @@ export interface RunState {
   nextId: number;
   /** One-shot events produced since the view last drained them. */
   events: GameEvent[];
+  /** The live desktop pop-up, or null. */
+  popup: Popup | null;
+  /** Tick when the next pop-up spawn may be attempted. */
+  nextPopupAttemptTick: number;
+  /** Ticks remaining on the AutoUpdate tower damage buff. */
+  towerDamageBuffTicks: number;
+  /** Ticks remaining on the Time Zone enemy slow. */
+  enemySlowTicks: number;
+  /** Tower id -> ticks remaining it is disabled. */
+  towerDisabled: Map<number, number>;
+  /** Seeded PRNG state (see rng.ts). */
+  rng: number;
+  /** Desktop geometry for pop-up placement, updated by the view on resize. */
+  viewport: { width: number; height: number; window: { x: number; y: number; w: number; h: number } };
 }
 
 export function createRunState(): RunState {
@@ -118,6 +139,13 @@ export function createRunState(): RunState {
     accumulator: 0,
     nextId: 1,
     events: [],
+    popup: null,
+    nextPopupAttemptTick: 0,
+    towerDamageBuffTicks: 0,
+    enemySlowTicks: 0,
+    towerDisabled: new Map(),
+    rng: 0x9e3779b9,
+    viewport: { width: 1280, height: 800, window: { x: 24, y: 24, w: 1232, h: 752 } },
   };
 }
 
@@ -180,7 +208,7 @@ export function placeTower(s: RunState, kind: TowerKind, col: number, row: numbe
   s.blocked.add(row * s.grid.cols + col);
   s.towers.push(createTower(s.nextId++, kind, col, row));
   rebuildField(s);
-  recomputeAuras(s);
+  recomputeAuras(s.towers);
   return true;
 }
 
@@ -193,26 +221,6 @@ function rebuildField(s: RunState): void {
   s.field = buildField(s.grid, s.blocked);
 }
 
-function recomputeAuras(s: RunState): void {
-  for (const t of s.towers) {
-    t.auraDamage = 1;
-    t.auraRange = 0;
-  }
-  for (const b of s.towers) {
-    const st = effectiveStats(b);
-    if (st.auraDamage <= 0 && st.auraRange <= 0) continue;
-    const r = st.range;
-    for (const t of s.towers) {
-      if (t.id === b.id) continue;
-      const d2 = (t.col + 0.5 - (b.col + 0.5)) ** 2 + (t.row + 0.5 - (b.row + 0.5)) ** 2;
-      if (d2 <= r * r) {
-        t.auraDamage *= 1 + st.auraDamage;
-        t.auraRange += st.auraRange;
-      }
-    }
-  }
-}
-
 export function upgradeTower(s: RunState, col: number, row: number): boolean {
   if (s.phase === 'halted' || s.phase === 'victory') return false;
   const t = towerAt(s, col, row);
@@ -222,7 +230,7 @@ export function upgradeTower(s: RunState, col: number, row: number): boolean {
   if (!spend(s.economy, cost)) return false;
   t.tier = (t.tier + 1) as Tier;
   t.spent += cost;
-  recomputeAuras(s);
+  recomputeAuras(s.towers);
   return true;
 }
 
@@ -236,7 +244,7 @@ export function chooseBranch(s: RunState, col: number, row: number, branch: Bran
   t.branch = branch;
   t.tier = 3;
   t.spent += cost;
-  recomputeAuras(s);
+  recomputeAuras(s.towers);
   return true;
 }
 
@@ -249,7 +257,7 @@ export function sellTower(s: RunState, col: number, row: number): boolean {
   s.economy.salvage += refund;
   if (s.selectedTowerId === t.id) s.selectedTowerId = null;
   rebuildField(s);
-  recomputeAuras(s);
+  recomputeAuras(s.towers);
   return true;
 }
 
@@ -259,7 +267,7 @@ export function startWave(s: RunState): boolean {
   s.phase = 'wave';
   s.schedule = buildSchedule(s.wave);
   s.waveTick = 0;
-  recomputeAuras(s);
+  recomputeAuras(s.towers);
   return true;
 }
 
@@ -296,10 +304,20 @@ export function pointerDown(s: RunState, x: number, y: number): boolean {
   s.pointer.held = true;
   const relay = relayPointerBonus(s, x, y);
   const target = enemyAt(s, x, y, CLICK_SLACK + relay.slack);
+  const weak = target ? isWeakPointHit(target, x, y) : false;
   s.events.push({ type: 'click', x, y, hit: !!target });
-  if (!target) return false;
+  if (!target) {
+    s.pointer.combo = 0;
+    s.pointer.comboTicks = 0;
+    return false;
+  }
   s.pointer.targetId = target.id;
-  damageEnemy(s, target, pointerInfo(s.pointer).clickDamage * relay.damage, 'pointer', true);
+  const base = pointerInfo(s.pointer).clickDamage * relay.damage;
+  damageEnemy(s, target, base * comboMultiplier(s.pointer) * (weak ? 2 : 1), 'pointer', true, undefined, weak);
+  if (weak) {
+    s.pointer.combo++;
+    s.pointer.comboTicks = COMBO_TICKS;
+  }
   return true;
 }
 
@@ -345,6 +363,8 @@ export function step(s: RunState, dtMs: number): number {
 export function tick(s: RunState): void {
   s.tick++;
   for (const t of s.towers) if (t.flash > 0) t.flash--;
+  decayCombo(s);
+  tickPopups(s);
   if (s.phase !== 'wave') return;
 
   spawnDue(s);
@@ -358,6 +378,15 @@ export function tick(s: RunState): void {
   if (s.schedule.length === 0 && s.enemies.length === 0) endWave(s);
 }
 
+/** The combo counts down every tick and expires (back to x1) when it reaches zero. */
+function decayCombo(s: RunState): void {
+  const p = s.pointer;
+  if (p.comboTicks > 0) {
+    p.comboTicks--;
+    if (p.comboTicks === 0) p.combo = 0;
+  }
+}
+
 function spawnDue(s: RunState): void {
   while (s.schedule.length > 0 && s.schedule[0].tick <= s.waveTick) {
     const sp = s.schedule.shift()!;
@@ -366,11 +395,13 @@ function spawnDue(s: RunState): void {
 }
 
 function moveEnemies(s: RunState): void {
+  const globalSlow = s.enemySlowTicks > 0 ? 0.5 : 1;
   for (const e of s.enemies) {
     if (e.dead) continue;
     e.prevX = e.x;
     e.prevY = e.y;
-    const slow = s.tick < e.slowUntilTick ? e.slowFactor : 1;
+    if (s.tick < e.stunUntilTick) continue; // stunned: stand still this tick
+    const slow = s.tick < e.slowUntilTick ? Math.min(globalSlow, e.slowFactor) : globalSlow;
     let remaining = speedPerTick(e.kind) * slow;
     while (remaining > 0 && !e.dead) {
       if (e.targetCol < 0) {
@@ -384,6 +415,7 @@ function moveEnemies(s: RunState): void {
       const dx = tx - e.x;
       const dy = ty - e.y;
       const d = Math.hypot(dx, dy);
+      if (d > 0) e.heading = Math.atan2(dy, dx);
       if (d <= remaining) {
         e.x = tx;
         e.y = ty;
@@ -537,7 +569,9 @@ function fireBeam(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg:
 }
 
 function fireTowers(s: RunState): void {
+  const buff = s.towerDamageBuffTicks > 0 ? 1.4 : 1;
   for (const t of s.towers) {
+    if ((s.towerDisabled.get(t.id) ?? 0) > 0) continue; // disabled by Blue Screen
     if (t.cooldown > 0) {
       t.cooldown--;
       continue;
@@ -545,7 +579,7 @@ function fireTowers(s: RunState): void {
     const st = effectiveStats(t);
     if (st.damage <= 0 || st.fireInterval <= 0) continue; // beacon never fires
     const range = st.range + t.auraRange;
-    const dmg = st.damage * t.auraDamage;
+    const dmg = st.damage * t.auraDamage * buff;
 
     if (st.beams > 1) {
       const targets = acquireTargets(s, t, st, range, st.beams);
@@ -587,7 +621,7 @@ function applyReticle(s: RunState): void {
     target = enemyAt(s, p.x, p.y, CLICK_SLACK + relay.slack);
   }
   p.targetId = target ? target.id : null;
-  if (target) damageEnemy(s, target, dpt * relay.damage, 'pointer', true);
+  if (target) damageEnemy(s, target, dpt * relay.damage * comboMultiplier(p), 'pointer', true);
 }
 
 /**
@@ -602,6 +636,7 @@ function damageEnemy(
   source: DamageSource,
   ignoresArmour: boolean,
   tower?: Tower,
+  weak = false,
 ): void {
   if (e.dead || amount <= 0) return;
   let dmg = amount;
@@ -615,10 +650,14 @@ function damageEnemy(
   }
   if (dmg <= 0) return;
   e.hp -= dmg;
+  s.events.push({ type: 'damage', x: e.x, y: e.y, amount: dmg, weak: source === 'pointer' && weak });
   if (e.hp <= 1e-9) {
     e.hp = 0;
     e.dead = true;
-    const reward = recordKill(s.economy, e.value, source);
+    const reward =
+      source === 'pointer' && weak
+        ? recordKillAt(s.economy, e.value, source, WEAK_POINT_KILL_BONUS)
+        : recordKill(s.economy, e.value, source);
     if (tower) {
       tower.kills++;
       tower.earned += reward;

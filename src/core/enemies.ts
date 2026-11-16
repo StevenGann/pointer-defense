@@ -64,6 +64,10 @@ export interface Enemy {
   slowFactor: number;
   /** Last tick the slow applies through; slowed while tick < this. */
   slowUntilTick: number;
+  /** Last tick the enemy is stunned through; it does not move while tick < this. */
+  stunUntilTick: number;
+  /** Direction of travel in radians; the leading edge (and weak point) faces this way. */
+  heading: number;
   dead: boolean;
 }
 
@@ -83,6 +87,7 @@ export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Ti
   const x = spawn.col + 0.5;
   const y = spawn.row + 0.5;
   const isFlyer = kind === 'flyer';
+  const heading = isFlyer ? Math.atan2(exit.row - spawn.row, exit.col - spawn.col) : 0;
   return {
     id,
     kind,
@@ -102,6 +107,8 @@ export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Ti
     value: Math.round(s.value * waveValueScale(wave)),
     slowFactor: 1,
     slowUntilTick: 0,
+    stunUntilTick: 0,
+    heading,
     dead: false,
   };
 }
@@ -113,4 +120,26 @@ export function speedPerTick(kind: EnemyKind): number {
 
 export function radiusOf(e: Enemy): number {
   return ENEMY_STATS[e.kind].radius;
+}
+
+/**
+ * The weak point is the leading-edge arc: clicks within the enemy's radius and within this half-angle
+ * of its heading hit the weak point. ±22.5° spans a 45° arc.
+ */
+export const WEAK_ARC_HALF_ANGLE = Math.PI / 8;
+
+/** Signed angle from the enemy's heading to the ray toward (x, y), folded into [-π, π]. */
+export function weakPointAngleDiff(e: Enemy, x: number, y: number): number {
+  let d = Math.atan2(y - e.y, x - e.x) - e.heading;
+  while (d > Math.PI) d -= 2 * Math.PI;
+  while (d < -Math.PI) d += 2 * Math.PI;
+  return d;
+}
+
+/** Whether a world point lies inside the enemy's radius and inside its weak-point arc. */
+export function isWeakPointHit(e: Enemy, x: number, y: number): boolean {
+  const dx = x - e.x;
+  const dy = y - e.y;
+  if (dx * dx + dy * dy > radiusOf(e) * radiusOf(e)) return false;
+  return Math.abs(weakPointAngleDiff(e, x, y)) <= WEAK_ARC_HALF_ANGLE;
 }

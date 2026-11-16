@@ -191,6 +191,30 @@ export function sellValue(tower: Tower): number {
 }
 
 /**
+ * Recompute every tower's beacon aura bonuses. Idempotent; called whenever the set of towers
+ * changes. Each tower starts at 1x damage / +0 range, then beacons in range multiply/add.
+ */
+export function recomputeAuras(towers: Tower[]): void {
+  for (const t of towers) {
+    t.auraDamage = 1;
+    t.auraRange = 0;
+  }
+  for (const b of towers) {
+    const st = effectiveStats(b);
+    if (st.auraDamage <= 0 && st.auraRange <= 0) continue;
+    const r = st.range;
+    for (const t of towers) {
+      if (t.id === b.id) continue;
+      const d2 = (t.col + 0.5 - (b.col + 0.5)) ** 2 + (t.row + 0.5 - (b.row + 0.5)) ** 2;
+      if (d2 <= r * r) {
+        t.auraDamage *= 1 + st.auraDamage;
+        t.auraRange += st.auraRange;
+      }
+    }
+  }
+}
+
+/**
  * Branch effects, applied on top of the tier-2 buff at tier 3. Tiers 4 and 5 re-apply the numeric
  * multipliers/adders at 50% strength each (strength 1.5 then 2.0); discrete values (pierce, beams,
  * chain counts, aura magnitudes, targeting flags) are fixed for tiers 3-5.

@@ -280,16 +280,6 @@ function drawTowerShape(g: Graphics, kind: TowerKind, cx: number, cy: number, ce
   }
 }
 
-function enemyHeading(e: Enemy): number {
-  let dx = e.x - e.prevX;
-  let dy = e.y - e.prevY;
-  if (dx === 0 && dy === 0) {
-    dx = e.targetCol - e.col;
-    dy = e.targetRow - e.row;
-  }
-  return Math.atan2(dy, dx);
-}
-
 function drawEnemy(
   g: Graphics,
   e: Enemy,
@@ -308,7 +298,7 @@ function drawEnemy(
   if (e.kind === 'grunt') {
     g.circle(ex, ey, r).fill(fill).stroke(outline);
   } else if (e.kind === 'runner') {
-    const heading = enemyHeading(e);
+    const heading = e.heading;
     const tipX = ex + Math.cos(heading) * r * 1.25;
     const tipY = ey + Math.sin(heading) * r * 1.25;
     const a1 = heading + Math.PI * 0.72;
@@ -319,7 +309,7 @@ function drawEnemy(
     const p2y = ey + Math.sin(a2) * r;
     g.poly([tipX, tipY, p1x, p1y, p2x, p2y]).fill(fill).stroke(outline);
   } else if (e.kind === 'flyer') {
-    const heading = enemyHeading(e);
+    const heading = e.heading;
     const tipX = ex + Math.cos(heading) * r;
     const tipY = ey + Math.sin(heading) * r;
     const bx = ex - Math.cos(heading) * r * 0.6;
@@ -339,6 +329,16 @@ function drawEnemy(
     if (e.shield > 0) {
       g.circle(ex, ey, r + 3).stroke({ width: 1, color: PAL.teal });
     }
+  }
+
+  // Weak-point notch: a short tick on the leading edge where a precision click pays double.
+  {
+    const n0 = r * 0.7;
+    const n1 = r * 1.08;
+    const nh = e.heading;
+    g.moveTo(ex + Math.cos(nh) * n0, ey + Math.sin(nh) * n0)
+      .lineTo(ex + Math.cos(nh) * n1, ey + Math.sin(nh) * n1)
+      .stroke({ width: 2, color: PAL.highlight });
   }
 
   if (slowed) {

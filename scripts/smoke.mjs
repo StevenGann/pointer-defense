@@ -28,10 +28,12 @@ import { TOWER_STATS, effectiveStats, upgradeCost, createTower } from '../src/co
 import { killReward } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { waveEnemyCount } from '../src/core/waves.ts';
-import { TICK_HZ, TICK_MS } from '../src/core/time.ts';
+import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField } from '../src/core/pathfield.ts';
-import { createGrid, SPAWN, EXIT, COLS, ROWS } from '../src/core/grid.ts';
+import { createGrid, SPAWN, EXIT, COLS, ROWS, tileAt } from '../src/core/grid.ts';
 import { createEnemy } from '../src/core/enemies.ts';
+import { spawnPopup, dismissPopup } from '../src/core/popups.ts';
+import { comboMultiplier } from '../src/core/pointer.ts';
 
 let failures = 0;
 function check(cond, msg) {
@@ -94,7 +96,16 @@ function check(cond, msg) {
     // Feed ~15 s of wall time in frames of the given size, then top up to an exact tick count.
     for (let t = 0; t < 900 * TICK_MS - frameMs; t += frameMs) step(s, frameMs);
     while (s.tick < 1000) tick(s);
-    return JSON.stringify([s.economy, s.integrity, s.enemies.map((e) => [e.id, e.hp, e.dist])]);
+    return JSON.stringify([
+      s.economy,
+      s.integrity,
+      s.enemies.map((e) => [e.id, e.hp, e.dist]),
+      s.rng,
+      s.nextPopupAttemptTick,
+      s.towerDamageBuffTicks,
+      s.enemySlowTicks,
+      s.towerDisabled.size,
+    ]);
   };
   const at60 = run(TICK_MS);
   check(at60 === run(1000 / 144), 'same result at 60 Hz and 144 Hz frames');
@@ -262,6 +273,83 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   tick(s);
   const hurt = s.enemies.filter((e) => e.hp < e.maxHp).length;
   check(hurt >= 2, `laser damaged ${hurt} enemies in a line (expected >= 2)`);
+}
+
+// --- 10. Precision clicking: weak points deal 2x, combo scales and resets ----------------------
+{
+  const make = () => {
+    const s = createRunState();
+    s.phase = 'wave';
+    const e = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+    e.x = 10.5;
+    e.y = 5.5;
+    e.prevX = 10.5;
+    e.prevY = 5.5;
+    e.heading = 0; // moving right; the weak point faces +x
+    s.enemies.push(e);
+    return { s, e };
+  };
+
+  // A click 0.15 tiles ahead of the centre is inside the radius and the leading arc.
+  const weak = make();
+  pointerDown(weak.s, weak.e.x + 0.15, weak.e.y);
+  const weakDmg = weak.e.maxHp - weak.e.hp;
+
+  // The same distance 90° off the heading is inside the radius but outside the arc: a normal hit.
+  const normal = make();
+  pointerDown(normal.s, normal.e.x, normal.e.y + 0.15);
+  const normalDmg = normal.e.maxHp - normal.e.hp;
+
+  check(weakDmg === normalDmg * 2, `weak-point click deals exactly 2x a normal click (${weakDmg} vs ${normalDmg})`);
+
+  // Combo: ten weak-point hits reach x2; a miss resets to x1.
+  const c = make();
+  c.e.hp = 1000000; // keep it alive across ten clicks
+  for (let i = 0; i < 10; i++) pointerDown(c.s, c.e.x + 0.15, c.e.y);
+  check(Math.abs(comboMultiplier(c.s.pointer) - 2) < 1e-9,
+    `combo reaches x2 at ten hits (combo=${c.s.pointer.combo})`);
+  pointerDown(c.s, c.e.x + 10, c.e.y); // click nothing
+  check(c.s.pointer.combo === 0 && comboMultiplier(c.s.pointer) === 1,
+    `combo resets to x1 on a miss (combo=${c.s.pointer.combo})`);
+}
+
+// --- 11. Pop-ups: no build-phase spawns, one alive, freeware and bluescreen --------------------
+{
+  const s = createRunState();
+  for (let i = 0; i < 1000; i++) tick(s);
+  check(s.popup === null, 'no pop-up ever spawns during build phase');
+
+  const first = spawnPopup(s, 'defrag');
+  check(first !== null, 'a pop-up spawns on demand');
+  check(spawnPopup(s, 'freeware') === null, 'a second pop-up is refused while one is alive');
+  s.popup = null;
+}
+
+{
+  const s = createRunState();
+  const routeBefore = currentPath(s).length;
+  const popup = spawnPopup(s, 'freeware');
+  check(dismissPopup(s, popup.id), 'dismiss freeware');
+  check(s.towers.length === 1, 'freeware adds one tower');
+  const gun = s.towers[0];
+  check(gun.kind === 'gun', 'the free tower is a Gun');
+  check(tileAt(s.grid, gun.col, gun.row) === 'buildable', 'the Gun sits on a buildable tile');
+  check(currentPath(s).length > 1, 'the route stays open after the free Gun');
+  check(routeBefore === currentPath(s).length || currentPath(s).length >= routeBefore,
+    'free Gun does not seal or shorten the route');
+}
+
+{
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 5, 5);
+  const gun = towerAt(s, 5, 5);
+  const popup = spawnPopup(s, 'bluescreen');
+  const before = s.economy.salvage;
+  check(dismissPopup(s, popup.id), 'dismiss bluescreen');
+  check(s.economy.salvage === before, 'bluescreen pays nothing');
+  check(s.towerDisabled.get(gun.id) === secondsToTicks(3),
+    `bluescreen disables a tower for 3 s (${s.towerDisabled.get(gun.id)} ticks)`);
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
