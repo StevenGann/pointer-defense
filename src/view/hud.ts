@@ -12,7 +12,7 @@ import { WAVES, WAVE_COUNT } from '../core/waves.ts';
  * upgrade button, the three tower buy buttons, the Start Wave button, and the end-of-run modal.
  */
 
-export type HudAction = 'gun' | 'cannon' | 'taser' | 'pointer' | 'wave';
+export type HudAction = TowerKind | 'pointer' | 'wave';
 
 const NOTICE_TICKS = 150;
 

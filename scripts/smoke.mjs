@@ -19,12 +19,16 @@ import {
   pointerUp,
   step,
   currentPath,
+  upgradeTower,
+  chooseBranch,
+  sellTower,
+  towerAt,
 } from '../src/core/state.ts';
-import { TOWER_STATS } from '../src/core/towers.ts';
+import { TOWER_STATS, effectiveStats, upgradeCost, createTower } from '../src/core/towers.ts';
 import { killReward } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { waveEnemyCount } from '../src/core/waves.ts';
-import { TICK_MS } from '../src/core/time.ts';
+import { TICK_HZ, TICK_MS } from '../src/core/time.ts';
 import { buildField } from '../src/core/pathfield.ts';
 import { createGrid, SPAWN, EXIT, COLS, ROWS } from '../src/core/grid.ts';
 import { createEnemy } from '../src/core/enemies.ts';
@@ -145,6 +149,119 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   const gruntTicks = ticksToLeak('grunt');
   const flyerTicks = ticksToLeak('flyer');
   check(flyerTicks < gruntTicks, `flyer crosses in fewer ticks than a grunt (${flyerTicks} < ${gruntTicks})`);
+}
+
+// --- 6. Tier ladder, branches, selling -------------------------------------------------------
+{
+  const dps = (st) => st.damage / (st.fireInterval / TICK_HZ);
+
+  // 6a. A branched tier-3 tower out-damages the same salvage spent on tier-2 towers.
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  check(placeTower(s, 'gun', 5, 5), 'place a gun to branch');
+  check(upgradeTower(s, 5, 5), 'upgrade gun 1 -> 2');
+  check(chooseBranch(s, 5, 5, 'A'), 'choose Marksman branch (2 -> 3)');
+  const branched = towerAt(s, 5, 5);
+  const branchDps = dps(effectiveStats(branched));
+
+  const tier1 = createTower(999, 'gun', 0, 0);
+  const tier2Cost = TOWER_STATS.gun.cost + upgradeCost(tier1);
+  const tier2 = createTower(998, 'gun', 0, 0);
+  tier2.tier = 2;
+  const tier2Dps = dps(effectiveStats(tier2));
+  const nTier2 = Math.floor(branched.spent / tier2Cost);
+  check(branchDps > nTier2 * tier2Dps,
+    `branched gun dps ${branchDps.toFixed(1)} > ${nTier2} tier-2 gun(s) (${(nTier2 * tier2Dps).toFixed(1)}) for the same salvage`);
+
+  // 6b. chooseBranch is required at tier 3; upgradeTower will not cross 2 -> 3 on its own.
+  const s2 = createRunState();
+  s2.economy.salvage = 10000;
+  placeTower(s2, 'gun', 5, 5);
+  upgradeTower(s2, 5, 5);
+  check(!upgradeTower(s2, 5, 5), 'upgradeTower refuses to cross 2 -> 3');
+  check(towerAt(s2, 5, 5).tier === 2, 'tower is still tier 2');
+  check(chooseBranch(s2, 5, 5, 'B'), 'chooseBranch performs 2 -> 3');
+  const branched2 = towerAt(s2, 5, 5);
+  check(branched2.tier === 3 && branched2.branch === 'B', `tower is tier 3 branch ${branched2.branch}`);
+
+  // 6c. Selling refunds floor(spent * 0.7) and restores the route length.
+  const s3 = createRunState();
+  s3.economy.salvage = 10000;
+  const routeBefore = currentPath(s3).length;
+  for (const [c, r] of [[11, 5], [12, 5], [11, 7], [12, 7]]) placeTower(s3, 'gun', c, r);
+  check(currentPath(s3).length > routeBefore, 'a wall lengthens the route');
+  const spent = towerAt(s3, 11, 5).spent;
+  const salv = s3.economy.salvage;
+  check(sellTower(s3, 11, 5), 'sell a wall tower');
+  check(s3.economy.salvage === salv + Math.floor(spent * 0.7),
+    `refund is floor(spent * 0.7) = ${Math.floor(spent * 0.7)}`);
+  for (const [c, r] of [[12, 5], [11, 7], [12, 7]]) sellTower(s3, c, r);
+  check(currentPath(s3).length === routeBefore, `selling restores the route (${routeBefore} tiles)`);
+
+  // 6d. The refund covers upgrade spend too (spent accumulates).
+  const s4 = createRunState();
+  s4.economy.salvage = 10000;
+  placeTower(s4, 'gun', 5, 5);
+  upgradeTower(s4, 5, 5);
+  const spent2 = towerAt(s4, 5, 5).spent;
+  const salv2 = s4.economy.salvage;
+  sellTower(s4, 5, 5);
+  check(s4.economy.salvage === salv2 + Math.floor(spent2 * 0.7), 'refund covers upgrades too');
+}
+
+// --- 7. Frost slows a grunt ------------------------------------------------------------------
+{
+  const travel = (withFrost) => {
+    const s = createRunState();
+    if (withFrost) {
+      s.economy.salvage = 10000;
+      placeTower(s, 'frost', 3, 5);
+    }
+    s.phase = 'wave';
+    const e = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+    s.enemies.push(e);
+    for (let i = 0; i < 60; i++) tick(s);
+    return e.dist;
+  };
+  const normal = travel(false);
+  const slowed = travel(true);
+  check(slowed < normal, `frost slows a grunt (${slowed.toFixed(2)} < ${normal.toFixed(2)} tiles over 60 ticks)`);
+}
+
+// --- 8. Beacon raises a neighbouring gun's damage by 15% -------------------------------------
+{
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 5, 5);
+  placeTower(s, 'beacon', 6, 5);
+  const gun = towerAt(s, 5, 5);
+  check(Math.abs(gun.auraDamage - 1.15) < 1e-9,
+    `beacon raises neighbouring gun damage by 15% (auraDamage=${gun.auraDamage.toFixed(4)})`);
+}
+
+// --- 9. Laser damages more than one enemy in a line ------------------------------------------
+{
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'laser', 5, 5);
+  s.phase = 'wave';
+  const spawn = (id, x, dist) => {
+    const e = createEnemy(id, 'grunt', 1, SPAWN, EXIT);
+    e.x = x;
+    e.y = 5.5;
+    e.prevX = x;
+    e.prevY = 5.5;
+    e.col = Math.floor(x);
+    e.row = 5;
+    e.dist = dist;
+    e.targetCol = -1;
+    e.targetRow = -1;
+    return e;
+  };
+  s.enemies.push(spawn(1, 6.5, 1), spawn(2, 7.5, 2), spawn(3, 8.5, 3));
+  tick(s);
+  const hurt = s.enemies.filter((e) => e.hp < e.maxHp).length;
+  check(hurt >= 2, `laser damaged ${hurt} enemies in a line (expected >= 2)`);
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

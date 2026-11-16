@@ -9,7 +9,17 @@ import {
 } from './grid.ts';
 import { buildField, isSealed, pathTiles, stepToward } from './pathfield.ts';
 import { createEnemy, ENEMY_STATS, radiusOf, speedPerTick, type Enemy } from './enemies.ts';
-import { createTower, TOWER_STATS, type Tower, type TowerKind } from './towers.ts';
+import {
+  createTower,
+  effectiveStats,
+  TOWER_STATS,
+  upgradeCost,
+  type Branch,
+  type EffectiveStats,
+  type Tier,
+  type Tower,
+  type TowerKind,
+} from './towers.ts';
 import {
   canAfford,
   createEconomy,
@@ -154,6 +164,7 @@ export function placeTower(s: RunState, kind: TowerKind, col: number, row: numbe
   s.blocked.add(row * s.grid.cols + col);
   s.towers.push(createTower(s.nextId++, kind, col, row));
   rebuildField(s);
+  recomputeAuras(s);
   return true;
 }
 
@@ -166,12 +177,72 @@ function rebuildField(s: RunState): void {
   s.field = buildField(s.grid, s.blocked);
 }
 
+function recomputeAuras(s: RunState): void {
+  for (const t of s.towers) {
+    t.auraDamage = 1;
+    t.auraRange = 0;
+  }
+  for (const b of s.towers) {
+    const st = effectiveStats(b);
+    if (st.auraDamage <= 0 && st.auraRange <= 0) continue;
+    const r = st.range;
+    for (const t of s.towers) {
+      if (t.id === b.id) continue;
+      const d2 = (t.col + 0.5 - (b.col + 0.5)) ** 2 + (t.row + 0.5 - (b.row + 0.5)) ** 2;
+      if (d2 <= r * r) {
+        t.auraDamage *= 1 + st.auraDamage;
+        t.auraRange += st.auraRange;
+      }
+    }
+  }
+}
+
+export function upgradeTower(s: RunState, col: number, row: number): boolean {
+  if (s.phase === 'halted' || s.phase === 'victory') return false;
+  const t = towerAt(s, col, row);
+  if (!t || t.tier === 2) return false; // 2 -> 3 is chooseBranch's job
+  const cost = upgradeCost(t);
+  if (cost === null) return false;
+  if (!spend(s.economy, cost)) return false;
+  t.tier = (t.tier + 1) as Tier;
+  t.spent += cost;
+  recomputeAuras(s);
+  return true;
+}
+
+export function chooseBranch(s: RunState, col: number, row: number, branch: Branch): boolean {
+  if (s.phase === 'halted' || s.phase === 'victory') return false;
+  const t = towerAt(s, col, row);
+  if (!t || t.tier !== 2 || t.branch !== null) return false;
+  const cost = upgradeCost(t);
+  if (cost === null) return false;
+  if (!spend(s.economy, cost)) return false;
+  t.branch = branch;
+  t.tier = 3;
+  t.spent += cost;
+  recomputeAuras(s);
+  return true;
+}
+
+export function sellTower(s: RunState, col: number, row: number): boolean {
+  const t = towerAt(s, col, row);
+  if (!t) return false;
+  const refund = Math.floor(t.spent * 0.7);
+  s.towers = s.towers.filter((x) => x.id !== t.id);
+  s.blocked.delete(row * s.grid.cols + col);
+  s.economy.salvage += refund;
+  rebuildField(s);
+  recomputeAuras(s);
+  return true;
+}
+
 export function startWave(s: RunState): boolean {
   if (s.phase !== 'build' || s.wave >= WAVE_COUNT) return false;
   s.wave += 1;
   s.phase = 'wave';
   s.schedule = buildSchedule(s.wave);
   s.waveTick = 0;
+  recomputeAuras(s);
   return true;
 }
 
@@ -186,16 +257,32 @@ export function upgradePointer(s: RunState): boolean {
  * Mouse button pressed on the board at a world point. Deals click damage to the enemy under it.
  * Returns true if an enemy was hit (so the input layer knows not to treat it as a build click).
  */
+function relayPointerBonus(s: RunState, x: number, y: number): { damage: number; slack: number } {
+  let damage = 1;
+  let slack = 0;
+  for (const t of s.towers) {
+    if (t.kind !== 'beacon' || t.branch !== 'B') continue;
+    const st = effectiveStats(t);
+    const r = st.range;
+    if ((x - (t.col + 0.5)) ** 2 + (y - (t.row + 0.5)) ** 2 <= r * r) {
+      damage += st.auraPointerDamage;
+      slack += st.auraPointerRange;
+    }
+  }
+  return { damage, slack };
+}
+
 export function pointerDown(s: RunState, x: number, y: number): boolean {
   s.pointer.x = x;
   s.pointer.y = y;
   if (s.phase !== 'wave') return false;
   s.pointer.held = true;
-  const target = enemyAt(s, x, y);
+  const relay = relayPointerBonus(s, x, y);
+  const target = enemyAt(s, x, y, CLICK_SLACK + relay.slack);
   s.events.push({ type: 'click', x, y, hit: !!target });
   if (!target) return false;
   s.pointer.targetId = target.id;
-  damageEnemy(s, target, pointerInfo(s.pointer).clickDamage, 'pointer', true);
+  damageEnemy(s, target, pointerInfo(s.pointer).clickDamage * relay.damage, 'pointer', true);
   return true;
 }
 
@@ -265,7 +352,8 @@ function moveEnemies(s: RunState): void {
     if (e.dead) continue;
     e.prevX = e.x;
     e.prevY = e.y;
-    let remaining = speedPerTick(e.kind);
+    const slow = s.tick < e.slowUntilTick ? e.slowFactor : 1;
+    let remaining = speedPerTick(e.kind) * slow;
     while (remaining > 0 && !e.dead) {
       if (e.targetCol < 0) {
         const next = stepToward(s.field, e.col, e.row);
@@ -322,37 +410,149 @@ function inRange(t: Tower, e: Enemy, range: number): boolean {
   return (e.x - (t.col + 0.5)) ** 2 + (e.y - (t.row + 0.5)) ** 2 <= r * r;
 }
 
+function intervalTicks(fireInterval: number): number {
+  return Math.max(1, Math.round(fireInterval));
+}
+
+function dist2(e: Enemy, x: number, y: number): number {
+  return (e.x - x) ** 2 + (e.y - y) ** 2;
+}
+
+function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  let t = 0;
+  if (len2 > 0) t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2));
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+
+/** Target "first": the hurtable enemy furthest along the lane, the one about to leak. */
+function acquireTarget(s: RunState, t: Tower, st: EffectiveStats, range: number): Enemy | undefined {
+  let target: Enemy | undefined;
+  for (const e of s.enemies) {
+    if (!towerCanHurt(e)) continue;
+    if (st.targetsFlyersOnly && e.kind !== 'flyer') continue;
+    if (!inRange(t, e, range)) continue;
+    if (!target || e.dist > target.dist) target = e;
+  }
+  return target;
+}
+
+/** Up to `limit` targets, most-threatened first (furthest along the lane). */
+function acquireTargets(s: RunState, t: Tower, st: EffectiveStats, range: number, limit: number): Enemy[] {
+  const out: Enemy[] = [];
+  for (const e of s.enemies) {
+    if (!towerCanHurt(e)) continue;
+    if (st.targetsFlyersOnly && e.kind !== 'flyer') continue;
+    if (!inRange(t, e, range)) continue;
+    out.push(e);
+  }
+  out.sort((a, b) => b.dist - a.dist);
+  return out.slice(0, limit);
+}
+
+function perEnemyDamage(st: EffectiveStats, e: Enemy, dmg: number): number {
+  let d = dmg;
+  if (e.kind === 'flyer') d *= st.flyerDamageMult;
+  if (e.kind === 'shielded') d *= st.shieldedDamageMult;
+  return d;
+}
+
+function applySlow(s: RunState, e: Enemy, factor: number, ticks: number): void {
+  if (!(s.tick < e.slowUntilTick) || factor < e.slowFactor) e.slowFactor = factor;
+  e.slowUntilTick = s.tick + ticks;
+}
+
+function hitEnemy(s: RunState, st: EffectiveStats, e: Enemy, dmg: number): void {
+  damageEnemy(s, e, perEnemyDamage(st, e, dmg), 'tower', st.ignoresArmour);
+  if (st.slowFactor < 1 && st.slowTicks > 0 && !e.dead) applySlow(s, e, st.slowFactor, st.slowTicks);
+}
+
+function fireSplash(s: RunState, st: EffectiveStats, target: Enemy, dmg: number): void {
+  const cx = target.x;
+  const cy = target.y;
+  for (const e of s.enemies) {
+    if (!towerCanHurt(e)) continue;
+    if (st.targetsFlyersOnly && e.kind !== 'flyer') continue;
+    const r = st.splash + radiusOf(e);
+    if ((e.x - cx) ** 2 + (e.y - cy) ** 2 <= r * r) hitEnemy(s, st, e, dmg);
+  }
+}
+
+function fireChain(s: RunState, st: EffectiveStats, target: Enemy, dmg: number): void {
+  hitEnemy(s, st, target, dmg);
+  const hitIds = new Set<number>([target.id]);
+  let prev = target;
+  for (let i = 1; i < st.chainCount; i++) {
+    let next: Enemy | undefined;
+    let best = Infinity;
+    for (const e of s.enemies) {
+      if (!towerCanHurt(e) || hitIds.has(e.id)) continue;
+      if (st.targetsFlyersOnly && e.kind !== 'flyer') continue;
+      const d2 = (e.x - prev.x) ** 2 + (e.y - prev.y) ** 2;
+      if (d2 <= 1.5 * 1.5 && d2 < best) {
+        best = d2;
+        next = e;
+      }
+    }
+    if (!next) break;
+    hitIds.add(next.id);
+    hitEnemy(s, st, next, dmg * st.chainDamage);
+    prev = next;
+  }
+}
+
+function fireBeam(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg: number): void {
+  const ox = t.col + 0.5;
+  const oy = t.row + 0.5;
+  const hits: Enemy[] = [];
+  for (const e of s.enemies) {
+    if (!towerCanHurt(e)) continue;
+    if (st.targetsFlyersOnly && e.kind !== 'flyer') continue;
+    if (distanceToSegment(e.x, e.y, ox, oy, target.x, target.y) > 0.35) continue;
+    hits.push(e);
+  }
+  hits.sort((a, b) => dist2(a, ox, oy) - dist2(b, ox, oy));
+  const n = Math.min(st.pierce, hits.length);
+  for (let i = 0; i < n; i++) hitEnemy(s, st, hits[i], dmg);
+}
+
 function fireTowers(s: RunState): void {
   for (const t of s.towers) {
     if (t.cooldown > 0) {
       t.cooldown--;
       continue;
     }
-    const st = TOWER_STATS[t.kind];
-    // Target "first": the hurtable enemy furthest along the lane, the one about to leak.
-    let target: Enemy | undefined;
-    for (const e of s.enemies) {
-      if (towerCanHurt(e) && inRange(t, e, st.range) && (!target || e.dist > target.dist)) target = e;
-    }
-    if (!target) continue;
+    const st = effectiveStats(t);
+    if (st.damage <= 0 || st.fireInterval <= 0) continue; // beacon never fires
+    const range = st.range + t.auraRange;
+    const dmg = st.damage * t.auraDamage;
 
-    t.cooldown = st.fireInterval - 1;
+    if (st.beams > 1) {
+      const targets = acquireTargets(s, t, st, range, st.beams);
+      if (targets.length === 0) continue;
+      t.cooldown = intervalTicks(st.fireInterval) - 1;
+      t.lastTargetId = targets[0].id;
+      t.flash = 6;
+      for (const tg of targets) {
+        s.events.push({ type: 'shot', towerId: t.id, x: tg.x, y: tg.y, splash: st.splash });
+        fireBeam(s, t, st, tg, dmg * st.beamDamage);
+      }
+      continue;
+    }
+
+    const target = acquireTarget(s, t, st, range);
+    if (!target) continue;
+    t.cooldown = intervalTicks(st.fireInterval) - 1;
     t.lastTargetId = target.id;
     t.flash = 6;
     s.events.push({ type: 'shot', towerId: t.id, x: target.x, y: target.y, splash: st.splash });
 
-    if (st.splash > 0) {
-      const cx = target.x;
-      const cy = target.y;
-      for (const e of s.enemies) {
-        const r = st.splash + radiusOf(e);
-        if (towerCanHurt(e) && (e.x - cx) ** 2 + (e.y - cy) ** 2 <= r * r) {
-          damageEnemy(s, e, st.damage, 'tower', st.ignoresArmour);
-        }
-      }
-    } else {
-      damageEnemy(s, target, st.damage, 'tower', st.ignoresArmour);
-    }
+    if (st.pierce > 1) fireBeam(s, t, st, target, dmg);
+    else if (st.chainCount > 0) fireChain(s, st, target, dmg);
+    else if (st.splash > 0) fireSplash(s, st, target, dmg);
+    else hitEnemy(s, st, target, dmg);
   }
 }
 
@@ -361,14 +561,15 @@ function applyReticle(s: RunState): void {
   const p = s.pointer;
   const dpt = holdDamagePerTick(p);
   if (!p.held || dpt <= 0) return;
+  const relay = relayPointerBonus(s, p.x, p.y);
   let target = s.enemies.find((e) => e.id === p.targetId && !e.dead);
   // Sticky lock: keep the current target while the cursor stays near it, so a fast runner is not
   // dropped by a few pixels of hand lag; otherwise retarget to whatever is under the cursor.
   if (!target || Math.hypot(target.x - p.x, target.y - p.y) > radiusOf(target) + RETICLE_STICKY) {
-    target = enemyAt(s, p.x, p.y);
+    target = enemyAt(s, p.x, p.y, CLICK_SLACK + relay.slack);
   }
   p.targetId = target ? target.id : null;
-  if (target) damageEnemy(s, target, dpt, 'pointer', true);
+  if (target) damageEnemy(s, target, dpt * relay.damage, 'pointer', true);
 }
 
 /**

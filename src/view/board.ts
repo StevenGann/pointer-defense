@@ -17,6 +17,9 @@ const TOWER_COLOR: Record<TowerKind, number> = {
   gun: PAL.teal,
   cannon: PAL.maroon,
   taser: PAL.olive,
+  frost: 0x3399cc,
+  laser: 0xff3300,
+  beacon: 0xffcc00,
 };
 
 const ENEMY_COLOR: Record<EnemyKind, number> = {

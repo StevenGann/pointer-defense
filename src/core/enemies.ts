@@ -60,6 +60,10 @@ export interface Enemy {
   targetRow: number;
   /** Salvage paid on death before the pointer bonus. */
   readonly value: number;
+  /** Movement multiplier while slowed (1 = normal). */
+  slowFactor: number;
+  /** Last tick the slow applies through; slowed while tick < this. */
+  slowUntilTick: number;
   dead: boolean;
 }
 
@@ -96,6 +100,8 @@ export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Ti
     targetCol: isFlyer ? exit.col : -1,
     targetRow: isFlyer ? exit.row : -1,
     value: Math.round(s.value * waveValueScale(wave)),
+    slowFactor: 1,
+    slowUntilTick: 0,
     dead: false,
   };
 }
