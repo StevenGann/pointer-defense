@@ -357,7 +357,17 @@ export class HudView {
 
     if (h.detail && tower) {
       const d = h.detail;
-      bevel(g, d.box, false, PAL.face);
+      for (const text of this.towerButtons) text.visible = false;
+
+      g.rect(d.box.x, d.box.y, d.box.w, d.box.h).fill(PAL.face);
+      bevel(g, d.box, true, PAL.face);
+
+      this.towerName.visible = true;
+      this.towerStats.visible = true;
+      this.towerRoute.visible = true;
+      this.upgradeButton.visible = true;
+      this.sellButton.visible = true;
+      for (const text of this.branchButtons) text.visible = true;
 
       const branch = tower.branch === null ? '' : ` - ${BRANCH_NAMES[tower.kind][tower.branch]}`;
       this.towerName.text = `${TOWER_STATS[tower.kind].name}  T${tower.tier}${branch}`;
@@ -409,9 +419,18 @@ export class HudView {
     this.towerRoute.text = '';
     this.upgradeButton.text = '';
     this.sellButton.text = '';
-    for (const text of this.branchButtons) text.text = '';
+    this.towerName.visible = false;
+    this.towerStats.visible = false;
+    this.towerRoute.visible = false;
+    this.upgradeButton.visible = false;
+    this.sellButton.visible = false;
+    for (const text of this.branchButtons) {
+      text.text = '';
+      text.visible = false;
+    }
 
     for (let i = 0; i < h.towers.length; i++) {
+      this.towerButtons[i].visible = true;
       const { kind, rect } = h.towers[i];
       const enabled = canAfford(s.economy, TOWER_STATS[kind].cost);
       const armed = s.selected === kind;

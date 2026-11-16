@@ -132,15 +132,15 @@ export class MouseController {
     const onBoard = x >= l.board.x && x < l.board.x + l.boardW && y >= l.board.y && y < l.board.y + l.boardH;
 
     if (onBoard) {
-      if (s.phase === 'wave' && enemyAt(s, w.x, w.y)) {
-        pointerDown(s, w.x, w.y);
-        return;
-      }
       const col = Math.floor(w.x);
       const row = Math.floor(w.y);
       const tower = towerAt(s, col, row);
       if (tower) {
         selectPlacedTower(s, tower);
+        return;
+      }
+      if (s.phase === 'wave' && enemyAt(s, w.x, w.y)) {
+        pointerDown(s, w.x, w.y);
         return;
       }
       if (s.selected) {
