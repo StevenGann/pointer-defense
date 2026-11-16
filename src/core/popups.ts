@@ -11,10 +11,11 @@ import { rngNext } from './rng.ts';
  * close box is clicked (docs/design.md §10). Spawn scheduling, selection and effects live here so
  * the sim stays deterministic; the view only draws whatever `s.popup` says.
  *
- * Rules: at most one pop-up alive; the first attempt comes 25–45 s into a wave, later attempts every
- * 45–75 s on an absolute clock that keeps running between waves, only during a wave, never within
- * the first 8 s of a wave, and never with fewer than two enemies alive. A pop-up expires after 8 s
- * with no penalty. Blue Screen is a trap that pays nothing and disables a random tower.
+ * Rules: at most one pop-up alive; the first attempt comes 8–16 s into the first wave, later attempts
+ * every 25–45 s on an absolute clock that keeps running between waves, only during a wave, never
+ * within the first 5 s of a wave, and never with fewer than two enemies alive. An attempt whose
+ * conditions are unmet retries after 8–12 s. A pop-up expires after 8 s with no penalty. Blue
+ * Screen is a trap that pays nothing and disables a random tower.
  */
 
 export type PopupKind = 'defrag' | 'autoupdate' | 'timezone' | 'freeware' | 'screensaver' | 'bluescreen';
@@ -72,11 +73,13 @@ export const POPUP_H = 54;
 const POPUP_INSET = 6;
 const FALLBACK_PANEL_W = 148;
 
-const FIRST_ATTEMPT_MIN_S = 25;
-const FIRST_ATTEMPT_SPAN_S = 20;
-const SPAWN_INTERVAL_MIN_S = 45;
-const SPAWN_INTERVAL_SPAN_S = 30;
-const WAVE_SETTLE_TICKS = secondsToTicks(8);
+const FIRST_ATTEMPT_MIN_S = 8;
+const FIRST_ATTEMPT_SPAN_S = 8;
+const SPAWN_INTERVAL_MIN_S = 25;
+const SPAWN_INTERVAL_SPAN_S = 20;
+const RETRY_MIN_S = 8;
+const RETRY_SPAN_S = 4;
+const WAVE_SETTLE_TICKS = secondsToTicks(5);
 const MIN_ENEMIES = 2;
 
 function nextFloat(s: RunState): number {
@@ -91,6 +94,10 @@ function nextFirstAttemptDelayTicks(s: RunState): number {
 
 function nextAttemptDelayTicks(s: RunState): number {
   return secondsToTicks(SPAWN_INTERVAL_MIN_S + nextFloat(s) * SPAWN_INTERVAL_SPAN_S);
+}
+
+function nextRetryDelayTicks(s: RunState): number {
+  return secondsToTicks(RETRY_MIN_S + nextFloat(s) * RETRY_SPAN_S);
 }
 
 /** The right panel column, derived from the window when the view has not supplied it. */
@@ -157,8 +164,10 @@ export function tickPopups(s: RunState): void {
     s.enemies.length >= MIN_ENEMIES
   ) {
     spawnPopup(s);
+    s.nextPopupAttemptTick = s.tick + nextAttemptDelayTicks(s);
+  } else {
+    s.nextPopupAttemptTick = s.tick + nextRetryDelayTicks(s);
   }
-  s.nextPopupAttemptTick = s.tick + nextAttemptDelayTicks(s);
 }
 
 /** Dismiss the live pop-up and apply its effect. Returns whether a pop-up was dismissed. */

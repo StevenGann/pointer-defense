@@ -315,15 +315,45 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     `combo resets to x1 on a miss (combo=${c.s.pointer.combo})`);
 }
 
-// --- 11. Pop-ups: no build-phase spawns, one alive, freeware and bluescreen --------------------
+// --- 11. Pop-ups: timing in wave 1, no build-phase spawns, one alive, freeware and bluescreen --
+{
+  // No towers: wave 1's grunts live long enough for the first attempt to find two on the board.
+  const s = createRunState();
+  check(startWave(s), 'pop-up timing: wave 1 started with no towers');
+  const limit = secondsToTicks(20);
+  let firstSeen = -1;
+  for (let i = 0; i < limit; i++) {
+    tick(s);
+    if (firstSeen < 0 && s.popup) firstSeen = s.tick;
+  }
+  check(firstSeen > 0 && firstSeen <= limit,
+    `wave 1 produces a pop-up within 20 s (first seen at tick ${firstSeen})`);
+}
+
+{
+  const s = createRunState();
+  check(startWave(s), 'pop-up timing: wave 1 started for the build-phase check');
+  let spawnedInBuild = false;
+  let previousId = null;
+  for (let i = 0; i < secondsToTicks(120); i++) {
+    const phase = s.phase;
+    tick(s);
+    const id = s.popup?.id ?? null;
+    if (id !== null && id !== previousId && phase === 'build') spawnedInBuild = true;
+    previousId = id;
+  }
+  check(s.phase === 'build', 'wave 1 ended and the run waits in build');
+  check(!spawnedInBuild, 'no pop-up ever spawns during build phase');
+}
+
 {
   const s = createRunState();
   for (let i = 0; i < 1000; i++) tick(s);
-  check(s.popup === null, 'no pop-up ever spawns during build phase');
+  check(s.popup === null, 'no pop-up ever spawns in an untouched build phase');
 
   const first = spawnPopup(s, 'defrag');
   check(first !== null, 'a pop-up spawns on demand');
-  check(spawnPopup(s, 'freeware') === null, 'a second pop-up is refused while one is alive');
+  check(spawnPopup(s, 'freeware') === null, 'two pop-ups never coexist (a second is refused)');
   s.popup = null;
 }
 

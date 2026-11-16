@@ -254,10 +254,10 @@ dismisses it and pays.
 | *Blue Screen* | 10 | a trap: dismissing pays nothing and disables a random tower for 3 s |
 
 - At most **one** pop-up on screen at a time.
-- The first attempt comes **25–45 s** into a wave; later attempts come every **45–75 s**. The countdown
-  is absolute and keeps running between waves, so a wave start never resets it. An attempt that finds
-  its conditions unmet waits for the next interval.
-- Attempts happen during waves only, never within the first **8 s** of a wave, and pause below **two**
+- The first attempt comes **8–16 s** into the first wave; later attempts come every **25–45 s**. The
+  countdown is absolute and keeps running between waves, so a wave start never resets it. An attempt
+  that finds its conditions unmet retries after **8–12 s**.
+- Attempts happen during waves only, never within the first **5 s** of a wave, and pause below **two**
   enemies on the board: a bonus you cannot earn is just noise.
 - Blue Screen exists so the bonus is a decision rather than a reflex. Its title bar is subtly wrong —
   the text sits a pixel high — and an attentive player learns the tell.
