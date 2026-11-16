@@ -10,7 +10,9 @@ import { COLS, ROWS } from '../core/grid.ts';
  *     frame:    2px raised bevel around the whole window
  *     title:    x+2, y+2,          w-4, 18    navy #000080
  *     menu:     x+2, y+20,         w-4, 18    face #c0c0c0
- *     client:   x+2, y+38,         w-4, h-60  2px sunken bevel
+ *     client:   x+2, y+38,         w-4, h-60  three columns: a 148px build palette, a sunken
+ *                                             board well, and a 148px info panel, each split by
+ *                                             a 2px separator
  *     status:   x+2, y+h-20,       w-4, 18    sunken panes
  */
 
@@ -62,7 +64,9 @@ export interface Layout {
   title: Rect;
   menu: Rect;
   client: Rect;
-  clientInner: Rect;
+  leftPanel: Rect;
+  boardCol: Rect;
+  rightPanel: Rect;
   status: Rect;
   statusPanes: StatusPanes;
   board: BoardGeometry;
@@ -81,14 +85,24 @@ export function computeLayout(vw: number, vh: number): Layout {
   const menu: Rect = { x: win.x + 2, y: win.y + 20, w: win.w - 4, h: MENU_H };
   const client: Rect = { x: win.x + 2, y: win.y + 38, w: win.w - 4, h: win.h - 60 };
   const status: Rect = { x: win.x + 2, y: win.y + win.h - 20, w: win.w - 4, h: STATUS_H };
-  const clientInner: Rect = { x: client.x + 2, y: client.y + 2, w: client.w - 4, h: client.h - 4 };
 
-  const cell = Math.max(1, Math.floor(Math.min(clientInner.w / COLS, clientInner.h / ROWS)));
+  const PANEL_W = 148;
+  const leftPanel: Rect = { x: client.x, y: client.y, w: PANEL_W, h: client.h };
+  const boardCol: Rect = {
+    x: client.x + PANEL_W + 2,
+    y: client.y,
+    w: client.w - PANEL_W * 2 - 4,
+    h: client.h,
+  };
+  const rightPanel: Rect = { x: client.x + client.w - PANEL_W, y: client.y, w: PANEL_W, h: client.h };
+
+  const inner: Rect = { x: boardCol.x + 2, y: boardCol.y + 2, w: boardCol.w - 4, h: boardCol.h - 4 };
+  const cell = Math.max(1, Math.floor(Math.min(inner.w / COLS, inner.h / ROWS)));
   const boardW = cell * COLS;
   const boardH = cell * ROWS;
-  const ox = Math.floor((clientInner.w - boardW) / 2);
-  const oy = Math.floor((clientInner.h - boardH) / 2);
-  const board: BoardGeometry = { x: clientInner.x + ox, y: clientInner.y + oy, cell };
+  const ox = Math.round((inner.w - boardW) / 2);
+  const oy = Math.round((inner.h - boardH) / 2);
+  const board: BoardGeometry = { x: inner.x + ox, y: inner.y + oy, cell };
 
   const right: Rect = { x: status.x + status.w - 120, y: status.y, w: 120, h: status.h };
   const middle: Rect = { x: right.x - 122, y: status.y, w: 120, h: status.h };
@@ -99,7 +113,9 @@ export function computeLayout(vw: number, vh: number): Layout {
     title,
     menu,
     client,
-    clientInner,
+    leftPanel,
+    boardCol,
+    rightPanel,
     status,
     statusPanes: { left, middle, right },
     board,
@@ -251,8 +267,12 @@ export class ChromeView {
       this.menuTexts[i].position.set(r.x, r.y + Math.floor(r.h / 2));
     }
 
-    // Client sunken well.
-    bevel(g, l.client, false, PAL.face);
+    // Client area: flat build and info panels flanking the sunken board well.
+    g.rect(l.leftPanel.x, l.leftPanel.y, l.leftPanel.w, l.leftPanel.h).fill(PAL.face);
+    bevel(g, l.boardCol, false, PAL.face);
+    g.rect(l.rightPanel.x, l.rightPanel.y, l.rightPanel.w, l.rightPanel.h).fill(PAL.face);
+    vline(g, l.leftPanel.x + l.leftPanel.w + 0.5, l.client.y, l.client.y + l.client.h, PAL.shadow);
+    vline(g, l.rightPanel.x - 0.5, l.client.y, l.client.y + l.client.h, PAL.shadow);
 
     // Status panes (sunken, 2px separators).
     bevel(g, l.statusPanes.left, false, PAL.face);

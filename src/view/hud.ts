@@ -1,11 +1,11 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { bevel, FONT, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
-import { canAfford } from '../core/economy.ts';
+import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
 import { nextStageCost, pointerInfo } from '../core/pointer.ts';
 import { STARTING_INTEGRITY, type RunState } from '../core/state.ts';
 import { TOWER_KINDS, TOWER_STATS, type TowerKind } from '../core/towers.ts';
-import { WAVE_COUNT } from '../core/waves.ts';
+import { WAVES, WAVE_COUNT } from '../core/waves.ts';
 
 /**
  * The HUD: status-bar text (hint / wave / salvage), the integrity readout, the pointer stage and
@@ -15,7 +15,6 @@ import { WAVE_COUNT } from '../core/waves.ts';
 export type HudAction = 'gun' | 'cannon' | 'taser' | 'pointer' | 'wave';
 
 interface HudLayout {
-  toolbar: Rect;
   integrity: Rect;
   pointerPanel: Rect;
   pointerUpgrade: Rect;
@@ -24,11 +23,10 @@ interface HudLayout {
 }
 
 function computeHud(l: Layout): HudLayout {
-  const margin = l.board.x - l.clientInner.x;
-  const w = Math.max(60, Math.min(120, margin - 16));
-  const x = l.clientInner.x + Math.floor((margin - w) / 2);
-  const y = l.clientInner.y + 8;
-  const toolbar: Rect = { x, y, w, h: l.clientInner.h - 16 };
+  const pad = 6;
+  const x = l.leftPanel.x + pad;
+  const w = l.leftPanel.w - pad * 2;
+  const y = l.leftPanel.y + pad;
 
   let cy = y;
   const integrity: Rect = { x, y: cy, w, h: 22 };
@@ -44,7 +42,7 @@ function computeHud(l: Layout): HudLayout {
   cy += 4;
   const wave: Rect = { x, y: cy, w, h: 28 };
 
-  return { toolbar, integrity, pointerPanel, pointerUpgrade, towers, wave };
+  return { integrity, pointerPanel, pointerUpgrade, towers, wave };
 }
 
 export function hudButtonAt(l: Layout, s: RunState, px: number, py: number): HudAction | null {
@@ -117,6 +115,12 @@ export class HudView {
   private readonly modalTitle = makeText('', true);
   private readonly modalMessage = makeText('');
   private readonly modalRestart = makeText('Restart');
+  private readonly nextWaveTitle = makeText('NEXT WAVE', true);
+  private readonly nextWaveRows: Text[] = [makeText(''), makeText(''), makeText('')];
+  private readonly killsTitle = makeText('KILLS', true);
+  private readonly killsRows: Text[] = [makeText(''), makeText(''), makeText('')];
+  private readonly pointerTitle = makeText('POINTER', true);
+  private readonly pointerRows: Text[] = [makeText(''), makeText('')];
 
   constructor() {
     this.towerButtons = TOWER_KINDS.map(() => makeText(''));
@@ -130,6 +134,12 @@ export class HudView {
       this.pointerButton,
       ...this.towerButtons,
       this.waveButton,
+      this.nextWaveTitle,
+      ...this.nextWaveRows,
+      this.killsTitle,
+      ...this.killsRows,
+      this.pointerTitle,
+      ...this.pointerRows,
     ]) {
       t.anchor.set(0, 0.5);
       this.root.addChild(t);
@@ -197,6 +207,8 @@ export class HudView {
       this.waveButton.text = '';
     }
 
+    this.drawRightPanel(s, l);
+
     // End-of-run modal.
     this.modalG.clear();
     if (s.phase === 'halted' || s.phase === 'victory') {
@@ -206,6 +218,54 @@ export class HudView {
       this.modalMessage.text = '';
       this.modalRestart.text = '';
     }
+  }
+
+  private drawRightPanel(s: RunState, l: Layout): void {
+    const g = this.g;
+    const pad = 6;
+    const x = l.rightPanel.x + pad;
+    const w = l.rightPanel.w - pad * 2;
+    let y = l.rightPanel.y + pad;
+
+    const wave = s.phase === 'build' ? s.wave + 1 : s.wave;
+    const def = WAVES[wave - 1];
+    const composition = def ? def.groups.map((grp) => `${grp.count} x ${grp.kind}`) : [];
+    y = this.drawInfoBox(g, this.nextWaveTitle, this.nextWaveRows, x, y, w, composition);
+
+    const kills = [
+      `by towers: ${s.economy.kills.tower}`,
+      `by pointer: ${s.economy.kills.pointer}`,
+      `x${POINTER_KILL_BONUS} on pointer kills`,
+    ];
+    y = this.drawInfoBox(g, this.killsTitle, this.killsRows, x, y, w, kills);
+
+    const cost = nextStageCost(s.pointer);
+    const pointer = [pointerInfo(s.pointer).name, cost === null ? 'Max level' : `Upgrade $${formatNumber(cost)}`];
+    this.drawInfoBox(g, this.pointerTitle, this.pointerRows, x, y, w, pointer);
+  }
+
+  private drawInfoBox(
+    g: Graphics,
+    title: Text,
+    rows: Text[],
+    x: number,
+    y: number,
+    w: number,
+    contents: string[],
+  ): number {
+    const titleH = 16;
+    const rowH = 13;
+    const padTop = 6;
+    const padBottom = 6;
+    const h = padTop + titleH + contents.length * rowH + padBottom;
+    const rect: Rect = { x, y, w, h };
+    bevel(g, rect, false, PAL.face);
+    title.position.set(x + 6, y + padTop + titleH / 2);
+    for (let i = 0; i < rows.length; i++) {
+      rows[i].text = i < contents.length ? contents[i] : '';
+      rows[i].position.set(x + 6, y + padTop + titleH + i * rowH + rowH / 2);
+    }
+    return y + h + 6;
   }
 
   private drawModal(s: RunState, l: Layout): void {
