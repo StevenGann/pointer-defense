@@ -13,6 +13,7 @@ import {
   createTower,
   effectiveStats,
   TOWER_STATS,
+  sellValue,
   upgradeCost,
   type Branch,
   type EffectiveStats,
@@ -80,6 +81,8 @@ export interface RunState {
   enemies: Enemy[];
   /** Tower kind armed for placement, or null. UI selection, but kept here so the sim validates it. */
   selected: TowerKind | null;
+  /** Placed tower selected for inspection, or null. Mutually exclusive with `selected`. */
+  selectedTowerId: number | null;
   /** Remaining spawns for the current wave, tick-ordered. */
   schedule: Spawn[];
   /** Ticks since the current wave started. */
@@ -108,6 +111,7 @@ export function createRunState(): RunState {
     towers: [],
     enemies: [],
     selected: null,
+    selectedTowerId: null,
     schedule: [],
     waveTick: 0,
     tick: 0,
@@ -122,6 +126,11 @@ export function createRunState(): RunState {
 
 export function towerAt(s: RunState, col: number, row: number): Tower | undefined {
   return s.towers.find((t) => t.col === col && t.row === row);
+}
+
+export function selectedTower(s: RunState): Tower | undefined {
+  if (s.selectedTowerId === null) return undefined;
+  return s.towers.find((t) => t.id === s.selectedTowerId);
 }
 
 export function canPlace(s: RunState, kind: TowerKind, col: number, row: number): boolean {
@@ -156,6 +165,13 @@ export function isFinalWave(s: RunState): boolean {
 
 export function selectTower(s: RunState, kind: TowerKind | null): void {
   s.selected = s.selected === kind ? null : kind;
+  if (s.selected !== null) s.selectedTowerId = null;
+}
+
+/** Select a placed tower for inspection; clears any armed build kind. */
+export function selectPlacedTower(s: RunState, tower: Tower): void {
+  s.selectedTowerId = tower.id;
+  s.selected = null;
 }
 
 export function placeTower(s: RunState, kind: TowerKind, col: number, row: number): boolean {
@@ -227,10 +243,11 @@ export function chooseBranch(s: RunState, col: number, row: number, branch: Bran
 export function sellTower(s: RunState, col: number, row: number): boolean {
   const t = towerAt(s, col, row);
   if (!t) return false;
-  const refund = Math.floor(t.spent * 0.7);
+  const refund = sellValue(t);
   s.towers = s.towers.filter((x) => x.id !== t.id);
   s.blocked.delete(row * s.grid.cols + col);
   s.economy.salvage += refund;
+  if (s.selectedTowerId === t.id) s.selectedTowerId = null;
   rebuildField(s);
   recomputeAuras(s);
   return true;
@@ -297,6 +314,7 @@ export function pointerUp(s: RunState): void {
 
 export function cancelSelection(s: RunState): void {
   s.selected = null;
+  s.selectedTowerId = null;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -464,24 +482,24 @@ function applySlow(s: RunState, e: Enemy, factor: number, ticks: number): void {
   e.slowUntilTick = s.tick + ticks;
 }
 
-function hitEnemy(s: RunState, st: EffectiveStats, e: Enemy, dmg: number): void {
-  damageEnemy(s, e, perEnemyDamage(st, e, dmg), 'tower', st.ignoresArmour);
+function hitEnemy(s: RunState, t: Tower, st: EffectiveStats, e: Enemy, dmg: number): void {
+  damageEnemy(s, e, perEnemyDamage(st, e, dmg), 'tower', st.ignoresArmour, t);
   if (st.slowFactor < 1 && st.slowTicks > 0 && !e.dead) applySlow(s, e, st.slowFactor, st.slowTicks);
 }
 
-function fireSplash(s: RunState, st: EffectiveStats, target: Enemy, dmg: number): void {
+function fireSplash(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg: number): void {
   const cx = target.x;
   const cy = target.y;
   for (const e of s.enemies) {
     if (!towerCanHurt(e)) continue;
     if (st.targetsFlyersOnly && e.kind !== 'flyer') continue;
     const r = st.splash + radiusOf(e);
-    if ((e.x - cx) ** 2 + (e.y - cy) ** 2 <= r * r) hitEnemy(s, st, e, dmg);
+    if ((e.x - cx) ** 2 + (e.y - cy) ** 2 <= r * r) hitEnemy(s, t, st, e, dmg);
   }
 }
 
-function fireChain(s: RunState, st: EffectiveStats, target: Enemy, dmg: number): void {
-  hitEnemy(s, st, target, dmg);
+function fireChain(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg: number): void {
+  hitEnemy(s, t, st, target, dmg);
   const hitIds = new Set<number>([target.id]);
   let prev = target;
   for (let i = 1; i < st.chainCount; i++) {
@@ -498,7 +516,7 @@ function fireChain(s: RunState, st: EffectiveStats, target: Enemy, dmg: number):
     }
     if (!next) break;
     hitIds.add(next.id);
-    hitEnemy(s, st, next, dmg * st.chainDamage);
+    hitEnemy(s, t, st, next, dmg * st.chainDamage);
     prev = next;
   }
 }
@@ -515,7 +533,7 @@ function fireBeam(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg:
   }
   hits.sort((a, b) => dist2(a, ox, oy) - dist2(b, ox, oy));
   const n = Math.min(st.pierce, hits.length);
-  for (let i = 0; i < n; i++) hitEnemy(s, st, hits[i], dmg);
+  for (let i = 0; i < n; i++) hitEnemy(s, t, st, hits[i], dmg);
 }
 
 function fireTowers(s: RunState): void {
@@ -550,9 +568,9 @@ function fireTowers(s: RunState): void {
     s.events.push({ type: 'shot', towerId: t.id, x: target.x, y: target.y, splash: st.splash });
 
     if (st.pierce > 1) fireBeam(s, t, st, target, dmg);
-    else if (st.chainCount > 0) fireChain(s, st, target, dmg);
-    else if (st.splash > 0) fireSplash(s, st, target, dmg);
-    else hitEnemy(s, st, target, dmg);
+    else if (st.chainCount > 0) fireChain(s, t, st, target, dmg);
+    else if (st.splash > 0) fireSplash(s, t, st, target, dmg);
+    else hitEnemy(s, t, st, target, dmg);
   }
 }
 
@@ -577,7 +595,14 @@ function applyReticle(s: RunState): void {
  * tower damage is subtracted by armour unless the tower ignores it. Kill attribution is decided
  * here and only here: whoever reduces hp to zero gets the kill.
  */
-function damageEnemy(s: RunState, e: Enemy, amount: number, source: DamageSource, ignoresArmour: boolean): void {
+function damageEnemy(
+  s: RunState,
+  e: Enemy,
+  amount: number,
+  source: DamageSource,
+  ignoresArmour: boolean,
+  tower?: Tower,
+): void {
   if (e.dead || amount <= 0) return;
   let dmg = amount;
   if (source === 'pointer' && e.shield > 0) {
@@ -594,6 +619,10 @@ function damageEnemy(s: RunState, e: Enemy, amount: number, source: DamageSource
     e.hp = 0;
     e.dead = true;
     const reward = recordKill(s.economy, e.value, source);
+    if (tower) {
+      tower.kills++;
+      tower.earned += reward;
+    }
     s.events.push({ type: 'kill', x: e.x, y: e.y, reward, source });
     if (s.pointer.targetId === e.id) s.pointer.targetId = null;
   }

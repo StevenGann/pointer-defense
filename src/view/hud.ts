@@ -3,29 +3,70 @@ import { bevel, FONT, PAL, pointInRect, type Layout, type Rect } from './chrome.
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
 import { nextStageCost, pointerInfo } from '../core/pointer.ts';
-import { currentPath, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
-import { TOWER_KINDS, TOWER_STATS, type TowerKind } from '../core/towers.ts';
+import { currentPath, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
+import {
+  effectiveStats,
+  sellValue,
+  TOWER_KINDS,
+  TOWER_STATS,
+  upgradeCost,
+  type Branch,
+  type TowerKind,
+} from '../core/towers.ts';
 import { WAVES, WAVE_COUNT } from '../core/waves.ts';
 
 /**
  * The HUD: status-bar text (hint / wave / salvage), the integrity readout, the pointer stage and
- * upgrade button, the three tower buy buttons, the Start Wave button, and the end-of-run modal.
+ * upgrade button, the build palette or selected-tower detail, the Start Wave button, and the
+ * end-of-run modal.
  */
 
-export type HudAction = TowerKind | 'pointer' | 'wave';
+export type HudAction =
+  | TowerKind
+  | 'pointer'
+  | 'wave'
+  | 'upgrade'
+  | 'sell'
+  | 'branchA'
+  | 'branchB';
 
 const NOTICE_TICKS = 150;
 
+const BRANCH_NAMES: Readonly<Record<TowerKind, Readonly<Record<Branch, string>>>> = {
+  gun: { A: 'Marksman', B: 'Repeater' },
+  cannon: { A: 'Mortar', B: 'Flak' },
+  taser: { A: 'Arc', B: 'Overload' },
+  frost: { A: 'Deep Freeze', B: 'Shard' },
+  laser: { A: 'Focus', B: 'Prism' },
+  beacon: { A: 'Command', B: 'Relay' },
+};
+
+interface BranchButton {
+  branch: Branch;
+  rect: Rect;
+}
+
+interface TowerDetailLayout {
+  box: Rect;
+  name: Rect;
+  stats: Rect;
+  route: Rect;
+  upgrade: Rect | null;
+  branches: BranchButton[];
+  sell: Rect;
+}
+
 interface HudLayout {
   integrity: Rect;
-  route: Rect;
+  route: Rect | null;
+  detail: TowerDetailLayout | null;
   pointerPanel: Rect;
   pointerUpgrade: Rect;
   towers: ReadonlyArray<{ kind: TowerKind; rect: Rect }>;
   wave: Rect;
 }
 
-function computeHud(l: Layout): HudLayout {
+function computeHud(l: Layout, s: RunState): HudLayout {
   const pad = 6;
   const x = l.leftPanel.x + pad;
   const w = l.leftPanel.w - pad * 2;
@@ -34,29 +75,90 @@ function computeHud(l: Layout): HudLayout {
   let cy = y;
   const integrity: Rect = { x, y: cy, w, h: 22 };
   cy += 22 + 4;
-  const route: Rect = { x, y: cy, w, h: 14 };
-  cy += 14 + 6;
+
+  const tower = selectedTower(s);
+
+  let route: Rect | null = null;
+  if (!tower) {
+    route = { x, y: cy, w, h: 14 };
+    cy += 14 + 6;
+  }
+
+  let towers: { kind: TowerKind; rect: Rect }[] = [];
+  let detail: TowerDetailLayout | null = null;
+
+  if (!tower) {
+    towers = TOWER_KINDS.map((kind) => {
+      const rect: Rect = { x, y: cy, w, h: 20 };
+      cy += 20 + 6;
+      return { kind, rect };
+    });
+  } else {
+    const boxTop = cy;
+    const innerX = x + 4;
+    const innerW = w - 8;
+    cy += 6;
+    const name: Rect = { x: x + 6, y: cy, w: w - 12, h: 16 };
+    cy += 16;
+    const stats: Rect = { x: x + 6, y: cy, w: w - 12, h: 14 };
+    cy += 14;
+    const routeRow: Rect = { x: x + 6, y: cy, w: w - 12, h: 14 };
+    cy += 14 + 4;
+
+    const cost = upgradeCost(tower);
+    let upgrade: Rect | null = null;
+    if (tower.tier !== 2 && cost !== null) {
+      upgrade = { x: innerX, y: cy, w: innerW, h: 20 };
+      cy += 20 + 4;
+    }
+
+    const branches: BranchButton[] = [];
+    if (tower.tier === 2) {
+      const gap = 4;
+      const half = Math.floor((innerW - gap) / 2);
+      branches.push({ branch: 'A', rect: { x: innerX, y: cy, w: half, h: 20 } });
+      branches.push({
+        branch: 'B',
+        rect: { x: innerX + half + gap, y: cy, w: innerW - half - gap, h: 20 },
+      });
+      cy += 20 + 4;
+    }
+
+    const sell: Rect = { x: innerX, y: cy, w: innerW, h: 20 };
+    cy += 20;
+    const box: Rect = { x, y: boxTop, w, h: cy - boxTop + 6 };
+    detail = { box, name, stats, route: routeRow, upgrade, branches, sell };
+    cy = box.y + box.h + 6;
+  }
+
   const pointerPanel: Rect = { x, y: cy, w, h: 44 };
   const pointerUpgrade: Rect = { x: x + 4, y: cy + 22, w: w - 8, h: 18 };
   cy += 44 + 8;
-  const towers = TOWER_KINDS.map((kind) => {
-    const rect: Rect = { x, y: cy, w, h: 26 };
-    cy += 26 + 4;
-    return { kind, rect };
-  });
-  cy += 4;
   const wave: Rect = { x, y: cy, w, h: 28 };
 
-  return { integrity, route, pointerPanel, pointerUpgrade, towers, wave };
+  return { integrity, route, detail, pointerPanel, pointerUpgrade, towers, wave };
 }
 
 export function hudButtonAt(l: Layout, s: RunState, px: number, py: number): HudAction | null {
-  const h = computeHud(l);
+  const h = computeHud(l, s);
   const cost = nextStageCost(s.pointer);
   if (cost !== null && canAfford(s.economy, cost) && pointInRect(h.pointerUpgrade, px, py)) return 'pointer';
-  for (const t of h.towers) {
-    if (canAfford(s.economy, TOWER_STATS[t.kind].cost) && pointInRect(t.rect, px, py)) return t.kind;
+
+  const tower = selectedTower(s);
+  if (h.detail && tower) {
+    const upgradePrice = upgradeCost(tower);
+    const affordable = upgradePrice !== null && canAfford(s.economy, upgradePrice);
+    if (h.detail.upgrade && affordable && pointInRect(h.detail.upgrade, px, py)) return 'upgrade';
+    for (const b of h.detail.branches) {
+      if (affordable && pointInRect(b.rect, px, py)) return b.branch === 'A' ? 'branchA' : 'branchB';
+    }
+    if (pointInRect(h.detail.sell, px, py)) return 'sell';
+  } else {
+    for (const t of h.towers) {
+      if (canAfford(s.economy, TOWER_STATS[t.kind].cost) && pointInRect(t.rect, px, py)) return t.kind;
+    }
   }
+
   if (s.phase === 'build' && pointInRect(h.wave, px, py)) return 'wave';
   return null;
 }
@@ -85,6 +187,7 @@ export function modalRestartAt(l: Layout, s: RunState, px: number, py: number): 
 
 function hintFor(s: RunState): string {
   if (s.selected) return `Click a tile to place ${TOWER_STATS[s.selected].name} — right-click to cancel`;
+  if (selectedTower(s)) return 'Click Upgrade, choose a branch, or sell — right-click to deselect';
   switch (s.phase) {
     case 'build':
       return 'Place towers, then start the wave';
@@ -114,6 +217,12 @@ export class HudView {
   private readonly statusSalvage = makeText('');
   private readonly integrity = makeText('');
   private readonly route = makeText('');
+  private readonly towerName = makeText('', true);
+  private readonly towerStats = makeText('');
+  private readonly towerRoute = makeText('');
+  private readonly upgradeButton = makeText('');
+  private readonly branchButtons: Text[] = [makeText(''), makeText('')];
+  private readonly sellButton = makeText('');
   private readonly pointerLabel = makeText('');
   private notice = '';
   private noticeUntilTick = 0;
@@ -129,7 +238,7 @@ export class HudView {
   private readonly killsTitle = makeText('KILLS', true);
   private readonly killsRows: Text[] = [makeText(''), makeText(''), makeText('')];
   private readonly pointerTitle = makeText('POINTER', true);
-  private readonly pointerRows: Text[] = [makeText(''), makeText('')];
+  private readonly pointerRows: Text[] = [makeText(''), makeText(''), makeText(''), makeText('')];
 
   constructor() {
     this.towerButtons = TOWER_KINDS.map(() => makeText(''));
@@ -140,6 +249,12 @@ export class HudView {
       this.statusSalvage,
       this.integrity,
       this.route,
+      this.towerName,
+      this.towerStats,
+      this.towerRoute,
+      this.upgradeButton,
+      ...this.branchButtons,
+      this.sellButton,
       this.pointerLabel,
       this.pointerButton,
       ...this.towerButtons,
@@ -154,6 +269,7 @@ export class HudView {
       t.anchor.set(0, 0.5);
       this.root.addChild(t);
     }
+    for (const t of this.branchButtons) t.anchor.set(0.5, 0.5);
     this.root.addChild(this.modalG);
     for (const t of [this.modalTitle, this.modalMessage, this.modalRestart]) {
       t.anchor.set(0, 0.5);
@@ -184,14 +300,20 @@ export class HudView {
     this.statusSalvage.position.set(sp.right.x + 4, sp.right.y + Math.floor(sp.right.h / 2));
 
     // Toolbar.
-    const h = computeHud(l);
+    const h = computeHud(l, s);
 
     bevel(g, h.integrity, false, PAL.face);
     this.integrity.text = `Integrity: ${s.integrity}/${STARTING_INTEGRITY}`;
     this.integrity.position.set(h.integrity.x + 6, h.integrity.y + Math.floor(h.integrity.h / 2));
 
-    this.route.text = `Route: ${currentPath(s).length} tiles`;
-    this.route.position.set(h.route.x + 6, h.route.y + Math.floor(h.route.h / 2));
+    this.drawTowerControls(s, h, hoverHud);
+
+    if (h.route) {
+      this.route.text = `Route: ${currentPath(s).length} tiles`;
+      this.route.position.set(h.route.x + 6, h.route.y + Math.floor(h.route.h / 2));
+    } else {
+      this.route.text = '';
+    }
 
     bevel(g, h.pointerPanel, true, PAL.face);
     this.pointerLabel.text = `Pointer: ${pointerInfo(s.pointer).name}`;
@@ -206,17 +328,6 @@ export class HudView {
       h.pointerUpgrade.x + 6,
       h.pointerUpgrade.y + Math.floor(h.pointerUpgrade.h / 2),
     );
-
-    for (let i = 0; i < h.towers.length; i++) {
-      const { kind, rect } = h.towers[i];
-      const enabled = canAfford(s.economy, TOWER_STATS[kind].cost);
-      const armed = s.selected === kind;
-      drawButton(g, rect, enabled, hoverHud === kind, armed);
-      const t = this.towerButtons[i];
-      t.text = `${TOWER_STATS[kind].name}  $${formatNumber(TOWER_STATS[kind].cost)}`;
-      t.style.fill = enabled ? (armed ? PAL.title : PAL.text) : PAL.shadow;
-      t.position.set(rect.x + 6, rect.y + Math.floor(rect.h / 2));
-    }
 
     if (s.phase === 'build') {
       drawButton(g, h.wave, true, hoverHud === 'wave');
@@ -240,6 +351,78 @@ export class HudView {
     }
   }
 
+  private drawTowerControls(s: RunState, h: HudLayout, hoverHud: HudAction | null): void {
+    const g = this.g;
+    const tower = selectedTower(s);
+
+    if (h.detail && tower) {
+      const d = h.detail;
+      bevel(g, d.box, false, PAL.face);
+
+      const branch = tower.branch === null ? '' : ` - ${BRANCH_NAMES[tower.kind][tower.branch]}`;
+      this.towerName.text = `${TOWER_STATS[tower.kind].name}  T${tower.tier}${branch}`;
+      this.towerName.position.set(d.name.x, d.name.y + Math.floor(d.name.h / 2));
+
+      const st = effectiveStats(tower);
+      const damage = st.damage * tower.auraDamage;
+      const range = st.range + tower.auraRange;
+      this.towerStats.text = `dmg ${damage.toFixed(1)}  rng ${range.toFixed(1)}`;
+      this.towerStats.position.set(d.stats.x, d.stats.y + Math.floor(d.stats.h / 2));
+
+      this.towerRoute.text = `Route: ${currentPath(s).length} tiles`;
+      this.towerRoute.position.set(d.route.x, d.route.y + Math.floor(d.route.h / 2));
+
+      const price = upgradeCost(tower);
+      if (d.upgrade && price !== null) {
+        const enabled = canAfford(s.economy, price);
+        drawButton(g, d.upgrade, enabled, hoverHud === 'upgrade');
+        this.upgradeButton.text = `Upgrade $${formatNumber(price)}`;
+        this.upgradeButton.style.fill = enabled ? PAL.text : PAL.shadow;
+        this.upgradeButton.position.set(d.upgrade.x + 6, d.upgrade.y + Math.floor(d.upgrade.h / 2));
+      } else {
+        this.upgradeButton.text = '';
+      }
+
+      for (let i = 0; i < this.branchButtons.length; i++) {
+        const text = this.branchButtons[i];
+        const b = d.branches[i];
+        if (!b) {
+          text.text = '';
+          continue;
+        }
+        const enabled = price !== null && canAfford(s.economy, price);
+        drawButton(g, b.rect, enabled, hoverHud === (b.branch === 'A' ? 'branchA' : 'branchB'));
+        text.text = BRANCH_NAMES[tower.kind][b.branch];
+        text.style.fill = enabled ? PAL.text : PAL.shadow;
+        text.position.set(b.rect.x + b.rect.w / 2, b.rect.y + Math.floor(b.rect.h / 2));
+      }
+
+      drawButton(g, d.sell, true, hoverHud === 'sell');
+      this.sellButton.text = `Sell $${formatNumber(sellValue(tower))}`;
+      this.sellButton.style.fill = PAL.text;
+      this.sellButton.position.set(d.sell.x + 6, d.sell.y + Math.floor(d.sell.h / 2));
+      return;
+    }
+
+    this.towerName.text = '';
+    this.towerStats.text = '';
+    this.towerRoute.text = '';
+    this.upgradeButton.text = '';
+    this.sellButton.text = '';
+    for (const text of this.branchButtons) text.text = '';
+
+    for (let i = 0; i < h.towers.length; i++) {
+      const { kind, rect } = h.towers[i];
+      const enabled = canAfford(s.economy, TOWER_STATS[kind].cost);
+      const armed = s.selected === kind;
+      drawButton(g, rect, enabled, hoverHud === kind, armed);
+      const t = this.towerButtons[i];
+      t.text = `${TOWER_STATS[kind].name}  $${formatNumber(TOWER_STATS[kind].cost)}`;
+      t.style.fill = enabled ? (armed ? PAL.title : PAL.text) : PAL.shadow;
+      t.position.set(rect.x + 6, rect.y + Math.floor(rect.h / 2));
+    }
+  }
+
   private drawRightPanel(s: RunState, l: Layout): void {
     const g = this.g;
     const pad = 6;
@@ -259,9 +442,23 @@ export class HudView {
     ];
     y = this.drawInfoBox(g, this.killsTitle, this.killsRows, x, y, w, kills);
 
-    const cost = nextStageCost(s.pointer);
-    const pointer = [pointerInfo(s.pointer).name, cost === null ? 'Max level' : `Upgrade $${formatNumber(cost)}`];
-    this.drawInfoBox(g, this.pointerTitle, this.pointerRows, x, y, w, pointer);
+    const tower = selectedTower(s);
+    if (tower) {
+      this.pointerTitle.text = 'TOWER';
+      const branch = tower.branch === null ? 'none' : BRANCH_NAMES[tower.kind][tower.branch];
+      const contents = [
+        `tier: T${tower.tier}`,
+        `branch: ${branch}`,
+        `kills: ${tower.kills}`,
+        `earned: $${formatNumber(tower.earned)}`,
+      ];
+      this.drawInfoBox(g, this.pointerTitle, this.pointerRows, x, y, w, contents);
+    } else {
+      this.pointerTitle.text = 'POINTER';
+      const cost = nextStageCost(s.pointer);
+      const pointer = [pointerInfo(s.pointer).name, cost === null ? 'Max level' : `Upgrade $${formatNumber(cost)}`];
+      this.drawInfoBox(g, this.pointerTitle, this.pointerRows, x, y, w, pointer);
+    }
   }
 
   private drawInfoBox(

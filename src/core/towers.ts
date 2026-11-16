@@ -31,7 +31,7 @@ export interface TowerStats {
   readonly auraRange: number;
 }
 
-export const TOWER_KINDS: readonly TowerKind[] = ['gun', 'cannon', 'taser'];
+export const TOWER_KINDS: readonly TowerKind[] = ['gun', 'cannon', 'taser', 'frost', 'laser', 'beacon'];
 
 /** Data, not code: balance lives here. */
 export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
@@ -146,6 +146,10 @@ export interface Tower {
   lastTargetId: number | null;
   /** Ticks remaining on the muzzle flash / tracer. */
   flash: number;
+  /** Enemies this tower landed the killing blow on. */
+  kills: number;
+  /** Salvage this tower earned from those kills. */
+  earned: number;
 }
 
 export function createTower(id: number, kind: TowerKind, col: number, row: number): Tower {
@@ -162,6 +166,8 @@ export function createTower(id: number, kind: TowerKind, col: number, row: numbe
     cooldown: 0,
     lastTargetId: null,
     flash: 0,
+    kills: 0,
+    earned: 0,
   };
 }
 
@@ -177,6 +183,11 @@ const UPGRADE_COST_FACTOR: Readonly<Record<Tier, number | null>> = {
 export function upgradeCost(tower: Tower): number | null {
   const factor = UPGRADE_COST_FACTOR[tower.tier];
   return factor === null ? null : Math.round(TOWER_STATS[tower.kind].cost * factor);
+}
+
+/** Salvage returned when a tower is sold: 70% of everything spent, rounded down. */
+export function sellValue(tower: Tower): number {
+  return Math.floor(tower.spent * 0.7);
 }
 
 /**

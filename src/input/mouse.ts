@@ -3,18 +3,23 @@ import { menuItemAt, pixelToWorld, type Layout } from '../view/chrome.ts';
 import { hudButtonAt, modalRestartAt, type HudAction } from '../view/hud.ts';
 import { canAfford } from '../core/economy.ts';
 import { tileAt } from '../core/grid.ts';
-import { TOWER_STATS, type TowerKind } from '../core/towers.ts';
+import { TOWER_KINDS, TOWER_STATS, type TowerKind } from '../core/towers.ts';
 import {
   cancelSelection,
+  chooseBranch,
   enemyAt,
   placeTower,
   pointerDown,
   pointerMove,
   pointerUp,
+  selectedTower,
+  selectPlacedTower,
   selectTower,
+  sellTower,
   startWave,
   towerAt,
   upgradePointer,
+  upgradeTower,
   type RunState,
 } from '../core/state.ts';
 
@@ -126,17 +131,29 @@ export class MouseController {
     const w = pixelToWorld(l, x, y);
     const onBoard = x >= l.board.x && x < l.board.x + l.boardW && y >= l.board.y && y < l.board.y + l.boardH;
 
-    if (s.selected && onBoard) {
-      const enemy = s.phase === 'wave' ? enemyAt(s, w.x, w.y) : undefined;
-      if (enemy) {
+    if (onBoard) {
+      if (s.phase === 'wave' && enemyAt(s, w.x, w.y)) {
         pointerDown(s, w.x, w.y);
         return;
       }
       const col = Math.floor(w.x);
       const row = Math.floor(w.y);
-      if (!placeTower(s, s.selected, col, row)) {
-        this.ctx.notice(refusalReason(s, s.selected, col, row));
+      const tower = towerAt(s, col, row);
+      if (tower) {
+        selectPlacedTower(s, tower);
+        return;
       }
+      if (s.selected) {
+        if (!placeTower(s, s.selected, col, row)) {
+          this.ctx.notice(refusalReason(s, s.selected, col, row));
+        }
+        return;
+      }
+      if (s.selectedTowerId !== null) {
+        cancelSelection(s);
+        return;
+      }
+      if (s.phase === 'wave') pointerDown(s, w.x, w.y);
       return;
     }
 
@@ -148,6 +165,9 @@ export class MouseController {
       case 'gun':
       case 'cannon':
       case 'taser':
+      case 'frost':
+      case 'laser':
+      case 'beacon':
         selectTower(s, hud);
         break;
       case 'pointer':
@@ -156,6 +176,22 @@ export class MouseController {
       case 'wave':
         startWave(s);
         break;
+      case 'upgrade': {
+        const tower = selectedTower(s);
+        if (tower) upgradeTower(s, tower.col, tower.row);
+        break;
+      }
+      case 'branchA':
+      case 'branchB': {
+        const tower = selectedTower(s);
+        if (tower) chooseBranch(s, tower.col, tower.row, hud === 'branchA' ? 'A' : 'B');
+        break;
+      }
+      case 'sell': {
+        const tower = selectedTower(s);
+        if (tower) sellTower(s, tower.col, tower.row);
+        break;
+      }
     }
   }
 
@@ -169,6 +205,13 @@ export class MouseController {
   };
 
   private onKey = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape') cancelSelection(this.ctx.state());
+    if (e.key === 'Escape') {
+      cancelSelection(this.ctx.state());
+      return;
+    }
+    const n = Number(e.key);
+    if (Number.isInteger(n) && n >= 1 && n <= TOWER_KINDS.length) {
+      selectTower(this.ctx.state(), TOWER_KINDS[n - 1]);
+    }
   };
 }

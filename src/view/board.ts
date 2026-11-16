@@ -1,8 +1,15 @@
 import { Container, Graphics } from 'pixi.js';
 import { PAL, type Layout } from './chrome.ts';
-import { enemyAt, canPlace, towerAt, currentPath, type RunState } from '../core/state.ts';
+import {
+  enemyAt,
+  canPlace,
+  towerAt,
+  currentPath,
+  selectedTower,
+  type RunState,
+} from '../core/state.ts';
 import { radiusOf, type Enemy, type EnemyKind } from '../core/enemies.ts';
-import { TOWER_STATS, type Tower, type TowerKind } from '../core/towers.ts';
+import { effectiveStats, TOWER_STATS, type Tower, type TowerKind } from '../core/towers.ts';
 import { tileAt, COLS, ROWS, type Grid } from '../core/grid.ts';
 
 /**
@@ -28,6 +35,9 @@ const ENEMY_COLOR: Record<EnemyKind, number> = {
   shielded: PAL.maroon,
   flyer: 0x8000ff,
 };
+
+const AURA_COLOR = 0x6699ff;
+const SLOW_COLOR = 0x00d0ff;
 
 export interface BoardHover {
   col: number;
@@ -72,16 +82,34 @@ export class BoardView {
       drawTower(this.entities, t, board, cell);
     }
 
+    for (const t of state.towers) {
+      if (t.kind !== 'laser' || t.flash <= 0 || t.lastTargetId === null) continue;
+      const target = state.enemies.find((e) => e.id === t.lastTargetId);
+      if (!target) continue;
+      const ox = board.x + (t.col + 0.5) * cell;
+      const oy = board.y + (t.row + 0.5) * cell;
+      this.entities
+        .moveTo(ox, oy)
+        .lineTo(board.x + target.x * cell, board.y + target.y * cell)
+        .stroke({ width: 2, color: TOWER_COLOR.laser });
+    }
+
     const hoveredTower = hover.onBoard ? towerAt(state, hover.col, hover.row) : undefined;
-    if (hoveredTower) {
-      const cx = board.x + (hoveredTower.col + 0.5) * cell;
-      const cy = board.y + (hoveredTower.row + 0.5) * cell;
-      dashedCircle(this.overlay, cx, cy, TOWER_STATS[hoveredTower.kind].range * cell, PAL.navy, 1);
+    if (hoveredTower) drawTowerRange(this.overlay, hoveredTower, board, cell);
+
+    const inspected = selectedTower(state);
+    if (inspected) {
+      if (inspected !== hoveredTower) drawTowerRange(this.overlay, inspected, board, cell);
+      const sx = board.x + inspected.col * cell + 0.5;
+      const sy = board.y + inspected.row * cell + 0.5;
+      this.overlay
+        .rect(sx, sy, cell - 1, cell - 1)
+        .stroke({ width: 1, color: PAL.title });
     }
 
     for (const e of state.enemies) {
       if (e.dead) continue;
-      drawEnemy(this.entities, e, board, cell, alpha);
+      drawEnemy(this.entities, e, board, cell, alpha, state.tick < e.slowUntilTick);
     }
 
     if (state.selected && hover.onBoard && canPlace(state, state.selected, hover.col, hover.row)) {
@@ -207,6 +235,19 @@ function drawTower(g: Graphics, t: Tower, board: { x: number; y: number; cell: n
   drawTowerShape(g, t.kind, cx, cy, cell, 1);
 }
 
+function drawTowerRange(
+  g: Graphics,
+  t: Tower,
+  board: { x: number; y: number; cell: number },
+  cell: number,
+): void {
+  const st = effectiveStats(t);
+  const cx = board.x + (t.col + 0.5) * cell;
+  const cy = board.y + (t.row + 0.5) * cell;
+  dashedCircle(g, cx, cy, (st.range + t.auraRange) * cell, PAL.navy, 1);
+  if (t.kind === 'beacon') dashedCircle(g, cx, cy, st.range * cell, AURA_COLOR, 1);
+}
+
 function drawTowerShape(g: Graphics, kind: TowerKind, cx: number, cy: number, cell: number, alpha: number): void {
   const color = TOWER_COLOR[kind];
   const fill = { color, alpha };
@@ -255,6 +296,7 @@ function drawEnemy(
   board: { x: number; y: number; cell: number },
   cell: number,
   alpha: number,
+  slowed: boolean,
 ): void {
   const ex = (e.prevX + (e.x - e.prevX) * alpha) * cell + board.x;
   const ey = (e.prevY + (e.y - e.prevY) * alpha) * cell + board.y;
@@ -297,6 +339,15 @@ function drawEnemy(
     if (e.shield > 0) {
       g.circle(ex, ey, r + 3).stroke({ width: 1, color: PAL.teal });
     }
+  }
+
+  if (slowed) {
+    const sr = r + 2.5;
+    const a0 = Math.PI * 0.2;
+    const a1 = Math.PI * 0.8;
+    g.moveTo(ex + Math.cos(a0) * sr, ey + Math.sin(a0) * sr)
+      .arc(ex, ey, sr, a0, a1)
+      .stroke({ width: 1, color: SLOW_COLOR });
   }
 
   const ratio = e.maxHp > 0 ? e.hp / e.maxHp : 0;
