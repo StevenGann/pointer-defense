@@ -123,6 +123,8 @@ export interface RunState {
   phase: Phase;
   /** Last wave started (0 before the first). During 'build' the next wave is wave + 1. */
   wave: number;
+  /** Waves actually cleared this run, incremented when a wave's queue and enemies are gone. */
+  clearedWaves: number;
   integrity: number;
   economy: Economy;
   pointer: PointerState;
@@ -213,6 +215,7 @@ export function createRunState(profile: Profile = defaultProfile()): RunState {
     blocked,
     phase: 'build',
     wave: 0,
+    clearedWaves: 0,
     integrity: STARTING_INTEGRITY + specs.disk,
     economy: createEconomy(STARTING_SALVAGE + specs.ram * RAM_SALVAGE_PER_POINT),
     pointer: createPointer(),
@@ -1000,6 +1003,7 @@ function clearDue(s: RunState): void {
     if (run.wave >= 40 && (s.leaksByWave.get(run.wave) ?? 0) === 0) s.clearedWaveNoLeaks = true;
     cleared.add(run);
   }
+  s.clearedWaves += cleared.size;
   if (cleared.size > 0) s.runs = s.runs.filter((r) => !cleared.has(r));
 }
 

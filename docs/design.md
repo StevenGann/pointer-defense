@@ -274,18 +274,22 @@ bonus    = clamp(round(40 × fraction), 5, 40)
 the most (40) and later calls decay to a floor of 5. The HUD shows the live value counting down. The
 formula has no randomness.
 
-**Harness.** `scripts/balance.mjs` runs three scenarios and reports waves cleared, integrity, salvage,
-specs, leaks and reboots for each:
+**Harness.** `scripts/balance.mjs` runs four scenarios and reports waves cleared, last wave started,
+integrity, salvage, specs, leaks and reboots for each:
 
 | Scenario | Flag | Strategy |
 |---|---|---|
 | standard | *(default)* | build greedily, click at a fixed rate, reboot at wave 60 |
 | control | `--no-support` | the same policy with Frost and Beacon replaced by Guns |
-| call | `--call` | build, then call every wave the moment it is allowed |
+| call | `--call` | run normally; call the next wave once every spawn queue is exhausted while enemies remain |
+| call-all | `--call-all` | chain every remaining wave at tick zero, as a stress test of overlapping waves |
 
-The call scenario exists to *measure* the mechanic rather than assume it is fair: if the aggressive
-strategy clears 100 with little loss, the bonus is reduced or the decay steepened — enemies are never
-made harder and per-wave HP/salvage tables are left alone.
+Waves cleared counts waves actually cleared, not the wave counter: the separate last wave started line
+is the counter, so an early call cannot inflate the result. The call scenario exists to *measure* the
+mechanic rather than assume it is fair: if the aggressive-but-playable line clears 100 with little
+loss, the bonus is reduced or the decay steepened — enemies are never made harder and per-wave
+HP/salvage tables are left alone. The call-all scenario is only a stress test of overlap, not a
+balance number.
 
 ---
 
@@ -522,8 +526,8 @@ One master volume, remembered in `localStorage`. No music at launch.
 
 The **balance harness** matters more than the rest of the tests: a headless scripted player — builds
 greedily, clicks at a fixed rate, reboots at wave 60 — printing leaks, salvage and route length per
-wave across three scenarios (standard, a no-support control, and the early-call run, §8.5). Balance
-changes are judged by its output, not by feel.
+wave across four scenarios (standard, a no-support control, the early-call run, and an all-at-once
+call stress test, §8.5). Balance changes are judged by its output, not by feel.
 
 ---
 

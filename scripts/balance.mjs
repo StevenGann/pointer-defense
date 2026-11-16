@@ -49,8 +49,10 @@ const quiet = hasFlag('--quiet');
 const support = !hasFlag('--no-support');
 // --no-build: a click-only player — never place a tower, spend salvage on the pointer instead.
 const noBuild = hasFlag('--no-build');
-// --call: a third scenario that starts every wave as soon as it is allowed (the early-call mechanic).
+// --call: run normally, calling the next wave once the current spawn queue is exhausted and enemies
+// are still on the board. --call-all: chain every remaining wave at tick zero (a stress test).
 const callMode = hasFlag('--call');
+const callAllMode = hasFlag('--call-all');
 
 // --- Deterministic PRNG (mulberry32), independent of the sim's own stream ----------------------
 function makeRng(seed) {
@@ -442,16 +444,33 @@ function playRun(profile, rebootAtWave, label, useSupport) {
     wallIdx = buildPhase(s, wave, wallIdx, counts, useSupport);
     const result = playWave(s, wave, leakList);
     if (result.status === 'died') {
-      return { reached: false, wave, integrity: s.integrity, earned: s.economy.earned, state: s, leakList };
+      return {
+        reached: false,
+        wave,
+        clearedWaves: s.clearedWaves,
+        integrity: s.integrity,
+        earned: s.economy.earned,
+        state: s,
+        leakList,
+      };
     }
     if (result.status === 'reached') {
-      return { reached: true, wave, integrity: s.integrity, earned: s.economy.earned, state: s, leakList };
+      return {
+        reached: true,
+        wave,
+        clearedWaves: s.clearedWaves,
+        integrity: s.integrity,
+        earned: s.economy.earned,
+        state: s,
+        leakList,
+      };
     }
     if (rebootAtWave > 0 && wave >= rebootAtWave) {
       return {
         reached: false,
         reboot: true,
         wave,
+        clearedWaves: s.clearedWaves,
         integrity: s.integrity,
         earned: s.economy.earned,
         state: s,
@@ -486,44 +505,84 @@ function runSession(useSupport, label) {
 }
 
 /**
- * The --call strategy: build the maze, start wave 1, then chain every later wave as soon as it is
- * allowed (each is an early call, paying the bonus). The player keeps building and clicking during
- * the resulting continuous wave, spending the bonus flood. Returns the same shape as playRun.
+ * The --call strategy: play normally, and whenever every in-flight wave has emptied its spawn queue
+ * while enemies are still alive, call the next wave immediately (paying the early-call bonus).
+ * --call-all chains every remaining wave at tick zero instead, as a stress test of overlap.
+ * Returns the same shape as playRun.
  */
-function playRunCall(profile, label) {
+function playRunCall(profile, label, allAtOnce) {
   const s = createRunState(profile);
   const counts = { gun: 0, cannon: 0, taser: 0, frost: 0, laser: 0, beacon: 0 };
   let wallIdx = 0;
-  if (!quiet) console.log(`--- ${label} ---`);
-  wallIdx = buildPhase(s, 1, wallIdx, counts, true);
-  if (!startWave(s)) {
-    return { reached: false, wave: s.wave, integrity: s.integrity, earned: s.economy.earned, state: s, leakList: [] };
-  }
-  // Call every remaining wave immediately, up to --to or the normal-run cap (wave 100).
-  while (s.wave < to && startWave(s)) {
-    /* chain waves 2..to; each pays the early-call bonus */
-  }
-  const clickInterval = Math.max(1, Math.round(TICK_HZ / cps));
-  let clicks = 0;
-  let guard = 0;
-  while (s.phase === 'wave') {
-    if (s.enemies.length > 0 && clicks % clickInterval === 0) doClick(s);
-    wallIdx = buildPhase(s, s.wave, wallIdx, counts, true);
-    tick(s);
-    clicks++;
-    if (++guard > TICK_HZ * 900) break; // safety; an all-in wave run is over in well under 15 min
-  }
   const leakList = [];
-  for (const [wave, leaks] of s.leaksByWave) {
-    if (leaks > 0) leakList.push({ wave, leaks });
+  if (!quiet) console.log(`--- ${label} ---`);
+
+  for (;;) {
+    wallIdx = buildPhase(s, s.wave + 1, wallIdx, counts, true);
+    if (!startWave(s)) break;
+    if (allAtOnce) {
+      // Chain every remaining wave immediately, up to --to or the normal-run cap (wave 100).
+      while (s.wave < to && startWave(s)) {
+        /* each call is an early call and pays the bonus */
+      }
+    }
+    const clickInterval = Math.max(1, Math.round(TICK_HZ / cps));
+    let clicks = 0;
+    let guard = 0;
+    while (s.phase === 'wave') {
+      if (s.enemies.length > 0 && clicks % clickInterval === 0) doClick(s);
+      if (allAtOnce) wallIdx = buildPhase(s, s.wave, wallIdx, counts, true);
+      tick(s);
+      if (!allAtOnce && s.phase === 'wave' && s.wave < to) {
+        const spawning = s.runs.some((r) => r.spawns.length > 0);
+        if (!spawning && s.enemies.length > 0) {
+          wallIdx = buildPhase(s, s.wave + 1, wallIdx, counts, true);
+          startWave(s);
+        }
+      }
+      clicks++;
+      if (++guard > TICK_HZ * 900) break; // safety; a call run is over in well under 15 min
+    }
+    for (const [wave, leaks] of s.leaksByWave) {
+      if (leaks > 0 && !leakList.some((l) => l.wave === wave)) leakList.push({ wave, leaks });
+    }
+    if (s.phase === 'halted') {
+      return {
+        reached: false,
+        wave: s.wave,
+        clearedWaves: s.clearedWaves,
+        integrity: s.integrity,
+        earned: s.economy.earned,
+        state: s,
+        leakList,
+      };
+    }
+    if (s.phase === 'victory' || s.wave >= to) {
+      return {
+        reached: true,
+        wave: s.wave,
+        clearedWaves: s.clearedWaves,
+        integrity: s.integrity,
+        earned: s.economy.earned,
+        state: s,
+        leakList,
+      };
+    }
   }
-  const reached = s.phase === 'victory' || (s.phase === 'build' && s.wave >= to);
-  return { reached, wave: s.wave, integrity: s.integrity, earned: s.economy.earned, state: s, leakList };
+  return {
+    reached: false,
+    wave: s.wave,
+    clearedWaves: s.clearedWaves,
+    integrity: s.integrity,
+    earned: s.economy.earned,
+    state: s,
+    leakList,
+  };
 }
 
-/** Run the --call scenario as a single run (no mid-run reboot: the all-in has no checkpoint). */
-function runSessionCall(label) {
-  const final = playRunCall(defaultProfile(), label);
+/** Run a call scenario as a single run (no mid-run reboot: an early-call chain has no checkpoint). */
+function runSessionCall(label, allAtOnce) {
+  const final = playRunCall(defaultProfile(), label, allAtOnce);
   return { final, totalSpecs: 0, reboots: 0 };
 }
 
@@ -561,9 +620,9 @@ function runSummary(final, totalSpecs, reboots, label) {
     .filter((l) => l.leaks > 0)
     .map((l) => `${l.wave}:${l.leaks}`)
     .join(' ');
-  const wavesCleared = final.reached ? final.wave : final.wave - 1;
   console.log(`\n=== ${label} ===`);
-  console.log(`waves cleared: ${wavesCleared}`);
+  console.log(`waves cleared: ${final.clearedWaves}`);
+  console.log(`last wave started: ${final.wave}`);
   console.log(`integrity: ${final.integrity}`);
   console.log(`total salvage: ${final.earned}`);
   console.log(`specs earned: ${totalSpecs}`);
@@ -585,8 +644,8 @@ if (mainSupport) {
 
   const stdTotal = mainTable.total;
   const ctrlTotal = controlTable.total;
-  const stdWave = main.final.reached ? main.final.wave : main.final.wave - 1;
-  const ctrlWave = control.final.reached ? control.final.wave : control.final.wave - 1;
+  const stdWave = main.final.clearedWaves;
+  const ctrlWave = control.final.clearedWaves;
   const stdPerWave = stdWave > 0 ? stdTotal / stdWave : 0;
   const ctrlPerWave = ctrlWave > 0 ? ctrlTotal / ctrlWave : 0;
   const delta = ctrlTotal > 0 ? ((stdTotal - ctrlTotal) / ctrlTotal) * 100 : Infinity;
@@ -597,9 +656,15 @@ if (mainSupport) {
 }
 
 if (callMode) {
-  // The early-call scenario: call every wave as soon as it is allowed, and measure the result.
-  const call = runSessionCall('call run (--call)');
+  // The early-call scenario: call the next wave once the spawn queue is exhausted, as a player would.
+  const call = runSessionCall('call run (--call)', false);
   runSummary(call.final, call.totalSpecs, call.reboots, 'call run (--call)');
+}
+
+if (callAllMode) {
+  // The stress test: chain every remaining wave at tick zero to exercise heavy overlap.
+  const callAll = runSessionCall('call-all run (--call-all)', true);
+  runSummary(callAll.final, callAll.totalSpecs, callAll.reboots, 'call-all run (--call-all)');
 }
 
 process.exit(main.final.reached ? 0 : 1);
