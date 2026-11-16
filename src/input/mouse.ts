@@ -156,7 +156,7 @@ export class MouseController {
       return;
     }
 
-    // A desktop pop-up's close box, drawn outside the board window.
+    // A desktop pop-up's close box, docked in the right panel column.
     if (s.popup && pointInRect(popupCloseRect(s.popup), x, y)) {
       dismissPopup(s, s.popup.id);
       return;

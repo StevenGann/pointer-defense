@@ -45,7 +45,7 @@ const dialogView = new DialogView();
 
 const root = new Container();
 app.stage.addChild(root);
-root.addChild(chrome.root, popup.root, board.root, numbers.root, hud.root, menuView.root, dialogView.root);
+root.addChild(chrome.root, board.root, numbers.root, hud.root, popup.root, menuView.root, dialogView.root);
 
 let menu: OpenMenu | null = null;
 let dialog: DialogModel | null = null;
@@ -55,6 +55,12 @@ function syncViewport(): void {
     width: app.screen.width,
     height: app.screen.height,
     window: { x: layout.window.x, y: layout.window.y, w: layout.window.w, h: layout.window.h },
+    rightPanel: {
+      x: layout.rightPanel.x,
+      y: layout.rightPanel.y,
+      w: layout.rightPanel.w,
+      h: layout.rightPanel.h,
+    },
   };
 }
 syncViewport();

@@ -137,7 +137,12 @@ export interface RunState {
   /** Seeded PRNG state (see rng.ts). */
   rng: number;
   /** Desktop geometry for pop-up placement, updated by the view on resize. */
-  viewport: { width: number; height: number; window: { x: number; y: number; w: number; h: number } };
+  viewport: {
+    width: number;
+    height: number;
+    window: { x: number; y: number; w: number; h: number };
+    rightPanel?: { x: number; y: number; w: number; h: number };
+  };
   /** Permanent spec levels applied to this run (mirrors the profile, drives the bonuses). */
   specs: SpecLevels;
   /** Banked, unspent specs — the currency the spec shop spends (mirrors the profile). */
@@ -190,7 +195,12 @@ export function createRunState(profile: Profile = defaultProfile()): RunState {
     enemySlowTicks: 0,
     towerDisabled: new Map(),
     rng: 0x9e3779b9,
-    viewport: { width: 1280, height: 800, window: { x: 24, y: 24, w: 1232, h: 752 } },
+    viewport: {
+      width: 1280,
+      height: 800,
+      window: { x: 24, y: 24, w: 1232, h: 752 },
+      rightPanel: { x: 1106, y: 62, w: 148, h: 692 },
+    },
     specs,
     unspentSpecs: profile.unspentSpecs,
     achievements: new Set(profile.achievements),

@@ -239,8 +239,10 @@ design has failed: tower kills do the work, pointer kills pay the bonus.
 
 The Win95 motif doing mechanical work, taken from *Cookie Clicker*'s golden cookies.
 
-During a wave a **pop-up window** appears on the desktop outside the board, with a title bar and a
-close box. It lives **8 seconds**. Clicking its close box dismisses it and pays.
+During a wave a **pop-up window** docks in the right panel column, at the top, with a title bar and a
+close box. It is inset 6 px from the panel's left edge, spans the panel width less 12 px, is 54 px
+tall, and stacks downward from the top of the panel. It lives **8 seconds**. Clicking its close box
+dismisses it and pays.
 
 | Pop-up | Weight | Effect |
 |---|---|---|
@@ -252,8 +254,11 @@ close box. It lives **8 seconds**. Clicking its close box dismisses it and pays.
 | *Blue Screen* | 10 | a trap: dismissing pays nothing and disables a random tower for 3 s |
 
 - At most **one** pop-up on screen at a time.
-- One every **45–75 s**, during waves only, never twice in the same second.
-- Spawning pauses below three enemies on the board: a bonus you cannot earn is just noise.
+- The first attempt comes **25–45 s** into a wave; later attempts come every **45–75 s**. The countdown
+  is absolute and keeps running between waves, so a wave start never resets it. An attempt that finds
+  its conditions unmet waits for the next interval.
+- Attempts happen during waves only, never within the first **8 s** of a wave, and pause below **two**
+  enemies on the board: a bonus you cannot earn is just noise.
 - Blue Screen exists so the bonus is a decision rather than a reflex. Its title bar is subtly wrong —
   the text sits a pixel high — and an attentive player learns the tell.
 

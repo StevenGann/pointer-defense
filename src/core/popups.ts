@@ -11,8 +11,9 @@ import { rngNext } from './rng.ts';
  * close box is clicked (docs/design.md §10). Spawn scheduling, selection and effects live here so
  * the sim stays deterministic; the view only draws whatever `s.popup` says.
  *
- * Rules: at most one pop-up alive; an attempt every 45–75 s, during a wave only, never within the
- * first 20 s of a wave, and never with fewer than three enemies alive. A pop-up expires after 8 s
+ * Rules: at most one pop-up alive; the first attempt comes 25–45 s into a wave, later attempts every
+ * 45–75 s on an absolute clock that keeps running between waves, only during a wave, never within
+ * the first 8 s of a wave, and never with fewer than two enemies alive. A pop-up expires after 8 s
  * with no penalty. Blue Screen is a trap that pays nothing and disables a random tower.
  */
 
@@ -34,12 +35,12 @@ interface PopupSpec {
 }
 
 export const POPUP_SPECS: Readonly<Record<PopupKind, PopupSpec>> = {
-  defrag: { title: 'Defrag complete', message: '+8% salvage', weight: 30 },
-  autoupdate: { title: 'AutoUpdate', message: 'Towers +40% for 10s', weight: 20 },
-  timezone: { title: 'Time Zone Change', message: 'Enemies -50% for 6s', weight: 15 },
-  freeware: { title: 'Freeware', message: 'A free Gun appears', weight: 15 },
-  screensaver: { title: 'Screensaver', message: 'All enemies take 25', weight: 10 },
-  bluescreen: { title: 'Blue Screen', message: 'The system is busy', weight: 10 },
+  defrag: { title: 'Defrag complete', message: 'Close for +8% salvage', weight: 30 },
+  autoupdate: { title: 'AutoUpdate', message: 'Close for +40% towers', weight: 20 },
+  timezone: { title: 'Time Zone Change', message: 'Close for -50% speed', weight: 15 },
+  freeware: { title: 'Freeware', message: 'Close for a free Gun', weight: 15 },
+  screensaver: { title: 'Screensaver', message: 'Close for 25 damage', weight: 10 },
+  bluescreen: { title: 'Blue Screen', message: 'Close for nothing', weight: 10 },
 };
 
 export interface Popup {
@@ -47,7 +48,14 @@ export interface Popup {
   readonly kind: PopupKind;
   /** Ticks remaining before it silently vanishes. */
   ttl: number;
-  /** Top-left corner on the desktop, snapped to an 8px grid. */
+  /** Top-left corner of the dialog, docked in the right panel column. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+interface ViewportRect {
   x: number;
   y: number;
   w: number;
@@ -57,15 +65,19 @@ export interface Popup {
 /** Pop-ups live 8 seconds. */
 export const POPUP_LIFETIME_TICKS = secondsToTicks(8);
 
-/** Pop-ups sit in the desktop margin around the window; the dialog is sized to fit the 24px band. */
-export const POPUP_W = 176;
-export const POPUP_H = 24;
+/** Pop-ups dock in the 148px right panel, inset 6px on each side. */
+export const POPUP_W = 136;
+export const POPUP_H = 54;
 
+const POPUP_INSET = 6;
+const FALLBACK_PANEL_W = 148;
+
+const FIRST_ATTEMPT_MIN_S = 25;
+const FIRST_ATTEMPT_SPAN_S = 20;
 const SPAWN_INTERVAL_MIN_S = 45;
 const SPAWN_INTERVAL_SPAN_S = 30;
-const WAVE_SETTLE_TICKS = secondsToTicks(20);
-const MIN_ENEMIES = 3;
-const SNAP = 8;
+const WAVE_SETTLE_TICKS = secondsToTicks(8);
+const MIN_ENEMIES = 2;
 
 function nextFloat(s: RunState): number {
   const r = rngNext(s.rng);
@@ -73,8 +85,20 @@ function nextFloat(s: RunState): number {
   return r.value;
 }
 
+function nextFirstAttemptDelayTicks(s: RunState): number {
+  return secondsToTicks(FIRST_ATTEMPT_MIN_S + nextFloat(s) * FIRST_ATTEMPT_SPAN_S);
+}
+
 function nextAttemptDelayTicks(s: RunState): number {
   return secondsToTicks(SPAWN_INTERVAL_MIN_S + nextFloat(s) * SPAWN_INTERVAL_SPAN_S);
+}
+
+/** The right panel column, derived from the window when the view has not supplied it. */
+function rightPanelRect(s: RunState): ViewportRect {
+  const supplied = s.viewport.rightPanel;
+  if (supplied) return supplied;
+  const win = s.viewport.window;
+  return { x: win.x + win.w - 2 - FALLBACK_PANEL_W, y: win.y + 38, w: FALLBACK_PANEL_W, h: win.h - 60 };
 }
 
 function pickKind(s: RunState): PopupKind {
@@ -88,18 +112,21 @@ function pickKind(s: RunState): PopupKind {
 
 /**
  * Spawn a pop-up (optionally forcing `kind` for tests). Returns null when one is already alive.
- * The position is snapped to an 8px grid in the desktop margin above or below the window, never
- * overlapping the window rect.
+ * The dialog is docked in the right panel column and stacks downward from its top edge.
  */
 export function spawnPopup(s: RunState, kind?: PopupKind): Popup | null {
   if (s.popup) return null;
   const k = kind ?? pickKind(s);
-  const popup: Popup = { id: s.nextId++, kind: k, ttl: POPUP_LIFETIME_TICKS, x: 0, y: 0, w: POPUP_W, h: POPUP_H };
-  const vw = s.viewport.width;
-  const margin = s.viewport.window.y; // desktop band around the window
-  const slots = Math.max(1, Math.floor((vw - POPUP_W) / SNAP));
-  popup.x = Math.min(vw - POPUP_W, Math.floor(nextFloat(s) * slots) * SNAP);
-  popup.y = nextFloat(s) < 0.5 ? 0 : s.viewport.height - margin;
+  const panel = rightPanelRect(s);
+  const popup: Popup = {
+    id: s.nextId++,
+    kind: k,
+    ttl: POPUP_LIFETIME_TICKS,
+    x: panel.x + POPUP_INSET,
+    y: panel.y + POPUP_INSET,
+    w: panel.w - POPUP_INSET * 2,
+    h: POPUP_H,
+  };
   s.popup = popup;
   return popup;
 }
@@ -118,12 +145,17 @@ export function tickPopups(s: RunState): void {
     if (s.popup.ttl <= 0) s.popup = null;
   }
 
-  if (s.phase !== 'wave') return;
   if (s.nextPopupAttemptTick === 0) {
-    s.nextPopupAttemptTick = s.tick + nextAttemptDelayTicks(s);
+    if (s.phase !== 'wave') return;
+    s.nextPopupAttemptTick = s.tick + nextFirstAttemptDelayTicks(s);
   }
   if (s.tick < s.nextPopupAttemptTick) return;
-  if (!s.popup && s.waveTick >= WAVE_SETTLE_TICKS && s.enemies.length >= MIN_ENEMIES) {
+  if (
+    s.phase === 'wave' &&
+    !s.popup &&
+    s.waveTick >= WAVE_SETTLE_TICKS &&
+    s.enemies.length >= MIN_ENEMIES
+  ) {
     spawnPopup(s);
   }
   s.nextPopupAttemptTick = s.tick + nextAttemptDelayTicks(s);

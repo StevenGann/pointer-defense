@@ -8,7 +8,7 @@ import type { RunState } from '../core/state.ts';
  * owned by the sim so the input layer and this view hit-test the same rect.
  */
 
-export const POPUP_TITLE_H = 12;
+export const POPUP_TITLE_H = 14;
 const CLOSE_W = 11;
 const CLOSE_H = 9;
 
@@ -16,7 +16,7 @@ const CLOSE_H = 9;
 export function popupCloseRect(popup: Popup): Rect {
   return {
     x: popup.x + popup.w - CLOSE_W - 2,
-    y: popup.y + 3,
+    y: popup.y + 4,
     w: CLOSE_W,
     h: CLOSE_H,
   };
@@ -35,6 +35,7 @@ export class PopupView {
   constructor() {
     this.root.addChild(this.g);
     this.title.anchor.set(0, 0.5);
+    this.title.style.fontWeight = 'bold';
     this.message.anchor.set(0, 0.5);
     this.root.addChild(this.title, this.message);
   }
@@ -69,9 +70,11 @@ export class PopupView {
     g.moveTo(cx - 3, cy - 2).lineTo(cx + 3, cy + 2).stroke({ width: 1, color: PAL.text });
     g.moveTo(cx + 3, cy - 2).lineTo(cx - 3, cy + 2).stroke({ width: 1, color: PAL.text });
 
-    // Message line.
+    // Message line, centred in the body below the title bar.
     this.message.text = spec.message;
     this.message.style.fill = PAL.text;
-    this.message.position.set(popup.x + 6, popup.y + 2 + POPUP_TITLE_H + 5);
+    const bodyTop = popup.y + 2 + POPUP_TITLE_H;
+    const bodyH = popup.h - POPUP_TITLE_H - 4;
+    this.message.position.set(popup.x + 6, bodyTop + Math.floor(bodyH / 2));
   }
 }
