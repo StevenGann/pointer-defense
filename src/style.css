@@ -1,0 +1,20 @@
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #008080;
+  font-family: "Tahoma", "Verdana", "Geneva", sans-serif;
+  -webkit-font-smoothing: none;
+}
+
+#app {
+  width: 100%;
+  height: 100%;
+}
+
+canvas {
+  display: block;
+  image-rendering: pixelated;
+}
