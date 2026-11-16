@@ -38,7 +38,7 @@ export const ENEMY_STATS: Readonly<Record<EnemyKind, EnemyStats>> = {
   flyer: { name: 'Flyer', hp: 8, speed: GRUNT_SPEED * 1.5, radius: 0.22, armour: 0, shield: 0, value: 5 },
   armoured: { name: 'Armoured', hp: 45, speed: 1.0, radius: 0.34, armour: 8, shield: 0, value: 12 },
   saboteur: { name: 'Saboteur', hp: 25, speed: 1.5, radius: 0.28, armour: 0, shield: 0, value: 11 },
-  boss: { name: 'Boss', hp: 900, speed: 0.8, radius: 0.55, armour: 6, shield: 120, value: 120 },
+  boss: { name: 'Boss', hp: 450, speed: 0.8, radius: 0.55, armour: 6, shield: 120, value: 120 },
 };
 
 export interface Enemy {
@@ -86,19 +86,23 @@ export interface Enemy {
 export function waveHpScale(wave: number): number {
   const w = Math.max(1, wave);
   if (w <= 20) return 1 + 0.18 * (w - 1);
-  return 4.42 * Math.pow(1.06, w - 20);
+  if (w <= 60) return 4.42 * Math.pow(1.015, w - 20);
+  return 4.42 * Math.pow(1.015, 40) * Math.pow(1.001, w - 60);
 }
 
 export function waveValueScale(wave: number): number {
   const w = Math.max(1, wave);
-  if (w <= 50) return 1 + 0.1 * (w - 1);
-  return 5.9 * Math.pow(1.03, w - 50);
+  if (w <= 50) return 1 + 0.06 * (w - 1);
+  return 3.94 * Math.pow(1.012, w - 50);
 }
 
 export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Tile, exit: Tile): Enemy {
   const s = ENEMY_STATS[kind];
   const hp = Math.round(s.hp * waveHpScale(wave));
-  const shield = Math.round(s.shield * waveHpScale(wave));
+  // Shield is a flat pointer-check, not wave-scaled: pointer damage does not scale with wave, so a
+  // wave-scaled shield would make the pointer half irrelevant (a wave-100 boss shield would take
+  // thousands of seconds to break at 3 damage per click).
+  const shield = s.shield;
   const x = spawn.col + 0.5;
   const y = spawn.row + 0.5;
   const isFlyer = kind === 'flyer';

@@ -180,13 +180,15 @@ wave timer.
 
 ```
 hpScale(w)    = 1 + 0.18·(w−1)          for w ≤ 20
-              = 4.42 · 1.06^(w−20)      for w > 20
-valueScale(w) = 1 + 0.10·(w−1)          for w ≤ 50
-              = 5.9 · 1.03^(w−50)       for w > 50
+              = 4.42 · 1.015^(w−20)     for 20 < w ≤ 60
+              = 8.02 · 1.001^(w−60)     for w > 60
+valueScale(w) = 1 + 0.06·(w−1)          for w ≤ 50
+              = 3.94 · 1.012^(w−50)     for w > 50
 ```
 
-HP outgrows value on purpose. Around wave 60 the curve should visibly bend and the player should start
-thinking about the reboot.
+HP outgrows value on purpose. The curve bends twice: it steepens through the Specialists and Attrition
+bands, then flattens past wave 60 so that one reboot's worth of specs is enough to carry a competent
+player to wave 100. Without the reboot the same player runs out of integrity somewhere in the Siege band.
 
 From wave 51 each wave takes one modifier from a small pool: **fog** (range −20 %), **no-build band**
 (one row cannot be built on), **fast forward** (speed +15 %), **blackout** (salvage hidden until the

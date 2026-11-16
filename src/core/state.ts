@@ -807,6 +807,7 @@ function damageEnemy(
   }
   if (dmg <= 0) return;
   e.hp -= dmg;
+  s.economy.damage[source] += dmg;
   s.events.push({ type: 'damage', x: e.x, y: e.y, amount: dmg, weak: source === 'pointer' && weak });
   if (e.hp <= 1e-9) {
     e.hp = 0;

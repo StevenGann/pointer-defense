@@ -30,6 +30,8 @@ export interface Economy {
   kills: Record<DamageSource, number>;
   /** Salvage earned from kills, by source, for the "where did my money come from" readout. */
   earnedBySource: Record<DamageSource, number>;
+  /** HP damage actually dealt by each source, for the balance harness's tower/click share. */
+  damage: Record<DamageSource, number>;
 }
 
 export function createEconomy(startingSalvage: number = STARTING_SALVAGE): Economy {
@@ -38,6 +40,7 @@ export function createEconomy(startingSalvage: number = STARTING_SALVAGE): Econo
     earned: 0,
     kills: { tower: 0, pointer: 0 },
     earnedBySource: { tower: 0, pointer: 0 },
+    damage: { tower: 0, pointer: 0 },
   };
 }
 
