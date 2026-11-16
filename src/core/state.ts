@@ -29,6 +29,7 @@ import {
   recordKill,
   recordKillAt,
   spend,
+  STARTING_SALVAGE,
   WEAK_POINT_KILL_BONUS,
   waveClearBonus,
   type DamageSource,
@@ -50,6 +51,16 @@ import {
 import { buildSchedule, WAVE_COUNT, type Spawn } from './waves.ts';
 import { tickPopups, type Popup } from './popups.ts';
 import { TICK_MS } from './time.ts';
+import {
+  cloneProfile,
+  defaultProfile,
+  specGain,
+  SPEC_CAPS,
+  totalSpecs,
+  type Profile,
+  type SpecKind,
+  type SpecLevels,
+} from './save.ts';
 
 /**
  * The run state and the functions that change it.
@@ -62,6 +73,18 @@ import { TICK_MS } from './time.ts';
 export type Phase = 'build' | 'wave' | 'halted' | 'victory';
 
 export const STARTING_INTEGRITY = 20;
+
+/** Bonus per RAM spec point, and the per-point damage/pointer multipliers (docs/design.md §12). */
+export const RAM_SALVAGE_PER_POINT = 5;
+const SPEC_DAMAGE_PCT_PER_POINT = 0.02;
+
+export function towerDamageMult(specs: SpecLevels): number {
+  return 1 + SPEC_DAMAGE_PCT_PER_POINT * specs.cpu;
+}
+
+export function pointerDamageMult(specs: SpecLevels): number {
+  return 1 + SPEC_DAMAGE_PCT_PER_POINT * specs.gpu;
+}
 
 /** One-shot things that happened during a tick; the view drains `events` to spawn effects. */
 export type GameEvent =
@@ -115,19 +138,41 @@ export interface RunState {
   rng: number;
   /** Desktop geometry for pop-up placement, updated by the view on resize. */
   viewport: { width: number; height: number; window: { x: number; y: number; w: number; h: number } };
+  /** Permanent spec levels applied to this run (mirrors the profile, drives the bonuses). */
+  specs: SpecLevels;
+  /** Banked, unspent specs — the currency the spec shop spends (mirrors the profile). */
+  unspentSpecs: number;
+  /** Achievement ids unlocked so far this run (seeded from the profile). */
+  achievements: Set<string>;
+  /** Weak-point hits this run, for the sharpshooter achievement. */
+  weakPointHits: number;
+  /** Pop-ups dismissed this run, for the popup-collector achievement. */
+  popupsDismissed: number;
+  /** Enemies leaked during the current wave, for the clean-wave achievement. */
+  leaksThisWave: number;
+  /** True once a wave at 40+ has been cleared with zero leaks this run. */
+  clearedWaveNoLeaks: boolean;
+  /** True once a boss has died to the pointer without any tower having touched it. */
+  bossKilledByPointer: boolean;
 }
 
-export function createRunState(): RunState {
+export function createRunState(profile: Profile = defaultProfile()): RunState {
   const grid = createGrid();
   const blocked = new Set<number>();
+  const specs: SpecLevels = {
+    cpu: profile.specs.cpu,
+    ram: profile.specs.ram,
+    gpu: profile.specs.gpu,
+    disk: profile.specs.disk,
+  };
   return {
     grid,
     field: buildField(grid, blocked),
     blocked,
     phase: 'build',
     wave: 0,
-    integrity: STARTING_INTEGRITY,
-    economy: createEconomy(),
+    integrity: STARTING_INTEGRITY + specs.disk,
+    economy: createEconomy(STARTING_SALVAGE + specs.ram * RAM_SALVAGE_PER_POINT),
     pointer: createPointer(),
     towers: [],
     enemies: [],
@@ -146,6 +191,14 @@ export function createRunState(): RunState {
     towerDisabled: new Map(),
     rng: 0x9e3779b9,
     viewport: { width: 1280, height: 800, window: { x: 24, y: 24, w: 1232, h: 752 } },
+    specs,
+    unspentSpecs: profile.unspentSpecs,
+    achievements: new Set(profile.achievements),
+    weakPointHits: 0,
+    popupsDismissed: 0,
+    leaksThisWave: 0,
+    clearedWaveNoLeaks: false,
+    bossKilledByPointer: false,
   };
 }
 
@@ -267,6 +320,7 @@ export function startWave(s: RunState): boolean {
   s.phase = 'wave';
   s.schedule = buildSchedule(s.wave);
   s.waveTick = 0;
+  s.leaksThisWave = 0;
   recomputeAuras(s.towers);
   return true;
 }
@@ -276,6 +330,60 @@ export function upgradePointer(s: RunState): boolean {
   if (cost === null || s.phase === 'halted' || !spend(s.economy, cost)) return false;
   s.pointer.stage = Math.min(MAX_POINTER_STAGE, s.pointer.stage + 1) as PointerStage;
   return true;
+}
+
+/** Spend one banked spec on a permanent upgrade. Capped rows and an empty bank are refused. */
+export function buySpec(s: RunState, kind: SpecKind): boolean {
+  if (s.unspentSpecs <= 0) return false;
+  if (s.specs[kind] >= SPEC_CAPS[kind]) return false;
+  s.unspentSpecs -= 1;
+  s.specs[kind] += 1;
+  return true;
+}
+
+/** A reboot banks specs from the run's lifetime salvage and returns the updated profile. */
+export interface RestartResult {
+  gained: number;
+  profile: Profile;
+}
+
+export function restartWindows(s: RunState, profile: Profile): RestartResult {
+  const gained = specGain(s.economy.earned);
+  const next = cloneProfile(profile);
+  next.unspentSpecs += gained;
+  next.reboots += 1;
+  next.bestWave = Math.max(next.bestWave, s.wave);
+  if (!next.achievements.includes('reboot-50') && totalSpecs(next) >= 50) {
+    next.achievements.push('reboot-50');
+  }
+  return { gained, profile: next };
+}
+
+/**
+ * Evaluate every achievement against the current run and return the ids that just unlocked (which
+ * are also recorded in `s.achievements`, so each id fires exactly once). Runs in the simulation
+ * step, never in the view.
+ */
+export function checkAchievements(s: RunState): string[] {
+  const unlocked: string[] = [];
+  const add = (id: string): void => {
+    if (!s.achievements.has(id)) {
+      s.achievements.add(id);
+      unlocked.push(id);
+    }
+  };
+
+  if (s.economy.kills.tower + s.economy.kills.pointer > 0) add('first-blood');
+  if (currentPath(s).length >= 50) add('long-road');
+  if (s.clearedWaveNoLeaks) add('clean-wave');
+  if (s.weakPointHits >= 100) add('sharpshooter');
+  if (s.towers.filter((t) => t.tier === 5).length >= 5) add('five-tier-five');
+  if (s.towers.filter((t) => t.kind === 'beacon').length >= 10) add('beacon-field');
+  if (s.bossKilledByPointer) add('boss-by-pointer');
+  if (s.popupsDismissed >= 10) add('popup-collector');
+  if (s.wave >= 150) add('endless-150');
+
+  return unlocked;
 }
 
 /**
@@ -312,9 +420,10 @@ export function pointerDown(s: RunState, x: number, y: number): boolean {
     return false;
   }
   s.pointer.targetId = target.id;
-  const base = pointerInfo(s.pointer).clickDamage * relay.damage;
+  const base = pointerInfo(s.pointer).clickDamage * relay.damage * pointerDamageMult(s.specs);
   damageEnemy(s, target, base * comboMultiplier(s.pointer) * (weak ? 2 : 1), 'pointer', true, undefined, weak);
   if (weak) {
+    s.weakPointHits++;
     s.pointer.combo++;
     s.pointer.comboTicks = COMBO_TICKS;
   }
@@ -365,6 +474,7 @@ export function tick(s: RunState): void {
   for (const t of s.towers) if (t.flash > 0) t.flash--;
   decayCombo(s);
   tickPopups(s);
+  checkAchievements(s);
   if (s.phase !== 'wave') return;
 
   spawnDue(s);
@@ -441,6 +551,7 @@ function moveEnemies(s: RunState): void {
 
 function leak(s: RunState, e: Enemy): void {
   e.dead = true;
+  s.leaksThisWave++;
   s.integrity = Math.max(0, s.integrity - 1);
   s.events.push({ type: 'leak', x: e.x, y: e.y });
   if (s.pointer.targetId === e.id) s.pointer.targetId = null;
@@ -579,7 +690,7 @@ function fireTowers(s: RunState): void {
     const st = effectiveStats(t);
     if (st.damage <= 0 || st.fireInterval <= 0) continue; // beacon never fires
     const range = st.range + t.auraRange;
-    const dmg = st.damage * t.auraDamage * buff;
+    const dmg = st.damage * t.auraDamage * buff * towerDamageMult(s.specs);
 
     if (st.beams > 1) {
       const targets = acquireTargets(s, t, st, range, st.beams);
@@ -621,7 +732,7 @@ function applyReticle(s: RunState): void {
     target = enemyAt(s, p.x, p.y, CLICK_SLACK + relay.slack);
   }
   p.targetId = target ? target.id : null;
-  if (target) damageEnemy(s, target, dpt * relay.damage * comboMultiplier(p), 'pointer', true);
+  if (target) damageEnemy(s, target, dpt * relay.damage * comboMultiplier(p) * pointerDamageMult(s.specs), 'pointer', true);
 }
 
 /**
@@ -639,6 +750,7 @@ function damageEnemy(
   weak = false,
 ): void {
   if (e.dead || amount <= 0) return;
+  if (source === 'tower') e.towerDamaged = true;
   let dmg = amount;
   if (source === 'pointer' && e.shield > 0) {
     const absorbed = Math.min(e.shield, dmg);
@@ -654,6 +766,7 @@ function damageEnemy(
   if (e.hp <= 1e-9) {
     e.hp = 0;
     e.dead = true;
+    if (e.isBoss && source === 'pointer' && !e.towerDamaged) s.bossKilledByPointer = true;
     const reward =
       source === 'pointer' && weak
         ? recordKillAt(s.economy, e.value, source, WEAK_POINT_KILL_BONUS)
@@ -671,6 +784,7 @@ function endWave(s: RunState): void {
   const bonus = waveClearBonus(s.wave);
   earn(s.economy, bonus);
   s.events.push({ type: 'waveCleared', wave: s.wave, bonus });
+  if (s.wave >= 40 && s.leaksThisWave === 0) s.clearedWaveNoLeaks = true;
   s.pointer.held = false;
   s.pointer.targetId = null;
   s.phase = s.wave >= WAVE_COUNT ? 'victory' : 'build';

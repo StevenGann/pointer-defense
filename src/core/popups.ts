@@ -134,6 +134,7 @@ export function dismissPopup(s: RunState, id: number): boolean {
   if (!s.popup || s.popup.id !== id) return false;
   const kind = s.popup.kind;
   s.popup = null;
+  s.popupsDismissed++;
   applyEffect(s, kind);
   return true;
 }

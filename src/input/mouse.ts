@@ -2,10 +2,13 @@ import type { Application } from 'pixi.js';
 import { menuItemAt, pixelToWorld, pointInRect, type Layout } from '../view/chrome.ts';
 import { hudButtonAt, modalRestartAt, type HudAction } from '../view/hud.ts';
 import { popupCloseRect } from '../view/popup.ts';
+import { menuEntryAt, type OpenMenu } from '../view/menu.ts';
+import { dialogButtonAt, type DialogModel } from '../view/dialog.ts';
 import { dismissPopup } from '../core/popups.ts';
 import { canAfford } from '../core/economy.ts';
 import { tileAt } from '../core/grid.ts';
 import { TOWER_KINDS, TOWER_STATS, type TowerKind } from '../core/towers.ts';
+import { type SpecKind } from '../core/save.ts';
 import {
   cancelSelection,
   chooseBranch,
@@ -26,14 +29,17 @@ import {
 } from '../core/state.ts';
 
 /**
- * Hit testing and gestures against the run state. Tracks the hover state (which the views read)
- * and translates raw mouse events into the core reducers.
+ * Hit testing and gestures against the run state, the menus and the modal dialogs. Tracks the
+ * hover state (which the views read) and translates raw mouse events into core reducers and into
+ * the wiring callbacks that own the meta-game (specs, profile, menus, dialogs).
  */
 
 export interface HoverState {
   x: number;
   y: number;
   menuItem: number;
+  menuHover: string | null;
+  dialogButton: string | null;
   hud: HudAction | null;
   onBoard: boolean;
   col: number;
@@ -46,7 +52,15 @@ export interface HoverState {
 export interface MouseContext {
   layout: () => Layout;
   state: () => RunState;
+  menu: () => OpenMenu | null;
+  dialog: () => DialogModel | null;
   restart: () => void;
+  newRun: () => void;
+  openMenu: (name: 'file' | 'help' | null) => void;
+  menuAction: (id: string) => void;
+  dialogAction: (id: string) => void;
+  closeDialog: () => void;
+  buySpec: (kind: SpecKind) => void;
   notice: (message: string) => void;
 }
 
@@ -62,6 +76,8 @@ export class MouseController {
     x: 0,
     y: 0,
     menuItem: -1,
+    menuHover: null,
+    dialogButton: null,
     hud: null,
     onBoard: false,
     col: -1,
@@ -99,6 +115,10 @@ export class MouseController {
     this.hover.worldX = w.x;
     this.hover.worldY = w.y;
     this.hover.menuItem = menuItemAt(l.menu, x, y);
+    const open = this.ctx.menu();
+    this.hover.menuHover = open ? menuEntryAt(l.menu, open, x, y) : null;
+    const dialog = this.ctx.dialog();
+    this.hover.dialogButton = dialog ? dialogButtonAt(l, dialog, x, y) : null;
     this.hover.hud = hudButtonAt(l, s, x, y);
     this.hover.onBoard =
       x >= l.board.x && x < l.board.x + l.boardW && y >= l.board.y && y < l.board.y + l.boardH;
@@ -119,9 +139,37 @@ export class MouseController {
     const l = this.ctx.layout();
     const { x, y } = this.localPoint(e);
 
+    // A modal dialog captures all input except its own buttons.
+    const dialog = this.ctx.dialog();
+    if (dialog) {
+      const id = dialogButtonAt(l, dialog, x, y);
+      if (id) this.ctx.dialogAction(id);
+      return;
+    }
+
+    // An open dropdown menu: an item fires, a click elsewhere closes it.
+    const open = this.ctx.menu();
+    if (open) {
+      const id = menuEntryAt(l.menu, open, x, y);
+      if (id) this.ctx.menuAction(id);
+      else this.ctx.openMenu(null);
+      return;
+    }
+
     // A desktop pop-up's close box, drawn outside the board window.
     if (s.popup && pointInRect(popupCloseRect(s.popup), x, y)) {
       dismissPopup(s, s.popup.id);
+      return;
+    }
+
+    // Menu words open their dropdowns.
+    const mi = menuItemAt(l.menu, x, y);
+    if (mi === 0) {
+      this.ctx.openMenu('file');
+      return;
+    }
+    if (mi === 2) {
+      this.ctx.openMenu('help');
       return;
     }
 
@@ -200,6 +248,18 @@ export class MouseController {
         if (tower) sellTower(s, tower.col, tower.row);
         break;
       }
+      case 'buyCpu':
+        this.ctx.buySpec('cpu');
+        break;
+      case 'buyRam':
+        this.ctx.buySpec('ram');
+        break;
+      case 'buyGpu':
+        this.ctx.buySpec('gpu');
+        break;
+      case 'buyDisk':
+        this.ctx.buySpec('disk');
+        break;
     }
   }
 
@@ -214,6 +274,14 @@ export class MouseController {
 
   private onKey = (e: KeyboardEvent): void => {
     if (e.key === 'Escape') {
+      if (this.ctx.menu()) {
+        this.ctx.openMenu(null);
+        return;
+      }
+      if (this.ctx.dialog()) {
+        this.ctx.closeDialog();
+        return;
+      }
       cancelSelection(this.ctx.state());
       return;
     }

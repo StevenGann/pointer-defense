@@ -14,6 +14,7 @@ import {
   type TowerKind,
 } from '../core/towers.ts';
 import { WAVES, WAVE_COUNT } from '../core/waves.ts';
+import { SPEC_CAPS, SPEC_KINDS, SPEC_NAMES, specEffectText, type SpecKind } from '../core/save.ts';
 
 /**
  * The HUD: status-bar text (hint / wave / salvage), the integrity readout, the pointer stage and
@@ -28,7 +29,18 @@ export type HudAction =
   | 'upgrade'
   | 'sell'
   | 'branchA'
-  | 'branchB';
+  | 'branchB'
+  | 'buyCpu'
+  | 'buyRam'
+  | 'buyGpu'
+  | 'buyDisk';
+
+const SPEC_ACTION: Readonly<Record<SpecKind, HudAction>> = {
+  cpu: 'buyCpu',
+  ram: 'buyRam',
+  gpu: 'buyGpu',
+  disk: 'buyDisk',
+};
 
 const NOTICE_TICKS = 150;
 
@@ -56,6 +68,17 @@ interface TowerDetailLayout {
   sell: Rect;
 }
 
+interface SpecRow {
+  kind: SpecKind;
+  label: Rect;
+  button: Rect;
+}
+
+interface SpecShopLayout {
+  header: Rect;
+  rows: SpecRow[];
+}
+
 interface HudLayout {
   integrity: Rect;
   route: Rect | null;
@@ -64,6 +87,7 @@ interface HudLayout {
   pointerUpgrade: Rect;
   towers: ReadonlyArray<{ kind: TowerKind; rect: Rect }>;
   wave: Rect;
+  specs: SpecShopLayout | null;
 }
 
 function computeHud(l: Layout, s: RunState): HudLayout {
@@ -135,8 +159,25 @@ function computeHud(l: Layout, s: RunState): HudLayout {
   const pointerUpgrade: Rect = { x: x + 4, y: cy + 22, w: w - 8, h: 18 };
   cy += 44 + 8;
   const wave: Rect = { x, y: cy, w, h: 28 };
+  cy += 28 + 8;
 
-  return { integrity, route, detail, pointerPanel, pointerUpgrade, towers, wave };
+  let specs: SpecShopLayout | null = null;
+  if (s.phase === 'build') {
+    const header: Rect = { x, y: cy, w, h: 14 };
+    cy += 14 + 4;
+    const rows = SPEC_KINDS.map((kind) => {
+      const row: Rect = { x, y: cy, w, h: 18 };
+      cy += 18 + 3;
+      return {
+        kind,
+        label: { x: row.x + 2, y: row.y, w: row.w - 58 - 6, h: row.h },
+        button: { x: row.x + row.w - 58, y: row.y + 1, w: 58, h: 16 },
+      };
+    });
+    specs = { header, rows };
+  }
+
+  return { integrity, route, detail, pointerPanel, pointerUpgrade, towers, wave, specs };
 }
 
 export function hudButtonAt(l: Layout, s: RunState, px: number, py: number): HudAction | null {
@@ -160,6 +201,14 @@ export function hudButtonAt(l: Layout, s: RunState, px: number, py: number): Hud
   }
 
   if (s.phase === 'build' && pointInRect(h.wave, px, py)) return 'wave';
+
+  if (h.specs) {
+    for (const row of h.specs.rows) {
+      const capped = s.specs[row.kind] >= SPEC_CAPS[row.kind];
+      if (!capped && s.unspentSpecs > 0 && pointInRect(row.button, px, py)) return SPEC_ACTION[row.kind];
+    }
+  }
+
   return null;
 }
 
@@ -240,6 +289,9 @@ export class HudView {
   private readonly comboText = makeText('', true);
   private readonly pointerTitle = makeText('POINTER', true);
   private readonly pointerRows: Text[] = [makeText(''), makeText(''), makeText(''), makeText('')];
+  private readonly specHeader = makeText('SPECS', true);
+  private readonly specLabels: Text[] = SPEC_KINDS.map(() => makeText(''));
+  private readonly specButtons: Text[] = SPEC_KINDS.map(() => makeText(''));
 
   constructor() {
     this.towerButtons = TOWER_KINDS.map(() => makeText(''));
@@ -267,11 +319,19 @@ export class HudView {
       this.pointerTitle,
       ...this.pointerRows,
       this.comboText,
+      this.specHeader,
+      ...this.specLabels,
+      ...this.specButtons,
     ]) {
       t.anchor.set(0, 0.5);
       this.root.addChild(t);
     }
     for (const t of this.branchButtons) t.anchor.set(0.5, 0.5);
+    for (const t of this.specLabels) t.style.fontSize = 10;
+    for (const t of this.specButtons) {
+      t.style.fontSize = 10;
+      t.anchor.set(0.5, 0.5);
+    }
     this.root.addChild(this.modalG);
     for (const t of [this.modalTitle, this.modalMessage, this.modalRestart]) {
       t.anchor.set(0, 0.5);
@@ -282,9 +342,9 @@ export class HudView {
     this.comboText.style.fill = PAL.title;
   }
 
-  showNotice(message: string): void {
+  showNotice(message: string, ticks = NOTICE_TICKS): void {
     this.notice = message;
-    this.noticeUntilTick = this.lastTick + NOTICE_TICKS;
+    this.noticeUntilTick = this.lastTick + ticks;
   }
 
   draw(s: RunState, l: Layout, hoverHud: HudAction | null): void {
@@ -340,6 +400,8 @@ export class HudView {
     } else {
       this.waveButton.text = '';
     }
+
+    this.drawSpecShop(s, h);
 
     this.drawRightPanel(s, l);
 
@@ -442,6 +504,39 @@ export class HudView {
       t.text = `${TOWER_STATS[kind].name}  $${formatNumber(TOWER_STATS[kind].cost)}`;
       t.style.fill = enabled ? (armed ? PAL.title : PAL.text) : PAL.shadow;
       t.position.set(rect.x + 6, rect.y + Math.floor(rect.h / 2));
+    }
+  }
+
+  private drawSpecShop(s: RunState, h: HudLayout): void {
+    const g = this.g;
+    if (!h.specs) {
+      this.specHeader.text = '';
+      for (const t of this.specLabels) t.text = '';
+      for (const t of this.specButtons) t.text = '';
+      return;
+    }
+
+    const banked = s.unspentSpecs;
+    this.specHeader.text = `SPECS  banked ${banked}`;
+    this.specHeader.position.set(h.specs.header.x + 2, h.specs.header.y + Math.floor(h.specs.header.h / 2));
+
+    for (let i = 0; i < h.specs.rows.length; i++) {
+      const row = h.specs.rows[i];
+      const level = s.specs[row.kind];
+      const cap = SPEC_CAPS[row.kind];
+      const capped = level >= cap;
+      const enabled = !capped && banked > 0;
+
+      this.specLabels[i].text = `${SPEC_NAMES[row.kind]} ${level}/${cap}  ${specEffectText(row.kind, level)}`;
+      this.specLabels[i].position.set(row.label.x, row.label.y + Math.floor(row.label.h / 2));
+
+      drawButton(g, row.button, enabled, false);
+      this.specButtons[i].text = capped ? 'FULL' : 'Buy (1 spec)';
+      this.specButtons[i].style.fill = enabled ? PAL.text : PAL.shadow;
+      this.specButtons[i].position.set(
+        row.button.x + Math.floor(row.button.w / 2),
+        row.button.y + Math.floor(row.button.h / 2),
+      );
     }
   }
 

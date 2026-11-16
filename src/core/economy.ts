@@ -32,9 +32,9 @@ export interface Economy {
   earnedBySource: Record<DamageSource, number>;
 }
 
-export function createEconomy(): Economy {
+export function createEconomy(startingSalvage: number = STARTING_SALVAGE): Economy {
   return {
-    salvage: STARTING_SALVAGE,
+    salvage: startingSalvage,
     earned: 0,
     kills: { tower: 0, pointer: 0 },
     earnedBySource: { tower: 0, pointer: 0 },

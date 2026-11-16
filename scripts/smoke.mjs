@@ -34,6 +34,8 @@ import { createGrid, SPAWN, EXIT, COLS, ROWS, tileAt } from '../src/core/grid.ts
 import { createEnemy } from '../src/core/enemies.ts';
 import { spawnPopup, dismissPopup } from '../src/core/popups.ts';
 import { comboMultiplier } from '../src/core/pointer.ts';
+import { loadProfile, saveProfile, defaultProfile } from '../src/core/save.ts';
+import { restartWindows, checkAchievements } from '../src/core/state.ts';
 
 let failures = 0;
 function check(cond, msg) {
@@ -350,6 +352,87 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(s.economy.salvage === before, 'bluescreen pays nothing');
   check(s.towerDisabled.get(gun.id) === secondsToTicks(3),
     `bluescreen disables a tower for 3 s (${s.towerDisabled.get(gun.id)} ticks)`);
+}
+
+// --- 12. Profile persistence: defaults for empty, corrupt and unknown-version stores -----------
+{
+  const empty = loadProfile({ getItem: () => null, setItem: () => {} });
+  check(empty.version === 1, 'empty storage returns a default profile (version 1)');
+  check(
+    empty.specs.cpu === 0 && empty.specs.ram === 0 && empty.specs.gpu === 0 && empty.specs.disk === 0,
+    'default spec levels are all zero',
+  );
+  check(
+    empty.unspentSpecs === 0 && empty.achievements.length === 0 && empty.bestWave === 0 && empty.reboots === 0,
+    'default profile meta fields are zero',
+  );
+
+  const corrupt = loadProfile({ getItem: () => 'not json', setItem: () => {} });
+  check(corrupt.specs.cpu === 0, 'corrupt JSON returns a default profile');
+
+  const unknown = loadProfile({
+    getItem: () => JSON.stringify({ version: 999, specs: { cpu: 5, ram: 5, gpu: 5, disk: 5 } }),
+    setItem: () => {},
+  });
+  check(unknown.specs.cpu === 0, 'an unknown-version save returns a default profile');
+
+  const store = { value: null, getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
+  const p = defaultProfile();
+  p.specs.cpu = 7;
+  p.unspentSpecs = 3;
+  p.achievements.push('first-blood');
+  saveProfile(p, store);
+  const loaded = loadProfile(store);
+  check(
+    loaded.specs.cpu === 7 && loaded.unspentSpecs === 3 && loaded.achievements.includes('first-blood'),
+    'save/load round-trips the profile',
+  );
+}
+
+// --- 13. Spec bonuses are applied to the starting economy ---------------------------------------
+{
+  const profile = defaultProfile();
+  profile.specs.ram = 3;
+  profile.specs.disk = 2;
+  const s = createRunState(profile);
+  check(s.economy.salvage === 60 + 3 * 5, `RAM specs add +5 salvage each (${s.economy.salvage})`);
+  check(s.integrity === 20 + 2, `Disk specs add +1 integrity each (${s.integrity})`);
+}
+
+// --- 14. restartWindows banks the right number of specs and resets the run ---------------------
+{
+  const s = createRunState();
+  s.economy.earned = 5000; // sqrt(5000 / 500) = sqrt(10) = 3.16 -> floor 3
+  s.wave = 52;
+  const before = defaultProfile();
+  const { gained, profile } = restartWindows(s, before);
+  check(gained === 3, `restartWindows banks floor(sqrt(earned/500)) = ${gained}`);
+  check(profile.unspentSpecs === 3, 'banked specs land in unspentSpecs');
+  check(profile.reboots === 1, 'reboot count increments');
+  check(profile.bestWave === 52, 'bestWave records the run wave');
+
+  const s2 = createRunState(profile);
+  check(s2.wave === 0 && s2.phase === 'build', 'the reboot resets the run');
+  check(s2.unspentSpecs === 3, 'the fresh run carries the banked specs');
+}
+
+// --- 15. An achievement unlocks once and only once ---------------------------------------------
+{
+  const s = createRunState();
+  s.phase = 'wave';
+  const e = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+  s.enemies.push(e);
+  let clicks = 0;
+  while (!e.dead && clicks < 50) {
+    pointerDown(s, e.x, e.y);
+    pointerUp(s);
+    clicks++;
+  }
+  check(e.dead, 'grunt killed for the achievement check');
+  const first = checkAchievements(s);
+  check(first.includes('first-blood'), 'first kill unlocks first-blood');
+  const again = checkAchievements(s);
+  check(!again.includes('first-blood'), 'first-blood does not fire twice');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
