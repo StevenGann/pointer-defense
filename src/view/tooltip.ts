@@ -52,6 +52,9 @@ function traits(st: {
 export function paletteTooltipLines(kind: TowerKind): string[] {
   const b = TOWER_STATS[kind];
   const name = `${b.name}  $${formatNumber(b.cost)}`;
+  if (kind === 'wall') {
+    return [name, b.blurb, 'Blocks the route · 60 HP', 'Upgrades add hit points'];
+  }
   const stats = b.fireInterval > 0
     ? `Range ${b.range.toFixed(1)} · Damage ${b.damage} · ${rateText(b.fireInterval)}`
     : `Range ${b.range.toFixed(1)} · Damage ${b.damage}`;
@@ -62,9 +65,16 @@ export function paletteTooltipLines(kind: TowerKind): string[] {
 
 /** Tooltip lines for a placed tower: its live stats with aura bonuses, as the sim sees them. */
 export function towerTooltipLines(tower: Tower): string[] {
-  const st = effectiveStats(tower);
   const branch = tower.branch === null ? '' : ` — ${BRANCH_NAMES[tower.kind][tower.branch]}`;
   const name = `${TOWER_STATS[tower.kind].name} T${tower.tier}${branch}`;
+
+  if (tower.kind === 'wall') {
+    const hp = tower.branch === null ? `HP ${Math.ceil(tower.hp)}` : `HP ${Math.ceil(tower.hp)}/${tower.maxHp}`;
+    const blocks = tower.branch === 'B' ? 'Blocks ground and flyers' : 'Blocks ground only';
+    return [name, hp, blocks, `Sell $${formatNumber(sellValue(tower))}`];
+  }
+
+  const st = effectiveStats(tower);
   const damage = st.damage * tower.auraDamage;
   const range = st.range + tower.auraRange;
   const firing = st.fireInterval > 0;

@@ -1,6 +1,6 @@
 import { secondsToTicks } from './time.ts';
 
-export type TowerKind = 'gun' | 'cannon' | 'taser' | 'frost' | 'laser' | 'beacon';
+export type TowerKind = 'gun' | 'cannon' | 'taser' | 'frost' | 'laser' | 'beacon' | 'wall';
 
 export type Branch = 'A' | 'B';
 
@@ -35,7 +35,7 @@ export interface TowerStats {
   readonly auraRange: number;
 }
 
-export const TOWER_KINDS: readonly TowerKind[] = ['gun', 'cannon', 'taser', 'frost', 'laser', 'beacon'];
+export const TOWER_KINDS: readonly TowerKind[] = ['gun', 'cannon', 'taser', 'frost', 'laser', 'beacon', 'wall'];
 
 /** Data, not code: balance lives here. */
 export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
@@ -135,7 +135,54 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     auraDamage: 0.6,
     auraRange: 0,
   },
+  wall: {
+    name: 'Wall',
+    blurb: 'Blocks the route, has hit points',
+    cost: 8,
+    range: 0,
+    damage: 0,
+    fireInterval: 0,
+    turnRate: 0,
+    splash: 0,
+    ignoresArmour: false,
+    slowFactor: 1,
+    slowTicks: 0,
+    pierce: 0,
+    auraDamage: 0,
+    auraRange: 0,
+  },
 };
+
+/** A wall's hit points at each tier, before the tier-3 branch doubling. */
+const WALL_HP_BY_TIER: Readonly<Record<Tier, number>> = { 1: 60, 2: 180, 3: 540, 4: 540, 5: 540 };
+
+/** The wall's hit points at its current tier and branch (both tier-3 branches double it). */
+export function wallMaxHp(tier: Tier, branch: Branch | null): number {
+  const base = WALL_HP_BY_TIER[tier];
+  return tier >= 3 && branch !== null ? base * 2 : base;
+}
+
+/** True when the tower is a wall — the only tower kind with hit points. */
+export function isWall(tower: Tower): boolean {
+  return tower.kind === 'wall';
+}
+
+/** True when this wall blocks flyers (the Mesh branch at tier 3). */
+export function wallBlocksFlyers(tower: Tower): boolean {
+  return tower.kind === 'wall' && tower.tier >= 3 && tower.branch === 'B';
+}
+
+/**
+ * Re-derive a wall's hit-point total after a tier or branch change, preserving the damage it has
+ * already taken (lost hit points carry across the upgrade rather than being healed away).
+ */
+export function refreshWallHp(tower: Tower): void {
+  if (tower.kind !== 'wall') return;
+  const lost = tower.maxHp - tower.hp;
+  const next = wallMaxHp(tower.tier, tower.branch);
+  tower.maxHp = next;
+  tower.hp = Math.max(1, next - lost);
+}
 
 export interface Tower {
   readonly id: number;
@@ -162,6 +209,10 @@ export interface Tower {
   damageDealt: number;
   /** Which enemy in range this tower prefers. */
   targetMode: TargetMode;
+  /** Current hit points (walls only; every other tower is invulnerable and unused). */
+  hp: number;
+  /** Hit points at full health (walls only; 0 for every other tower). */
+  maxHp: number;
 }
 
 export function createTower(id: number, kind: TowerKind, col: number, row: number): Tower {
@@ -181,6 +232,8 @@ export function createTower(id: number, kind: TowerKind, col: number, row: numbe
     earned: 0,
     damageDealt: 0,
     targetMode: 'first',
+    hp: kind === 'wall' ? wallMaxHp(1, null) : 0,
+    maxHp: kind === 'wall' ? wallMaxHp(1, null) : 0,
   };
 }
 
@@ -194,12 +247,19 @@ const UPGRADE_COST_FACTOR: Readonly<Record<Tier, number | null>> = {
 };
 
 export function upgradeCost(tower: Tower): number | null {
+  if (tower.kind === 'wall') {
+    // Walls are a three-tier tower: tier 2 costs 12, the tier-3 branch costs 20, then it is done.
+    if (tower.tier === 1) return 12;
+    if (tower.tier === 2) return 20;
+    return null;
+  }
   const factor = UPGRADE_COST_FACTOR[tower.tier];
   return factor === null ? null : Math.round(TOWER_STATS[tower.kind].cost * factor);
 }
 
-/** Salvage returned when a tower is sold: 70% of everything spent, rounded down. */
+/** Salvage returned when a tower is sold: 70% of everything spent, rounded down. Walls pay nothing. */
 export function sellValue(tower: Tower): number {
+  if (tower.kind === 'wall') return 0;
   return Math.floor(tower.spent * 0.7);
 }
 
@@ -278,6 +338,12 @@ const BRANCH_EFFECTS: Readonly<Record<TowerKind, Readonly<Record<Branch, BranchE
   beacon: {
     A: { auraDamage: 0.3, auraRange: 0 },
     B: { auraPointerDamage: 0.5, auraPointerRange: 0.75 },
+  },
+  // Walls carry their branch in hit points (and Mesh's flyer block), not in combat stats, so the
+  // branch effect table is empty. It must exist so effectiveStats can look up a branched wall.
+  wall: {
+    A: {},
+    B: {},
   },
 };
 

@@ -121,6 +121,7 @@ export const BRANCH_NAMES: Readonly<Record<TowerKind, Readonly<Record<Branch, st
   frost: { A: 'Deep Freeze', B: 'Shard' },
   laser: { A: 'Focus', B: 'Prism' },
   beacon: { A: 'Command', B: 'Relay' },
+  wall: { A: 'Bulwark', B: 'Mesh' },
 };
 
 export const TARGET_LABEL: Readonly<Record<TargetMode, string>> = {
@@ -139,7 +140,7 @@ interface TowerDetailLayout {
   name: Rect;
   stats: Rect;
   route: Rect;
-  target: Rect;
+  target: Rect | null;
   upgrade: Rect | null;
   branches: BranchButton[];
   sell: Rect;
@@ -214,8 +215,9 @@ function computeHud(l: Layout, s: RunState): HudLayout {
     const routeRow: Rect = { x: x + 6, y: cy, w: w - 12, h: 14 };
     cy += 14 + 4;
 
-    const target: Rect = { x: innerX, y: cy, w: innerW, h: 20 };
-    cy += 20 + 4;
+    // Walls never target, so they have no target-mode row.
+    const target: Rect | null = tower.kind === 'wall' ? null : { x: innerX, y: cy, w: innerW, h: 20 };
+    if (target) cy += 20 + 4;
 
     const cost = upgradeCost(tower);
     let upgrade: Rect | null = null;
@@ -323,7 +325,7 @@ export function hudButtonAt(l: Layout, s: RunState, px: number, py: number): Hud
   if (h.detail && tower) {
     const upgradePrice = upgradeCost(tower);
     const affordable = upgradePrice !== null && canAfford(s.economy, upgradePrice);
-    if (pointInRect(h.detail.target, px, py)) return 'target';
+    if (h.detail.target && pointInRect(h.detail.target, px, py)) return 'target';
     if (h.detail.upgrade && affordable && pointInRect(h.detail.upgrade, px, py)) return 'upgrade';
     for (const b of h.detail.branches) {
       if (affordable && pointInRect(b.rect, px, py)) return b.branch === 'A' ? 'branchA' : 'branchB';
@@ -657,26 +659,34 @@ export class HudView {
       this.towerRoute.visible = true;
       this.upgradeButton.visible = true;
       this.sellButton.visible = true;
-      this.targetButton.visible = true;
+      this.targetButton.visible = d.target !== null;
       for (const text of this.branchButtons) text.visible = true;
 
       const branch = tower.branch === null ? '' : ` - ${BRANCH_NAMES[tower.kind][tower.branch]}`;
       this.towerName.text = `${TOWER_STATS[tower.kind].name}  T${tower.tier}${branch}`;
       this.towerName.position.set(d.name.x, d.name.y + Math.floor(d.name.h / 2));
 
-      const st = effectiveStats(tower);
-      const damage = st.damage * tower.auraDamage;
-      const range = st.range + tower.auraRange;
-      this.towerStats.text = `dmg ${damage.toFixed(1)}  rng ${range.toFixed(1)}`;
+      if (tower.kind === 'wall') {
+        this.towerStats.text = tower.branch === null ? `HP ${Math.ceil(tower.hp)}` : `HP ${Math.ceil(tower.hp)}/${tower.maxHp}`;
+      } else {
+        const st = effectiveStats(tower);
+        const damage = st.damage * tower.auraDamage;
+        const range = st.range + tower.auraRange;
+        this.towerStats.text = `dmg ${damage.toFixed(1)}  rng ${range.toFixed(1)}`;
+      }
       this.towerStats.position.set(d.stats.x, d.stats.y + Math.floor(d.stats.h / 2));
 
       this.towerRoute.text = `Route: ${currentPath(s).length} tiles`;
       this.towerRoute.position.set(d.route.x, d.route.y + Math.floor(d.route.h / 2));
 
-      drawButton(g, d.target, true, hoverHud === 'target');
-      this.targetButton.text = `Target: ${TARGET_LABEL[tower.targetMode]}`;
-      this.targetButton.style.fill = PAL.text;
-      this.targetButton.position.set(d.target.x + 6, d.target.y + Math.floor(d.target.h / 2));
+      if (d.target) {
+        drawButton(g, d.target, true, hoverHud === 'target');
+        this.targetButton.text = `Target: ${TARGET_LABEL[tower.targetMode]}`;
+        this.targetButton.style.fill = PAL.text;
+        this.targetButton.position.set(d.target.x + 6, d.target.y + Math.floor(d.target.h / 2));
+      } else {
+        this.targetButton.text = '';
+      }
 
       const price = upgradeCost(tower);
       if (d.upgrade && price !== null) {

@@ -17,12 +17,11 @@ const DIRS: readonly (readonly [number, number])[] = [
 ];
 
 /**
- * Breadth-first search from the exit over every walkable, unblocked tile, storing the distance in
+ * Breadth-first search from the exit over every tile `walkable` permits, storing the distance in
  * tiles to the exit. `-1` marks tiles the exit cannot be reached from. All edges cost one tile, so a
  * FIFO queue of buckets (one per distance) is a valid Dijkstra without a priority queue.
  */
-export function buildField(grid: Grid, blocked: ReadonlySet<number>, exit: Tile): Int32Array {
-  const { cols, rows, tiles } = grid;
+function bfs(cols: number, rows: number, walkable: (idx: number) => boolean, exit: Tile): Int32Array {
   const n = cols * rows;
   const field = new Int32Array(n).fill(-1);
   const queue = new Int32Array(n);
@@ -44,14 +43,30 @@ export function buildField(grid: Grid, blocked: ReadonlySet<number>, exit: Tile)
       if (!inBounds(c, r)) continue;
       const ni = r * cols + c;
       if (field[ni] >= 0) continue;
-      if (tiles[ni] !== 'buildable') continue;
-      if (blocked.has(ni)) continue;
+      if (!walkable(ni)) continue;
       field[ni] = dist + 1;
       queue[tail++] = ni;
     }
   }
 
   return field;
+}
+
+/**
+ * The ground field: only buildable tiles are walkable, and `blocked` tiles are impassable. Towers
+ * (including walls) live in `blocked`, so every placement rewrites the field.
+ */
+export function buildField(grid: Grid, blocked: ReadonlySet<number>, exit: Tile): Int32Array {
+  const { cols, rows, tiles } = grid;
+  return bfs(cols, rows, (idx) => tiles[idx] === 'buildable' && !blocked.has(idx), exit);
+}
+
+/**
+ * The air field: every in-bounds tile is walkable and only `blocked` tiles are impassable. Flyers
+ * use this, so authored terrain and ordinary towers never stop them — only a Mesh wall does.
+ */
+export function buildAirField(cols: number, rows: number, blocked: ReadonlySet<number>, exit: Tile): Int32Array {
+  return bfs(cols, rows, (idx) => !blocked.has(idx), exit);
 }
 
 /**

@@ -26,12 +26,12 @@ import {
   cycleLevel,
   canCycleLevel,
 } from '../src/core/state.ts';
-import { TOWER_STATS, effectiveStats, upgradeCost, createTower } from '../src/core/towers.ts';
+import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
-import { buildField, pathTiles } from '../src/core/pathfield.ts';
+import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
 import { LEVELS, DEFAULT_LEVEL, createGrid, levelById } from '../src/core/levels.ts';
 import { createEnemy } from '../src/core/enemies.ts';
@@ -730,6 +730,140 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   s.phase = 'wave';
   check(!startWave(s), 'early call: refused at wave 100 from wave');
   check(s.wave === 100, 'early call: wave number unchanged at 100');
+}
+
+// --- 18. Walls and breachers ----------------------------------------------------------------
+
+// 18a. A wall costs 8 and blocks the route exactly as a gun on the same tile does.
+{
+  const base = createRunState(); // corridor
+  const baseLen = currentPath(base).length;
+
+  const wallState = createRunState();
+  const sal = wallState.economy.salvage;
+  check(placeTower(wallState, 'wall', 4, 9), 'wall placed in the corridor gap');
+  check(wallState.economy.salvage === sal - TOWER_STATS.wall.cost, `wall costs ${TOWER_STATS.wall.cost}`);
+  const wallLen = currentPath(wallState).length;
+
+  const gunState = createRunState();
+  gunState.economy.salvage = 10000;
+  check(placeTower(gunState, 'gun', 4, 9), 'gun placed on the same corridor gap');
+  const gunLen = currentPath(gunState).length;
+
+  check(wallLen > baseLen, `wall lengthens the route (${baseLen} -> ${wallLen})`);
+  check(wallLen === gunLen, `wall blocks the route exactly like a gun (${wallLen} vs ${gunLen})`);
+}
+
+// 18b. A breacher heads for the wall on its field line, stops to chew it, and resumes the same
+// tick the wall dies (and the route unblocks).
+{
+  const s = stateOnLevel('open-field');
+  const openLen = currentPath(s).length;
+  s.economy.salvage = 10000;
+  const first = stepToward(s.breacherField, SPAWN.col, SPAWN.row);
+  check(first !== null, 'breacher field gives a first step from spawn');
+  check(placeTower(s, 'wall', first.col, first.row), 'wall placed on the breacher line');
+  const wall = towerAt(s, first.col, first.row);
+  const fullHp = wall.hp;
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER; // no pop-ups mid-test
+  const b = createEnemy(1, 'breacher', 12, SPAWN, EXIT);
+  s.enemies.push(b);
+
+  const salvageAtSpawn = s.economy.salvage;
+  let attacked = false;
+  let destroyed = false;
+  let unblockedSameTick = false;
+  let resumedDist = -1;
+
+  for (let i = 0; i < 6000 && !b.dead; i++) {
+    tick(s);
+    if (!attacked && wall.hp < fullHp) attacked = true;
+    if (!destroyed && !towerAt(s, first.col, first.row)) {
+      destroyed = true;
+      unblockedSameTick = currentPath(s).length === openLen;
+    }
+    if (destroyed && b.dist > 0) resumedDist = b.dist;
+  }
+
+  check(attacked, 'breacher stops and damages the wall on its line');
+  check(destroyed, 'the wall dies under the breacher');
+  check(unblockedSameTick, 'the route unblocks in the same tick the wall dies');
+  check(s.economy.salvage === salvageAtSpawn, 'losing a wall never refunds salvage');
+  check(resumedDist > 0, `breacher resumes once the wall is gone (dist ${resumedDist.toFixed(2)})`);
+}
+
+// 18c. Wall hit points survive upgrade and branch selection; both branches double the tier-3 total.
+{
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  check(placeTower(s, 'wall', 5, 5), 'place a wall to upgrade');
+  const wall = towerAt(s, 5, 5);
+  check(wallMaxHp(1, null) === 60 && wall.hp === 60, `tier-1 wall has 60 HP (${wall.hp})`);
+  wall.hp = 40; // 20 damage taken
+
+  check(upgradeTower(s, 5, 5), 'upgrade wall 1 -> 2');
+  check(wall.tier === 2 && wall.maxHp === 180 && wall.hp === 160,
+    `wall HP survives upgrade (${wall.hp}/180)`);
+
+  check(chooseBranch(s, 5, 5, 'A'), 'choose Bulwark (2 -> 3)');
+  check(wall.tier === 3 && wall.branch === 'A' && wall.maxHp === 1080 && wall.hp === 1060,
+    `Bulwark doubles the total and keeps damage (${wall.hp}/1080)`);
+  check(!wallBlocksFlyers(wall), 'Bulwark does not block flyers');
+
+  const mesh = createRunState();
+  mesh.economy.salvage = 10000;
+  placeTower(mesh, 'wall', 5, 5);
+  upgradeTower(mesh, 5, 5);
+  check(chooseBranch(mesh, 5, 5, 'B'), 'choose Mesh (2 -> 3)');
+  const m = towerAt(mesh, 5, 5);
+  check(m.maxHp === 1080 && m.hp === 1080, `Mesh doubles the total too (${m.hp}/1080)`);
+  check(wallBlocksFlyers(m), 'Mesh blocks flyers');
+}
+
+// 18d. Flyers ignore a normal wall and detour around a Mesh wall.
+{
+  const runFlyer = (withMesh) => {
+    const s = stateOnLevel('open-field');
+    s.economy.salvage = 10000;
+    placeTower(s, 'wall', 5, 6);
+    if (withMesh) {
+      placeTower(s, 'wall', 10, 6);
+      upgradeTower(s, 10, 6);
+      chooseBranch(s, 10, 6, 'B');
+    }
+    s.phase = 'wave';
+    s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+    const f = createEnemy(1, 'flyer', 12, SPAWN, EXIT);
+    s.enemies.push(f);
+    let minRow = 999;
+    let maxRow = -999;
+    for (let i = 0; i < 6000 && !f.dead; i++) {
+      tick(s);
+      minRow = Math.min(minRow, f.row);
+      maxRow = Math.max(maxRow, f.row);
+    }
+    return { minRow, maxRow, dead: f.dead };
+  };
+
+  const straight = runFlyer(false);
+  check(straight.dead && straight.minRow === 6 && straight.maxRow === 6,
+    `flyer ignores a normal wall (rows ${straight.minRow}-${straight.maxRow})`);
+
+  const detour = runFlyer(true);
+  check(detour.dead && (detour.minRow < 6 || detour.maxRow > 6),
+    `flyer detours around a Mesh wall (rows ${detour.minRow}-${detour.maxRow})`);
+}
+
+// 18e. Selling a wall never refunds.
+{
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'wall', 5, 5);
+  const before = s.economy.salvage;
+  check(sellValue(towerAt(s, 5, 5)) === 0, 'sellValue of a wall is 0');
+  check(sellTower(s, 5, 5), 'sell a wall');
+  check(s.economy.salvage === before, 'selling a wall refunds nothing');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

@@ -239,6 +239,7 @@ export class MouseController {
       case 'frost':
       case 'laser':
       case 'beacon':
+      case 'wall':
         selectTower(s, hud);
         break;
       case 'pointer':

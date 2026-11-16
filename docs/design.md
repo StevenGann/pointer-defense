@@ -78,7 +78,8 @@ Sealing is detected by flood fill from the spawn after a hypothetical placement.
 
 From wave 6, part of each wave flies **straight from spawn to exit**, ignoring the maze and the blocked
 tiles. This is the answer to an over-mazed board and the reason mazing cannot be the whole strategy.
-Flyers are purple chevrons with motion ticks, and the next-wave preview names them.
+Flyers are purple chevrons with motion ticks, and the next-wave preview names them. The one exception
+is a **Mesh** wall, which blocks flyers and forces them to detour around it.
 
 ### 5.5 Authored maps
 
@@ -120,9 +121,9 @@ original board. All three spawn at (0,6) and exit at (19,6).
 
 ## 6. Towers
 
-Six towers. Each has a role, a tier ladder, and **two exclusive branches** at tier 3.
+Seven towers. Each has a role, a tier ladder, and **two exclusive branches** at tier 3.
 
-### 6.1 The six
+### 6.1 The seven
 
 | Tower | Cost | Range | Damage | Interval | Turn rate | Role | Wants |
 |---|---|---|---|---|---|---|---|---|
@@ -132,9 +133,15 @@ Six towers. Each has a role, a tier ladder, and **two exclusive branches** at ti
 | **Frost** | 70 | 2.2 | 1, slows to 30 % speed for 3.0 s | 0.60 s | instant | utility | in front of the damage |
 | **Laser** | 70 | 3.4 | 11, pierces 8 | 0.80 s | 150°/s | straight lines | corridors you deliberately left open |
 | **Beacon** | 90 | 3.5 | none | — | — (still) | +60 % damage to towers in radius | a dense cluster worth buffing |
+| **Wall** | 8 | — | none | — | — (still) | blocks the route, has hit points | a long maze made cheap |
 
-Four damage answers and two that are useless alone. That is how placement stays interesting without
+Four damage answers and three that are useless alone. That is how placement stays interesting without
 becoming opaque.
+
+Walls are the asymmetry: every other tower is invulnerable and cannot be targeted, but a wall can be
+destroyed and then it is gone for good. It carries 60 hit points at tier 1, 180 at tier 2 and 540 at
+tier 3; both tier-3 branches double that. A destroyed wall is removed, the route is recomputed in the
+same tick, and nothing is refunded.
 
 **These are the harness's numbers, not the first draft's.** The first draft (Gun 4 damage at 25,
 Cannon 10 at 60, Taser 2 at 45, Laser 6 at 120, Beacon +15 %) let a scripted player win with Gun and
@@ -156,6 +163,9 @@ run that replaces those two with Guns dies at wave 40 while the standard run rea
 Tier 3 is the identity choice. A tier-5 tower is roughly **6–9×** the base tower's output, not 2×,
 because waves 60–100 demand it.
 
+Walls break the ladder pattern: they are a three-tier tower. Tier 2 costs 12, the tier-3 branch costs
+20, and there is no tier 4 or 5 — a branched wall is finished.
+
 ### 6.3 Branches
 
 | Tower | Branch A | Branch B |
@@ -166,6 +176,7 @@ because waves 60–100 demand it.
 | Frost | **Deep Freeze** — 60 % slow for 2.5 s | **Shard** — no slow; damage ×4, splash 0.6 |
 | Laser | **Focus** — pierce 8, +50 % damage | **Prism** — splits into 3 short beams at −40 % damage |
 | Beacon | **Command** — +30 % damage aura, no range bonus | **Relay** — extends pointer reach, +50 % pointer damage in radius |
+| Wall | **Bulwark** — hit points doubled again | **Mesh** — hit points doubled and it blocks flyers |
 
 The tensions are deliberate. Mortar or Flak is "ground or air". Command or Relay is "your towers or
 you" — the one place the pointer gets a tower's help, and the reason a clicker-minded player and a
@@ -217,6 +228,7 @@ pre-traverse build.
 | **Armoured** | 45 | 1.0 t/s | 0.34 | 8 | 0 | 12 | taser, laser, Overload |
 | **Saboteur** | 25 | 1.5 t/s | 0.28 | 0 | 0 | 11 | kill it before it arrives — it disables a tower for 4 s |
 | **Boss** | 900 | 0.8 t/s | 0.55 | 6 | 120 | 120 | both halves: towers strip armour, pointer breaks the shield |
+| **Breacher** | 55 | 0.6 t/s | 0.42 | 0 | 0 | 14 | walks into walls and breaks them — a gun in front of the wall, or walls behind walls |
 
 Armour is **flat subtraction** on tower hits, floored at 1. Clicks ignore armour entirely. Shields
 absorb tower damage completely until broken, and only the pointer can break them. That is pillar 1
@@ -238,7 +250,7 @@ waves are authored without listing individuals.
 | Band | Waves | Introduced |
 |---|---|---|
 | Tutorial | 1–5 | grunts, the first runners, the economy |
-| Pressure | 6–20 | flyers, shielded, the first real maze |
+| Pressure | 6–20 | flyers, shielded, breachers (from 12), the first real maze |
 | Specialists | 21–40 | armoured, saboteurs, branch towers |
 | Attrition | 41–60 | mixed waves; modifiers begin at 51 |
 | Siege | 61–80 | boss at 70, dense flyer waves |
@@ -311,7 +323,7 @@ bonus    = clamp(round(0.25 × waveKillValue(nextWave) × fraction), 5, waveKill
 `createEnemy` assigns, so the bonus cannot drift from the economy. `nextWave` is the wave being called,
 not the one currently running; `span` is measured from the wave that just started (the current one,
 `nextWave − 1`). The 0.25 coefficient means a full-early call pays a quarter of the next wave's worth —
-12 at wave 2, 181 at wave 30, 276 at wave 60, 1,272 at wave 100 — and later calls decay to a floor of
+12 at wave 2, 162 at wave 30, 440 at wave 60, 1,272 at wave 100 — and later calls decay to a floor of
 5. The HUD shows the live value counting down. The formula has no randomness.
 
 **Harness.** `scripts/balance.mjs` runs five scenarios and reports waves cleared, last wave started,
@@ -502,12 +514,14 @@ Shape carries meaning before colour does — readability, and colour-blind playe
 | Armoured | square with a thick outline |
 | Saboteur | circle with a spark |
 | Boss | large hexagon with a double ring |
+| Breacher | square with a forward battering ram |
 | Gun | small square with a barrel |
 | Cannon | circle with a thick barrel |
 | Taser | diamond with a coil |
 | Frost | hexagon with a snow cross |
 | Laser | long bar |
 | Beacon | ring with a dot |
+| Wall | brick block |
 
 ### 13.3 Type and layout
 

@@ -175,6 +175,7 @@ const KIND_INTERVAL_S: Readonly<Record<EnemyKind, number>> = {
   shielded: 2.5,
   armoured: 2.0,
   saboteur: 3.0,
+  breacher: 3.5,
   boss: 0,
 };
 
@@ -191,8 +192,9 @@ function withStagger(items: readonly { kind: EnemyKind; count: number }[]): Spaw
 }
 
 /**
- * Deterministic composition for waves 11..100. Always four groups:
- *   flyer (15-25%) · tank (shielded early, armoured late) · chaff (grunt/runner) · saboteur (21+)
+ * Deterministic composition for waves 11..100. The groups are flyer (15-25%), tank (shielded early,
+ * armoured late), chaff (grunt/runner), breachers (from wave 12, 3-6%, skipped on boss waves) and
+ * saboteurs (21+).
  * Wave 11..20 has no saboteur, so the two chaff kinds both appear. Flyers stay 15-25% after wave 6;
  * the shielded share shrinks after wave 40 as armoured takes over the "towers cannot do this" role.
  */
@@ -206,6 +208,11 @@ function generateWave(wave: number): WaveDef {
   );
 
   const saboteurs = wave >= 21 ? 1 + Math.floor(rnd() * 3) : 0;
+
+  // Breachers arrive from wave 12 as a minority (3-6% of the wave) and scale with the wave's
+  // total, so they stay a trickle rather than a second tank line. Boss waves are already dense
+  // (a boss plus escorts on top of a full wave), so breachers skip them.
+  const breachers = wave >= 12 && !isBossWave(wave) ? Math.max(1, Math.round(total * (0.03 + rnd() * 0.03))) : 0;
 
   let tank: EnemyKind;
   let tankCount: number;
@@ -223,7 +230,7 @@ function generateWave(wave: number): WaveDef {
     tankCount = Math.round(total * (0.12 + rnd() * 0.1));
   }
 
-  const rest = Math.max(1, total - flyers - saboteurs - tankCount);
+  const rest = Math.max(1, total - flyers - saboteurs - tankCount - breachers);
 
   let ordered: { kind: EnemyKind; count: number }[];
   if (wave < 21) {
@@ -233,6 +240,7 @@ function generateWave(wave: number): WaveDef {
       { kind: 'grunt', count: grunts },
       { kind: 'runner', count: runners },
       { kind: tank, count: tankCount },
+      { kind: 'breacher', count: breachers },
       { kind: 'flyer', count: flyers },
     ];
   } else {
@@ -240,6 +248,7 @@ function generateWave(wave: number): WaveDef {
     ordered = [
       { kind: chaff, count: rest },
       { kind: tank, count: tankCount },
+      { kind: 'breacher', count: breachers },
       { kind: 'flyer', count: flyers },
       { kind: 'saboteur', count: saboteurs },
     ];

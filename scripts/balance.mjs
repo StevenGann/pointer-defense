@@ -55,6 +55,9 @@ const quiet = hasFlag('--quiet');
 const support = !hasFlag('--no-support');
 // --no-build: a click-only player — never place a tower, spend salvage on the pointer instead.
 const noBuild = hasFlag('--no-build');
+// --wall: the standard build, but the maze is built from wall towers instead of Guns, and the
+// walls are kept upgraded so breachers have something to chew on.
+const wallMode = hasFlag('--wall');
 // --call: run normally, calling the next wave once the current spawn queue is exhausted and enemies
 // are still on the board. --call-all: chain every remaining wave at tick zero (a stress test).
 // --call-sweep: call every wave at 25%, 50% and 75% of its spawn window, one run per timing.
@@ -386,10 +389,12 @@ function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, 
     return wallIdx;
   }
   const plan = WALL_PLANS[s.levelId] ?? WALL_PLANS['open-field'];
+  const mazeKind = wallMode ? 'wall' : 'gun';
+  const mazeCost = TOWER_STATS[mazeKind].cost;
   let nextWall = wallIdx;
-  while (nextWall < plan.length && s.towers.length < maxTowers && s.economy.salvage >= TOWER_STATS.gun.cost) {
+  while (nextWall < plan.length && s.towers.length < maxTowers && s.economy.salvage >= mazeCost) {
     const t = plan[nextWall];
-    if (!placeTower(s, 'gun', t.col, t.row)) break;
+    if (!placeTower(s, mazeKind, t.col, t.row)) break;
     nextWall++;
   }
   upgradePass(s);
@@ -424,6 +429,29 @@ function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, 
       if (s.economy.salvage < TOWER_STATS.gun.cost) break;
       const tile = chooseCoverageTile(s, currentPath(s));
       if (!tile || !placeTower(s, 'gun', tile.col, tile.row)) break;
+    }
+  }
+
+  // A wall maze needs to stay alive: upgrade walls to tier 2 and then branch Bulwark with whatever
+  // salvage is left after the standard towers are bought.
+  if (wallMode && nextWall >= plan.length) {
+    for (let guard = 0; guard < 400; guard++) {
+      let acted = false;
+      for (const t of s.towers) {
+        if (t.kind !== 'wall') continue;
+        const cost = upgradeCost(t);
+        if (cost === null || s.economy.salvage < cost) continue;
+        if (t.tier === 2 && t.branch === null) {
+          if (chooseBranch(s, t.col, t.row, 'A')) {
+            acted = true;
+            break;
+          }
+        } else if (upgradeTower(s, t.col, t.row)) {
+          acted = true;
+          break;
+        }
+      }
+      if (!acted) break;
     }
   }
 
@@ -856,75 +884,97 @@ let allReached = true;
 silent = !singleLevel;
 const loopMaxTowers = singleLevel ? MAX_TOWERS : MAP_MAX_TOWERS;
 const loopCoverage = !singleLevel;
-for (const level of activeLevels) {
-  const std = runSession(support, `${support ? 'standard' : 'control'} run [${level.id}]`, level.id, loopMaxTowers, loopCoverage);
-  mapRows.push({ level, std });
-  if (!std.final.reached) allReached = false;
-}
-silent = false;
 
-console.log('\n=== maps ===');
-console.log('  map          waves cleared   integrity   salvage');
-for (const { level, std } of mapRows) {
-  console.log(
-    `  ${level.id.padEnd(11)}  ${String(std.final.clearedWaves).padStart(13)}  ` +
-      `${String(std.final.integrity).padStart(9)}  ${String(std.final.earned).padStart(7)}`,
-  );
-}
-
-// A single-map run keeps the original detailed summary, tower table and support comparison.
-if (singleLevel) {
-  const main = mapRows[0].std;
-  const mainTable = runSummary(
-    main.final,
-    main.totalSpecs,
-    main.reboots,
-    `${support ? 'standard' : 'control'} run [${mapRows[0].level.id}]`,
-  );
-
-  if (support) {
-    // The control: identical policy, but Frost and Beacon are replaced by Guns.
-    const control = runSession(false, 'control run', mapRows[0].level.id);
-    const controlTable = runSummary(control.final, control.totalSpecs, control.reboots, 'control run (no support)');
-
-    const stdTotal = mainTable.total;
-    const ctrlTotal = controlTable.total;
-    const stdWave = main.final.clearedWaves;
-    const ctrlWave = control.final.clearedWaves;
-    const stdPerWave = stdWave > 0 ? stdTotal / stdWave : 0;
-    const ctrlPerWave = ctrlWave > 0 ? ctrlTotal / ctrlWave : 0;
-    const delta = ctrlTotal > 0 ? ((stdTotal - ctrlTotal) / ctrlTotal) * 100 : Infinity;
-    console.log(`\nenabling effect (Frost + Beacon vs. Guns in their slots):`);
-    console.log(`  total tower damage:  standard ${Math.round(stdTotal)}  control ${Math.round(ctrlTotal)}  (${delta >= 0 ? '+' : ''}${delta.toFixed(1)}%)`);
-    console.log(`  per wave:            standard ${stdPerWave.toFixed(0)}  control ${ctrlPerWave.toFixed(0)}`);
-    console.log(`  (control ${ctrlWave < 100 ? `died at wave ${ctrlWave}` : 'reached ' + ctrlWave})`);
+if (wallMode) {
+  // The wall-heavy scenario: the standard build, but the maze is walls (kept upgraded) rather than
+  // Guns. Reports how much damage breachers did to walls, so wall cost and breacher DPS can be tuned.
+  silent = true;
+  console.log('\n=== wall build ===');
+  console.log('  map          waves cleared   integrity   salvage   breacher dmg   walls left');
+  // Walls do no damage, so the wall build needs the coverage Guns the map-summary loop buys (a
+  // higher cap and coverage, the same "stronger board" policy every authored map is judged against).
+  for (const level of activeLevels) {
+    const wall = runSession(true, `wall run [${level.id}]`, level.id, MAP_MAX_TOWERS, true);
+    const st = wall.final.state;
+    const wallsLeft = st.towers.filter((t) => t.kind === 'wall').length;
+    console.log(
+      `  ${level.id.padEnd(11)}  ${String(wall.final.clearedWaves).padStart(13)}  ` +
+        `${String(wall.final.integrity).padStart(9)}  ${String(wall.final.earned).padStart(7)}  ` +
+        `${String(Math.round(st.wallDamageTaken)).padStart(13)}  ${String(wallsLeft).padStart(10)}`,
+    );
+    if (!wall.final.reached) allReached = false;
   }
-}
+} else {
+  for (const level of activeLevels) {
+    const std = runSession(support, `${support ? 'standard' : 'control'} run [${level.id}]`, level.id, loopMaxTowers, loopCoverage);
+    mapRows.push({ level, std });
+    if (!std.final.reached) allReached = false;
+  }
+  silent = false;
 
-if (callMode) {
-  // The early-call scenario: call the next wave once the spawn queue is exhausted, as a player would.
-  const call = runSessionCall('call run (--call)', false);
-  runSummary(call.final, call.totalSpecs, call.reboots, 'call run (--call)');
-}
+  console.log('\n=== maps ===');
+  console.log('  map          waves cleared   integrity   salvage');
+  for (const { level, std } of mapRows) {
+    console.log(
+      `  ${level.id.padEnd(11)}  ${String(std.final.clearedWaves).padStart(13)}  ` +
+        `${String(std.final.integrity).padStart(9)}  ${String(std.final.earned).padStart(7)}`,
+    );
+  }
 
-if (callAllMode) {
-  // The stress test: chain every remaining wave at tick zero to exercise heavy overlap.
-  const callAll = runSessionCall('call-all run (--call-all)', true);
-  runSummary(callAll.final, callAll.totalSpecs, callAll.reboots, 'call-all run (--call-all)');
-}
+  // A single-map run keeps the original detailed summary, tower table and support comparison.
+  if (singleLevel) {
+    const main = mapRows[0].std;
+    const mainTable = runSummary(
+      main.final,
+      main.totalSpecs,
+      main.reboots,
+      `${support ? 'standard' : 'control'} run [${mapRows[0].level.id}]`,
+    );
 
-if (callSweepMode) {
-  // The trade curve: one run per timing, each paying the real early-call bonus and spending it,
-  // plus a control leg using the same build policy with no early calls.
-  const sweep = [0.25, 0.5, 0.75].map((timing) => runSessionSweep(timing));
-  sweep.push({
-    timing: null,
-    final: playRunSweep(defaultProfile(), 'call sweep control', null),
-    bonusPaid: 0,
-    totalSpecs: 0,
-    reboots: 0,
-  });
-  callSweepTable(sweep);
+    if (support) {
+      // The control: identical policy, but Frost and Beacon are replaced by Guns.
+      const control = runSession(false, 'control run', mapRows[0].level.id);
+      const controlTable = runSummary(control.final, control.totalSpecs, control.reboots, 'control run (no support)');
+
+      const stdTotal = mainTable.total;
+      const ctrlTotal = controlTable.total;
+      const stdWave = main.final.clearedWaves;
+      const ctrlWave = control.final.clearedWaves;
+      const stdPerWave = stdWave > 0 ? stdTotal / stdWave : 0;
+      const ctrlPerWave = ctrlWave > 0 ? ctrlTotal / ctrlWave : 0;
+      const delta = ctrlTotal > 0 ? ((stdTotal - ctrlTotal) / ctrlTotal) * 100 : Infinity;
+      console.log(`\nenabling effect (Frost + Beacon vs. Guns in their slots):`);
+      console.log(`  total tower damage:  standard ${Math.round(stdTotal)}  control ${Math.round(ctrlTotal)}  (${delta >= 0 ? '+' : ''}${delta.toFixed(1)}%)`);
+      console.log(`  per wave:            standard ${stdPerWave.toFixed(0)}  control ${ctrlPerWave.toFixed(0)}`);
+      console.log(`  (control ${ctrlWave < 100 ? `died at wave ${ctrlWave}` : 'reached ' + ctrlWave})`);
+    }
+  }
+
+  if (callMode) {
+    // The early-call scenario: call the next wave once the spawn queue is exhausted, as a player would.
+    const call = runSessionCall('call run (--call)', false);
+    runSummary(call.final, call.totalSpecs, call.reboots, 'call run (--call)');
+  }
+
+  if (callAllMode) {
+    // The stress test: chain every remaining wave at tick zero to exercise heavy overlap.
+    const callAll = runSessionCall('call-all run (--call-all)', true);
+    runSummary(callAll.final, callAll.totalSpecs, callAll.reboots, 'call-all run (--call-all)');
+  }
+
+  if (callSweepMode) {
+    // The trade curve: one run per timing, each paying the real early-call bonus and spending it,
+    // plus a control leg using the same build policy with no early calls.
+    const sweep = [0.25, 0.5, 0.75].map((timing) => runSessionSweep(timing));
+    sweep.push({
+      timing: null,
+      final: playRunSweep(defaultProfile(), 'call sweep control', null),
+      bonusPaid: 0,
+      totalSpecs: 0,
+      reboots: 0,
+    });
+    callSweepTable(sweep);
+  }
 }
 
 process.exit(allReached ? 0 : 1);

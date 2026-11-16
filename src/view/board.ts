@@ -28,6 +28,7 @@ export const TOWER_COLOR: Record<TowerKind, number> = {
   frost: 0x3399cc,
   laser: 0xff3300,
   beacon: 0xffcc00,
+  wall: 0x8a8a8a,
 };
 
 export const ENEMY_COLOR: Record<EnemyKind, number> = {
@@ -38,6 +39,7 @@ export const ENEMY_COLOR: Record<EnemyKind, number> = {
   armoured: 0x406080,
   saboteur: 0x808000,
   boss: 0x806000,
+  breacher: 0xa04040,
 };
 
 const AURA_COLOR = 0x6699ff;
@@ -270,6 +272,16 @@ function drawTower(g: Graphics, t: Tower, board: { x: number; y: number; cell: n
   const cx = board.x + (t.col + 0.5) * cell;
   const cy = board.y + (t.row + 0.5) * cell;
   drawTowerShape(g, t.kind, cx, cy, cell, 1, t.angle);
+
+  // A damaged wall shows a health bar above it; an undamaged wall shows nothing.
+  if (t.kind === 'wall' && t.maxHp > 0 && t.hp < t.maxHp) {
+    const ratio = t.maxHp > 0 ? t.hp / t.maxHp : 0;
+    const w = Math.round(cell * 0.8);
+    const x0 = Math.round(cx - w / 2);
+    const y0 = Math.round(cy - cell * 0.5 - 6);
+    g.rect(x0, y0, w, 3).fill({ color: PAL.dark });
+    g.rect(x0 + 1, y0 + 1, Math.max(0, Math.round((w - 2) * ratio)), 1).fill({ color: healthColor(ratio) });
+  }
 }
 
 function drawTowerRange(
@@ -354,6 +366,20 @@ function drawTowerShape(
     const bw = Math.round(cell * 0.2);
     const bl = Math.round(cell * 0.36);
     drawBarrel(g, cx, cy, angle, Math.round(cx - bw / 2), Math.round(cy - r - bl), bw, bl, fill, outline);
+  } else if (kind === 'wall') {
+    const s = Math.round(cell * 0.78);
+    const bx = Math.round(cx - s / 2);
+    const by = Math.round(cy - s / 2);
+    g.rect(bx, by, s, s).fill(fill).stroke({ width: 1, color: PAL.dark, alpha });
+    // Brick joints: a course line plus staggered perpends.
+    g.moveTo(bx, by + Math.round(s / 2)).lineTo(bx + s, by + Math.round(s / 2))
+      .stroke({ width: 1, color: PAL.shadow, alpha });
+    g.moveTo(bx + Math.round(s / 2), by).lineTo(bx + Math.round(s / 2), by + Math.round(s / 2))
+      .stroke({ width: 1, color: PAL.shadow, alpha });
+    g.moveTo(bx + Math.round(s / 4), by + Math.round(s / 2)).lineTo(bx + Math.round(s / 4), by + s)
+      .stroke({ width: 1, color: PAL.shadow, alpha });
+    g.moveTo(bx + Math.round((3 * s) / 4), by + Math.round(s / 2)).lineTo(bx + Math.round((3 * s) / 4), by + s)
+      .stroke({ width: 1, color: PAL.shadow, alpha });
   } else {
     const r = Math.round(cell * 0.38);
     g.poly([cx, cy - r, cx + r, cy, cx, cy + r, cx - r, cy]).fill(fill).stroke(outline);
@@ -428,6 +454,15 @@ export function drawEnemyShape(
     g.poly(hex(r)).fill(fill).stroke({ width: 2, color: PAL.dark, alpha });
     g.circle(x, y, r * 1.1).stroke({ width: 1, color: PAL.dark, alpha });
     g.circle(x, y, r * 1.18).stroke({ width: 1, color: PAL.dark, alpha });
+  } else if (kind === 'breacher') {
+    const s = r * 1.6;
+    g.rect(x - s / 2, y - s / 2, s, s).fill(fill).stroke({ width: 3, color: PAL.dark, alpha });
+    // The battering ram: a short bar jutting from the leading edge.
+    const bx = x + Math.cos(heading) * s * 0.5;
+    const by = y + Math.sin(heading) * s * 0.5;
+    const rx = x + Math.cos(heading) * (s * 0.5 + r * 0.8);
+    const ry = y + Math.sin(heading) * (s * 0.5 + r * 0.8);
+    g.moveTo(bx, by).lineTo(rx, ry).stroke({ width: 3, color: PAL.dark, alpha });
   } else {
     g.poly(hex(r)).fill(fill).stroke(outline);
   }

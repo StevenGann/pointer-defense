@@ -1,7 +1,7 @@
 import type { Tile } from './grid.ts';
 import { TICK_HZ } from './time.ts';
 
-export type EnemyKind = 'grunt' | 'runner' | 'shielded' | 'flyer' | 'armoured' | 'saboteur' | 'boss';
+export type EnemyKind = 'grunt' | 'runner' | 'shielded' | 'flyer' | 'armoured' | 'saboteur' | 'boss' | 'breacher';
 
 export interface EnemyStats {
   readonly name: string;
@@ -17,6 +17,8 @@ export interface EnemyStats {
   readonly shield: number;
   /** Base salvage for a kill at wave 1. */
   readonly value: number;
+  /** Damage per second dealt to a wall while stopped at it (0 for non-breachers). */
+  readonly wallDps: number;
 }
 
 const GRUNT_SPEED = 1.6;
@@ -32,13 +34,14 @@ const GRUNT_SPEED = 1.6;
  * so it is a check on raw coverage rather than on the player's wall-building.
  */
 export const ENEMY_STATS: Readonly<Record<EnemyKind, EnemyStats>> = {
-  grunt: { name: 'Grunt', hp: 20, speed: GRUNT_SPEED, radius: 0.3, armour: 0, shield: 0, value: 4 },
-  runner: { name: 'Runner', hp: 10, speed: GRUNT_SPEED * 2.2, radius: 0.18, armour: 0, shield: 0, value: 6 },
-  shielded: { name: 'Shielded', hp: 30, speed: 1.2, radius: 0.36, armour: 2, shield: 15, value: 10 },
-  flyer: { name: 'Flyer', hp: 8, speed: GRUNT_SPEED * 1.5, radius: 0.22, armour: 0, shield: 0, value: 5 },
-  armoured: { name: 'Armoured', hp: 45, speed: 1.0, radius: 0.34, armour: 8, shield: 0, value: 12 },
-  saboteur: { name: 'Saboteur', hp: 25, speed: 1.5, radius: 0.28, armour: 0, shield: 0, value: 11 },
-  boss: { name: 'Boss', hp: 450, speed: 0.8, radius: 0.55, armour: 6, shield: 120, value: 120 },
+  grunt: { name: 'Grunt', hp: 20, speed: GRUNT_SPEED, radius: 0.3, armour: 0, shield: 0, value: 4, wallDps: 0 },
+  runner: { name: 'Runner', hp: 10, speed: GRUNT_SPEED * 2.2, radius: 0.18, armour: 0, shield: 0, value: 6, wallDps: 0 },
+  shielded: { name: 'Shielded', hp: 30, speed: 1.2, radius: 0.36, armour: 2, shield: 15, value: 10, wallDps: 0 },
+  flyer: { name: 'Flyer', hp: 8, speed: GRUNT_SPEED * 1.5, radius: 0.22, armour: 0, shield: 0, value: 5, wallDps: 0 },
+  armoured: { name: 'Armoured', hp: 45, speed: 1.0, radius: 0.34, armour: 8, shield: 0, value: 12, wallDps: 0 },
+  saboteur: { name: 'Saboteur', hp: 25, speed: 1.5, radius: 0.28, armour: 0, shield: 0, value: 11, wallDps: 0 },
+  boss: { name: 'Boss', hp: 450, speed: 0.8, radius: 0.55, armour: 6, shield: 120, value: 120, wallDps: 0 },
+  breacher: { name: 'Breacher', hp: 55, speed: 0.6, radius: 0.42, armour: 0, shield: 0, value: 14, wallDps: 12 },
 };
 
 export interface Enemy {
@@ -77,6 +80,8 @@ export interface Enemy {
   stunUntilTick: number;
   /** Direction of travel in radians; the leading edge (and weak point) faces this way. */
   heading: number;
+  /** Wall tower id this breacher is currently chewing through, or null. */
+  attackWallId: number | null;
   dead: boolean;
 }
 
@@ -131,13 +136,14 @@ export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Ti
     prevY: y,
     col: spawn.col,
     row: spawn.row,
-    targetCol: isFlyer ? exit.col : -1,
-    targetRow: isFlyer ? exit.row : -1,
+    targetCol: -1,
+    targetRow: -1,
     value: enemyKillValue(kind, wave),
     slowFactor: 1,
     slowUntilTick: 0,
     stunUntilTick: 0,
     heading,
+    attackWallId: null,
     dead: false,
   };
 }

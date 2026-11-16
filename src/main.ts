@@ -289,6 +289,8 @@ function towerSound(kind: TowerKind): SoundName {
       return 'frost';
     case 'beacon':
       return 'cannon';
+    case 'wall':
+      return 'cannon';
   }
 }
 
@@ -319,6 +321,13 @@ function drainEvents(): void {
         break;
       case 'waveCleared':
         sfx.play('waveClear');
+        break;
+      case 'wallDamaged':
+        effects.addHitFlash(ev.x, ev.y);
+        break;
+      case 'wallDestroyed':
+        effects.addHitFlash(ev.x, ev.y);
+        sfx.play('cannon');
         break;
       case 'popupSpawned':
         sfx.play('popup');

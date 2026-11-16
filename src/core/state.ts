@@ -5,15 +5,18 @@ import {
   type Tile,
 } from './grid.ts';
 import { createGrid, DEFAULT_LEVEL, LEVELS, levelById } from './levels.ts';
-import { buildField, isSealed, pathTiles, stepToward } from './pathfield.ts';
+import { buildAirField, buildField, isSealed, pathTiles, stepToward } from './pathfield.ts';
 import { createEnemy, ENEMY_STATS, isWeakPointHit, radiusOf, speedPerTick, type Enemy, type EnemyKind } from './enemies.ts';
 import {
   createTower,
   effectiveStats,
+  isWall,
   recomputeAuras,
+  refreshWallHp,
   TOWER_STATS,
   sellValue,
   upgradeCost,
+  wallBlocksFlyers,
   type Branch,
   type EffectiveStats,
   type TargetMode,
@@ -102,6 +105,8 @@ export type GameEvent =
   | { type: 'damage'; x: number; y: number; amount: number; weak: boolean }
   | { type: 'waveStarted'; wave: number }
   | { type: 'waveCleared'; wave: number; bonus: number }
+  | { type: 'wallDamaged'; x: number; y: number; amount: number }
+  | { type: 'wallDestroyed'; x: number; y: number }
   | { type: 'popupSpawned'; kind: PopupKind }
   | { type: 'popupDismissed'; kind: PopupKind };
 
@@ -118,6 +123,10 @@ export interface RunState {
   levelId: string;
   /** Distance-in-tiles to the exit for every walkable, unblocked tile; -1 unreachable. */
   field: Int32Array;
+  /** Ground field for breachers: walls are walkable, other towers still block. */
+  breacherField: Int32Array;
+  /** Air field for flyers: only Mesh walls block, terrain and other towers are ignored. */
+  flyerField: Int32Array;
   /** Tower tiles (blocked for pathing), by index row * COLS + col. */
   blocked: Set<number>;
   phase: Phase;
@@ -190,6 +199,8 @@ export interface RunState {
   clearedWaveNoLeaks: boolean;
   /** True once a boss has died to the pointer without any tower having touched it. */
   bossKilledByPointer: boolean;
+  /** Cumulative wall hit points removed by breachers this run (for the balance harness). */
+  wallDamageTaken: number;
   /** Simulation paused by P: the view keeps rendering, the sim clock stands still. */
   paused: boolean;
   /** Speed multiplier fed into the accumulator (1, 2 or 3); never applied to the fixed tick. */
@@ -214,6 +225,8 @@ export function createRunState(profile: Profile = defaultProfile()): RunState {
     grid,
     levelId: level.id,
     field: buildField(grid, blocked, level.exits[0]),
+    breacherField: buildField(grid, blocked, level.exits[0]),
+    flyerField: buildAirField(grid.cols, grid.rows, blocked, level.exits[0]),
     blocked,
     phase: 'build',
     wave: 0,
@@ -256,6 +269,7 @@ export function createRunState(profile: Profile = defaultProfile()): RunState {
     calledEarly: false,
     clearedWaveNoLeaks: false,
     bossKilledByPointer: false,
+    wallDamageTaken: 0,
     paused: false,
     speed: 1,
     onboarding: profile.reboots === 0 && profile.achievements.length === 0,
@@ -290,6 +304,8 @@ export function cycleLevel(s: RunState): boolean {
   s.grid = createGrid(next);
   s.blocked = new Set();
   s.field = buildField(s.grid, s.blocked, next.exits[0]);
+  s.breacherField = buildField(s.grid, s.blocked, next.exits[0]);
+  s.flyerField = buildAirField(s.grid.cols, s.grid.rows, s.blocked, next.exits[0]);
   return true;
 }
 
@@ -381,8 +397,30 @@ export function currentPath(s: RunState): Tile[] {
   return pathTiles(s.field, spawnTile(s));
 }
 
+/** The set of tile indices that block breacher pathing: everything but wall towers. */
+function breacherBlocked(s: RunState): Set<number> {
+  const out = new Set<number>();
+  for (const i of s.blocked) {
+    const col = i % s.grid.cols;
+    const row = (i - col) / s.grid.cols;
+    const t = towerAt(s, col, row);
+    if (!t || !isWall(t)) out.add(i);
+  }
+  return out;
+}
+
+/** The set of tile indices that block flyer pathing: only Mesh walls. */
+function flyerBlocked(s: RunState): Set<number> {
+  const out = new Set<number>();
+  for (const t of s.towers) if (wallBlocksFlyers(t)) out.add(t.row * s.grid.cols + t.col);
+  return out;
+}
+
 function rebuildField(s: RunState): void {
-  s.field = buildField(s.grid, s.blocked, exitTile(s));
+  const exit = exitTile(s);
+  s.field = buildField(s.grid, s.blocked, exit);
+  s.breacherField = buildField(s.grid, breacherBlocked(s), exit);
+  s.flyerField = buildAirField(s.grid.cols, s.grid.rows, flyerBlocked(s), exit);
 }
 
 export function upgradeTower(s: RunState, col: number, row: number): boolean {
@@ -394,6 +432,7 @@ export function upgradeTower(s: RunState, col: number, row: number): boolean {
   if (!spend(s.economy, cost)) return false;
   t.tier = (t.tier + 1) as Tier;
   t.spent += cost;
+  refreshWallHp(t);
   recomputeAuras(s.towers);
   return true;
 }
@@ -408,6 +447,8 @@ export function chooseBranch(s: RunState, col: number, row: number, branch: Bran
   t.branch = branch;
   t.tier = 3;
   t.spent += cost;
+  refreshWallHp(t);
+  rebuildField(s); // a Mesh branch starts blocking flyers
   recomputeAuras(s.towers);
   return true;
 }
@@ -649,6 +690,21 @@ function spawnDue(s: RunState): void {
   }
 }
 
+/** The distance field an enemy paths downhill over (breachers and flyers use their own). */
+function fieldFor(s: RunState, e: Enemy): Int32Array {
+  if (e.kind === 'breacher') return s.breacherField;
+  if (e.kind === 'flyer') return s.flyerField;
+  return s.field;
+}
+
+/** Turn a breacher to face the wall it is chewing. */
+function faceWall(e: Enemy, wall: Tower): void {
+  const dx = wall.col + 0.5 - e.x;
+  const dy = wall.row + 0.5 - e.y;
+  const d = Math.hypot(dx, dy);
+  if (d > 0) e.heading = Math.atan2(dy, dx);
+}
+
 function moveEnemies(s: RunState): void {
   const globalSlow = s.enemySlowTicks > 0 ? 0.5 : 1;
   const speedMult = s.modifiers.includes('fast') ? 1.15 : 1;
@@ -660,10 +716,39 @@ function moveEnemies(s: RunState): void {
     if (s.tick < e.stunUntilTick) continue; // stunned: stand still this tick
     const slow = s.tick < e.slowUntilTick ? Math.min(globalSlow, e.slowFactor) : globalSlow;
     let remaining = speedPerTick(e.kind) * slow * speedMult;
+    const field = fieldFor(s, e);
+    const wallDps = ENEMY_STATS[e.kind].wallDps;
+
+    // A breacher locked onto a wall stands still and chews it for damage per second.
+    if (e.attackWallId !== null) {
+      const wall = s.towers.find((t) => t.id === e.attackWallId);
+      if (wall && isWall(wall) && wall.hp > 0) {
+        faceWall(e, wall);
+        if (wallDps > 0) damageWall(s, wall, wallDps / TICK_HZ);
+        continue;
+      }
+      e.attackWallId = null;
+      e.targetCol = -1;
+      e.targetRow = -1;
+    }
+
     while (remaining > 0 && !e.dead) {
       if (e.targetCol < 0) {
-        const next = stepToward(s.field, e.col, e.row);
+        const next = stepToward(field, e.col, e.row);
         if (!next) break;
+        // A breacher stops at a wall in its path instead of walking through it.
+        if (e.kind === 'breacher') {
+          const wall = towerAt(s, next.col, next.row);
+          if (wall && isWall(wall) && wall.hp > 0) {
+            e.attackWallId = wall.id;
+            e.targetCol = next.col;
+            e.targetRow = next.row;
+            faceWall(e, wall);
+            if (wallDps > 0) damageWall(s, wall, wallDps / TICK_HZ);
+            remaining = 0;
+            break;
+          }
+        }
         e.targetCol = next.col;
         e.targetRow = next.row;
       }
@@ -694,6 +779,36 @@ function moveEnemies(s: RunState): void {
       }
     }
   }
+}
+
+/** Deal damage to a wall, destroying (and removing) it the moment its hit points run out. */
+function damageWall(s: RunState, wall: Tower, amount: number): void {
+  if (amount <= 0 || wall.hp <= 0) return;
+  const dealt = Math.min(wall.hp, amount);
+  wall.hp -= dealt;
+  s.wallDamageTaken += dealt;
+  s.events.push({ type: 'wallDamaged', x: wall.col + 0.5, y: wall.row + 0.5, amount: dealt });
+  if (wall.hp <= 1e-9) {
+    wall.hp = 0;
+    destroyWall(s, wall);
+  }
+}
+
+/** Remove a destroyed wall, unblocking its tile and recomputing the route in the same tick. */
+function destroyWall(s: RunState, wall: Tower): void {
+  s.towers = s.towers.filter((t) => t.id !== wall.id);
+  s.blocked.delete(wall.row * s.grid.cols + wall.col);
+  if (s.selectedTowerId === wall.id) s.selectedTowerId = null;
+  for (const e of s.enemies) {
+    if (e.attackWallId === wall.id) {
+      e.attackWallId = null;
+      e.targetCol = -1;
+      e.targetRow = -1;
+    }
+  }
+  rebuildField(s);
+  recomputeAuras(s.towers);
+  s.events.push({ type: 'wallDestroyed', x: wall.col + 0.5, y: wall.row + 0.5 });
 }
 
 function leak(s: RunState, e: Enemy): void {
