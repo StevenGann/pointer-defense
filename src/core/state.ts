@@ -1,10 +1,13 @@
 import {
   createGrid,
+  EXIT,
   inBounds,
-  pointAlongPath,
+  SPAWN,
   tileAt,
   type Grid,
+  type Tile,
 } from './grid.ts';
+import { buildField, isSealed, pathTiles, stepToward } from './pathfield.ts';
 import { createEnemy, ENEMY_STATS, radiusOf, speedPerTick, type Enemy } from './enemies.ts';
 import { createTower, TOWER_STATS, type Tower, type TowerKind } from './towers.ts';
 import {
@@ -53,6 +56,10 @@ export type GameEvent =
 
 export interface RunState {
   readonly grid: Grid;
+  /** Distance-in-tiles to the exit for every walkable, unblocked tile; -1 unreachable. */
+  field: Int32Array;
+  /** Tower tiles (blocked for pathing), by index row * COLS + col. */
+  blocked: Set<number>;
   phase: Phase;
   /** Last wave started (0 before the first). During 'build' the next wave is wave + 1. */
   wave: number;
@@ -77,8 +84,12 @@ export interface RunState {
 }
 
 export function createRunState(): RunState {
+  const grid = createGrid();
+  const blocked = new Set<number>();
   return {
-    grid: createGrid(),
+    grid,
+    field: buildField(grid, blocked),
+    blocked,
     phase: 'build',
     wave: 0,
     integrity: STARTING_INTEGRITY,
@@ -107,7 +118,12 @@ export function canPlace(s: RunState, kind: TowerKind, col: number, row: number)
   if (s.phase !== 'build' && s.phase !== 'wave') return false;
   if (!inBounds(col, row) || tileAt(s.grid, col, row) !== 'buildable') return false;
   if (towerAt(s, col, row)) return false;
-  return canAfford(s.economy, TOWER_STATS[kind].cost);
+  if (!canAfford(s.economy, TOWER_STATS[kind].cost)) return false;
+  const idx = row * s.grid.cols + col;
+  s.blocked.add(idx);
+  const sealed = isSealed(s.grid, s.blocked, SPAWN, EXIT);
+  s.blocked.delete(idx);
+  return !sealed;
 }
 
 /** The live enemy under a world point, preferring the one furthest along the lane. */
@@ -135,8 +151,19 @@ export function selectTower(s: RunState, kind: TowerKind | null): void {
 export function placeTower(s: RunState, kind: TowerKind, col: number, row: number): boolean {
   if (!canPlace(s, kind, col, row)) return false;
   spend(s.economy, TOWER_STATS[kind].cost);
+  s.blocked.add(row * s.grid.cols + col);
   s.towers.push(createTower(s.nextId++, kind, col, row));
+  rebuildField(s);
   return true;
+}
+
+/** The route creeps will take right now, for drawing. */
+export function currentPath(s: RunState): Tile[] {
+  return pathTiles(s.field, SPAWN);
+}
+
+function rebuildField(s: RunState): void {
+  s.field = buildField(s.grid, s.blocked);
 }
 
 export function startWave(s: RunState): boolean {
@@ -229,7 +256,7 @@ export function tick(s: RunState): void {
 function spawnDue(s: RunState): void {
   while (s.schedule.length > 0 && s.schedule[0].tick <= s.waveTick) {
     const sp = s.schedule.shift()!;
-    s.enemies.push(createEnemy(s.nextId++, sp.kind, s.wave, s.grid));
+    s.enemies.push(createEnemy(s.nextId++, sp.kind, s.wave, SPAWN, EXIT));
   }
 }
 
@@ -238,14 +265,39 @@ function moveEnemies(s: RunState): void {
     if (e.dead) continue;
     e.prevX = e.x;
     e.prevY = e.y;
-    e.dist += speedPerTick(e.kind);
-    if (e.dist >= s.grid.length) {
-      leak(s, e);
-      continue;
+    let remaining = speedPerTick(e.kind);
+    while (remaining > 0 && !e.dead) {
+      if (e.targetCol < 0) {
+        const next = stepToward(s.field, e.col, e.row);
+        if (!next) break;
+        e.targetCol = next.col;
+        e.targetRow = next.row;
+      }
+      const tx = e.targetCol + 0.5;
+      const ty = e.targetRow + 0.5;
+      const dx = tx - e.x;
+      const dy = ty - e.y;
+      const d = Math.hypot(dx, dy);
+      if (d <= remaining) {
+        e.x = tx;
+        e.y = ty;
+        e.dist += d;
+        remaining -= d;
+        e.col = e.targetCol;
+        e.row = e.targetRow;
+        if (e.col === EXIT.col && e.row === EXIT.row) {
+          leak(s, e);
+          break;
+        }
+        e.targetCol = -1;
+        e.targetRow = -1;
+      } else {
+        e.x += (dx / d) * remaining;
+        e.y += (dy / d) * remaining;
+        e.dist += remaining;
+        remaining = 0;
+      }
     }
-    const p = pointAlongPath(s.grid, e.dist);
-    e.x = p.x;
-    e.y = p.y;
   }
 }
 

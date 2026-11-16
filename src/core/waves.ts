@@ -40,11 +40,11 @@ export const WAVES: readonly WaveDef[] = [
   /* 3 */ { groups: [g('grunt', 10, 0.9), g('runner', 3, 1.5, 6)] },
   /* 4 */ { groups: [g('grunt', 16, 0.7)] },
   /* 5 */ { groups: [g('grunt', 10, 0.8), g('runner', 6, 1.0, 4)] },
-  /* 6 */ { groups: [g('grunt', 22, 0.5)] },
-  /* 7 */ { groups: [g('runner', 10, 0.7), g('grunt', 14, 0.6, 3)] },
-  /* 8 */ { groups: [g('grunt', 20, 0.5), g('runner', 10, 0.8, 5)] },
-  /* 9 */ { groups: [g('grunt', 18, 0.5), g('shielded', 3, 3.0, 4), g('runner', 8, 0.8, 8)] },
-  /* 10 */ { groups: [g('grunt', 26, 0.4), g('runner', 12, 0.6, 4), g('shielded', 5, 2.5, 6)] },
+  /* 6 */ { groups: [g('grunt', 19, 0.5), g('flyer', 3, 2.0, 8)] },
+  /* 7 */ { groups: [g('runner', 10, 0.7), g('grunt', 11, 0.6, 3), g('flyer', 4, 2.0, 10)] },
+  /* 8 */ { groups: [g('grunt', 17, 0.5), g('runner', 8, 0.8, 5), g('flyer', 5, 1.8, 12)] },
+  /* 9 */ { groups: [g('grunt', 15, 0.5), g('shielded', 3, 3.0, 4), g('runner', 6, 0.8, 8), g('flyer', 6, 1.8, 12)] },
+  /* 10 */ { groups: [g('grunt', 21, 0.4), g('runner', 10, 0.6, 4), g('shielded', 4, 2.5, 6), g('flyer', 8, 1.5, 10)] },
 ];
 
 export const WAVE_COUNT = WAVES.length;

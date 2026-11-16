@@ -1,15 +1,16 @@
 import { Container, Graphics } from 'pixi.js';
 import { PAL, type Layout } from './chrome.ts';
-import { enemyAt, canPlace, towerAt, type RunState } from '../core/state.ts';
+import { enemyAt, canPlace, towerAt, currentPath, type RunState } from '../core/state.ts';
 import { radiusOf, type Enemy, type EnemyKind } from '../core/enemies.ts';
 import { TOWER_STATS, type Tower, type TowerKind } from '../core/towers.ts';
-import { pointAlongPath, tileAt, COLS, ROWS, type Grid } from '../core/grid.ts';
+import { tileAt, COLS, ROWS, type Grid } from '../core/grid.ts';
 
 /**
- * Draws the board: tiles, towers, enemies, the range ring and the pointer reticle.
+ * Draws the board: tiles, the live route, towers, enemies, the range ring and the pointer reticle.
  *
- * Tiles and the path centre line are static for a given layout and are only redrawn when the board
- * geometry changes; towers, enemies and overlays are redrawn every frame from the run state.
+ * Tiles are static for a given layout and are only redrawn when the board geometry changes. The
+ * route is redrawn whenever the player's maze changes it; towers, enemies and overlays are redrawn
+ * every frame from the run state.
  */
 
 const TOWER_COLOR: Record<TowerKind, number> = {
@@ -22,6 +23,7 @@ const ENEMY_COLOR: Record<EnemyKind, number> = {
   grunt: PAL.navy,
   runner: PAL.purple,
   shielded: PAL.maroon,
+  flyer: 0x8000ff,
 };
 
 export interface BoardHover {
@@ -33,15 +35,17 @@ export interface BoardHover {
 export class BoardView {
   readonly root = new Container();
   private readonly tiles = new Graphics();
+  private readonly path = new Graphics();
   private readonly entities = new Graphics();
   private readonly overlay = new Graphics();
 
   private staticX = -1;
   private staticY = -1;
   private staticCell = -1;
+  private pathKey = '';
 
   constructor() {
-    this.root.addChild(this.tiles, this.entities, this.overlay);
+    this.root.addChild(this.tiles, this.path, this.entities, this.overlay);
   }
 
   draw(state: RunState, l: Layout, alpha: number, hover: BoardHover): void {
@@ -52,8 +56,11 @@ export class BoardView {
       this.staticX = board.x;
       this.staticY = board.y;
       this.staticCell = cell;
+      this.pathKey = '';
       this.drawStatic(state.grid, board, cell);
     }
+
+    this.drawRoute(state, board, cell);
 
     this.entities.clear();
     this.overlay.clear();
@@ -71,7 +78,7 @@ export class BoardView {
 
     for (const e of state.enemies) {
       if (e.dead) continue;
-      drawEnemy(this.entities, e, state.grid, board, cell, alpha);
+      drawEnemy(this.entities, e, board, cell, alpha);
     }
 
     if (state.selected && hover.onBoard && canPlace(state, state.selected, hover.col, hover.row)) {
@@ -98,20 +105,35 @@ export class BoardView {
         drawTile(g, kind, px, py, cell);
       }
     }
-    drawPath(g, grid, board, cell, board.x + cell * COLS, board.y + cell * ROWS);
+  }
+
+  private drawRoute(state: RunState, board: { x: number; y: number; cell: number }, cell: number): void {
+    const route = currentPath(state);
+    const key = route.map((t) => `${t.col},${t.row}`).join('|');
+    if (key === this.pathKey) return;
+    this.pathKey = key;
+
+    const g = this.path;
+    g.clear();
+    for (let i = 1; i < route.length; i++) {
+      const a = route[i - 1];
+      const b = route[i];
+      const ax = board.x + (a.col + 0.5) * cell;
+      const ay = board.y + (a.row + 0.5) * cell;
+      const bx = board.x + (b.col + 0.5) * cell;
+      const by = board.y + (b.row + 0.5) * cell;
+      dashedLine(g, ax, ay, bx, by, 4, 4, 3, PAL.light);
+    }
   }
 }
 
-function drawTile(g: Graphics, kind: 'buildable' | 'path' | 'blocked', px: number, py: number, cell: number): void {
+function drawTile(g: Graphics, kind: 'buildable' | 'blocked', px: number, py: number, cell: number): void {
   if (kind === 'buildable') {
     g.rect(px, py, cell, cell).fill(PAL.face);
     hline(g, px, px + cell, py + 0.5, PAL.highlight);
     vline(g, px + 0.5, py, py + cell, PAL.highlight);
     hline(g, px, px + cell, py + cell - 0.5, PAL.shadow);
     vline(g, px + cell - 0.5, py, py + cell, PAL.shadow);
-  } else if (kind === 'path') {
-    g.rect(px, py, cell, cell).fill(PAL.shadow);
-    edgeRect(g, px, py, cell, 0x404040);
   } else {
     g.rect(px, py, cell, cell).fill(0xa0a0a0);
     edgeRect(g, px, py, cell, 0x707070);
@@ -131,54 +153,6 @@ function edgeRect(g: Graphics, x: number, y: number, s: number, color: number): 
   hline(g, x, x + s, y + s - 0.5, color);
   vline(g, x + 0.5, y, y + s, color);
   vline(g, x + s - 0.5, y, y + s, color);
-}
-
-function drawPath(
-  g: Graphics,
-  grid: Grid,
-  board: { x: number; y: number; cell: number },
-  cell: number,
-  bx1: number,
-  by1: number,
-): void {
-  const x0 = board.x;
-  const y0 = board.y;
-  for (let i = 1; i < grid.waypoints.length; i++) {
-    const a = grid.waypoints[i - 1];
-    const b = grid.waypoints[i];
-    const ax = x0 + a.x * cell;
-    const ay = y0 + a.y * cell;
-    const bx = x0 + b.x * cell;
-    const by = y0 + b.y * cell;
-    const seg = clipAxisAligned(ax, ay, bx, by, x0, y0, bx1, by1);
-    if (!seg) continue;
-    dashedLine(g, seg[0], seg[1], seg[2], seg[3], 4, 4, 3, PAL.light);
-  }
-}
-
-/** Clips an axis-aligned segment to the board rect; returns null when it misses entirely. */
-function clipAxisAligned(
-  ax: number,
-  ay: number,
-  bx: number,
-  by: number,
-  x0: number,
-  y0: number,
-  x1: number,
-  y1: number,
-): [number, number, number, number] | null {
-  if (ax === bx) {
-    if (ax < x0 || ax > x1) return null;
-    const lo = Math.max(y0, Math.min(ay, by));
-    const hi = Math.min(y1, Math.max(ay, by));
-    if (lo >= hi) return null;
-    return [ax, lo, ax, hi];
-  }
-  if (ay < y0 || ay > y1) return null;
-  const lo = Math.max(x0, Math.min(ax, bx));
-  const hi = Math.min(x1, Math.max(ax, bx));
-  if (lo >= hi) return null;
-  return [lo, ay, hi, ay];
 }
 
 function dashedLine(
@@ -262,14 +236,12 @@ function drawTowerShape(g: Graphics, kind: TowerKind, cx: number, cy: number, ce
   }
 }
 
-function enemyHeading(grid: Grid, e: Enemy): number {
+function enemyHeading(e: Enemy): number {
   let dx = e.x - e.prevX;
   let dy = e.y - e.prevY;
   if (dx === 0 && dy === 0) {
-    const p0 = pointAlongPath(grid, e.dist);
-    const p1 = pointAlongPath(grid, Math.min(e.dist + 0.1, grid.length));
-    dx = p1.x - p0.x;
-    dy = p1.y - p0.y;
+    dx = e.targetCol - e.col;
+    dy = e.targetRow - e.row;
   }
   return Math.atan2(dy, dx);
 }
@@ -277,7 +249,6 @@ function enemyHeading(grid: Grid, e: Enemy): number {
 function drawEnemy(
   g: Graphics,
   e: Enemy,
-  grid: Grid,
   board: { x: number; y: number; cell: number },
   cell: number,
   alpha: number,
@@ -292,7 +263,7 @@ function drawEnemy(
   if (e.kind === 'grunt') {
     g.circle(ex, ey, r).fill(fill).stroke(outline);
   } else if (e.kind === 'runner') {
-    const heading = enemyHeading(grid, e);
+    const heading = enemyHeading(e);
     const tipX = ex + Math.cos(heading) * r * 1.25;
     const tipY = ey + Math.sin(heading) * r * 1.25;
     const a1 = heading + Math.PI * 0.72;
@@ -302,6 +273,17 @@ function drawEnemy(
     const p2x = ex + Math.cos(a2) * r;
     const p2y = ey + Math.sin(a2) * r;
     g.poly([tipX, tipY, p1x, p1y, p2x, p2y]).fill(fill).stroke(outline);
+  } else if (e.kind === 'flyer') {
+    const heading = enemyHeading(e);
+    const tipX = ex + Math.cos(heading) * r;
+    const tipY = ey + Math.sin(heading) * r;
+    const bx = ex - Math.cos(heading) * r * 0.6;
+    const by = ey - Math.sin(heading) * r * 0.6;
+    const px = -Math.sin(heading) * r;
+    const py = Math.cos(heading) * r;
+    g.moveTo(bx + px, by + py).lineTo(tipX, tipY);
+    g.moveTo(bx - px, by - py).lineTo(tipX, tipY);
+    g.stroke({ width: 2, color });
   } else {
     const pts: number[] = [];
     for (let i = 0; i < 6; i++) {
