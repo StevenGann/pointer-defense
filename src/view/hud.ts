@@ -3,7 +3,7 @@ import { bevel, FONT, PAL, pointInRect, type Layout, type Rect } from './chrome.
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
 import { nextStageCost, pointerInfo } from '../core/pointer.ts';
-import { STARTING_INTEGRITY, type RunState } from '../core/state.ts';
+import { currentPath, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
 import { TOWER_KINDS, TOWER_STATS, type TowerKind } from '../core/towers.ts';
 import { WAVES, WAVE_COUNT } from '../core/waves.ts';
 
@@ -14,8 +14,11 @@ import { WAVES, WAVE_COUNT } from '../core/waves.ts';
 
 export type HudAction = 'gun' | 'cannon' | 'taser' | 'pointer' | 'wave';
 
+const NOTICE_TICKS = 150;
+
 interface HudLayout {
   integrity: Rect;
+  route: Rect;
   pointerPanel: Rect;
   pointerUpgrade: Rect;
   towers: ReadonlyArray<{ kind: TowerKind; rect: Rect }>;
@@ -30,7 +33,9 @@ function computeHud(l: Layout): HudLayout {
 
   let cy = y;
   const integrity: Rect = { x, y: cy, w, h: 22 };
-  cy += 22 + 6;
+  cy += 22 + 4;
+  const route: Rect = { x, y: cy, w, h: 14 };
+  cy += 14 + 6;
   const pointerPanel: Rect = { x, y: cy, w, h: 44 };
   const pointerUpgrade: Rect = { x: x + 4, y: cy + 22, w: w - 8, h: 18 };
   cy += 44 + 8;
@@ -42,7 +47,7 @@ function computeHud(l: Layout): HudLayout {
   cy += 4;
   const wave: Rect = { x, y: cy, w, h: 28 };
 
-  return { integrity, pointerPanel, pointerUpgrade, towers, wave };
+  return { integrity, route, pointerPanel, pointerUpgrade, towers, wave };
 }
 
 export function hudButtonAt(l: Layout, s: RunState, px: number, py: number): HudAction | null {
@@ -108,7 +113,11 @@ export class HudView {
   private readonly statusWave = makeText('');
   private readonly statusSalvage = makeText('');
   private readonly integrity = makeText('');
+  private readonly route = makeText('');
   private readonly pointerLabel = makeText('');
+  private notice = '';
+  private noticeUntilTick = 0;
+  private lastTick = 0;
   private readonly pointerButton = makeText('');
   private readonly towerButtons: Text[];
   private readonly waveButton = makeText('', true);
@@ -130,6 +139,7 @@ export class HudView {
       this.statusWave,
       this.statusSalvage,
       this.integrity,
+      this.route,
       this.pointerLabel,
       this.pointerButton,
       ...this.towerButtons,
@@ -153,13 +163,20 @@ export class HudView {
     this.modalRestart.anchor.set(0.5, 0.5);
   }
 
+  showNotice(message: string): void {
+    this.notice = message;
+    this.noticeUntilTick = this.lastTick + NOTICE_TICKS;
+  }
+
   draw(s: RunState, l: Layout, hoverHud: HudAction | null): void {
     const g = this.g;
     g.clear();
 
     // Status bar text.
     const sp = l.statusPanes;
-    this.statusHint.text = hintFor(s);
+    this.lastTick = s.tick;
+    if (this.notice !== '' && s.tick >= this.noticeUntilTick) this.notice = '';
+    this.statusHint.text = this.notice || hintFor(s);
     this.statusHint.position.set(sp.left.x + 4, sp.left.y + Math.floor(sp.left.h / 2));
     this.statusWave.text = `Wave ${s.phase === 'build' ? s.wave + 1 : s.wave} / ${WAVE_COUNT}`;
     this.statusWave.position.set(sp.middle.x + 4, sp.middle.y + Math.floor(sp.middle.h / 2));
@@ -172,6 +189,9 @@ export class HudView {
     bevel(g, h.integrity, false, PAL.face);
     this.integrity.text = `Integrity: ${s.integrity}/${STARTING_INTEGRITY}`;
     this.integrity.position.set(h.integrity.x + 6, h.integrity.y + Math.floor(h.integrity.h / 2));
+
+    this.route.text = `Route: ${currentPath(s).length} tiles`;
+    this.route.position.set(h.route.x + 6, h.route.y + Math.floor(h.route.h / 2));
 
     bevel(g, h.pointerPanel, true, PAL.face);
     this.pointerLabel.text = `Pointer: ${pointerInfo(s.pointer).name}`;

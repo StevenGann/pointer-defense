@@ -39,6 +39,7 @@ const mouse = new MouseController(app, {
   restart: () => {
     state = createRunState();
   },
+  notice: (message) => hud.showNotice(message),
 });
 
 function drawCursorArrow(g: Graphics): void {

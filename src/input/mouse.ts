@@ -1,6 +1,9 @@
 import type { Application } from 'pixi.js';
 import { menuItemAt, pixelToWorld, type Layout } from '../view/chrome.ts';
 import { hudButtonAt, modalRestartAt, type HudAction } from '../view/hud.ts';
+import { canAfford } from '../core/economy.ts';
+import { tileAt } from '../core/grid.ts';
+import { TOWER_STATS, type TowerKind } from '../core/towers.ts';
 import {
   cancelSelection,
   enemyAt,
@@ -10,6 +13,7 @@ import {
   pointerUp,
   selectTower,
   startWave,
+  towerAt,
   upgradePointer,
   type RunState,
 } from '../core/state.ts';
@@ -36,6 +40,14 @@ export interface MouseContext {
   layout: () => Layout;
   state: () => RunState;
   restart: () => void;
+  notice: (message: string) => void;
+}
+
+function refusalReason(s: RunState, kind: TowerKind, col: number, row: number): string {
+  if (tileAt(s.grid, col, row) !== 'buildable') return 'That tile is blocked.';
+  if (towerAt(s, col, row)) return 'There is already a tower there.';
+  if (!canAfford(s.economy, TOWER_STATS[kind].cost)) return 'Not enough salvage for that tower.';
+  return 'That would seal the route.';
 }
 
 export class MouseController {
@@ -120,7 +132,11 @@ export class MouseController {
         pointerDown(s, w.x, w.y);
         return;
       }
-      placeTower(s, s.selected, Math.floor(w.x), Math.floor(w.y));
+      const col = Math.floor(w.x);
+      const row = Math.floor(w.y);
+      if (!placeTower(s, s.selected, col, row)) {
+        this.ctx.notice(refusalReason(s, s.selected, col, row));
+      }
       return;
     }
 
