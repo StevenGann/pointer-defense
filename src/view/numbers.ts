@@ -3,9 +3,9 @@ import { FONT, PAL, worldToPixel, type Layout } from './chrome.ts';
 import type { RunState } from '../core/state.ts';
 
 /**
- * Floating damage numbers. Pure view: it drains the sim's `damage` events and renders short-lived
- * labels that rise 12px over 30 ticks and fade in the last 10. Weak-point hits are larger and navy;
- * everything else is black. Capped at 40 live numbers, dropping the oldest.
+ * Floating damage numbers. Pure view: the wiring feeds it `damage` events via `addDamage` and it
+ * renders short-lived labels that rise 12px over 30 ticks and fade in the last 10. Weak-point hits
+ * are larger and navy; everything else is black. Capped at 40 live numbers, dropping the oldest.
  */
 
 const LIFE_TICKS = 30;
@@ -31,16 +31,11 @@ export class FloatingNumbersView {
   private active: Float[] = [];
   private readonly texts: Text[] = [];
 
-  draw(state: RunState, layout: Layout): void {
-    if (state.events.length > 0) {
-      const keep: typeof state.events = [];
-      for (const ev of state.events) {
-        if (ev.type === 'damage') this.active.push({ x: ev.x, y: ev.y, amount: ev.amount, weak: ev.weak, bornTick: state.tick });
-        else keep.push(ev);
-      }
-      state.events = keep;
-    }
+  addDamage(x: number, y: number, amount: number, weak: boolean, tick: number): void {
+    this.active.push({ x, y, amount, weak, bornTick: tick });
+  }
 
+  draw(state: RunState, layout: Layout): void {
     const now = state.tick;
     this.active = this.active.filter((f) => now - f.bornTick < LIFE_TICKS);
     if (this.active.length > CAP) this.active.splice(0, this.active.length - CAP);

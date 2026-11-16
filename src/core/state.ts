@@ -8,7 +8,7 @@ import {
   type Tile,
 } from './grid.ts';
 import { buildField, isSealed, pathTiles, stepToward } from './pathfield.ts';
-import { createEnemy, ENEMY_STATS, isWeakPointHit, radiusOf, speedPerTick, type Enemy } from './enemies.ts';
+import { createEnemy, ENEMY_STATS, isWeakPointHit, radiusOf, speedPerTick, type Enemy, type EnemyKind } from './enemies.ts';
 import {
   createTower,
   effectiveStats,
@@ -56,7 +56,7 @@ import {
   type ModifierId,
   type Spawn,
 } from './waves.ts';
-import { tickPopups, type Popup } from './popups.ts';
+import { tickPopups, type Popup, type PopupKind } from './popups.ts';
 import { TICK_MS } from './time.ts';
 import {
   cloneProfile,
@@ -95,12 +95,15 @@ export function pointerDamageMult(specs: SpecLevels): number {
 
 /** One-shot things that happened during a tick; the view drains `events` to spawn effects. */
 export type GameEvent =
-  | { type: 'kill'; x: number; y: number; reward: number; source: DamageSource }
+  | { type: 'kill'; x: number; y: number; reward: number; source: DamageSource; kind: EnemyKind; heading: number }
   | { type: 'leak'; x: number; y: number }
   | { type: 'shot'; towerId: number; x: number; y: number; splash: number }
   | { type: 'click'; x: number; y: number; hit: boolean }
   | { type: 'damage'; x: number; y: number; amount: number; weak: boolean }
-  | { type: 'waveCleared'; wave: number; bonus: number };
+  | { type: 'waveStarted'; wave: number }
+  | { type: 'waveCleared'; wave: number; bonus: number }
+  | { type: 'popupSpawned'; kind: PopupKind }
+  | { type: 'popupDismissed'; kind: PopupKind };
 
 export interface RunState {
   readonly grid: Grid;
@@ -172,6 +175,14 @@ export interface RunState {
   clearedWaveNoLeaks: boolean;
   /** True once a boss has died to the pointer without any tower having touched it. */
   bossKilledByPointer: boolean;
+  /** Simulation paused by P: the view keeps rendering, the sim clock stands still. */
+  paused: boolean;
+  /** Speed multiplier fed into the accumulator (1, 2 or 3); never applied to the fixed tick. */
+  speed: 1 | 2 | 3;
+  /** A fresh profile (no achievements, no reboots) — gates the first-run onboarding. */
+  onboarding: boolean;
+  /** True once the player has placed a tower this run — hides the onboarding hints. */
+  placedFirstTower: boolean;
 }
 
 export function createRunState(profile: Profile = defaultProfile()): RunState {
@@ -225,6 +236,10 @@ export function createRunState(profile: Profile = defaultProfile()): RunState {
     leaksThisWave: 0,
     clearedWaveNoLeaks: false,
     bossKilledByPointer: false,
+    paused: false,
+    speed: 1,
+    onboarding: profile.reboots === 0 && profile.achievements.length === 0,
+    placedFirstTower: false,
   };
 }
 
@@ -294,7 +309,24 @@ export function placeTower(s: RunState, kind: TowerKind, col: number, row: numbe
   s.towers.push(createTower(s.nextId++, kind, col, row));
   rebuildField(s);
   recomputeAuras(s.towers);
+  s.placedFirstTower = true;
   return true;
+}
+
+/** The highest speed Space may reach right now (1 before wave 1, 2 from wave 1, 3 from wave 50). */
+export function maxSpeed(s: RunState): 1 | 2 | 3 {
+  return s.wave >= 50 ? 3 : s.wave >= 1 ? 2 : 1;
+}
+
+/** Space cycles the speed 1 -> 2 -> (3) -> 1, only ever up to `maxSpeed`. */
+export function toggleSpeed(s: RunState): void {
+  const max = maxSpeed(s);
+  s.speed = s.speed >= max ? 1 : ((s.speed + 1) as 1 | 2 | 3);
+}
+
+/** P pauses and resumes the simulation without disturbing the view. */
+export function togglePause(s: RunState): void {
+  s.paused = !s.paused;
 }
 
 /** The route creeps will take right now, for drawing. */
@@ -357,6 +389,7 @@ export function startWave(s: RunState): boolean {
   s.modifiers = waveModifiers(s.wave);
   s.noBuildRow = s.modifiers.includes('no-build') ? noBuildRow(s.wave) : null;
   recomputeAuras(s.towers);
+  s.events.push({ type: 'waveStarted', wave: s.wave });
   return true;
 }
 
@@ -501,7 +534,10 @@ const MAX_TICKS_PER_STEP = 15;
  * current tick, which the view uses to draw smooth motion without ever touching the sim.
  */
 export function step(s: RunState, dtMs: number): number {
-  s.accumulator += Math.max(0, dtMs);
+  if (!s.paused) {
+    // Speed scales the wall-clock time fed in, never the fixed timestep (docs/design.md §15).
+    s.accumulator += Math.max(0, dtMs) * s.speed;
+  }
   let n = 0;
   while (s.accumulator >= TICK_MS && n < MAX_TICKS_PER_STEP) {
     tick(s);
@@ -515,7 +551,6 @@ export function step(s: RunState, dtMs: number): number {
 /** One fixed 1/60 s simulation tick. */
 export function tick(s: RunState): void {
   s.tick++;
-  for (const t of s.towers) if (t.flash > 0) t.flash--;
   decayCombo(s);
   tickPopups(s);
   checkAchievements(s);
@@ -741,8 +776,6 @@ function fireTowers(s: RunState): void {
       const targets = acquireTargets(s, t, st, range, st.beams);
       if (targets.length === 0) continue;
       t.cooldown = intervalTicks(st.fireInterval) - 1;
-      t.lastTargetId = targets[0].id;
-      t.flash = 6;
       for (const tg of targets) {
         s.events.push({ type: 'shot', towerId: t.id, x: tg.x, y: tg.y, splash: st.splash });
         fireBeam(s, t, st, tg, dmg * st.beamDamage);
@@ -753,8 +786,6 @@ function fireTowers(s: RunState): void {
     const target = acquireTarget(s, t, st, range);
     if (!target) continue;
     t.cooldown = intervalTicks(st.fireInterval) - 1;
-    t.lastTargetId = target.id;
-    t.flash = 6;
     s.events.push({ type: 'shot', towerId: t.id, x: target.x, y: target.y, splash: st.splash });
 
     if (st.pierce > 1) fireBeam(s, t, st, target, dmg);
@@ -822,7 +853,7 @@ function damageEnemy(
       tower.kills++;
       tower.earned += reward;
     }
-    s.events.push({ type: 'kill', x: e.x, y: e.y, reward, source });
+    s.events.push({ type: 'kill', x: e.x, y: e.y, reward, source, kind: e.kind, heading: e.heading });
     if (s.pointer.targetId === e.id) s.pointer.targetId = null;
   }
 }

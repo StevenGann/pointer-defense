@@ -142,10 +142,6 @@ export interface Tower {
   auraRange: number;
   /** Ticks until the tower may fire again. */
   cooldown: number;
-  /** Id of the enemy hit by the most recent shot, for drawing a tracer. */
-  lastTargetId: number | null;
-  /** Ticks remaining on the muzzle flash / tracer. */
-  flash: number;
   /** Enemies this tower landed the killing blow on. */
   kills: number;
   /** Salvage this tower earned from those kills. */
@@ -164,8 +160,6 @@ export function createTower(id: number, kind: TowerKind, col: number, row: numbe
     auraDamage: 1,
     auraRange: 0,
     cooldown: 0,
-    lastTargetId: null,
-    flash: 0,
     kills: 0,
     earned: 0,
   };

@@ -135,6 +135,7 @@ export function spawnPopup(s: RunState, kind?: PopupKind): Popup | null {
     h: POPUP_H,
   };
   s.popup = popup;
+  s.events.push({ type: 'popupSpawned', kind: k });
   return popup;
 }
 
@@ -176,6 +177,7 @@ export function dismissPopup(s: RunState, id: number): boolean {
   const kind = s.popup.kind;
   s.popup = null;
   s.popupsDismissed++;
+  s.events.push({ type: 'popupDismissed', kind });
   applyEffect(s, kind);
   return true;
 }
@@ -236,7 +238,7 @@ function applyScreensaver(s: RunState): void {
       e.hp = 0;
       e.dead = true;
       const reward = recordKill(s.economy, e.value, 'tower');
-      s.events.push({ type: 'kill', x: e.x, y: e.y, reward, source: 'tower' });
+      s.events.push({ type: 'kill', x: e.x, y: e.y, reward, source: 'tower', kind: e.kind, heading: e.heading });
       if (s.pointer.targetId === e.id) s.pointer.targetId = null;
     }
   }

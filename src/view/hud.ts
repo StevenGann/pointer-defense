@@ -277,9 +277,9 @@ function hintFor(s: RunState): string {
   if (selectedTower(s)) return 'Click Upgrade, choose a branch, or sell — right-click to deselect';
   switch (s.phase) {
     case 'build':
-      return 'Place towers, then start the wave';
+      return s.towers.length === 0 ? 'Pick a tower, then click a tile' : 'Click Start Wave when you are ready';
     case 'wave':
-      return 'Click enemies to shoot — hold for the reticle';
+      return 'Click enemies to shoot — aim for the notch';
     case 'halted':
       return 'The lane broke. Click Restart to try again';
     case 'victory':
@@ -302,6 +302,8 @@ export class HudView {
   private readonly statusHint = makeText('');
   private readonly statusWave = makeText('');
   private readonly statusSalvage = makeText('');
+  private readonly statusSpeed = makeText('');
+  private readonly statusPaused = makeText('', true);
   private readonly integrity = makeText('');
   private readonly route = makeText('');
   private readonly towerName = makeText('', true);
@@ -339,6 +341,8 @@ export class HudView {
       this.statusHint,
       this.statusWave,
       this.statusSalvage,
+      this.statusSpeed,
+      this.statusPaused,
       this.integrity,
       this.route,
       this.towerName,
@@ -380,6 +384,7 @@ export class HudView {
     this.modalRestart.anchor.set(0.5, 0.5);
     this.modalButton2.anchor.set(0.5, 0.5);
     this.comboText.style.fill = PAL.title;
+    this.statusPaused.style.fill = PAL.title;
   }
 
   showNotice(message: string, ticks = NOTICE_TICKS): void {
@@ -395,11 +400,25 @@ export class HudView {
     const sp = l.statusPanes;
     this.lastTick = s.tick;
     if (this.notice !== '' && s.tick >= this.noticeUntilTick) this.notice = '';
-    this.statusHint.text = this.notice || hintFor(s);
-    this.statusHint.position.set(sp.left.x + 4, sp.left.y + Math.floor(sp.left.h / 2));
+
+    // A paused run shows a sunken PAUSED box and keeps the speed readout; otherwise the hint shows.
+    if (s.paused) {
+      const pr: Rect = { x: sp.left.x + 4, y: sp.left.y + 2, w: 64, h: sp.left.h - 4 };
+      bevel(g, pr, false, PAL.face);
+      this.statusPaused.text = 'PAUSED';
+      this.statusPaused.position.set(pr.x + 6, pr.y + Math.floor(pr.h / 2));
+      this.statusHint.text = '';
+    } else {
+      this.statusPaused.text = '';
+      this.statusHint.text = this.notice || hintFor(s);
+      this.statusHint.position.set(sp.left.x + 4, sp.left.y + Math.floor(sp.left.h / 2));
+    }
+
     const displayWave = s.phase === 'build' ? s.wave + 1 : s.wave;
     this.statusWave.text = s.endless ? `Wave ${displayWave}` : `Wave ${displayWave} / ${WAVE_COUNT}`;
     this.statusWave.position.set(sp.middle.x + 4, sp.middle.y + Math.floor(sp.middle.h / 2));
+    this.statusSpeed.text = `×${s.speed}`;
+    this.statusSpeed.position.set(sp.speed.x + 4, sp.speed.y + Math.floor(sp.speed.h / 2));
     this.statusSalvage.text =
       s.modifiers.includes('blackout') && s.phase === 'wave' ? '---' : `$${formatNumber(s.economy.salvage)}`;
     this.statusSalvage.position.set(sp.right.x + 4, sp.right.y + Math.floor(sp.right.h / 2));
@@ -542,7 +561,13 @@ export class HudView {
       const { kind, rect } = h.towers[i];
       const enabled = canAfford(s.economy, TOWER_STATS[kind].cost);
       const armed = s.selected === kind;
+      // Onboarding: on a fresh profile the Gun button pulses every 2 s until the first placement.
+      const pulse =
+        kind === 'gun' && s.onboarding && !s.placedFirstTower && enabled && s.tick % 120 < 24;
       drawButton(g, rect, enabled, hoverHud === kind, armed);
+      if (pulse) {
+        g.rect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2).stroke({ width: 2, color: PAL.title });
+      }
       const t = this.towerButtons[i];
       t.text = `${TOWER_STATS[kind].name}  $${formatNumber(TOWER_STATS[kind].cost)}`;
       t.style.fill = enabled ? (armed ? PAL.title : PAL.text) : PAL.shadow;

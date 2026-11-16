@@ -1,5 +1,5 @@
-import { Container, Graphics } from 'pixi.js';
-import { PAL, type Layout } from './chrome.ts';
+import { Container, Graphics, Text } from 'pixi.js';
+import { bevel, FONT, PAL, type Layout } from './chrome.ts';
 import {
   enemyAt,
   canPlace,
@@ -21,7 +21,7 @@ import { tileAt, COLS, ROWS, type Grid } from '../core/grid.ts';
  * every frame from the run state.
  */
 
-const TOWER_COLOR: Record<TowerKind, number> = {
+export const TOWER_COLOR: Record<TowerKind, number> = {
   gun: PAL.teal,
   cannon: PAL.maroon,
   taser: PAL.olive,
@@ -30,7 +30,7 @@ const TOWER_COLOR: Record<TowerKind, number> = {
   beacon: 0xffcc00,
 };
 
-const ENEMY_COLOR: Record<EnemyKind, number> = {
+export const ENEMY_COLOR: Record<EnemyKind, number> = {
   grunt: PAL.navy,
   runner: PAL.purple,
   shielded: PAL.maroon,
@@ -55,6 +55,10 @@ export class BoardView {
   private readonly path = new Graphics();
   private readonly entities = new Graphics();
   private readonly overlay = new Graphics();
+  private readonly note = new Text({
+    text: 'Build a maze. Towers block the route.',
+    style: { fontFamily: FONT, fontSize: 11, fill: PAL.text },
+  });
 
   private staticX = -1;
   private staticY = -1;
@@ -62,7 +66,8 @@ export class BoardView {
   private pathKey = '';
 
   constructor() {
-    this.root.addChild(this.tiles, this.path, this.entities, this.overlay);
+    this.note.anchor.set(0, 0.5);
+    this.root.addChild(this.tiles, this.path, this.entities, this.overlay, this.note);
   }
 
   draw(state: RunState, l: Layout, alpha: number, hover: BoardHover): void {
@@ -84,18 +89,6 @@ export class BoardView {
 
     for (const t of state.towers) {
       drawTower(this.entities, t, board, cell);
-    }
-
-    for (const t of state.towers) {
-      if (t.kind !== 'laser' || t.flash <= 0 || t.lastTargetId === null) continue;
-      const target = state.enemies.find((e) => e.id === t.lastTargetId);
-      if (!target) continue;
-      const ox = board.x + (t.col + 0.5) * cell;
-      const oy = board.y + (t.row + 0.5) * cell;
-      this.entities
-        .moveTo(ox, oy)
-        .lineTo(board.x + target.x * cell, board.y + target.y * cell)
-        .stroke({ width: 2, color: TOWER_COLOR.laser });
     }
 
     const rangeMult = towerRangeMult(state);
@@ -131,6 +124,26 @@ export class BoardView {
     if (state.pointer.stage >= 2 && state.phase === 'wave') {
       drawReticle(this.overlay, state, board, cell);
     }
+
+    if (state.onboarding && !state.placedFirstTower) {
+      this.drawFirstRunNote(l);
+      this.note.visible = true;
+    } else {
+      this.note.visible = false;
+    }
+  }
+
+  private drawFirstRunNote(l: Layout): void {
+    const w = 190;
+    const h = 26;
+    const rect = {
+      x: l.board.x + Math.floor((l.boardW - w) / 2),
+      y: l.board.y + Math.floor((l.boardH - h) / 2),
+      w,
+      h,
+    };
+    bevel(this.overlay, rect, false, PAL.face);
+    this.note.position.set(rect.x + 6, rect.y + Math.floor(rect.h / 2));
   }
 
   private drawStatic(grid: Grid, board: { x: number; y: number; cell: number }, cell: number): void {
@@ -304,6 +317,67 @@ function drawTowerShape(g: Graphics, kind: TowerKind, cx: number, cy: number, ce
   }
 }
 
+/**
+ * The enemy's body shape, shared by the live draw and the death collapse. `r` is the radius in
+ * pixels; `alpha` lets the death animation fade the shape as it shrinks toward a point.
+ */
+export function drawEnemyShape(
+  g: Graphics,
+  kind: EnemyKind,
+  x: number,
+  y: number,
+  r: number,
+  color: number,
+  heading: number,
+  alpha = 1,
+): void {
+  const fill = { color, alpha };
+  const outline = { width: 1, color: PAL.dark, alpha };
+  const hex = (radius: number): number[] => {
+    const pts: number[] = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i + Math.PI / 6;
+      pts.push(x + Math.cos(a) * radius, y + Math.sin(a) * radius);
+    }
+    return pts;
+  };
+
+  if (kind === 'grunt') {
+    g.circle(x, y, r).fill(fill).stroke(outline);
+  } else if (kind === 'runner') {
+    const tipX = x + Math.cos(heading) * r * 1.25;
+    const tipY = y + Math.sin(heading) * r * 1.25;
+    const a1 = heading + Math.PI * 0.72;
+    const a2 = heading - Math.PI * 0.72;
+    const p1x = x + Math.cos(a1) * r;
+    const p1y = y + Math.sin(a1) * r;
+    const p2x = x + Math.cos(a2) * r;
+    const p2y = y + Math.sin(a2) * r;
+    g.poly([tipX, tipY, p1x, p1y, p2x, p2y]).fill(fill).stroke(outline);
+  } else if (kind === 'flyer') {
+    const tipX = x + Math.cos(heading) * r;
+    const tipY = y + Math.sin(heading) * r;
+    const bx = x - Math.cos(heading) * r * 0.6;
+    const by = y - Math.sin(heading) * r * 0.6;
+    const px = -Math.sin(heading) * r;
+    const py = Math.cos(heading) * r;
+    g.moveTo(bx + px, by + py).lineTo(tipX, tipY);
+    g.moveTo(bx - px, by - py).lineTo(tipX, tipY);
+    g.stroke({ width: 2, color, alpha });
+  } else if (kind === 'armoured') {
+    const s = r * 1.6;
+    g.rect(x - s / 2, y - s / 2, s, s).fill(fill).stroke({ width: 3, color: PAL.dark, alpha });
+  } else if (kind === 'saboteur') {
+    g.circle(x, y, r).fill(fill).stroke(outline);
+  } else if (kind === 'boss') {
+    g.poly(hex(r)).fill(fill).stroke({ width: 2, color: PAL.dark, alpha });
+    g.circle(x, y, r * 1.1).stroke({ width: 1, color: PAL.dark, alpha });
+    g.circle(x, y, r * 1.18).stroke({ width: 1, color: PAL.dark, alpha });
+  } else {
+    g.poly(hex(r)).fill(fill).stroke(outline);
+  }
+}
+
 function drawEnemy(
   g: Graphics,
   e: Enemy,
@@ -316,59 +390,15 @@ function drawEnemy(
   const ey = (e.prevY + (e.y - e.prevY) * alpha) * cell + board.y;
   const r = radiusOf(e) * cell;
   const color = ENEMY_COLOR[e.kind];
-  const fill = { color };
-  const outline = { width: 1, color: PAL.dark };
 
-  const hexPts = (radius: number): number[] => {
-    const pts: number[] = [];
-    for (let i = 0; i < 6; i++) {
-      const a = (Math.PI / 3) * i + Math.PI / 6;
-      pts.push(ex + Math.cos(a) * radius, ey + Math.sin(a) * radius);
-    }
-    return pts;
-  };
+  drawEnemyShape(g, e.kind, ex, ey, r, color, e.heading);
 
-  if (e.kind === 'grunt') {
-    g.circle(ex, ey, r).fill(fill).stroke(outline);
-  } else if (e.kind === 'runner') {
-    const heading = e.heading;
-    const tipX = ex + Math.cos(heading) * r * 1.25;
-    const tipY = ey + Math.sin(heading) * r * 1.25;
-    const a1 = heading + Math.PI * 0.72;
-    const a2 = heading - Math.PI * 0.72;
-    const p1x = ex + Math.cos(a1) * r;
-    const p1y = ey + Math.sin(a1) * r;
-    const p2x = ex + Math.cos(a2) * r;
-    const p2y = ey + Math.sin(a2) * r;
-    g.poly([tipX, tipY, p1x, p1y, p2x, p2y]).fill(fill).stroke(outline);
-  } else if (e.kind === 'flyer') {
-    const heading = e.heading;
-    const tipX = ex + Math.cos(heading) * r;
-    const tipY = ey + Math.sin(heading) * r;
-    const bx = ex - Math.cos(heading) * r * 0.6;
-    const by = ey - Math.sin(heading) * r * 0.6;
-    const px = -Math.sin(heading) * r;
-    const py = Math.cos(heading) * r;
-    g.moveTo(bx + px, by + py).lineTo(tipX, tipY);
-    g.moveTo(bx - px, by - py).lineTo(tipX, tipY);
-    g.stroke({ width: 2, color });
-  } else if (e.kind === 'armoured') {
-    const s = r * 1.6;
-    g.rect(ex - s / 2, ey - s / 2, s, s).fill(fill).stroke({ width: 3, color: PAL.dark });
-  } else if (e.kind === 'saboteur') {
-    g.circle(ex, ey, r).fill(fill).stroke(outline);
+  if (e.kind === 'saboteur') {
     const sy = ey - r - 2;
     g.moveTo(ex - r * 0.4, sy).lineTo(ex + r * 0.1, sy + r * 0.7).lineTo(ex - r * 0.1, sy + r * 0.7).lineTo(ex + r * 0.4, sy + r * 1.4).stroke({ width: 1, color: PAL.amber });
-  } else if (e.kind === 'boss') {
-    g.poly(hexPts(r)).fill(fill).stroke({ width: 2, color: PAL.dark });
-    g.circle(ex, ey, r + 3).stroke({ width: 1, color: PAL.dark });
-    g.circle(ex, ey, r + 5).stroke({ width: 1, color: PAL.dark });
-    if (e.shield > 0) g.circle(ex, ey, r + 7).stroke({ width: 1, color: PAL.teal });
-  } else {
-    g.poly(hexPts(r)).fill(fill).stroke(outline);
-    if (e.shield > 0) {
-      g.circle(ex, ey, r + 3).stroke({ width: 1, color: PAL.teal });
-    }
+  }
+  if (e.shield > 0 && (e.kind === 'boss' || e.kind === 'shielded')) {
+    g.circle(ex, ey, r + (e.kind === 'boss' ? 7 : 3)).stroke({ width: 1, color: PAL.teal });
   }
 
   // Weak-point notch: a short tick on the leading edge where a precision click pays double.

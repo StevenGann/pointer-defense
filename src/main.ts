@@ -18,6 +18,9 @@ import { FloatingNumbersView } from './view/numbers.ts';
 import { MenuView, type OpenMenu } from './view/menu.ts';
 import { DialogView, type DialogModel } from './view/dialog.ts';
 import { MouseController } from './input/mouse.ts';
+import { EffectsView } from './view/effects.ts';
+import { sfx, type SoundName } from './audio/sfx.ts';
+import type { TowerKind } from './core/towers.ts';
 import pkg from '../package.json';
 
 const app = new Application();
@@ -38,6 +41,7 @@ let layout: Layout = computeLayout(app.screen.width, app.screen.height);
 
 const chrome = new ChromeView();
 const board = new BoardView();
+const effects = new EffectsView();
 const hud = new HudView();
 const popup = new PopupView();
 const numbers = new FloatingNumbersView();
@@ -46,7 +50,13 @@ const dialogView = new DialogView();
 
 const root = new Container();
 app.stage.addChild(root);
-root.addChild(chrome.root, board.root, numbers.root, hud.root, popup.root, menuView.root, dialogView.root);
+root.addChild(chrome.root, board.root, effects.root, numbers.root, hud.root, popup.root, menuView.root, dialogView.root);
+
+sfx.setEnabled(profile.soundOn);
+sfx.setVolume(profile.volume);
+// Audio may only start inside a user gesture, so create the context on the first click or key.
+app.canvas.addEventListener('pointerdown', () => sfx.ensure());
+window.addEventListener('keydown', () => sfx.ensure());
 
 let menu: OpenMenu | null = null;
 let dialog: DialogModel | null = null;
@@ -138,6 +148,11 @@ function buildMenu(name: 'file' | 'help'): OpenMenu {
     return {
       name,
       entries: [
+        { id: 'sound', label: profile.soundOn ? 'Sound: On' : 'Sound: Off' },
+        { id: 'volumeLow', label: 'Volume: Low', checked: profile.volume === 'low' },
+        { id: 'volumeMed', label: 'Volume: Medium', checked: profile.volume === 'med' },
+        { id: 'volumeHigh', label: 'Volume: High', checked: profile.volume === 'high' },
+        { id: 'separator', label: '', separator: true },
         { id: 'achievements', label: 'Achievements' },
         { id: 'about', label: 'About' },
       ],
@@ -197,6 +212,18 @@ function menuAction(id: string): void {
         buttons: [{ id: 'close', label: 'Close' }],
       };
       break;
+    case 'sound':
+      profile.soundOn = !profile.soundOn;
+      sfx.setEnabled(profile.soundOn);
+      saveProfile(profile);
+      break;
+    case 'volumeLow':
+    case 'volumeMed':
+    case 'volumeHigh':
+      profile.volume = id === 'volumeLow' ? 'low' : id === 'volumeHigh' ? 'high' : 'med';
+      sfx.setVolume(profile.volume);
+      saveProfile(profile);
+      break;
   }
 }
 
@@ -245,13 +272,73 @@ const mouse = new MouseController(app, {
   notice: (message) => hud.showNotice(message),
 });
 
+function towerSound(kind: TowerKind): SoundName {
+  switch (kind) {
+    case 'gun':
+      return 'gun';
+    case 'cannon':
+      return 'cannon';
+    case 'taser':
+      return 'taser';
+    case 'laser':
+      return 'laser';
+    case 'frost':
+      return 'frost';
+    case 'beacon':
+      return 'cannon';
+  }
+}
+
+/** Drain the sim's one-shot events into sound and view effects, clearing the queue each frame. */
+function drainEvents(): void {
+  if (state.events.length === 0) return;
+  for (const ev of state.events) {
+    switch (ev.type) {
+      case 'shot': {
+        const tower = state.towers.find((t) => t.id === ev.towerId);
+        effects.addShot(tower, ev.x, ev.y);
+        if (tower) sfx.play(towerSound(tower.kind));
+        break;
+      }
+      case 'damage':
+        effects.addHitFlash(ev.x, ev.y);
+        numbers.addDamage(ev.x, ev.y, ev.amount, ev.weak, state.tick);
+        break;
+      case 'kill':
+        effects.addDeath(ev.kind, ev.x, ev.y, ev.heading);
+        sfx.play('kill', { pitch: 1 + 0.06 * Math.min(state.pointer.combo, 12) });
+        break;
+      case 'leak':
+        sfx.play('leak');
+        break;
+      case 'waveStarted':
+        sfx.play('waveStart');
+        break;
+      case 'waveCleared':
+        sfx.play('waveClear');
+        break;
+      case 'popupSpawned':
+        sfx.play('popup');
+        break;
+      case 'popupDismissed':
+        sfx.play('popupClose');
+        break;
+      case 'click':
+        break;
+    }
+  }
+  state.events = [];
+}
+
 app.ticker.add((ticker) => {
   const alpha = step(state, ticker.deltaMS);
+  drainEvents();
   syncAchievements();
   syncBestWave();
   chrome.draw(layout, mouse.hover.menuItem);
   menuView.draw(layout.menu, menu, mouse.hover.menuHover);
   board.draw(state, layout, alpha, { col: mouse.hover.col, row: mouse.hover.row, onBoard: mouse.hover.onBoard });
+  effects.draw(state, layout);
   numbers.draw(state, layout);
   hud.draw(state, layout, mouse.hover.hud);
   popup.draw(state);

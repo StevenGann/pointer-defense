@@ -11,6 +11,8 @@ export interface MenuEntry {
   label: string;
   disabled?: boolean;
   separator?: boolean;
+  /** Draw a leading check mark (used by the Help menu's volume radio row). */
+  checked?: boolean;
 }
 
 export interface OpenMenu {
@@ -27,12 +29,12 @@ const PAD = 2;
 
 export interface MenuLayout {
   rect: Rect;
-  items: { id: string; label: string; disabled: boolean; separator: boolean; rect: Rect }[];
+  items: { id: string; label: string; disabled: boolean; separator: boolean; checked: boolean; rect: Rect }[];
 }
 
 export function computeMenu(menu: Rect, open: OpenMenu): MenuLayout {
   const word = menuWordRects(menu)[MENU_INDEX[open.name]];
-  const width = Math.max(128, ...open.entries.map((e) => e.label.length * 6 + 28));
+  const width = Math.max(128, ...open.entries.map((e) => e.label.length * 6 + 28 + (e.checked ? 14 : 0)));
   let h = PAD * 2;
   for (const e of open.entries) h += e.separator ? SEP_H : ITEM_H;
   const rect: Rect = { x: word.x, y: menu.y + menu.h - 1, w: width, h };
@@ -41,7 +43,14 @@ export function computeMenu(menu: Rect, open: OpenMenu): MenuLayout {
   const items: MenuLayout['items'] = open.entries.map((e) => {
     const itemRect: Rect = { x: rect.x, y, w: width, h: e.separator ? SEP_H : ITEM_H };
     y += itemRect.h;
-    return { id: e.id, label: e.label, disabled: !!e.disabled, separator: !!e.separator, rect: itemRect };
+    return {
+      id: e.id,
+      label: e.label,
+      disabled: !!e.disabled,
+      separator: !!e.separator,
+      checked: !!e.checked,
+      rect: itemRect,
+    };
   });
 
   return { rect, items };
@@ -58,6 +67,11 @@ export function menuEntryAt(menu: Rect, open: OpenMenu, px: number, py: number):
 
 function makeText(text: string): Text {
   return new Text({ text, style: { fontFamily: FONT, fontSize: 11, fill: PAL.text } });
+}
+
+/** A small Win95 check mark for a selected menu entry. */
+function drawCheck(g: Graphics, x: number, cy: number, color: number): void {
+  g.moveTo(x, cy).lineTo(x + 2, cy + 3).lineTo(x + 7, cy - 3).stroke({ width: 1, color });
 }
 
 export class MenuView {
@@ -96,9 +110,11 @@ export class MenuView {
       if (hoveredId === item.id && !item.disabled) {
         g.rect(item.rect.x + 2, item.rect.y, item.rect.w - 4, item.rect.h).fill(PAL.title);
       }
+      const textColor = item.disabled ? PAL.shadow : hoveredId === item.id ? PAL.titleInverse : PAL.text;
+      if (item.checked) drawCheck(g, item.rect.x + 5, item.rect.y + Math.floor(item.rect.h / 2), textColor);
       t.text = item.label;
-      t.style.fill = item.disabled ? PAL.shadow : hoveredId === item.id ? PAL.titleInverse : PAL.text;
-      t.position.set(item.rect.x + 6, item.rect.y + Math.floor(item.rect.h / 2));
+      t.style.fill = textColor;
+      t.position.set(item.rect.x + 6 + (item.checked ? 14 : 0), item.rect.y + Math.floor(item.rect.h / 2));
     }
   }
 }

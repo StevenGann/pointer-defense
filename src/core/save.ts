@@ -14,6 +14,9 @@ export const SAVE_VERSION = 1;
 
 export type SpecKind = 'cpu' | 'ram' | 'gpu' | 'disk';
 
+/** Master volume step, remembered next to the profile (docs/design.md §14). */
+export type VolumeLevel = 'low' | 'med' | 'high';
+
 export interface SpecLevels {
   cpu: number;
   ram: number;
@@ -28,6 +31,10 @@ export interface Profile {
   achievements: string[];
   bestWave: number;
   reboots: number;
+  /** Whether sound effects play at all. */
+  soundOn: boolean;
+  /** Master volume step. */
+  volume: VolumeLevel;
 }
 
 export const SPEC_KINDS: readonly SpecKind[] = ['cpu', 'ram', 'gpu', 'disk'];
@@ -69,6 +76,8 @@ export function defaultProfile(): Profile {
     achievements: [],
     bestWave: 0,
     reboots: 0,
+    soundOn: true,
+    volume: 'med',
   };
 }
 
@@ -80,6 +89,8 @@ export function cloneProfile(p: Profile): Profile {
     achievements: [...p.achievements],
     bestWave: p.bestWave,
     reboots: p.reboots,
+    soundOn: p.soundOn,
+    volume: p.volume,
   };
 }
 
@@ -145,8 +156,10 @@ function parseProfile(raw: string): Profile | null {
     typeof o.bestWave === 'number' && Number.isFinite(o.bestWave) ? Math.max(0, Math.floor(o.bestWave)) : 0;
   const reboots =
     typeof o.reboots === 'number' && Number.isFinite(o.reboots) ? Math.max(0, Math.floor(o.reboots)) : 0;
+  const soundOn = typeof o.soundOn === 'boolean' ? o.soundOn : true;
+  const volume: VolumeLevel = o.volume === 'low' || o.volume === 'high' ? o.volume : 'med';
 
-  return { version: SAVE_VERSION, specs, unspentSpecs, achievements, bestWave, reboots };
+  return { version: SAVE_VERSION, specs, unspentSpecs, achievements, bestWave, reboots, soundOn, volume };
 }
 
 /**

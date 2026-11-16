@@ -58,6 +58,7 @@ export interface StatusPanes {
   left: Rect;
   middle: Rect;
   right: Rect;
+  speed: Rect;
 }
 
 export interface Layout {
@@ -106,7 +107,8 @@ export function computeLayout(vw: number, vh: number): Layout {
   const board: BoardGeometry = { x: inner.x + ox, y: inner.y + oy, cell };
 
   const right: Rect = { x: status.x + status.w - 120, y: status.y, w: 120, h: status.h };
-  const middle: Rect = { x: right.x - 122, y: status.y, w: 120, h: status.h };
+  const speed: Rect = { x: right.x - 46, y: status.y, w: 44, h: status.h };
+  const middle: Rect = { x: speed.x - 122, y: status.y, w: 120, h: status.h };
   const left: Rect = { x: status.x, y: status.y, w: middle.x - 2 - status.x, h: status.h };
 
   return {
@@ -118,7 +120,7 @@ export function computeLayout(vw: number, vh: number): Layout {
     boardCol,
     rightPanel,
     status,
-    statusPanes: { left, middle, right },
+    statusPanes: { left, middle, right, speed },
     board,
     boardW,
     boardH,
@@ -278,6 +280,7 @@ export class ChromeView {
     // Status panes (sunken, 2px separators).
     bevel(g, l.statusPanes.left, false, PAL.face);
     bevel(g, l.statusPanes.middle, false, PAL.face);
+    bevel(g, l.statusPanes.speed, false, PAL.face);
     bevel(g, l.statusPanes.right, false, PAL.face);
   }
 }

@@ -22,6 +22,8 @@ import {
   selectTower,
   sellTower,
   startWave,
+  togglePause,
+  toggleSpeed,
   towerAt,
   upgradePointer,
   upgradeTower,
@@ -294,6 +296,17 @@ export class MouseController {
         return;
       }
       cancelSelection(this.ctx.state());
+      return;
+    }
+    if (e.key === 'p' || e.key === 'P') {
+      if (this.ctx.menu() || this.ctx.dialog()) return;
+      togglePause(this.ctx.state());
+      return;
+    }
+    if (e.key === ' ') {
+      if (this.ctx.menu() || this.ctx.dialog()) return;
+      e.preventDefault();
+      toggleSpeed(this.ctx.state());
       return;
     }
     const n = Number(e.key);

@@ -11,6 +11,7 @@ import type { RunState } from '../core/state.ts';
 export const POPUP_TITLE_H = 14;
 const CLOSE_W = 11;
 const CLOSE_H = 9;
+const POPUP_APPEAR_TICKS = 6;
 
 /** The close box, 11x9 in the top-right of the title bar. */
 export function popupCloseRect(popup: Popup): Rect {
@@ -31,6 +32,8 @@ export class PopupView {
   private readonly g = new Graphics();
   private readonly title = makeText('');
   private readonly message = makeText('');
+  private seenId: number | null = null;
+  private bornTick = 0;
 
   constructor() {
     this.root.addChild(this.g);
@@ -47,11 +50,23 @@ export class PopupView {
     if (!popup) {
       this.title.text = '';
       this.message.text = '';
+      this.seenId = null;
       return;
+    }
+    if (popup.id !== this.seenId) {
+      this.seenId = popup.id;
+      this.bornTick = state.tick;
     }
 
     const spec = POPUP_SPECS[popup.kind];
     bevel(g, { x: popup.x, y: popup.y, w: popup.w, h: popup.h }, true, PAL.face);
+
+    // Appear snap: a bright frame for the first 6 ticks, no easing (docs/design.md §13.4).
+    const age = state.tick - this.bornTick;
+    if (age < POPUP_APPEAR_TICKS) {
+      const a = 1 - age / POPUP_APPEAR_TICKS;
+      g.rect(popup.x, popup.y, popup.w, popup.h).stroke({ width: 2, color: PAL.highlight, alpha: a });
+    }
 
     // Title bar (navy). The Blue Screen trap's only tell: the title text sits a pixel high.
     g.rect(popup.x + 2, popup.y + 2, popup.w - 4, POPUP_TITLE_H).fill(PAL.title);
