@@ -6,13 +6,15 @@ import {
   enterEndless,
   restartWindows,
   step,
+  towerAt,
   type RunState,
 } from './core/state.ts';
 import { loadProfile, saveProfile, specGain, type Profile, type SpecKind } from './core/save.ts';
 import { achievementName, ACHIEVEMENTS } from './core/achievements.ts';
-import { ChromeView, computeLayout, PAL, type Layout } from './view/chrome.ts';
+import { ChromeView, computeLayout, PAL, pointInRect, type Layout } from './view/chrome.ts';
 import { BoardView } from './view/board.ts';
-import { HudView } from './view/hud.ts';
+import { HudView, paletteTowerAt } from './view/hud.ts';
+import { paletteTooltipLines, TooltipView, towerTooltipLines } from './view/tooltip.ts';
 import { PopupView } from './view/popup.ts';
 import { FloatingNumbersView } from './view/numbers.ts';
 import { MenuView, type OpenMenu } from './view/menu.ts';
@@ -47,10 +49,11 @@ const popup = new PopupView();
 const numbers = new FloatingNumbersView();
 const menuView = new MenuView();
 const dialogView = new DialogView();
+const tooltip = new TooltipView();
 
 const root = new Container();
 app.stage.addChild(root);
-root.addChild(chrome.root, board.root, effects.root, numbers.root, hud.root, popup.root, menuView.root, dialogView.root);
+root.addChild(chrome.root, board.root, effects.root, numbers.root, hud.root, popup.root, menuView.root, dialogView.root, tooltip.root);
 
 sfx.setEnabled(profile.soundOn);
 sfx.setVolume(profile.volume);
@@ -343,8 +346,40 @@ app.ticker.add((ticker) => {
   hud.draw(state, layout, mouse.hover.hud);
   popup.draw(state);
   dialogView.draw(dialog, layout);
+  updateTooltip();
   cursor.position.set(mouse.hover.x, mouse.hover.y);
 });
+
+/** Decide what the pointer is over and hand the tooltip its content (or nothing). */
+function updateTooltip(): void {
+  const h = mouse.hover;
+  const suppressed =
+    state.selected !== null || // placing a tower
+    menu !== null || // dropdown open
+    dialog !== null || // modal open
+    h.menuItem >= 0 || // over the menu bar
+    state.phase === 'halted' ||
+    state.phase === 'victory' ||
+    (state.popup !== null && pointInRect(state.popup, h.x, h.y)); // over a pop-up
+
+  const viewportW = app.screen.width;
+  const viewportH = app.screen.height;
+
+  if (!suppressed) {
+    const palette = paletteTowerAt(layout, state, h.x, h.y);
+    if (palette !== null) {
+      tooltip.update({ key: `palette:${palette}`, lines: paletteTooltipLines(palette) }, h.x, h.y, viewportW, viewportH);
+      return;
+    }
+    const tower = h.onBoard ? towerAt(state, h.col, h.row) : undefined;
+    if (tower) {
+      tooltip.update({ key: `tower:${tower.id}`, lines: towerTooltipLines(tower) }, h.x, h.y, viewportW, viewportH);
+      return;
+    }
+  }
+
+  tooltip.update({ key: null, lines: [] }, h.x, h.y, viewportW, viewportH);
+}
 
 app.renderer.on('resize', () => {
   layout = computeLayout(app.screen.width, app.screen.height);

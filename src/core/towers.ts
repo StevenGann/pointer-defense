@@ -17,6 +17,8 @@ export interface TowerStats {
   readonly damage: number;
   /** Ticks between shots (0 for towers that never fire). */
   readonly fireInterval: number;
+  /** Degrees per second the barrel can traverse toward a target; 0 = instant (no turning time). */
+  readonly turnRate: number;
   /** Splash radius in tiles around the primary target (0 = single target). */
   readonly splash: number;
   /** If true, enemy armour is not subtracted from this tower's hits. */
@@ -44,6 +46,7 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     range: 2.6,
     damage: 3,
     fireInterval: secondsToTicks(0.5),
+    turnRate: 720,
     splash: 0,
     ignoresArmour: false,
     slowFactor: 1,
@@ -59,6 +62,7 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     range: 3.0,
     damage: 5,
     fireInterval: secondsToTicks(1.6),
+    turnRate: 90,
     splash: 1.0,
     ignoresArmour: false,
     slowFactor: 1,
@@ -74,6 +78,7 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     range: 1.6,
     damage: 1,
     fireInterval: secondsToTicks(0.12),
+    turnRate: 0,
     splash: 0,
     ignoresArmour: true,
     slowFactor: 1,
@@ -89,6 +94,7 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     range: 2.2,
     damage: 1,
     fireInterval: secondsToTicks(0.6),
+    turnRate: 0,
     splash: 0,
     ignoresArmour: false,
     slowFactor: 0.3,
@@ -104,6 +110,7 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     range: 3.4,
     damage: 11,
     fireInterval: secondsToTicks(0.8),
+    turnRate: 150,
     splash: 0,
     ignoresArmour: false,
     slowFactor: 1,
@@ -119,6 +126,7 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     range: 3.5,
     damage: 0,
     fireInterval: 0,
+    turnRate: 0,
     splash: 0,
     ignoresArmour: false,
     slowFactor: 1,
@@ -142,6 +150,8 @@ export interface Tower {
   auraDamage: number;
   /** Additive range bonus (tiles) from beacon auras. */
   auraRange: number;
+  /** Current barrel facing in radians; 0 = north, increasing clockwise. */
+  angle: number;
   /** Ticks until the tower may fire again. */
   cooldown: number;
   /** Enemies this tower landed the killing blow on. */
@@ -165,6 +175,7 @@ export function createTower(id: number, kind: TowerKind, col: number, row: numbe
     spent: TOWER_STATS[kind].cost,
     auraDamage: 1,
     auraRange: 0,
+    angle: 0,
     cooldown: 0,
     kills: 0,
     earned: 0,
@@ -274,6 +285,7 @@ export interface EffectiveStats {
   readonly range: number;
   readonly damage: number;
   readonly fireInterval: number;
+  readonly turnRate: number;
   readonly splash: number;
   readonly ignoresArmour: boolean;
   readonly slowFactor: number;
@@ -352,6 +364,7 @@ export function effectiveStats(tower: Tower): EffectiveStats {
     range,
     damage,
     fireInterval,
+    turnRate: base.turnRate,
     splash,
     ignoresArmour: base.ignoresArmour,
     slowFactor,

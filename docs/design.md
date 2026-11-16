@@ -88,14 +88,14 @@ Six towers. Each has a role, a tier ladder, and **two exclusive branches** at ti
 
 ### 6.1 The six
 
-| Tower | Cost | Range | Damage | Interval | Role | Wants |
-|---|---|---|---|---|---|---|
-| **Gun** | 25 | 2.6 | 3 | 0.50 s | cheap single-target backbone | the longest stretch of route it can reach |
-| **Cannon** | 90 | 3.0 | 5 + splash 1.0 | 1.60 s | clusters and corners | where the maze doubles back |
-| **Taser** | 80 | 1.6 | 1, ignores armour | 0.12 s | armour, speed, close work | the inside of a hairpin |
-| **Frost** | 70 | 2.2 | 1, slows to 30 % speed for 3.0 s | 0.60 s | utility | in front of the damage |
-| **Laser** | 70 | 3.4 | 11, pierces 8 | 0.80 s | straight lines | corridors you deliberately left open |
-| **Beacon** | 90 | 3.5 | none | — | +60 % damage to towers in radius | a dense cluster worth buffing |
+| Tower | Cost | Range | Damage | Interval | Turn rate | Role | Wants |
+|---|---|---|---|---|---|---|---|---|
+| **Gun** | 25 | 2.6 | 3 | 0.50 s | 720°/s | cheap single-target backbone | the longest stretch of route it can reach |
+| **Cannon** | 90 | 3.0 | 5 + splash 1.0 | 1.60 s | 90°/s | clusters and corners | where the maze doubles back |
+| **Taser** | 80 | 1.6 | 1, ignores armour | 0.12 s | instant | armour, speed, close work | the inside of a hairpin |
+| **Frost** | 70 | 2.2 | 1, slows to 30 % speed for 3.0 s | 0.60 s | instant | utility | in front of the damage |
+| **Laser** | 70 | 3.4 | 11, pierces 8 | 0.80 s | 150°/s | straight lines | corridors you deliberately left open |
+| **Beacon** | 90 | 3.5 | none | — | — (still) | +60 % damage to towers in radius | a dense cluster worth buffing |
 
 Four damage answers and two that are useless alone. That is how placement stays interesting without
 becoming opaque.
@@ -139,6 +139,34 @@ tower-minded player build different boards from the same pieces.
 
 Refund **70 %** of everything spent, rounded down. Selling is how mazing recovers from a mistake, so it
 has to stay cheap enough to actually use.
+
+### 6.5 Turret traverse
+
+A tower does not fire the instant it has a target: it must first bring its barrel to bear. Each tower
+has a **turn rate** (degrees per second); `0` means it never turns and fires instantly. On each tick a
+tower picks its target exactly as before, computes the bearing from its centre to that enemy, and
+rotates its barrel toward the bearing by at most `turnRate / 60` degrees (one fixed 60 Hz tick). It
+only fires once the remaining angular error is within the **8° aim tolerance**; otherwise it holds
+fire and keeps turning. Cooldown ticks down regardless of facing, so a slow traverse costs shots, not
+cooldown.
+
+The tolerance is 8° by design. It is wide enough that a tower tracking a slow enemy settles and holds
+without wobbling across the firing line, and narrow enough that a fast enemy crossing the field forces
+a real swing. A cannon needs a moment to swing round and loses time reacquiring a runner that has
+rounded a corner — slow traverse costs something, without making the cannon bad.
+
+| Tower | Turn rate | Why |
+|---|---|---|
+| Gun | 720°/s | fast — it can track almost anything, costs a fraction of a second to swing round |
+| Cannon | 90°/s | slow and heavy — the one that changes play |
+| Laser | 150°/s | must line the beam up before it fires |
+| Taser | 0 | instant — an arc weapon that needs no aiming |
+| Frost | 0 | instant — area effect |
+| Beacon | 0 | never fires; keep it still |
+
+The barrel facing is a sim value stored on the tower in radians (`0` = north, increasing clockwise)
+and drawn at that angle. Angle 0 is the classic north-facing barrel and renders identically to the
+pre-traverse build.
 
 ---
 

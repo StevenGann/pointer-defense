@@ -258,23 +258,80 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   s.economy.salvage = 10000;
   placeTower(s, 'laser', 5, 5);
   s.phase = 'wave';
-  const spawn = (id, x, dist) => {
+  // Enemies sit in a vertical line north of the laser, so its barrel (which starts facing north)
+  // is already lined up and the single tick is about piercing, not traversal.
+  const spawn = (id, y, dist) => {
     const e = createEnemy(id, 'grunt', 1, SPAWN, EXIT);
-    e.x = x;
-    e.y = 5.5;
-    e.prevX = x;
-    e.prevY = 5.5;
-    e.col = Math.floor(x);
-    e.row = 5;
+    e.x = 5.5;
+    e.y = y;
+    e.prevX = 5.5;
+    e.prevY = y;
+    e.col = 5;
+    e.row = Math.floor(y);
     e.dist = dist;
     e.targetCol = -1;
     e.targetRow = -1;
     return e;
   };
-  s.enemies.push(spawn(1, 6.5, 1), spawn(2, 7.5, 2), spawn(3, 8.5, 3));
+  s.enemies.push(spawn(1, 4.5, 1), spawn(2, 3.5, 2), spawn(3, 2.5, 3));
   tick(s);
   const hurt = s.enemies.filter((e) => e.hp < e.maxHp).length;
   check(hurt >= 2, `laser damaged ${hurt} enemies in a line (expected >= 2)`);
+}
+
+// --- 9b. Turret traverse: a traversing barrel waits to line up; instant towers do not ----------
+{
+  // A cannon facing south must swing 180° north before firing. At 90°/s that is ~115 ticks, so it
+  // must hold fire early and land a shot inside the expected window.
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'cannon', 5, 5);
+  const cannon = towerAt(s, 5, 5);
+  cannon.angle = Math.PI; // pointing away from the target (which is north)
+  s.phase = 'wave';
+  const e = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+  e.x = 5.5;
+  e.y = 4.0;
+  e.prevX = 5.5;
+  e.prevY = 4.0;
+  e.col = 5;
+  e.row = 4;
+  e.dist = 1;
+  e.targetCol = -1;
+  e.targetRow = -1;
+  e.stunUntilTick = 9999; // hold still so traverse is the only variable
+  s.enemies.push(e);
+
+  let firedAt = -1;
+  for (let i = 1; i <= 160; i++) {
+    tick(s);
+    if (firedAt < 0 && e.hp < e.maxHp) firedAt = i;
+    if (i === 50) check(e.hp === e.maxHp, 'cannon holds fire while the barrel traverses (50 ticks)');
+  }
+  check(firedAt > 0, 'cannon fires once the barrel lines up');
+  check(firedAt >= 100 && firedAt <= 130, `cannon fires within the expected window (tick ${firedAt})`);
+
+  // An instant-turn tower (turnRate 0) ignores facing entirely and fires on the first tick.
+  const s2 = createRunState();
+  s2.economy.salvage = 10000;
+  placeTower(s2, 'taser', 5, 5);
+  const taser = towerAt(s2, 5, 5);
+  taser.angle = Math.PI; // even pointing away, an instant tower needs no aiming
+  s2.phase = 'wave';
+  const e2 = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+  e2.x = 5.5;
+  e2.y = 4.0;
+  e2.prevX = 5.5;
+  e2.prevY = 4.0;
+  e2.col = 5;
+  e2.row = 4;
+  e2.dist = 1;
+  e2.targetCol = -1;
+  e2.targetRow = -1;
+  e2.stunUntilTick = 9999;
+  s2.enemies.push(e2);
+  tick(s2);
+  check(e2.hp < e2.maxHp, 'an instant-turn tower fires on the first tick it has a target');
 }
 
 // --- 10. Precision clicking: weak points deal 2x, combo scales and resets ----------------------

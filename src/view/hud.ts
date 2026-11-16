@@ -46,7 +46,7 @@ const SPEC_ACTION: Readonly<Record<SpecKind, HudAction>> = {
 
 const NOTICE_TICKS = 150;
 
-const BRANCH_NAMES: Readonly<Record<TowerKind, Readonly<Record<Branch, string>>>> = {
+export const BRANCH_NAMES: Readonly<Record<TowerKind, Readonly<Record<Branch, string>>>> = {
   gun: { A: 'Marksman', B: 'Repeater' },
   cannon: { A: 'Mortar', B: 'Flak' },
   taser: { A: 'Arc', B: 'Overload' },
@@ -55,7 +55,7 @@ const BRANCH_NAMES: Readonly<Record<TowerKind, Readonly<Record<Branch, string>>>
   beacon: { A: 'Command', B: 'Relay' },
 };
 
-const TARGET_LABEL: Readonly<Record<TargetMode, string>> = {
+export const TARGET_LABEL: Readonly<Record<TargetMode, string>> = {
   first: 'First',
   strong: 'Strong',
   close: 'Close',
@@ -190,6 +190,20 @@ function computeHud(l: Layout, s: RunState): HudLayout {
   }
 
   return { integrity, route, detail, pointerPanel, pointerUpgrade, towers, wave, specs };
+}
+
+/**
+ * The build-palette tower button under a point, regardless of whether it is currently affordable.
+ * Returns null when a placed tower is selected for inspection (the palette is replaced by detail),
+ * so the tooltip does not report a tower button that is not on screen.
+ */
+export function paletteTowerAt(l: Layout, s: RunState, px: number, py: number): TowerKind | null {
+  if (selectedTower(s)) return null;
+  const h = computeHud(l, s);
+  for (const t of h.towers) {
+    if (pointInRect(t.rect, px, py)) return t.kind;
+  }
+  return null;
 }
 
 export function hudButtonAt(l: Layout, s: RunState, px: number, py: number): HudAction | null {

@@ -58,7 +58,7 @@ import {
   type Spawn,
 } from './waves.ts';
 import { tickPopups, type Popup, type PopupKind } from './popups.ts';
-import { TICK_MS } from './time.ts';
+import { TICK_HZ, TICK_MS } from './time.ts';
 import {
   cloneProfile,
   defaultProfile,
@@ -814,22 +814,71 @@ function fireBeam(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg:
   for (let i = 0; i < n; i++) hitEnemy(s, t, st, hits[i], dmg);
 }
 
+/**
+ * A traversing barrel must line up before it fires. 8° is wide enough that a tower tracking a
+ * slow enemy never wobbles over the line (it settles and holds), but narrow enough that a fast
+ * enemy crossing the tower's field actually forces a swing — a cannon with a 90°/s traverse pays
+ * real time to reacquire a runner that rounded a corner. Expressed in radians for the sim.
+ */
+const AIM_TOLERANCE = (8 * Math.PI) / 180;
+
+/** Fold an angle into [-π, π]. */
+function normalizeAngle(a: number): number {
+  while (a > Math.PI) a -= 2 * Math.PI;
+  while (a < -Math.PI) a += 2 * Math.PI;
+  return a;
+}
+
+/** Bearing from the tower's centre to the enemy: 0 = north, increasing clockwise. */
+function bearingTo(t: Tower, e: Enemy): number {
+  return Math.atan2(e.x - (t.col + 0.5), -(e.y - (t.row + 0.5)));
+}
+
+/**
+ * Rotate the barrel toward `bearing` by at most one tick's worth of traverse. Returns true when
+ * the barrel is within tolerance and may fire; otherwise it has moved one step and must wait.
+ * A turn rate of 0 (instant-turn towers) always returns true.
+ */
+function aimToward(t: Tower, bearing: number, turnRate: number): boolean {
+  if (turnRate <= 0) return true;
+  const diff = normalizeAngle(bearing - t.angle);
+  if (Math.abs(diff) <= AIM_TOLERANCE) return true;
+  const maxStep = ((turnRate / TICK_HZ) * Math.PI) / 180;
+  t.angle = normalizeAngle(t.angle + Math.sign(diff) * Math.min(Math.abs(diff), maxStep));
+  return false;
+}
+
 function fireTowers(s: RunState): void {
   const buff = s.towerDamageBuffTicks > 0 ? 1.4 : 1;
   for (const t of s.towers) {
     if ((s.towerDisabled.get(t.id) ?? 0) > 0) continue; // disabled by Blue Screen
-    if (t.cooldown > 0) {
-      t.cooldown--;
-      continue;
-    }
     const st = effectiveStats(t);
     if (st.damage <= 0 || st.fireInterval <= 0) continue; // beacon never fires
     const range = (st.range + t.auraRange) * towerRangeMult(s);
     const dmg = st.damage * t.auraDamage * buff * towerDamageMult(s.specs);
 
+    // Pick the target(s) exactly as before, so targeting priorities are unchanged by traverse.
+    const targets =
+      st.beams > 1
+        ? acquireTargets(s, t, st, range, st.beams)
+        : ((): Enemy[] => {
+            const tg = acquireTarget(s, t, st, range);
+            return tg ? [tg] : [];
+          })();
+
+    // Cooldown ticks down regardless of facing; the barrel keeps tracking while it cools down.
+    if (t.cooldown > 0) {
+      t.cooldown--;
+      if (targets.length > 0) aimToward(t, bearingTo(t, targets[0]), st.turnRate);
+      continue;
+    }
+
+    if (targets.length === 0) continue;
+
+    // Line the barrel up first; if it still has to turn, hold fire until a later tick.
+    if (!aimToward(t, bearingTo(t, targets[0]), st.turnRate)) continue;
+
     if (st.beams > 1) {
-      const targets = acquireTargets(s, t, st, range, st.beams);
-      if (targets.length === 0) continue;
       t.cooldown = intervalTicks(st.fireInterval) - 1;
       for (const tg of targets) {
         s.events.push({ type: 'shot', towerId: t.id, x: tg.x, y: tg.y, splash: st.splash });
@@ -838,8 +887,7 @@ function fireTowers(s: RunState): void {
       continue;
     }
 
-    const target = acquireTarget(s, t, st, range);
-    if (!target) continue;
+    const target = targets[0];
     t.cooldown = intervalTicks(st.fireInterval) - 1;
     s.events.push({ type: 'shot', towerId: t.id, x: target.x, y: target.y, splash: st.splash });
 

@@ -269,7 +269,7 @@ function dashedCircle(g: Graphics, cx: number, cy: number, r: number, color: num
 function drawTower(g: Graphics, t: Tower, board: { x: number; y: number; cell: number }, cell: number): void {
   const cx = board.x + (t.col + 0.5) * cell;
   const cy = board.y + (t.row + 0.5) * cell;
-  drawTowerShape(g, t.kind, cx, cy, cell, 1);
+  drawTowerShape(g, t.kind, cx, cy, cell, 1, t.angle);
 }
 
 function drawTowerRange(
@@ -286,7 +286,56 @@ function drawTowerRange(
   if (t.kind === 'beacon') dashedCircle(g, cx, cy, st.range * rangeMult * cell, AURA_COLOR, 1);
 }
 
-function drawTowerShape(g: Graphics, kind: TowerKind, cx: number, cy: number, cell: number, alpha: number): void {
+interface BarrelFill {
+  color: number;
+  alpha: number;
+}
+
+/**
+ * Draw a barrel rectangle centred on the tower and rotate it by `angle` (radians, 0 = north,
+ * clockwise). At angle 0 the barrel is drawn with the exact rounded pixel-grid rect, so the
+ * north-facing tower looks identical to the pre-traverse build; at any other angle it becomes a
+ * smoothly rotated polygon around the tower centre.
+ */
+function drawBarrel(
+  g: Graphics,
+  cx: number,
+  cy: number,
+  angle: number,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  fill: BarrelFill,
+  outline: BarrelFill,
+): void {
+  if (angle === 0) {
+    g.rect(x, y, w, h).fill(fill).stroke(outline);
+    return;
+  }
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const pts: number[] = [];
+  for (const [lx, ly] of [
+    [x - cx, y - cy],
+    [x + w - cx, y - cy],
+    [x + w - cx, y + h - cy],
+    [x - cx, y + h - cy],
+  ]) {
+    pts.push(cx + lx * cos - ly * sin, cy + lx * sin + ly * cos);
+  }
+  g.poly(pts).fill(fill).stroke(outline);
+}
+
+function drawTowerShape(
+  g: Graphics,
+  kind: TowerKind,
+  cx: number,
+  cy: number,
+  cell: number,
+  alpha: number,
+  angle = 0,
+): void {
   const color = TOWER_COLOR[kind];
   const fill = { color, alpha };
   const outline = { width: 1, color: PAL.dark, alpha };
@@ -298,16 +347,21 @@ function drawTowerShape(g: Graphics, kind: TowerKind, cx: number, cy: number, ce
     g.rect(bx, by, s, s).fill(fill).stroke(outline);
     const bw = Math.round(cell * 0.14);
     const bl = Math.round(cell * 0.32);
-    g.rect(Math.round(cx - bw / 2), by - bl, bw, bl).fill(fill).stroke(outline);
+    drawBarrel(g, cx, cy, angle, Math.round(cx - bw / 2), by - bl, bw, bl, fill, outline);
   } else if (kind === 'cannon') {
     const r = Math.round(cell * 0.34);
     g.circle(cx, cy, r).fill(fill).stroke(outline);
     const bw = Math.round(cell * 0.2);
     const bl = Math.round(cell * 0.36);
-    g.rect(Math.round(cx - bw / 2), Math.round(cy - r - bl), bw, bl).fill(fill).stroke(outline);
+    drawBarrel(g, cx, cy, angle, Math.round(cx - bw / 2), Math.round(cy - r - bl), bw, bl, fill, outline);
   } else {
     const r = Math.round(cell * 0.38);
     g.poly([cx, cy - r, cx + r, cy, cx, cy + r, cx - r, cy]).fill(fill).stroke(outline);
+    if (kind === 'laser') {
+      const bw = Math.max(2, Math.min(3, Math.round(cell * 0.08)));
+      const bl = Math.round(cell * 0.34);
+      drawBarrel(g, cx, cy, angle, Math.round(cx - bw / 2), Math.round(cy - bl), bw, bl, fill, outline);
+    }
     const top = cy + r + 2;
     const cw = Math.round(cell * 0.14);
     g.moveTo(cx - cw, top)
