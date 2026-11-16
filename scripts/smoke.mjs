@@ -241,15 +241,15 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(slowed < normal, `frost slows a grunt (${slowed.toFixed(2)} < ${normal.toFixed(2)} tiles over 60 ticks)`);
 }
 
-// --- 8. Beacon raises a neighbouring gun's damage by 15% -------------------------------------
+// --- 8. Beacon raises a neighbouring gun's damage by 60% -------------------------------------
 {
   const s = createRunState();
   s.economy.salvage = 10000;
   placeTower(s, 'gun', 5, 5);
   placeTower(s, 'beacon', 6, 5);
   const gun = towerAt(s, 5, 5);
-  check(Math.abs(gun.auraDamage - 1.15) < 1e-9,
-    `beacon raises neighbouring gun damage by 15% (auraDamage=${gun.auraDamage.toFixed(4)})`);
+  check(Math.abs(gun.auraDamage - 1.6) < 1e-9,
+    `beacon raises neighbouring gun damage by 60% (auraDamage=${gun.auraDamage.toFixed(4)})`);
 }
 
 // --- 9. Laser damages more than one enemy in a line ------------------------------------------

@@ -90,15 +90,22 @@ Six towers. Each has a role, a tier ladder, and **two exclusive branches** at ti
 
 | Tower | Cost | Range | Damage | Interval | Role | Wants |
 |---|---|---|---|---|---|---|
-| **Gun** | 25 | 2.6 | 4 | 0.50 s | cheap single-target backbone | the longest stretch of route it can reach |
-| **Cannon** | 60 | 3.0 | 10 + splash 1.0 | 1.60 s | clusters and corners | where the maze doubles back |
-| **Taser** | 45 | 1.6 | 2, ignores armour | 0.15 s | armour, speed, close work | the inside of a hairpin |
-| **Frost** | 70 | 2.2 | 1, slows 40 % for 1.5 s | 0.60 s | utility | in front of the damage |
-| **Laser** | 120 | 3.4 | 6, pierces 4 | 0.80 s | straight lines | corridors you deliberately left open |
-| **Beacon** | 90 | 2.5 | none | — | +15 % damage, +0.4 range to towers in radius | a dense cluster worth buffing |
+| **Gun** | 25 | 2.6 | 3 | 0.50 s | cheap single-target backbone | the longest stretch of route it can reach |
+| **Cannon** | 90 | 3.0 | 5 + splash 1.0 | 1.60 s | clusters and corners | where the maze doubles back |
+| **Taser** | 80 | 1.6 | 1, ignores armour | 0.12 s | armour, speed, close work | the inside of a hairpin |
+| **Frost** | 70 | 2.2 | 1, slows to 30 % speed for 3.0 s | 0.60 s | utility | in front of the damage |
+| **Laser** | 70 | 3.4 | 11, pierces 8 | 0.80 s | straight lines | corridors you deliberately left open |
+| **Beacon** | 90 | 3.5 | none | — | +60 % damage to towers in radius | a dense cluster worth buffing |
 
 Four damage answers and two that are useless alone. That is how placement stays interesting without
 becoming opaque.
+
+**These are the harness's numbers, not the first draft's.** The first draft (Gun 4 damage at 25,
+Cannon 10 at 60, Taser 2 at 45, Laser 6 at 120, Beacon +15 %) let a scripted player win with Gun and
+Cannon alone — the other four were never bought, so they were untested at every wave. The tuned set
+gives every kind a slot a player notices: Taser and Laser both beat Gun on damage per salvage, Cannon
+pays for its cost in splash, and Frost plus Beacon are load-bearing rather than decorative — a control
+run that replaces those two with Guns dies at wave 40 while the standard run reaches 100.
 
 ### 6.2 The tier ladder
 
