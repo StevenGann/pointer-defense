@@ -1,7 +1,7 @@
 import type { Tile } from './grid.ts';
 import { TICK_HZ } from './time.ts';
 
-export type EnemyKind = 'grunt' | 'runner' | 'shielded' | 'flyer' | 'armoured' | 'saboteur' | 'boss' | 'breacher';
+export type EnemyKind = 'grunt' | 'runner' | 'shielded' | 'flyer' | 'armoured' | 'saboteur' | 'boss' | 'breacher' | 'popup';
 
 export interface EnemyStats {
   readonly name: string;
@@ -42,7 +42,27 @@ export const ENEMY_STATS: Readonly<Record<EnemyKind, EnemyStats>> = {
   saboteur: { name: 'Saboteur', hp: 25, speed: 1.5, radius: 0.28, armour: 0, shield: 0, value: 11, wallDps: 0 },
   boss: { name: 'Boss', hp: 450, speed: 0.8, radius: 0.55, armour: 6, shield: 120, value: 120, wallDps: 0 },
   breacher: { name: 'Breacher', hp: 55, speed: 0.6, radius: 0.42, armour: 0, shield: 0, value: 14, wallDps: 12 },
+  popup: { name: 'Pop-up', hp: 60, speed: 0.7, radius: 0.4, armour: 0, shield: 0, value: 18, wallDps: 0 },
 };
+
+/**
+ * The pop-up enemy is a walking shield, not a "shielded" enemy: its `shield` stat is 0. Towers are
+ * blinded to any enemy whose centre lies inside the window's rectangle, and the window itself can
+ * only be killed by clicking its close box (the view dispatches that click to a core reducer).
+ */
+export const POPUP_W = 2.2; // window width in tiles
+export const POPUP_H = 1.5; // window height in tiles
+
+export type PopupEnemy = Enemy & { readonly kind: 'popup' };
+
+export function isPopupEnemy(e: Enemy): e is PopupEnemy {
+  return e.kind === 'popup';
+}
+
+/** Whether a world point lies inside the window's shield rectangle (inclusive edges). */
+export function popupCovers(e: Enemy, x: number, y: number): boolean {
+  return Math.abs(x - e.x) <= POPUP_W / 2 && Math.abs(y - e.y) <= POPUP_H / 2;
+}
 
 export interface Enemy {
   readonly id: number;

@@ -135,6 +135,35 @@ function bossGroups(wave: number): readonly SpawnGroup[] {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Pop-up enemies (the walking shield)
+
+/** First wave that may carry a pop-up; the wave itself is the seed, so it never changes. */
+export const POPUP_FIRST_WAVE = 15;
+
+/** Two pop-ups per wave (and two alive at once) become possible from this wave. */
+export const POPUP_TWO_FROM = 60;
+
+/**
+ * How many pop-ups a wave carries: 0 or 1 before wave 60, 0..2 after, never on a boss wave, and
+ * never before wave 15. Decided from the wave's seeded RNG, so the same wave always produces the
+ * same pop-ups.
+ */
+export function popupCountForWave(wave: number): number {
+  if (wave < POPUP_FIRST_WAVE || isBossWave(wave)) return 0;
+  const rnd = waveRng(wave);
+  if (wave < POPUP_TWO_FROM) return rnd() < 0.2 ? 1 : 0;
+  const roll = rnd();
+  if (roll < 0.4) return 0;
+  if (roll < 0.75) return 1;
+  return 2;
+}
+
+/** The most pop-ups that may be alive at once during a wave of this number. */
+export function popupAliveCap(wave: number): number {
+  return wave < POPUP_TWO_FROM ? 1 : 2;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Modifiers
 
 /** The modifiers for a wave: one from 51, two (distinct) from 120 in endless. Empty before 51. */
@@ -177,6 +206,7 @@ const KIND_INTERVAL_S: Readonly<Record<EnemyKind, number>> = {
   saboteur: 3.0,
   breacher: 3.5,
   boss: 0,
+  popup: 0,
 };
 
 /** Assemble ordered groups, staggering each group to start partway through the previous one. */
@@ -280,6 +310,19 @@ export function buildSchedule(wave: number): Spawn[] {
     const interval = Math.max(1, Math.round(grp.interval * intervalScale));
     for (let i = 0; i < grp.count; i++) out.push({ tick: grp.delay + i * interval, kind: grp.kind });
   }
+
+  // The walking shield rides mid-wave, so it covers enemies rather than leading the pack.
+  const popups = popupCountForWave(wave);
+  if (popups > 0) {
+    let last = 0;
+    for (const sp of out) last = Math.max(last, sp.tick);
+    const span = Math.max(60, last);
+    for (let i = 0; i < popups; i++) {
+      const frac = popups === 1 ? 0.5 : i === 0 ? 0.3 : 0.7;
+      out.push({ tick: Math.round(span * frac), kind: 'popup' });
+    }
+  }
+
   return out.sort((a, b) => a.tick - b.tick);
 }
 
@@ -315,5 +358,6 @@ export function waveEnemyCount(wave: number): number {
   if (!def) return 0;
   let n = def.groups.reduce((sum, grp) => sum + grp.count, 0);
   if (isBossWave(wave)) n += bossGroups(wave).reduce((sum, grp) => sum + grp.count, 0);
+  n += popupCountForWave(wave);
   return n;
 }

@@ -6,7 +6,7 @@ import {
 } from './grid.ts';
 import { createGrid, DEFAULT_LEVEL, LEVELS, levelById } from './levels.ts';
 import { buildAirField, buildField, isSealed, pathTiles, stepToward } from './pathfield.ts';
-import { createEnemy, ENEMY_STATS, isWeakPointHit, radiusOf, speedPerTick, type Enemy, type EnemyKind } from './enemies.ts';
+import { createEnemy, ENEMY_STATS, isPopupEnemy, isWeakPointHit, popupCovers, radiusOf, speedPerTick, type Enemy, type EnemyKind } from './enemies.ts';
 import {
   createTower,
   effectiveStats,
@@ -54,6 +54,7 @@ import {
   buildSchedule,
   earlyCallBonus,
   noBuildRow,
+  popupAliveCap,
   WAVE_COUNT,
   waveModifiers,
   type ModifierId,
@@ -336,6 +337,7 @@ export function enemyAt(s: RunState, x: number, y: number, slack = CLICK_SLACK):
   let best: Enemy | undefined;
   for (const e of s.enemies) {
     if (e.dead) continue;
+    if (isPopupEnemy(e)) continue; // the window is not pointer-targetable; only its close box is
     const r = radiusOf(e) + slack;
     if ((e.x - x) ** 2 + (e.y - y) ** 2 <= r * r && (!best || e.dist > best.dist)) best = e;
   }
@@ -624,6 +626,22 @@ export function cancelSelection(s: RunState): void {
   s.selectedTowerId = null;
 }
 
+/**
+ * Close a pop-up window by clicking its close box: the only way to kill it. It pays the enemy's
+ * normal salvage (no pointer bonus) and every enemy it was covering is targetable again on the next
+ * tick, when towers reacquire.
+ */
+export function closePopupEnemy(s: RunState, id: number): boolean {
+  const e = s.enemies.find((x) => x.id === id && isPopupEnemy(x) && !x.dead);
+  if (!e) return false;
+  e.dead = true;
+  e.hp = 0;
+  const reward = recordKillAt(s.economy, e.value, 'pointer', 1);
+  s.events.push({ type: 'kill', x: e.x, y: e.y, reward, source: 'pointer', kind: e.kind, heading: e.heading });
+  if (s.pointer.targetId === e.id) s.pointer.targetId = null;
+  return true;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Simulation
 
@@ -685,9 +703,19 @@ function spawnDue(s: RunState): void {
   for (const run of s.runs) {
     while (run.spawns.length > 0 && run.startTick + run.spawns[0].tick <= s.clock) {
       const sp = run.spawns.shift()!;
+      // A pop-up respects the "at most N alive" cap: if one is already walking (e.g. an early
+      // call overlapped waves), this wave's pop-up is skipped rather than breaking the cap.
+      if (sp.kind === 'popup' && livingPopups(s) >= popupAliveCap(run.wave)) continue;
       s.enemies.push(createEnemy(s.nextId++, sp.kind, run.wave, spawnTile(s), exitTile(s)));
     }
   }
+}
+
+/** The number of pop-up windows currently walking the board. */
+function livingPopups(s: RunState): number {
+  let n = 0;
+  for (const e of s.enemies) if (!e.dead && isPopupEnemy(e)) n++;
+  return n;
 }
 
 /** The distance field an enemy paths downhill over (breachers and flyers use their own). */
@@ -823,9 +851,22 @@ function leak(s: RunState, e: Enemy): void {
   }
 }
 
+/**
+ * A pop-up window is a shield, not just camouflage: any enemy whose centre is inside its rectangle
+ * is blind to towers, and the window itself can never be tower-targeted. The pointer is unaffected.
+ */
+function shieldedByPopup(s: RunState, e: Enemy): boolean {
+  if (isPopupEnemy(e)) return true;
+  for (const p of s.enemies) {
+    if (p.dead || !isPopupEnemy(p)) continue;
+    if (popupCovers(p, e.x, e.y)) return true;
+  }
+  return false;
+}
+
 /** Towers can hurt this enemy right now (shielded enemies are immune until the shield breaks). */
-function towerCanHurt(e: Enemy): boolean {
-  return !e.dead && e.shield <= 0;
+function towerCanHurt(s: RunState, e: Enemy): boolean {
+  return !e.dead && e.shield <= 0 && !shieldedByPopup(s, e);
 }
 
 function inRange(t: Tower, e: Enemy, range: number): boolean {
@@ -854,7 +895,7 @@ function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: n
 function towerCandidates(s: RunState, t: Tower, st: EffectiveStats, range: number): Enemy[] {
   const out: Enemy[] = [];
   for (const e of s.enemies) {
-    if (!towerCanHurt(e)) continue;
+    if (!towerCanHurt(s, e)) continue;
     if (st.targetsFlyersOnly && e.kind !== 'flyer') continue;
     if (!inRange(t, e, range)) continue;
     out.push(e);
@@ -943,7 +984,7 @@ function fireSplash(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dm
   const cx = target.x;
   const cy = target.y;
   for (const e of s.enemies) {
-    if (!towerCanHurt(e)) continue;
+    if (!towerCanHurt(s, e)) continue;
     if (st.targetsFlyersOnly && e.kind !== 'flyer') continue;
     const r = st.splash + radiusOf(e);
     if ((e.x - cx) ** 2 + (e.y - cy) ** 2 <= r * r) hitEnemy(s, t, st, e, dmg);
@@ -958,7 +999,7 @@ function fireChain(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg
     let next: Enemy | undefined;
     let best = Infinity;
     for (const e of s.enemies) {
-      if (!towerCanHurt(e) || hitIds.has(e.id)) continue;
+      if (!towerCanHurt(s, e) || hitIds.has(e.id)) continue;
       if (st.targetsFlyersOnly && e.kind !== 'flyer') continue;
       const d2 = (e.x - prev.x) ** 2 + (e.y - prev.y) ** 2;
       if (d2 <= 1.5 * 1.5 && d2 < best) {
@@ -978,7 +1019,7 @@ function fireBeam(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg:
   const oy = t.row + 0.5;
   const hits: Enemy[] = [];
   for (const e of s.enemies) {
-    if (!towerCanHurt(e)) continue;
+    if (!towerCanHurt(s, e)) continue;
     if (st.targetsFlyersOnly && e.kind !== 'flyer') continue;
     if (distanceToSegment(e.x, e.y, ox, oy, target.x, target.y) > 0.35) continue;
     hits.push(e);

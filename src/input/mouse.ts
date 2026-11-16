@@ -5,6 +5,7 @@ import { popupCloseRect } from '../view/popup.ts';
 import { menuEntryAt, type OpenMenu } from '../view/menu.ts';
 import { dialogButtonAt, type DialogModel } from '../view/dialog.ts';
 import { dismissPopup } from '../core/popups.ts';
+import { popupCloseHit } from '../view/popupEnemy.ts';
 import { canAfford } from '../core/economy.ts';
 import { tileAt } from '../core/grid.ts';
 import { TOWER_KINDS, TOWER_STATS, type TowerKind } from '../core/towers.ts';
@@ -12,6 +13,7 @@ import { type SpecKind } from '../core/save.ts';
 import {
   cancelSelection,
   chooseBranch,
+  closePopupEnemy,
   cycleLevel,
   cycleTargetMode,
   enemyAt,
@@ -203,6 +205,12 @@ export class MouseController {
     const onBoard = x >= l.board.x && x < l.board.x + l.boardW && y >= l.board.y && y < l.board.y + l.boardH;
 
     if (onBoard) {
+      // The pop-up's close box is the one place a click kills it; it wins over towers and enemies.
+      const popup = s.enemies.find((e) => e.kind === 'popup' && !e.dead && popupCloseHit(e, l.board, x, y));
+      if (popup) {
+        closePopupEnemy(s, popup.id);
+        return;
+      }
       const col = Math.floor(w.x);
       const row = Math.floor(w.y);
       const tower = towerAt(s, col, row);

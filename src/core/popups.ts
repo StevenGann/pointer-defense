@@ -235,6 +235,7 @@ function placeFreeGun(s: RunState): void {
 function applyScreensaver(s: RunState): void {
   for (const e of s.enemies) {
     if (e.dead) continue;
+    if (e.kind === 'popup') continue; // the window only dies to its close box
     e.stunUntilTick = s.tick + secondsToTicks(0.5);
     e.hp -= 25;
     s.events.push({ type: 'damage', x: e.x, y: e.y, amount: 25, weak: false });

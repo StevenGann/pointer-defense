@@ -349,7 +349,7 @@ app.ticker.add((ticker) => {
   syncBestWave();
   chrome.draw(layout, mouse.hover.menuItem);
   menuView.draw(layout.menu, menu, mouse.hover.menuHover);
-  board.draw(state, layout, alpha, { col: mouse.hover.col, row: mouse.hover.row, onBoard: mouse.hover.onBoard });
+  board.draw(state, layout, alpha, { col: mouse.hover.col, row: mouse.hover.row, onBoard: mouse.hover.onBoard, x: mouse.hover.x, y: mouse.hover.y });
   effects.draw(state, layout);
   numbers.draw(state, layout);
   hud.draw(state, layout, mouse.hover.hud);

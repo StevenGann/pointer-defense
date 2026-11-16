@@ -229,10 +229,16 @@ pre-traverse build.
 | **Saboteur** | 25 | 1.5 t/s | 0.28 | 0 | 0 | 11 | kill it before it arrives — it disables a tower for 4 s |
 | **Boss** | 900 | 0.8 t/s | 0.55 | 6 | 120 | 120 | both halves: towers strip armour, pointer breaks the shield |
 | **Breacher** | 55 | 0.6 t/s | 0.42 | 0 | 0 | 14 | walks into walls and breaks them — a gun in front of the wall, or walls behind walls |
+| **Pop-up** | 60 | 0.7 t/s | 0.40 | 0 | 0 | 18 | click its close box — a window that shields every enemy under it from towers |
 
 Armour is **flat subtraction** on tower hits, floored at 1. Clicks ignore armour entirely. Shields
 absorb tower damage completely until broken, and only the pointer can break them. That is pillar 1
 stated as arithmetic.
+
+The pop-up window is a **spatial shield**, not a stat: any enemy whose centre is inside its rectangle
+is untargetable by towers, and no tower damage — including flak bursts — reaches it while the window
+lives. The pointer is unaffected and can still shoot those enemies; the window itself only dies when
+its close box is clicked, which pays the normal salvage and releases whatever it was covering.
 
 If an enemy could be answered equally well by either half, it is not doing its job.
 
@@ -515,6 +521,7 @@ Shape carries meaning before colour does — readability, and colour-blind playe
 | Saboteur | circle with a spark |
 | Boss | large hexagon with a double ring |
 | Breacher | square with a forward battering ram |
+| Pop-up | Win95 window with a title bar and close box |
 | Gun | small square with a barrel |
 | Cannon | circle with a thick barrel |
 | Taser | diamond with a coil |

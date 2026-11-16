@@ -13,6 +13,13 @@ import { radiusOf, type Enemy, type EnemyKind } from '../core/enemies.ts';
 import { effectiveStats, TOWER_STATS, type Tower, type TowerKind } from '../core/towers.ts';
 import { tileAt, COLS, ROWS, type Grid, type Tile } from '../core/grid.ts';
 import { dashRects, offsetSegment, routeOffset, type RouteSegment } from './route.ts';
+import {
+  enemyDrawOrder,
+  popupCloseHit,
+  popupCloseRect,
+  popupTitleH,
+  popupWindowRect,
+} from './popupEnemy.ts';
 
 export { dashRects, offsetSegment, routeOffset } from './route.ts';
 
@@ -43,6 +50,7 @@ export const ENEMY_COLOR: Record<EnemyKind, number> = {
   saboteur: 0x808000,
   boss: 0x806000,
   breacher: 0xa04040,
+  popup: 0x000080,
 };
 
 const AURA_COLOR = 0x6699ff;
@@ -52,18 +60,24 @@ export interface BoardHover {
   col: number;
   row: number;
   onBoard: boolean;
+  x: number;
+  y: number;
 }
 
 export class BoardView {
   readonly root = new Container();
   private readonly tiles = new Graphics();
   private readonly path = new Graphics();
-  private readonly entities = new Graphics();
+  private readonly towers = new Graphics();
+  private readonly popups = new Container();
+  private readonly popupGfx = new Graphics();
+  private readonly enemies = new Graphics();
   private readonly overlay = new Graphics();
   private readonly note = new Text({
     text: 'Build a maze. Towers block the route.',
     style: { fontFamily: FONT, fontSize: 11, fill: PAL.text },
   });
+  private readonly popupTexts: { title: Text; message: Text }[] = [];
 
   private staticX = -1;
   private staticY = -1;
@@ -72,7 +86,27 @@ export class BoardView {
 
   constructor() {
     this.note.anchor.set(0, 0.5);
-    this.root.addChild(this.tiles, this.path, this.entities, this.overlay, this.note);
+    this.popups.addChild(this.popupGfx);
+    this.root.addChild(this.tiles, this.path, this.towers, this.popups, this.enemies, this.overlay, this.note);
+  }
+
+  /** The caption and message Text objects for the `i`-th live pop-up, creating them on demand. */
+  private popupText(i: number): { title: Text; message: Text } {
+    while (this.popupTexts.length <= i) {
+      const title = new Text({
+        text: '',
+        style: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', fill: PAL.titleInverse },
+      });
+      title.anchor.set(0, 0.5);
+      const message = new Text({
+        text: '',
+        style: { fontFamily: FONT, fontSize: 9, fill: PAL.text, wordWrap: true },
+      });
+      message.anchor.set(0, 0.5);
+      this.popupTexts.push({ title, message });
+      this.popups.addChild(title, message);
+    }
+    return this.popupTexts[i];
   }
 
   draw(state: RunState, l: Layout, alpha: number, hover: BoardHover): void {
@@ -89,11 +123,13 @@ export class BoardView {
 
     this.drawRoute([currentPath(state)], board, cell);
 
-    this.entities.clear();
+    this.towers.clear();
+    this.enemies.clear();
+    this.popupGfx.clear();
     this.overlay.clear();
 
     for (const t of state.towers) {
-      drawTower(this.entities, t, board, cell);
+      drawTower(this.towers, t, board, cell);
     }
 
     const rangeMult = towerRangeMult(state);
@@ -110,9 +146,32 @@ export class BoardView {
         .stroke({ width: 1, color: PAL.title });
     }
 
-    for (const e of state.enemies) {
+    // Pop-up windows draw beneath every other enemy (the shield is blind to towers, not the player).
+    const layers = enemyDrawOrder(state.enemies);
+    const overClose = (e: Enemy): boolean => hover.onBoard && popupCloseHit(e, board, hover.x, hover.y);
+    let pi = 0;
+    for (const e of layers.popups) {
       if (e.dead) continue;
-      drawEnemy(this.entities, e, board, cell, alpha, state.tick < e.slowUntilTick);
+      const { title, message } = this.popupText(pi);
+      drawPopupWindow(this.popupGfx, e, board, overClose(e));
+      const r = popupWindowRect(e, board);
+      const titleH = popupTitleH(r);
+      title.text = 'Pop-up';
+      title.position.set(r.x + 5, r.y + 2 + Math.floor(titleH / 2));
+      message.text = 'This program has performed an illegal operation';
+      message.style.wordWrapWidth = Math.max(20, r.w - 8);
+      const bodyTop = r.y + 2 + titleH;
+      message.position.set(r.x + 4, bodyTop + Math.floor((r.h - titleH - 4) / 2));
+      pi++;
+    }
+    for (; pi < this.popupTexts.length; pi++) {
+      this.popupTexts[pi].title.text = '';
+      this.popupTexts[pi].message.text = '';
+    }
+
+    for (const e of layers.others) {
+      if (e.dead) continue;
+      drawEnemy(this.enemies, e, board, cell, alpha, state.tick < e.slowUntilTick);
     }
 
     if (state.selected && hover.onBoard && canPlace(state, state.selected, hover.col, hover.row)) {
@@ -476,6 +535,24 @@ export function drawEnemyShape(
   } else {
     g.poly(hex(r)).fill(fill).stroke(outline);
   }
+}
+
+function drawPopupWindow(
+  g: Graphics,
+  e: Enemy,
+  board: { x: number; y: number; cell: number },
+  hoverClose: boolean,
+): void {
+  const r = popupWindowRect(e, board);
+  bevel(g, r, true, PAL.face);
+  const titleH = popupTitleH(r);
+  g.rect(r.x + 2, r.y + 2, r.w - 4, titleH).fill(PAL.title);
+  const close = popupCloseRect(e, board);
+  bevel(g, close, true, hoverClose ? PAL.highlight : PAL.face);
+  const cx = close.x + Math.floor(close.w / 2);
+  const cy = close.y + Math.floor(close.h / 2);
+  g.moveTo(cx - 3, cy - 3).lineTo(cx + 3, cy + 3).stroke({ width: 1, color: PAL.text });
+  g.moveTo(cx + 3, cy - 3).lineTo(cx - 3, cy + 3).stroke({ width: 1, color: PAL.text });
 }
 
 function drawEnemy(

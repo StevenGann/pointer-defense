@@ -25,11 +25,12 @@ import {
   towerAt,
   cycleLevel,
   canCycleLevel,
+  closePopupEnemy,
 } from '../src/core/state.ts';
 import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
-import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
+import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, popupCountForWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
@@ -40,6 +41,7 @@ import { comboMultiplier } from '../src/core/pointer.ts';
 import { loadProfile, saveProfile, defaultProfile } from '../src/core/save.ts';
 import { restartWindows, checkAchievements, enterEndless } from '../src/core/state.ts';
 import { dashRects, offsetSegment, routeOffset } from '../src/view/route.ts';
+import { enemyDrawOrder, popupCloseHit, popupCloseRect, popupWindowRect } from '../src/view/popupEnemy.ts';
 
 // All v0.10b levels share a single spawn and exit, so the older maze checks keep a local gate.
 const SPAWN = DEFAULT_LEVEL.starts[0];
@@ -50,6 +52,22 @@ function stateOnLevel(id) {
   const s = createRunState();
   while (s.levelId !== id) cycleLevel(s);
   return s;
+}
+
+/** An enemy pinned at a world point so a test can reason about exactly where it stands. */
+function stationary(id, kind, wave, x, y) {
+  const e = createEnemy(id, kind, wave, SPAWN, EXIT);
+  e.x = x;
+  e.y = y;
+  e.prevX = x;
+  e.prevY = y;
+  e.col = Math.floor(x);
+  e.row = Math.floor(y);
+  e.dist = 0;
+  e.targetCol = -1;
+  e.targetRow = -1;
+  e.stunUntilTick = 999999;
+  return e;
 }
 
 let failures = 0;
@@ -891,6 +909,123 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   const v1 = offsetSegment(10, 0, 10, 10, o1);
   check(h0.a.y !== h1.a.y && v0.a.x !== v1.a.x,
     'horizontal and vertical segments separate two routes');
+}
+
+// --- 20. Pop-up enemy: the walking shield ------------------------------------------------
+{
+  // 20a. An enemy inside the window is never acquired while it lives, and is acquired on the tick
+  // after the window closes.
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 5, 5);
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const grunt = stationary(1, 'grunt', 15, 5.5, 4.0);
+  const popup = stationary(2, 'popup', 15, 5.5, 4.0);
+  s.enemies.push(grunt, popup);
+
+  for (let i = 0; i < 30; i++) tick(s);
+  check(grunt.hp === grunt.maxHp, 'an enemy inside the window is never acquired while it lives');
+
+  check(closePopupEnemy(s, popup.id), 'the pop-up window closes');
+  tick(s);
+  check(grunt.hp < grunt.maxHp, 'the enemy is acquired on the tick after the pop-up closes');
+}
+
+{
+  // 20b. Flak (cannon splash) reaches an unshielded enemy but not an enemy inside the window.
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'cannon', 5, 6);
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const target = stationary(1, 'grunt', 15, 5.5, 3.7);
+  const covered = stationary(2, 'grunt', 15, 5.5, 4.5);
+  const popup = stationary(3, 'popup', 15, 5.5, 4.5);
+  s.enemies.push(target, covered, popup);
+
+  tick(s);
+  check(target.hp < target.maxHp, 'flak damages an unshielded enemy');
+  check(covered.hp === covered.maxHp, 'flak burst does not damage a shielded enemy');
+  check(popup.hp === popup.maxHp && !popup.dead, 'flak does not damage the window itself');
+}
+
+{
+  // 20c. The pointer ignores the shield and cannot damage the window body.
+  const s = createRunState();
+  s.phase = 'wave';
+  const grunt = stationary(1, 'grunt', 15, 5.5, 4.5);
+  const popup = stationary(2, 'popup', 15, 5.5, 4.5);
+  s.enemies.push(grunt, popup);
+
+  const hpBefore = grunt.hp;
+  pointerDown(s, grunt.x, grunt.y);
+  check(grunt.hp < hpBefore, 'the pointer damages an enemy inside the window');
+  check(!popup.dead, 'the pointer cannot damage the window body');
+}
+
+{
+  // 20d. Clicking the close box kills the window; clicking the body does not.
+  const s = createRunState();
+  s.phase = 'wave';
+  const popup = stationary(1, 'popup', 15, 10.5, 6.5);
+  s.enemies.push(popup);
+  const board = { x: 0, y: 0, cell: 28 };
+  const win = popupWindowRect(popup, board);
+  const close = popupCloseRect(popup, board);
+  check(close.w === 14 && close.h === 12, `close box is 14x12 px (${close.w}x${close.h})`);
+
+  const body = { x: win.x + 6, y: win.y + win.h - 4 };
+  check(!popupCloseHit(popup, board, body.x, body.y), 'clicking the window body is not the close box');
+  check(popupCloseHit(popup, board, close.x + close.w / 2, close.y + close.h / 2), 'the close-box centre is a hit');
+
+  const salvageBefore = s.economy.salvage;
+  check(closePopupEnemy(s, popup.id), 'clicking the close box kills the window');
+  check(popup.dead, 'the window is dead');
+  check(s.economy.salvage === salvageBefore + popup.value,
+    `closing pays the normal salvage (${s.economy.salvage - salvageBefore}, base ${popup.value})`);
+}
+
+{
+  // 20e. The pop-up renders below other enemies: it lands in the lower draw layer.
+  const popup = createEnemy(1, 'popup', 15, SPAWN, EXIT);
+  const grunt = createEnemy(2, 'grunt', 15, SPAWN, EXIT);
+  const order = enemyDrawOrder([popup, grunt]);
+  check(order.popups.length === 1 && order.popups[0].id === popup.id, 'the pop-up is in the lower layer');
+  check(order.others.length === 1 && order.others[0].id === grunt.id, 'the grunt is in the upper layer');
+}
+
+{
+  // 20f. Rarity: none before wave 15, never two before 60, never on a boss wave, at most two after.
+  let noneBefore15 = true;
+  for (let w = 1; w < 15; w++) if (popupCountForWave(w) !== 0) noneBefore15 = false;
+  check(noneBefore15, 'no pop-up before wave 15');
+
+  let neverTwoBefore60 = true;
+  for (let w = 15; w < 60; w++) if (popupCountForWave(w) > 1) neverTwoBefore60 = false;
+  check(neverTwoBefore60, 'never two pop-ups in a wave before wave 60');
+
+  let bossClear = true;
+  for (const w of [10, 25, 50, 75, 100]) if (popupCountForWave(w) !== 0) bossClear = false;
+  check(bossClear, 'never on a boss wave');
+
+  let cappedAfter60 = true;
+  for (let w = 60; w <= 100; w++) if (popupCountForWave(w) > 2) cappedAfter60 = false;
+  check(cappedAfter60, 'at most two pop-ups per wave after wave 60');
+}
+
+{
+  // 20g. Deterministic and wired into the schedule: the same wave produces the same pop-up.
+  let matches = true;
+  let present = 0;
+  for (let w = 1; w <= 100; w++) {
+    const n = popupCountForWave(w);
+    if (buildSchedule(w).filter((sp) => sp.kind === 'popup').length !== n) matches = false;
+    if (w >= 15 && n > 0) present++;
+  }
+  check(matches, 'every wave schedule matches its pop-up count');
+  check(present > 0, 'pop-ups appear on at least one wave (15..100)');
+  check(popupCountForWave(60) === popupCountForWave(60), 'the same wave produces the same pop-up count');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
