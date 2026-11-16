@@ -1,6 +1,7 @@
 import type { EnemyKind } from './enemies.ts';
 import { secondsToTicks } from './time.ts';
 import { ROWS } from './grid.ts';
+import { waveClearBonus } from './economy.ts';
 
 /**
  * Wave generation (docs/design.md §8).
@@ -276,16 +277,18 @@ export function buildSchedule(wave: number): Spawn[] {
 
 /**
  * The salvage bonus for starting the next wave early (docs/design.md §8.5). `elapsedTicks` is the
- * time since the most recent wave started, and `wave` is that wave: the span is the last spawn tick
- * of its schedule (min 60 ticks), so calling the instant a wave begins pays the most (40) and a
- * late call decays to a floor of 5. Deterministic — no randomness.
+ * time since the most recent wave started, and `nextWave` is the wave being called: the span is the
+ * last spawn tick of the wave that just started (`nextWave - 1`, min 60 ticks), and the reward is a
+ * fraction of the called wave's clear bonus, so a full-early call pays half of that wave's clear
+ * bonus and a late call decays to a floor of 5. Deterministic — no randomness.
  */
-export function earlyCallBonus(elapsedTicks: number, wave: number): number {
-  const schedule = buildSchedule(wave);
+export function earlyCallBonus(elapsedTicks: number, nextWave: number): number {
+  const schedule = buildSchedule(nextWave - 1);
   const last = schedule.length > 0 ? schedule[schedule.length - 1].tick : 0;
   const span = Math.max(60, last);
   const fraction = Math.min(1, Math.max(0, 1 - elapsedTicks / span));
-  return Math.min(40, Math.max(5, Math.round(40 * fraction)));
+  const clear = waveClearBonus(nextWave);
+  return Math.min(clear, Math.max(5, Math.round(0.5 * clear * fraction)));
 }
 
 /** Total enemies in a wave, including a boss and its escorts on boss waves. */

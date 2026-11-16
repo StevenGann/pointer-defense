@@ -407,9 +407,9 @@ export function startWave(s: RunState): boolean {
   const early = s.phase === 'wave';
   if (s.phase !== 'build' && !early) return false;
   if (s.wave >= WAVE_COUNT && !s.endless) return false;
-  // The early-call bonus is measured from the wave that just started, before we reset waveTick.
+  // The early-call bonus is measured from the wave that just started, before we reset waveTick,
+  // and paid as a fraction of the wave being called (s.wave + 1 once incremented below).
   const elapsed = s.waveTick;
-  const fromWave = s.wave;
   s.wave += 1;
   s.runs.push({ wave: s.wave, startTick: s.clock, spawns: buildSchedule(s.wave) });
   s.phase = 'wave';
@@ -421,7 +421,7 @@ export function startWave(s: RunState): boolean {
   s.events.push({ type: 'waveStarted', wave: s.wave });
   if (early) {
     s.calledEarly = true;
-    earn(s.economy, earlyCallBonus(elapsed, fromWave));
+    earn(s.economy, earlyCallBonus(elapsed, s.wave));
   }
   return true;
 }

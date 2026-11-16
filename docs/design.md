@@ -262,17 +262,20 @@ when every run is cleared and no enemies remain; **victory** still lands on the 
 are counted **per wave number**, so an early call can neither poison nor rescue another wave's
 no-leak record.
 
-**Bonus.** Calling early pays, at the moment of the call:
+**Bonus.** Calling early pays, at the moment of the call, a fraction of the *called* wave's clear
+bonus:
 
 ```
-span     = last spawn tick of the wave that just started   (min 60 ticks)
+span     = last spawn tick of the wave that just started        (min 60 ticks)
 fraction = clamp(1 − elapsedTicks / span, 0, 1)
-bonus    = clamp(round(40 × fraction), 5, 40)
+bonus    = clamp(round(0.5 × waveClearBonus(nextWave) × fraction), 5, waveClearBonus(nextWave))
 ```
 
-`elapsedTicks` is measured from the most recent wave start, so calling the instant a wave begins pays
-the most (40) and later calls decay to a floor of 5. The HUD shows the live value counting down. The
-formula has no randomness.
+`nextWave` is the wave being called, not the one currently running; `span` is measured from the wave
+that just started (the current one, `nextWave − 1`). The 0.5 coefficient means a full-early call pays
+half of the next wave's clear bonus — 10 at wave 2, 80 at wave 30, 155 at wave 60, 255 at wave 100 —
+and later calls decay to a floor of 5. The HUD shows the live value counting down. The formula has no
+randomness.
 
 **Harness.** `scripts/balance.mjs` runs four scenarios and reports waves cleared, last wave started,
 integrity, salvage, specs, leaks and reboots for each:

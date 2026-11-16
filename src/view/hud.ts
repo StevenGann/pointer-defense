@@ -580,7 +580,7 @@ export class HudView {
       this.waveButton.text =
         s.phase === 'build'
           ? `Start Wave ${s.wave + 1}`
-          : `Call Wave ${s.wave + 1}  +$${earlyCallBonus(s.waveTick, s.wave)}`;
+          : `Call Wave ${s.wave + 1}  +$${earlyCallBonus(s.waveTick, s.wave + 1)}`;
       this.waveButton.style.fill = enabled ? PAL.text : PAL.shadow;
       this.waveButton.position.set(h.wave.x + 6, h.wave.y + Math.floor(h.wave.h / 2));
     } else {

@@ -593,9 +593,12 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 }
 
 {
-  // 17b. The bonus is non-increasing in elapsed ticks and bottoms out at 5.
-  let prev = earlyCallBonus(0, 3);
-  check(prev === 40, `early call: bonus starts at 40 (${prev})`);
+  // 17b. The bonus is a fraction of the called wave's clear bonus: bounded by it, non-increasing
+  // in elapsed ticks, floored at 5, and growing with the wave number at the same elapsed time.
+  const start = earlyCallBonus(0, 3);
+  check(start === Math.round(0.5 * waveClearBonus(3)),
+    `early call: wave 3 starts at half its clear bonus (${start} = ${Math.round(0.5 * waveClearBonus(3))})`);
+  let prev = start;
   let monotone = true;
   for (let t = 0; t <= 5000; t += 10) {
     const b = earlyCallBonus(t, 3);
@@ -604,6 +607,14 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   }
   check(monotone, 'early call: bonus never increases as elapsed grows');
   check(prev === 5, `early call: bonus bottoms out at 5 (${prev})`);
+  for (const w of [2, 30, 60, 100]) {
+    const b = earlyCallBonus(0, w);
+    check(b <= waveClearBonus(w), `early call: wave ${w} bonus ${b} <= clear bonus ${waveClearBonus(w)}`);
+  }
+  check(
+    earlyCallBonus(0, 10) > earlyCallBonus(0, 3) && earlyCallBonus(0, 60) > earlyCallBonus(0, 10),
+    'early call: bonus grows with the wave number at the same elapsed time',
+  );
 }
 
 {
