@@ -15,7 +15,14 @@ import {
   type TowerKind,
 } from '../core/towers.ts';
 import { MODIFIER_NAMES, waveDef, WAVE_COUNT, waveModifiers } from '../core/waves.ts';
-import { SPEC_CAPS, SPEC_KINDS, SPEC_NAMES, specEffectText, type SpecKind } from '../core/save.ts';
+import {
+  SPEC_CAPS,
+  SPEC_KINDS,
+  SPEC_NAMES,
+  specEffectCompactText,
+  specEffectText,
+  type SpecKind,
+} from '../core/save.ts';
 
 /**
  * The HUD: status-bar text (hint / wave / salvage), the integrity readout, the pointer stage and
@@ -45,6 +52,65 @@ const SPEC_ACTION: Readonly<Record<SpecKind, HudAction>> = {
 };
 
 const NOTICE_TICKS = 150;
+
+const SPEC_FONT_SIZE = 10;
+const SPEC_BUTTON_PAD = 12;
+const SPEC_BUTTON_MIN = 44;
+const SPEC_BUTTON_MAX = 64;
+const SPEC_LABEL_GAP = 6;
+const SPEC_LABEL_MIN = 40;
+
+let metricsText: Text | null = null;
+
+const TEXT_WIDTH_CACHE_MAX = 256;
+const textWidthCache = new Map<string, number>();
+
+/** Measure a string with the same font the HUD draws with, without adding it to the scene. */
+function textWidth(text: string, size: number): number {
+  const key = `${size}|${text}`;
+  const cached = textWidthCache.get(key);
+  if (cached !== undefined) return cached;
+
+  if (!metricsText) {
+    metricsText = new Text({
+      text: '',
+      style: { fontFamily: FONT, fontSize: size, fill: PAL.text },
+    });
+  }
+  metricsText.style.fontSize = size;
+  metricsText.text = text;
+  const width = metricsText.width;
+
+  if (textWidthCache.size >= TEXT_WIDTH_CACHE_MAX) textWidthCache.clear();
+  textWidthCache.set(key, width);
+  return width;
+}
+
+function fitButtonText(preferred: string, fallbacks: readonly string[]): string {
+  for (const candidate of [preferred, ...fallbacks]) {
+    if (Math.ceil(textWidth(candidate, SPEC_FONT_SIZE)) + SPEC_BUTTON_PAD <= SPEC_BUTTON_MAX) {
+      return candidate;
+    }
+  }
+  return fallbacks[fallbacks.length - 1] ?? preferred;
+}
+
+function truncateText(text: string, maxWidth: number): string {
+  if (Math.ceil(textWidth(text, SPEC_FONT_SIZE)) <= maxWidth) return text;
+  const chars = Array.from(text);
+  while (chars.length > 0) {
+    chars.pop();
+    const candidate = `${chars.join('')}…`;
+    if (Math.ceil(textWidth(candidate, SPEC_FONT_SIZE)) <= maxWidth) return candidate;
+  }
+  return '…';
+}
+
+function fitSpecLabel(verbose: string, compact: string, width: number): string {
+  if (Math.ceil(textWidth(verbose, SPEC_FONT_SIZE)) <= width) return verbose;
+  if (Math.ceil(textWidth(compact, SPEC_FONT_SIZE)) <= width) return compact;
+  return truncateText(compact, Math.max(SPEC_LABEL_MIN, width));
+}
 
 export const BRANCH_NAMES: Readonly<Record<TowerKind, Readonly<Record<Branch, string>>>> = {
   gun: { A: 'Marksman', B: 'Repeater' },
@@ -81,6 +147,8 @@ interface SpecRow {
   kind: SpecKind;
   label: Rect;
   button: Rect;
+  labelText: string;
+  buttonText: string;
 }
 
 interface SpecShopLayout {
@@ -180,11 +248,33 @@ function computeHud(l: Layout, s: RunState): HudLayout {
     const rows = SPEC_KINDS.map((kind) => {
       const row: Rect = { x, y: cy, w, h: 18 };
       cy += 18 + 3;
-      return {
-        kind,
-        label: { x: row.x + 2, y: row.y, w: row.w - 58 - 6, h: row.h },
-        button: { x: row.x + row.w - 58, y: row.y + 1, w: 58, h: 16 },
+
+      const level = s.specs[kind];
+      const cap = SPEC_CAPS[kind];
+      const capped = level >= cap;
+
+      const buttonText = capped
+        ? fitButtonText('FULL', [])
+        : fitButtonText('Buy (1 spec)', ['Buy 1', 'BUY']);
+      const buttonW = Math.min(
+        SPEC_BUTTON_MAX,
+        Math.max(SPEC_BUTTON_MIN, Math.ceil(textWidth(buttonText, SPEC_FONT_SIZE)) + SPEC_BUTTON_PAD),
+      );
+      const button: Rect = { x: row.x + row.w - buttonW, y: row.y + 1, w: buttonW, h: 16 };
+
+      const labelX = row.x + 2;
+      const label: Rect = {
+        x: labelX,
+        y: row.y,
+        w: Math.max(0, button.x - labelX - SPEC_LABEL_GAP),
+        h: row.h,
       };
+
+      const verbose = `${SPEC_NAMES[kind]} ${level}/${cap}  ${specEffectText(kind, level)}`;
+      const compact = `${SPEC_NAMES[kind]} ${level}/${cap} ${specEffectCompactText(kind, level)}`;
+      const labelText = fitSpecLabel(verbose, compact, label.w);
+
+      return { kind, label, button, labelText, buttonText };
     });
     specs = { header, rows };
   }
@@ -632,11 +722,11 @@ export class HudView {
       const capped = level >= cap;
       const enabled = !capped && banked > 0;
 
-      this.specLabels[i].text = `${SPEC_NAMES[row.kind]} ${level}/${cap}  ${specEffectText(row.kind, level)}`;
+      this.specLabels[i].text = row.labelText;
       this.specLabels[i].position.set(row.label.x, row.label.y + Math.floor(row.label.h / 2));
 
       drawButton(g, row.button, enabled, false);
-      this.specButtons[i].text = capped ? 'FULL' : 'Buy (1 spec)';
+      this.specButtons[i].text = row.buttonText;
       this.specButtons[i].style.fill = enabled ? PAL.text : PAL.shadow;
       this.specButtons[i].position.set(
         row.button.x + Math.floor(row.button.w / 2),

@@ -68,6 +68,20 @@ export function specEffectText(kind: SpecKind, level: number): string {
   }
 }
 
+/** The compact bonus text, with the unit dropped, for a shop row too narrow for the verbose form. */
+export function specEffectCompactText(kind: SpecKind, level: number): string {
+  switch (kind) {
+    case 'cpu':
+      return `+${level * 2}%`;
+    case 'ram':
+      return `+${level * 5}`;
+    case 'gpu':
+      return `+${level * 2}%`;
+    case 'disk':
+      return `+${level}`;
+  }
+}
+
 export function defaultProfile(): Profile {
   return {
     version: SAVE_VERSION,
