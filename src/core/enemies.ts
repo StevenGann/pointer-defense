@@ -44,6 +44,8 @@ export const ENEMY_STATS: Readonly<Record<EnemyKind, EnemyStats>> = {
 export interface Enemy {
   readonly id: number;
   readonly kind: EnemyKind;
+  /** The wave this enemy was spawned for; drives HP scaling and per-wave leak accounting. */
+  readonly wave: number;
   /** Bosses (wave bosses, added in a later slice) are tracked for the boss-by-pointer achievement. */
   readonly isBoss: boolean;
   /** True once any tower has landed a hit; used to detect a pointer-only boss kill. */
@@ -110,6 +112,7 @@ export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Ti
   return {
     id,
     kind,
+    wave,
     isBoss: kind === 'boss',
     towerDamaged: false,
     hp,

@@ -51,6 +51,7 @@ import {
 } from './pointer.ts';
 import {
   buildSchedule,
+  earlyCallBonus,
   noBuildRow,
   WAVE_COUNT,
   waveModifiers,
@@ -106,6 +107,13 @@ export type GameEvent =
   | { type: 'popupSpawned'; kind: PopupKind }
   | { type: 'popupDismissed'; kind: PopupKind };
 
+/** One started wave's live spawn queue. Spawn ticks are relative to `startTick`. */
+export interface WaveRun {
+  wave: number;
+  startTick: number;
+  spawns: Spawn[];
+}
+
 export interface RunState {
   readonly grid: Grid;
   /** Distance-in-tiles to the exit for every walkable, unblocked tile; -1 unreachable. */
@@ -124,10 +132,12 @@ export interface RunState {
   selected: TowerKind | null;
   /** Placed tower selected for inspection, or null. Mutually exclusive with `selected`. */
   selectedTowerId: number | null;
-  /** Remaining spawns for the current wave, tick-ordered. */
-  schedule: Spawn[];
-  /** Ticks since the current wave started. */
+  /** Started waves still in flight, in the order they began. Several may run at once. */
+  runs: WaveRun[];
+  /** Ticks since the most recent wave started (popups and the early-call bonus depend on it). */
   waveTick: number;
+  /** Monotonic run clock, incremented once per tick and never reset. */
+  clock: number;
   /** Modifiers active for the current wave (empty outside a wave). */
   modifiers: readonly ModifierId[];
   /** Row locked by the no-build modifier, or null. */
@@ -170,8 +180,10 @@ export interface RunState {
   weakPointHits: number;
   /** Pop-ups dismissed this run, for the popup-collector achievement. */
   popupsDismissed: number;
-  /** Enemies leaked during the current wave, for the clean-wave achievement. */
-  leaksThisWave: number;
+  /** Leaks counted per wave number, so an early call cannot poison or rescue another wave's record. */
+  leaksByWave: Map<number, number>;
+  /** True once the player has called a wave early this run. */
+  calledEarly: boolean;
   /** True once a wave at 40+ has been cleared with zero leaks this run. */
   clearedWaveNoLeaks: boolean;
   /** True once a boss has died to the pointer without any tower having touched it. */
@@ -208,8 +220,9 @@ export function createRunState(profile: Profile = defaultProfile()): RunState {
     enemies: [],
     selected: null,
     selectedTowerId: null,
-    schedule: [],
+    runs: [],
     waveTick: 0,
+    clock: 0,
     modifiers: [],
     noBuildRow: null,
     endless: false,
@@ -234,7 +247,8 @@ export function createRunState(profile: Profile = defaultProfile()): RunState {
     achievements: new Set(profile.achievements),
     weakPointHits: 0,
     popupsDismissed: 0,
-    leaksThisWave: 0,
+    leaksByWave: new Map(),
+    calledEarly: false,
     clearedWaveNoLeaks: false,
     bossKilledByPointer: false,
     paused: false,
@@ -387,17 +401,25 @@ export function cycleTargetMode(s: RunState, col: number, row: number): void {
 }
 
 export function startWave(s: RunState): boolean {
-  if (s.phase !== 'build') return false;
+  const early = s.phase === 'wave';
+  if (s.phase !== 'build' && !early) return false;
   if (s.wave >= WAVE_COUNT && !s.endless) return false;
+  // The early-call bonus is measured from the wave that just started, before we reset waveTick.
+  const elapsed = s.waveTick;
+  const fromWave = s.wave;
   s.wave += 1;
+  s.runs.push({ wave: s.wave, startTick: s.clock, spawns: buildSchedule(s.wave) });
   s.phase = 'wave';
-  s.schedule = buildSchedule(s.wave);
   s.waveTick = 0;
-  s.leaksThisWave = 0;
+  s.leaksByWave.set(s.wave, 0);
   s.modifiers = waveModifiers(s.wave);
   s.noBuildRow = s.modifiers.includes('no-build') ? noBuildRow(s.wave) : null;
   recomputeAuras(s.towers);
   s.events.push({ type: 'waveStarted', wave: s.wave });
+  if (early) {
+    s.calledEarly = true;
+    earn(s.economy, earlyCallBonus(elapsed, fromWave));
+  }
   return true;
 }
 
@@ -562,17 +584,19 @@ export function tick(s: RunState): void {
   decayCombo(s);
   tickPopups(s);
   checkAchievements(s);
-  if (s.phase !== 'wave') return;
-
-  spawnDue(s);
-  moveEnemies(s);
-  fireTowers(s);
-  applyReticle(s);
-  s.enemies = s.enemies.filter((e) => !e.dead);
-  if (s.phase !== 'wave') return;
-  s.waveTick++;
-
-  if (s.schedule.length === 0 && s.enemies.length === 0) endWave(s);
+  if (s.phase === 'wave') {
+    spawnDue(s);
+    moveEnemies(s);
+    fireTowers(s);
+    applyReticle(s);
+    s.enemies = s.enemies.filter((e) => !e.dead);
+    if (s.phase === 'wave') {
+      s.waveTick++;
+      clearDue(s);
+      finishWavePhase(s);
+    }
+  }
+  s.clock++;
 }
 
 /** The combo counts down every tick and expires (back to x1) when it reaches zero. */
@@ -585,9 +609,11 @@ function decayCombo(s: RunState): void {
 }
 
 function spawnDue(s: RunState): void {
-  while (s.schedule.length > 0 && s.schedule[0].tick <= s.waveTick) {
-    const sp = s.schedule.shift()!;
-    s.enemies.push(createEnemy(s.nextId++, sp.kind, s.wave, SPAWN, EXIT));
+  for (const run of s.runs) {
+    while (run.spawns.length > 0 && run.startTick + run.spawns[0].tick <= s.clock) {
+      const sp = run.spawns.shift()!;
+      s.enemies.push(createEnemy(s.nextId++, sp.kind, run.wave, SPAWN, EXIT));
+    }
   }
 }
 
@@ -639,7 +665,7 @@ function moveEnemies(s: RunState): void {
 
 function leak(s: RunState, e: Enemy): void {
   e.dead = true;
-  s.leaksThisWave++;
+  s.leaksByWave.set(e.wave, (s.leaksByWave.get(e.wave) ?? 0) + 1);
   s.integrity = Math.max(0, s.integrity - (e.isBoss ? 3 : 1));
   s.events.push({ type: 'leak', x: e.x, y: e.y });
   if (s.pointer.targetId === e.id) s.pointer.targetId = null;
@@ -962,11 +988,24 @@ function damageEnemy(
   }
 }
 
-function endWave(s: RunState): void {
-  const bonus = waveClearBonus(s.wave);
-  earn(s.economy, bonus);
-  s.events.push({ type: 'waveCleared', wave: s.wave, bonus });
-  if (s.wave >= 40 && s.leaksThisWave === 0) s.clearedWaveNoLeaks = true;
+/** Award the clear bonus for each wave whose queue is empty and whose enemies are all gone. */
+function clearDue(s: RunState): void {
+  const cleared = new Set<WaveRun>();
+  for (const run of s.runs) {
+    if (run.spawns.length !== 0) continue;
+    if (s.enemies.some((e) => e.wave === run.wave)) continue;
+    const bonus = waveClearBonus(run.wave);
+    earn(s.economy, bonus);
+    s.events.push({ type: 'waveCleared', wave: run.wave, bonus });
+    if (run.wave >= 40 && (s.leaksByWave.get(run.wave) ?? 0) === 0) s.clearedWaveNoLeaks = true;
+    cleared.add(run);
+  }
+  if (cleared.size > 0) s.runs = s.runs.filter((r) => !cleared.has(r));
+}
+
+/** With every wave cleared and no enemies left, the run returns to build (or wins at wave 100). */
+function finishWavePhase(s: RunState): void {
+  if (s.runs.length !== 0 || s.enemies.length !== 0) return;
   s.pointer.held = false;
   s.pointer.targetId = null;
   s.modifiers = [];

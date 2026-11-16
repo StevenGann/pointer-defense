@@ -3,7 +3,7 @@ import { bevel, FONT, PAL, pointInRect, type Layout, type Rect } from './chrome.
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
 import { comboMultiplier, nextStageCost, pointerInfo } from '../core/pointer.ts';
-import { currentPath, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
+import { currentPath, isFinalWave, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
 import {
   effectiveStats,
   sellValue,
@@ -14,7 +14,7 @@ import {
   type TargetMode,
   type TowerKind,
 } from '../core/towers.ts';
-import { MODIFIER_NAMES, waveDef, WAVE_COUNT, waveModifiers } from '../core/waves.ts';
+import { earlyCallBonus, MODIFIER_NAMES, waveDef, WAVE_COUNT, waveModifiers } from '../core/waves.ts';
 import {
   SPEC_CAPS,
   SPEC_KINDS,
@@ -317,7 +317,7 @@ export function hudButtonAt(l: Layout, s: RunState, px: number, py: number): Hud
     }
   }
 
-  if (s.phase === 'build' && pointInRect(h.wave, px, py)) return 'wave';
+  if ((s.phase === 'build' || s.phase === 'wave') && !isFinalWave(s) && pointInRect(h.wave, px, py)) return 'wave';
 
   if (h.specs) {
     for (const row of h.specs.rows) {
@@ -396,7 +396,9 @@ function hintFor(s: RunState): string {
     case 'build':
       return s.towers.length === 0 ? 'Pick a tower, then click a tile' : 'Click Start Wave when you are ready';
     case 'wave':
-      return 'Click enemies to shoot — aim for the notch';
+      return s.calledEarly
+        ? 'Click enemies to shoot — aim for the notch'
+        : 'Call the next wave early for a salvage bonus — two waves at once';
     case 'halted':
       return 'The lane broke. Click Restart to try again';
     case 'victory':
@@ -572,10 +574,14 @@ export class HudView {
       h.pointerUpgrade.y + Math.floor(h.pointerUpgrade.h / 2),
     );
 
-    if (s.phase === 'build') {
-      drawButton(g, h.wave, true, hoverHud === 'wave');
-      this.waveButton.text = `Start Wave ${s.wave + 1}`;
-      this.waveButton.style.fill = PAL.text;
+    if (s.phase === 'build' || s.phase === 'wave') {
+      const enabled = !isFinalWave(s);
+      drawButton(g, h.wave, enabled, hoverHud === 'wave');
+      this.waveButton.text =
+        s.phase === 'build'
+          ? `Start Wave ${s.wave + 1}`
+          : `Call Wave ${s.wave + 1}  +$${earlyCallBonus(s.waveTick, s.wave)}`;
+      this.waveButton.style.fill = enabled ? PAL.text : PAL.shadow;
       this.waveButton.position.set(h.wave.x + 6, h.wave.y + Math.floor(h.wave.h / 2));
     } else {
       this.waveButton.text = '';
@@ -754,7 +760,7 @@ export class HudView {
       this.comboText.visible = false;
     }
 
-    const wave = s.phase === 'build' ? s.wave + 1 : s.wave;
+    const wave = s.wave + 1;
     const def = waveDef(wave);
     const composition = def ? def.groups.map((grp) => `${grp.count} x ${grp.kind}`) : [];
     const mods = waveModifiers(wave);

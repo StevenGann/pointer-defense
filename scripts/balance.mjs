@@ -49,6 +49,8 @@ const quiet = hasFlag('--quiet');
 const support = !hasFlag('--no-support');
 // --no-build: a click-only player — never place a tower, spend salvage on the pointer instead.
 const noBuild = hasFlag('--no-build');
+// --call: a third scenario that starts every wave as soon as it is allowed (the early-call mechanic).
+const callMode = hasFlag('--call');
 
 // --- Deterministic PRNG (mulberry32), independent of the sim's own stream ----------------------
 function makeRng(seed) {
@@ -414,11 +416,12 @@ function playWave(s, wave, leakList) {
   const clickDmg = s.economy.damage.pointer - dmgStart.pointer;
   const total = towerDmg + clickDmg;
   const towerPct = total > 0 ? Math.round((towerDmg / total) * 100) : 0;
-  leakList.push({ wave, leaks: s.leaksThisWave });
+  const leaks = s.leaksByWave.get(wave) ?? 0;
+  leakList.push({ wave, leaks });
   if (!quiet) {
     const w = String(wave).padStart(2, '0');
     console.log(
-      `w ${w} leaks ${s.leaksThisWave} hp ${s.integrity} sal ${s.economy.salvage} ` +
+      `w ${w} leaks ${leaks} hp ${s.integrity} sal ${s.economy.salvage} ` +
         `towers ${s.towers.length} route ${currentPath(s).length} ` +
         `towerDmg ${towerPct}% clickDmg ${100 - towerPct}%`,
     );
@@ -480,6 +483,48 @@ function runSession(useSupport, label) {
   }
 
   return { final, totalSpecs, reboots };
+}
+
+/**
+ * The --call strategy: build the maze, start wave 1, then chain every later wave as soon as it is
+ * allowed (each is an early call, paying the bonus). The player keeps building and clicking during
+ * the resulting continuous wave, spending the bonus flood. Returns the same shape as playRun.
+ */
+function playRunCall(profile, label) {
+  const s = createRunState(profile);
+  const counts = { gun: 0, cannon: 0, taser: 0, frost: 0, laser: 0, beacon: 0 };
+  let wallIdx = 0;
+  if (!quiet) console.log(`--- ${label} ---`);
+  wallIdx = buildPhase(s, 1, wallIdx, counts, true);
+  if (!startWave(s)) {
+    return { reached: false, wave: s.wave, integrity: s.integrity, earned: s.economy.earned, state: s, leakList: [] };
+  }
+  // Call every remaining wave immediately, up to --to or the normal-run cap (wave 100).
+  while (s.wave < to && startWave(s)) {
+    /* chain waves 2..to; each pays the early-call bonus */
+  }
+  const clickInterval = Math.max(1, Math.round(TICK_HZ / cps));
+  let clicks = 0;
+  let guard = 0;
+  while (s.phase === 'wave') {
+    if (s.enemies.length > 0 && clicks % clickInterval === 0) doClick(s);
+    wallIdx = buildPhase(s, s.wave, wallIdx, counts, true);
+    tick(s);
+    clicks++;
+    if (++guard > TICK_HZ * 900) break; // safety; an all-in wave run is over in well under 15 min
+  }
+  const leakList = [];
+  for (const [wave, leaks] of s.leaksByWave) {
+    if (leaks > 0) leakList.push({ wave, leaks });
+  }
+  const reached = s.phase === 'victory' || (s.phase === 'build' && s.wave >= to);
+  return { reached, wave: s.wave, integrity: s.integrity, earned: s.economy.earned, state: s, leakList };
+}
+
+/** Run the --call scenario as a single run (no mid-run reboot: the all-in has no checkpoint). */
+function runSessionCall(label) {
+  const final = playRunCall(defaultProfile(), label);
+  return { final, totalSpecs: 0, reboots: 0 };
 }
 
 // --- Reporting --------------------------------------------------------------------------------
@@ -549,6 +594,12 @@ if (mainSupport) {
   console.log(`  total tower damage:  standard ${Math.round(stdTotal)}  control ${Math.round(ctrlTotal)}  (${delta >= 0 ? '+' : ''}${delta.toFixed(1)}%)`);
   console.log(`  per wave:            standard ${stdPerWave.toFixed(0)}  control ${ctrlPerWave.toFixed(0)}`);
   console.log(`  (control ${ctrlWave < 100 ? `died at wave ${ctrlWave}` : 'reached ' + ctrlWave})`);
+}
+
+if (callMode) {
+  // The early-call scenario: call every wave as soon as it is allowed, and measure the result.
+  const call = runSessionCall('call run (--call)');
+  runSummary(call.final, call.totalSpecs, call.reboots, 'call run (--call)');
 }
 
 process.exit(main.final.reached ? 0 : 1);

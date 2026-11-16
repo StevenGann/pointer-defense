@@ -234,6 +234,59 @@ wave ends), **rush** (spawn interval −25 %, value +10 %).
 Clearing wave 100 grants victory and unlocks **endless**: procedural composition from a weighted pool,
 scaling continues, modifiers stack. Endless exists for players who do not want to reboot yet.
 
+### 8.5 Call the next wave early
+
+While a wave is running the player may **start the next wave immediately** instead of waiting for the
+board to clear, and is paid a salvage bonus for the risk (Desktop TD's "send next wave"). The wave
+loop is no longer one-wave-at-a-time: several waves may be in flight at once.
+
+**Model.** The single spawn schedule is replaced by a queue of *wave runs*, one per started wave:
+
+```
+WaveRun { wave, startTick, spawns[] }
+```
+
+`spawns` holds the remaining spawns for that wave, each tick measured **relative to `startTick`**. A
+monotonic run clock (`clock`) advances once per simulation tick and is never reset; a wave's spawn
+fires when `clock` reaches `startTick + spawn.tick`. `waveTick` still means "ticks since the most
+recent wave started" (pop-ups and the bonus read it) and resets on every start, early ones included.
+
+`startWave` is allowed from **build** (a normal call, no bonus) or from **wave** (an early call). It
+is refused at wave 100 in a normal run. Starting increments the wave number, pushes a `WaveRun`, sets
+phase to wave, resets `waveTick`, applies the new wave's modifiers and no-build row, and — on an early
+call — pays the bonus.
+
+A wave is **cleared** when its queue is empty and no living enemy carries that wave number. Clearing
+awards `waveClearBonus(wave)` and pushes `waveCleared`, exactly as before. The run returns to **build**
+when every run is cleared and no enemies remain; **victory** still lands on the wave-100 clear. Leaks
+are counted **per wave number**, so an early call can neither poison nor rescue another wave's
+no-leak record.
+
+**Bonus.** Calling early pays, at the moment of the call:
+
+```
+span     = last spawn tick of the wave that just started   (min 60 ticks)
+fraction = clamp(1 − elapsedTicks / span, 0, 1)
+bonus    = clamp(round(40 × fraction), 5, 40)
+```
+
+`elapsedTicks` is measured from the most recent wave start, so calling the instant a wave begins pays
+the most (40) and later calls decay to a floor of 5. The HUD shows the live value counting down. The
+formula has no randomness.
+
+**Harness.** `scripts/balance.mjs` runs three scenarios and reports waves cleared, integrity, salvage,
+specs, leaks and reboots for each:
+
+| Scenario | Flag | Strategy |
+|---|---|---|
+| standard | *(default)* | build greedily, click at a fixed rate, reboot at wave 60 |
+| control | `--no-support` | the same policy with Frost and Beacon replaced by Guns |
+| call | `--call` | build, then call every wave the moment it is allowed |
+
+The call scenario exists to *measure* the mechanic rather than assume it is fair: if the aggressive
+strategy clears 100 with little loss, the bonus is reduced or the decay steepened — enemies are never
+made harder and per-wave HP/salvage tables are left alone.
+
 ---
 
 ## 9. The pointer
@@ -468,8 +521,9 @@ One master volume, remembered in `localStorage`. No music at launch.
 | Performance | 60 fps with 400 enemies and 60 towers on integrated graphics; the sim budget is 4 ms/tick |
 
 The **balance harness** matters more than the rest of the tests: a headless scripted player — builds
-greedily, clicks at a fixed rate, reboots at wave 60, 80 and 100 — printing leaks, salvage and route
-length per wave. Balance changes are judged by its output, not by feel.
+greedily, clicks at a fixed rate, reboots at wave 60 — printing leaks, salvage and route length per
+wave across three scenarios (standard, a no-support control, and the early-call run, §8.5). Balance
+changes are judged by its output, not by feel.
 
 ---
 

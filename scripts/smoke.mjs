@@ -25,9 +25,9 @@ import {
   towerAt,
 } from '../src/core/state.ts';
 import { TOWER_STATS, effectiveStats, upgradeCost, createTower } from '../src/core/towers.ts';
-import { killReward } from '../src/core/economy.ts';
+import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
-import { buildSchedule, isBossWave, MODIFIER_POOL, waveDef, waveEnemyCount, waveModifiers } from '../src/core/waves.ts';
+import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, waveDef, waveEnemyCount, waveModifiers } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField } from '../src/core/pathfield.ts';
 import { createGrid, SPAWN, EXIT, COLS, ROWS, tileAt } from '../src/core/grid.ts';
@@ -553,7 +553,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   s.wave = 99;
   s.phase = 'build';
   check(startWave(s), 'wave 100 starts');
-  s.schedule = [];
+  s.runs[0].spawns = [];
   s.enemies = [];
   tick(s);
   check(s.phase === 'victory', 'clearing wave 100 sets victory');
@@ -564,7 +564,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   s.wave = 99;
   s.phase = 'build';
   startWave(s);
-  s.schedule = [];
+  s.runs[0].spawns = [];
   s.enemies = [];
   tick(s);
   check(s.phase === 'victory', 'endless setup: victory reached');
@@ -572,6 +572,80 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(s.endless && s.phase === 'build', 'endless returns to build phase');
   check(startWave(s), 'endless starts wave 101');
   check(s.wave === 101, 'endless continues at 101');
+}
+
+// --- 17. Early-call waves: bonus, schedules, per-wave leaks and victory -----------------------
+{
+  // 17a. A normal call from build starts wave 1 with no bonus; an early call mid-wave pays.
+  const s = createRunState();
+  const sal0 = s.economy.salvage;
+  check(startWave(s), 'early call: wave 1 starts from build');
+  check(s.wave === 1 && s.phase === 'wave', 'early call: wave 1 running');
+  check(s.economy.salvage === sal0, 'early call: a build-phase call pays no bonus');
+  check(s.calledEarly === false, 'early call: not yet flagged');
+
+  const sal1 = s.economy.salvage;
+  check(startWave(s), 'early call: wave 2 starts mid-wave');
+  check(s.wave === 2 && s.phase === 'wave', 'early call: wave 2 running');
+  const bonus = s.economy.salvage - sal1;
+  check(bonus > 0 && bonus <= 40, `early call: paid ${bonus} (0 < bonus <= 40)`);
+  check(s.calledEarly === true, 'early call: flagged after the first early call');
+}
+
+{
+  // 17b. The bonus is non-increasing in elapsed ticks and bottoms out at 5.
+  let prev = earlyCallBonus(0, 3);
+  check(prev === 40, `early call: bonus starts at 40 (${prev})`);
+  let monotone = true;
+  for (let t = 0; t <= 5000; t += 10) {
+    const b = earlyCallBonus(t, 3);
+    if (b > prev) monotone = false;
+    prev = b;
+  }
+  check(monotone, 'early call: bonus never increases as elapsed grows');
+  check(prev === 5, `early call: bonus bottoms out at 5 (${prev})`);
+}
+
+{
+  // 17c. Two waves in flight spawn on their own schedules; each enemy carries its wave for HP.
+  const s = createRunState();
+  startWave(s); // wave 1 (8 grunts)
+  startWave(s); // wave 2 (12 grunts), called immediately
+  check(s.runs.length === 2, 'early call: two waves in flight');
+  tick(s);
+  const waves = s.enemies.map((e) => e.wave).sort((a, b) => a - b);
+  check(waves.length === 2 && waves[0] === 1 && waves[1] === 2, `early call: each enemy carries its wave (${waves.join(',')})`);
+  const hp1 = s.enemies.find((e) => e.wave === 1).maxHp;
+  const hp2 = s.enemies.find((e) => e.wave === 2).maxHp;
+  check(hp2 > hp1, `early call: wave-2 enemy has more HP than wave-1 (${hp1} vs ${hp2})`);
+  check(s.runs[0].spawns.length === 7 && s.runs[1].spawns.length === 11,
+    `early call: each wave drains its own schedule (${s.runs[0].spawns.length}, ${s.runs[1].spawns.length})`);
+}
+
+{
+  // 17d. Wave N clears while wave N+1 is still running: the clear bonus lands once, stay in wave.
+  const s = createRunState();
+  startWave(s); // wave 1
+  startWave(s); // wave 2
+  s.runs[0].spawns = [];
+  const sal = s.economy.salvage;
+  tick(s);
+  const clearedCount = s.events.filter((e) => e.type === 'waveCleared').length;
+  check(clearedCount === 1, `early call: wave 1 clear event fires once (${clearedCount})`);
+  check(s.economy.salvage === sal + waveClearBonus(1), `early call: wave 1 clear bonus +${waveClearBonus(1)}`);
+  check(s.phase === 'wave', 'early call: still in wave phase while wave 2 runs');
+  check(s.runs.length === 1 && s.runs[0].wave === 2, 'early call: wave 1 removed, wave 2 still in flight');
+}
+
+{
+  // 17e. Calling at wave 100 in a normal run is refused (from build and from wave).
+  const s = createRunState();
+  s.wave = 100;
+  s.phase = 'build';
+  check(!startWave(s), 'early call: refused at wave 100 from build');
+  s.phase = 'wave';
+  check(!startWave(s), 'early call: refused at wave 100 from wave');
+  check(s.wave === 100, 'early call: wave number unchanged at 100');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
