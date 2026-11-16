@@ -12,7 +12,6 @@ import {
   TOWER_STATS,
   upgradeCost,
   type Branch,
-  type TargetMode,
   type TowerKind,
 } from '../core/towers.ts';
 import { earlyCallBonus, MODIFIER_NAMES, waveDef, WAVE_COUNT, waveModifiers } from '../core/waves.ts';
@@ -24,6 +23,7 @@ import {
   specEffectText,
   type SpecKind,
 } from '../core/save.ts';
+import { branchName, TARGET_LABEL } from './tooltipText.ts';
 
 /**
  * The HUD: status-bar text (hint / wave / salvage), the integrity readout, the pointer stage and
@@ -114,27 +114,6 @@ function fitSpecLabel(verbose: string, compact: string, width: number): string {
   if (Math.ceil(textWidth(compact, SPEC_FONT_SIZE)) <= width) return compact;
   return truncateText(compact, Math.max(SPEC_LABEL_MIN, width));
 }
-
-export const BRANCH_NAMES: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch, string>>>>> = {
-  gun: { A: 'Marksman', B: 'Repeater' },
-  cannon: { A: 'Mortar', B: 'Flak' },
-  taser: { A: 'Arc', B: 'Overload' },
-  frost: { A: 'Deep Freeze', B: 'Shard' },
-  laser: { A: 'Focus', B: 'Prism' },
-  beacon: { A: 'Command', B: 'Relay' },
-  wall: { A: 'Bulwark', B: 'Mesh', C: 'Toggle' },
-};
-
-/** The display name of a branch, falling back to the key so an unknown branch still reads. */
-export function branchName(kind: TowerKind, branch: Branch): string {
-  return BRANCH_NAMES[kind][branch] ?? branch;
-}
-
-export const TARGET_LABEL: Readonly<Record<TargetMode, string>> = {
-  first: 'First',
-  strong: 'Strong',
-  close: 'Close',
-};
 
 interface BranchButton {
   branch: Branch;
@@ -323,41 +302,67 @@ export function paletteTowerAt(l: Layout, s: RunState, px: number, py: number): 
   return null;
 }
 
-export function hudButtonAt(l: Layout, s: RunState, px: number, py: number): HudAction | null {
+export interface HudControlHit {
+  action: HudAction;
+  enabled: boolean;
+}
+
+/**
+ * The HUD control under a point, hit-tested whether or not it is currently clickable. Tooltips use
+ * this so a disabled control can still explain why it is disabled; `hudButtonAt` filters it down to
+ * the clickable set.
+ */
+export function hudControlAt(l: Layout, s: RunState, px: number, py: number): HudControlHit | null {
   const h = computeHud(l, s);
-  const cost = nextStageCost(s.pointer);
-  if (cost !== null && canAfford(s.economy, cost) && pointInRect(h.pointerUpgrade, px, py)) return 'pointer';
+
+  {
+    const cost = nextStageCost(s.pointer);
+    const enabled = cost !== null && canAfford(s.economy, cost);
+    if (pointInRect(h.pointerUpgrade, px, py)) return { action: 'pointer', enabled };
+  }
 
   const tower = selectedTower(s);
   if (h.detail && tower) {
     const upgradePrice = upgradeCost(tower);
     const affordable = upgradePrice !== null && canAfford(s.economy, upgradePrice);
-    if (h.detail.target && pointInRect(h.detail.target, px, py)) return 'target';
-    if (h.detail.upgrade && affordable && pointInRect(h.detail.upgrade, px, py)) return 'upgrade';
+    if (h.detail.target && pointInRect(h.detail.target, px, py)) return { action: 'target', enabled: true };
+    if (h.detail.upgrade && pointInRect(h.detail.upgrade, px, py)) return { action: 'upgrade', enabled: affordable };
     for (const b of h.detail.branches) {
-      if (affordable && pointInRect(b.rect, px, py)) {
-        return b.branch === 'A' ? 'branchA' : b.branch === 'B' ? 'branchB' : 'branchC';
+      if (pointInRect(b.rect, px, py)) {
+        const action = b.branch === 'A' ? 'branchA' : b.branch === 'B' ? 'branchB' : 'branchC';
+        return { action, enabled: affordable };
       }
     }
-    if (pointInRect(h.detail.sell, px, py)) return 'sell';
+    if (pointInRect(h.detail.sell, px, py)) return { action: 'sell', enabled: true };
   } else {
     for (const t of h.towers) {
-      if (canAfford(s.economy, TOWER_STATS[t.kind].cost) && pointInRect(t.rect, px, py)) return t.kind;
+      if (pointInRect(t.rect, px, py)) {
+        return { action: t.kind, enabled: canAfford(s.economy, TOWER_STATS[t.kind].cost) };
+      }
     }
   }
 
-  if (h.map && pointInRect(h.map.next, px, py)) return 'map';
+  if (h.map && pointInRect(h.map.next, px, py)) return { action: 'map', enabled: true };
 
-  if ((s.phase === 'build' || s.phase === 'wave') && !isFinalWave(s) && pointInRect(h.wave, px, py)) return 'wave';
+  if (s.phase === 'build' || s.phase === 'wave') {
+    if (pointInRect(h.wave, px, py)) return { action: 'wave', enabled: !isFinalWave(s) };
+  }
 
   if (h.specs) {
     for (const row of h.specs.rows) {
-      const capped = s.specs[row.kind] >= SPEC_CAPS[row.kind];
-      if (!capped && s.unspentSpecs > 0 && pointInRect(row.button, px, py)) return SPEC_ACTION[row.kind];
+      if (pointInRect(row.button, px, py)) {
+        const capped = s.specs[row.kind] >= SPEC_CAPS[row.kind];
+        return { action: SPEC_ACTION[row.kind], enabled: !capped && s.unspentSpecs > 0 };
+      }
     }
   }
 
   return null;
+}
+
+export function hudButtonAt(l: Layout, s: RunState, px: number, py: number): HudAction | null {
+  const hit = hudControlAt(l, s, px, py);
+  return hit && hit.enabled ? hit.action : null;
 }
 
 function modalRect(l: Layout): Rect {

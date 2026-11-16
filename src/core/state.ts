@@ -462,6 +462,8 @@ export function chooseBranch(s: RunState, col: number, row: number, branch: Bran
   t.branch = branch;
   t.tier = 3;
   t.spent += cost;
+  // A Toggle gate installs closed: the branch must never silently open the route the player built.
+  t.open = false;
   refreshWallHp(t);
   rebuildField(s); // a Mesh branch starts blocking flyers
   recomputeAuras(s.towers);

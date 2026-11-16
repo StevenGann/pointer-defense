@@ -55,6 +55,7 @@ import {
   WALL_FACE_DISABLED,
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
+import { upgradeTooltipLines, tooltipText } from '../src/view/tooltipText.ts';
 
 // All v0.10b levels share a single spawn and exit, so the older maze checks keep a local gate.
 const SPAWN = DEFAULT_LEVEL.starts[0];
@@ -325,6 +326,28 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   const salv2 = s4.economy.salvage;
   sellTower(s4, 5, 5);
   check(s4.economy.salvage === salv2 + Math.floor(spent2 * 0.7), 'refund covers upgrades too');
+}
+
+// --- 6e. Upgrade tooltip text matches the stats after actually buying --------------------------
+{
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'wall', 5, 5);
+  const wall = towerAt(s, 5, 5);
+  const line = upgradeTooltipLines(wall, s.economy.salvage)[0];
+  check(tooltipText(line) === 'Wall T2 — HP 60 → 180, $12',
+    `upgrade tooltip reads the tier-2 total and cost (${tooltipText(line)})`);
+  upgradeTower(s, 5, 5);
+  check(towerAt(s, 5, 5).maxHp === 180, 'the tooltip after-value matches the wall after buying');
+
+  // A non-wall upgrade reads from effectiveStats, so a beacon aura is part of the shown delta.
+  const s2 = createRunState();
+  s2.economy.salvage = 10000;
+  placeTower(s2, 'gun', 5, 5);
+  placeTower(s2, 'beacon', 6, 5);
+  const gun = towerAt(s2, 5, 5);
+  const gunLine = tooltipText(upgradeTooltipLines(gun, s2.economy.salvage)[0]);
+  check(gunLine.includes('4.8 → 6.0'), `gun upgrade tooltip includes the beacon aura (${gunLine})`);
 }
 
 // --- 7. Frost slows a grunt ------------------------------------------------------------------
@@ -973,11 +996,16 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   s.economy.salvage = 10000;
   placeTower(s, 'wall', 4, 9);
   upgradeTower(s, 4, 9);
+  const tier2Len = currentPath(s).length;
   chooseBranch(s, 4, 9, 'C');
+  const gate = towerAt(s, 4, 9);
   const closedLen = currentPath(s).length;
+  check(!gate.open, 'a Toggle gate installs closed');
+  check(closedLen === tier2Len, `branching does not reroute the maze (${tier2Len} -> ${closedLen})`);
   check(closedLen > base, `a closed gate lengthens the route (${base} -> ${closedLen})`);
 
-  check(toggleGate(s, 4, 9), 'open the gate');
+  check(toggleGate(s, 4, 9), 'one click opens the gate');
+  check(gate.open, 'the gate is now open');
   check(currentPath(s).length === base, `an open gate is walkable (route ${currentPath(s).length} == ${base})`);
   check(toggleGate(s, 4, 9), 'close the gate');
   check(currentPath(s).length === closedLen, `a closed gate blocks again (${currentPath(s).length})`);

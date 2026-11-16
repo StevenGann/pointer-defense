@@ -1,0 +1,285 @@
+import {
+  effectiveStats,
+  sellValue,
+  TOWER_STATS,
+  upgradeCost,
+  wallMaxHp,
+  type Branch,
+  type TargetMode,
+  type Tier,
+  type Tower,
+  type TowerKind,
+} from '../core/towers.ts';
+import { formatNumber } from '../core/format.ts';
+import { nextStageCost, pointerInfo, type PointerState, type PointerStage } from '../core/pointer.ts';
+import { SPEC_CAPS, SPEC_NAMES, specEffectText, type SpecKind } from '../core/save.ts';
+import { TICK_HZ } from '../core/time.ts';
+
+/**
+ * Tooltip *text* for the spend controls, kept Pixi-free so the smoke harness can assert that a
+ * tooltip's numbers match what actually happens when the purchase is applied. Everything here is a
+ * pure function over the run state; `TooltipView` (tooltip.ts) owns the drawing, hover delay and
+ * placement, and colours the "after" number.
+ *
+ * A line is either a plain string (one colour) or a list of segments. The segments let the view
+ * paint the "after" number of a delta in a distinct colour; `tooltipText` flattens a line back to
+ * its plain text for assertions.
+ */
+
+export const TOOLTIP_GOOD = 0x008000;
+
+export interface TooltipSegment {
+  text: string;
+  color?: number;
+}
+
+export type TooltipLine = string | TooltipSegment[];
+
+/** The plain-text form of a tooltip line, for tests and for anything that needs a string. */
+export function tooltipText(line: TooltipLine): string {
+  return typeof line === 'string' ? line : line.map((s) => s.text).join('');
+}
+
+export const BRANCH_NAMES: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch, string>>>>> = {
+  gun: { A: 'Marksman', B: 'Repeater' },
+  cannon: { A: 'Mortar', B: 'Flak' },
+  taser: { A: 'Arc', B: 'Overload' },
+  frost: { A: 'Deep Freeze', B: 'Shard' },
+  laser: { A: 'Focus', B: 'Prism' },
+  beacon: { A: 'Command', B: 'Relay' },
+  wall: { A: 'Bulwark', B: 'Mesh', C: 'Toggle' },
+};
+
+/** The display name of a branch, falling back to the key so an unknown branch still reads. */
+export function branchName(kind: TowerKind, branch: Branch): string {
+  return BRANCH_NAMES[kind][branch] ?? branch;
+}
+
+export const TARGET_LABEL: Readonly<Record<TargetMode, string>> = {
+  first: 'First',
+  strong: 'Strong',
+  close: 'Close',
+};
+
+/** Shots per second for a fire interval, or an em-dash for towers that never fire. */
+function rateText(fireInterval: number): string {
+  return fireInterval > 0 ? `${(TICK_HZ / fireInterval).toFixed(1)}/s` : '—';
+}
+
+/** The traverse line: instant towers need no aiming, traversing towers name their rate. */
+function turnText(turnRate: number): string {
+  return turnRate <= 0 ? 'Turns instantly' : `Turns ${turnRate}°/s`;
+}
+
+/** The named special traits on a tower's stats (docs/design.md §6.1). */
+function traits(st: {
+  ignoresArmour: boolean;
+  splash: number;
+  slowFactor: number;
+  pierce: number;
+  auraDamage: number;
+  auraRange: number;
+}): string[] {
+  const out: string[] = [];
+  if (st.ignoresArmour) out.push('ignores armour');
+  if (st.splash > 0) out.push('splash');
+  if (st.slowFactor < 1) out.push('slow');
+  if (st.pierce > 0) out.push('pierce');
+  if (st.auraDamage > 0 || st.auraRange > 0) out.push('aura');
+  return out;
+}
+
+/** Tooltip lines for a build-palette button (the tower's base, un-upgraded stats). */
+export function paletteTooltipLines(kind: TowerKind): string[] {
+  const b = TOWER_STATS[kind];
+  const name = `${b.name}  $${formatNumber(b.cost)}`;
+  if (kind === 'wall') {
+    return [name, b.blurb, 'Blocks the route · 60 HP', 'Upgrades add hit points'];
+  }
+  const stats = b.fireInterval > 0
+    ? `Range ${b.range.toFixed(1)} · Damage ${b.damage} · ${rateText(b.fireInterval)}`
+    : `Range ${b.range.toFixed(1)} · Damage ${b.damage}`;
+  const list = traits(b);
+  const traitsLine = list.length > 0 ? `Traits: ${list.join(', ')}` : 'Traits: none';
+  return [name, b.blurb, stats, traitsLine, turnText(b.turnRate)];
+}
+
+/** Tooltip lines for a placed tower: its live stats with aura bonuses, as the sim sees them. */
+export function towerTooltipLines(tower: Tower): string[] {
+  const branch = tower.branch === null ? '' : ` — ${branchName(tower.kind, tower.branch)}`;
+  const name = `${TOWER_STATS[tower.kind].name} T${tower.tier}${branch}`;
+
+  if (tower.kind === 'wall') {
+    const hp = tower.branch === null ? `HP ${Math.ceil(tower.hp)}` : `HP ${Math.ceil(tower.hp)}/${tower.maxHp}`;
+    const blocks =
+      tower.branch === 'B'
+        ? 'Blocks ground and flyers'
+        : tower.branch === 'C'
+          ? tower.open
+            ? 'Open — ground passes through'
+            : 'Closed — blocks ground'
+          : 'Blocks ground only';
+    return [name, hp, blocks, `Sell $${formatNumber(sellValue(tower))}`];
+  }
+
+  const st = effectiveStats(tower);
+  const damage = st.damage * tower.auraDamage;
+  const range = st.range + tower.auraRange;
+  const firing = st.fireInterval > 0;
+  const rate = firing ? TICK_HZ / st.fireInterval : 0;
+  const dps = firing ? damage * rate : 0;
+  return [
+    name,
+    `Damage ${damage.toFixed(1)} · Range ${range.toFixed(1)}`,
+    `Rate ${firing ? rate.toFixed(1) + '/s' : '—'} · DPS ${firing ? dps.toFixed(1) : '—'}`,
+    `Target: ${TARGET_LABEL[tower.targetMode]}`,
+    turnText(st.turnRate),
+    `Sell $${formatNumber(sellValue(tower))}`,
+  ];
+}
+
+/** Disabled-reason text for a purchase the player cannot yet afford. */
+export function cannotAffordText(salvage: number, cost: number): string {
+  return `Cannot afford ($${formatNumber(salvage)} of $${formatNumber(cost)})`;
+}
+
+function fmtHp(n: number): string {
+  return String(Math.round(n));
+}
+
+function fmt1(n: number): string {
+  return n.toFixed(1);
+}
+
+function good(n: string): TooltipSegment {
+  return { text: n, color: TOOLTIP_GOOD };
+}
+
+/**
+ * Tooltip for the Upgrade button on a selected tower: the result of spending the upgrade cost,
+ * computed from the same `effectiveStats` / `wallMaxHp` path the purchase uses.
+ */
+export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[] {
+  const cost = upgradeCost(tower);
+  if (cost === null) return [];
+  if (salvage < cost) return [cannotAffordText(salvage, cost)];
+
+  const next = (tower.tier + 1) as Tier;
+
+  if (tower.kind === 'wall') {
+    const before = wallMaxHp(tower.tier, tower.branch);
+    const after = wallMaxHp(next, tower.branch);
+    return [[
+      { text: `Wall T${next} — HP ${fmtHp(before)} → ` },
+      good(fmtHp(after)),
+      { text: `, $${formatNumber(cost)}` },
+    ]];
+  }
+
+  const name = TOWER_STATS[tower.kind].name;
+  const before = effectiveStats(tower);
+  const after = effectiveStats({ ...tower, tier: next });
+  return [[
+    { text: `${name} T${tower.tier} → T${next} — dmg ${fmt1(before.damage * tower.auraDamage)} → ` },
+    good(fmt1(after.damage * tower.auraDamage)),
+    { text: ` · rng ${fmt1(before.range + tower.auraRange)} → ` },
+    good(fmt1(after.range + tower.auraRange)),
+    { text: `, $${formatNumber(cost)}` },
+  ]];
+}
+
+/** Behaviour words for branches that change what the tower does rather than just how hard it hits. */
+const BRANCH_BEHAVIOUR: Readonly<Partial<Record<TowerKind, Readonly<Partial<Record<Branch, string>>>>>> = {
+  cannon: { B: 'air only' },
+  taser: { A: 'chains to 3' },
+  frost: { B: 'no slow' },
+  laser: { B: 'splits into 3' },
+  beacon: { B: 'buff the pointer' },
+  wall: { B: 'blocks flyers', C: 'click to open/close' },
+};
+
+/**
+ * Tooltip for a tier-3 branch button: its own outcome, so a wall's Bulwark, Mesh and Toggle each
+ * read differently and a branch that adds a behaviour says so in words.
+ */
+export function branchTooltipLines(tower: Tower, branch: Branch, salvage: number): TooltipLine[] {
+  const cost = upgradeCost(tower);
+  if (cost === null) return [];
+  if (salvage < cost) return [cannotAffordText(salvage, cost)];
+
+  const name = branchName(tower.kind, branch);
+
+  if (tower.kind === 'wall') {
+    const before = wallMaxHp(tower.tier, tower.branch);
+    const after = wallMaxHp(3, branch);
+    const segments: TooltipSegment[] = [
+      { text: `${name} — HP ${fmtHp(before)} → ` },
+      good(fmtHp(after)),
+    ];
+    const behaviour = BRANCH_BEHAVIOUR.wall?.[branch];
+    if (behaviour) segments.push({ text: `, ${behaviour}` });
+    segments.push({ text: `, $${formatNumber(cost)}` });
+    return [segments];
+  }
+
+  const before = effectiveStats(tower);
+  const after = effectiveStats({ ...tower, tier: 3, branch });
+  const segments: TooltipSegment[] = [{ text: `${name} — ` }];
+
+  const push = (label: string, a: string, b: string): void => {
+    if (segments.length > 1) segments.push({ text: ' · ' });
+    segments.push({ text: `${label} ${a} → ` }, good(b));
+  };
+
+  if (after.damage !== before.damage) {
+    push('dmg', fmt1(before.damage * tower.auraDamage), fmt1(after.damage * tower.auraDamage));
+  }
+  const rateBefore = before.fireInterval > 0 ? TICK_HZ / before.fireInterval : 0;
+  const rateAfter = after.fireInterval > 0 ? TICK_HZ / after.fireInterval : 0;
+  if (rateAfter !== rateBefore) {
+    push('rate', fmt1(rateBefore), `${fmt1(rateAfter)}/s`);
+  }
+  if (after.range !== before.range) {
+    push('rng', fmt1(before.range + tower.auraRange), fmt1(after.range + tower.auraRange));
+  }
+
+  const behaviour = BRANCH_BEHAVIOUR[tower.kind]?.[branch];
+  if (behaviour) segments.push({ text: `, ${behaviour}` });
+  segments.push({ text: `, $${formatNumber(cost)}` });
+  return [segments];
+}
+
+/** Tooltip for the pointer Upgrade button: the next stage's click damage and its cost. */
+export function pointerTooltipLines(p: PointerState, salvage: number): TooltipLine[] {
+  const cost = nextStageCost(p);
+  if (cost === null) return ['Max level'];
+  if (salvage < cost) return [cannotAffordText(salvage, cost)];
+
+  const next = (p.stage + 1) as PointerStage;
+  const before = pointerInfo(p).clickDamage;
+  const after = pointerInfo({ ...p, stage: next }).clickDamage;
+  return [[
+    { text: `Pointer T${p.stage} → T${next} — click damage ${before} → ` },
+    good(String(after)),
+    { text: `, $${formatNumber(cost)}` },
+  ]];
+}
+
+/** Tooltip for the Sell button: the refund and the 70% rule, or the wall's nothing-refunded rule. */
+export function sellTooltipLines(tower: Tower): TooltipLine[] {
+  const value = sellValue(tower);
+  if (tower.kind === 'wall') return ['Sell for $0 (walls refund nothing)'];
+  return [`Sell for $${formatNumber(value)} (70% of $${formatNumber(tower.spent)} spent)`];
+}
+
+/** Tooltip for a spec shop row: the effect the game actually applies at the next level. */
+export function specTooltipLines(kind: SpecKind, level: number, banked: number): TooltipLine[] {
+  const cap = SPEC_CAPS[kind];
+  if (level >= cap) return [`${SPEC_NAMES[kind]} maxed at ${cap}`];
+  if (banked <= 0) return ['Needs 1 spec'];
+  return [[
+    { text: `${SPEC_NAMES[kind]} ${level} → ${level + 1} (${specEffectText(kind, level)} → ` },
+    good(specEffectText(kind, level + 1)),
+    { text: '), 1 spec' },
+  ]];
+}

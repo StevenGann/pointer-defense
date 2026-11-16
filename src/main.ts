@@ -5,6 +5,7 @@ import {
   createRunState,
   enterEndless,
   restartWindows,
+  selectedTower,
   step,
   towerAt,
   type RunState,
@@ -13,8 +14,16 @@ import { loadProfile, saveProfile, specGain, type Profile, type SpecKind } from 
 import { achievementName, ACHIEVEMENTS } from './core/achievements.ts';
 import { ChromeView, computeLayout, PAL, pointInRect, type Layout } from './view/chrome.ts';
 import { BoardView } from './view/board.ts';
-import { HudView, paletteTowerAt } from './view/hud.ts';
+import { HudView, hudControlAt, paletteTowerAt, type HudAction } from './view/hud.ts';
 import { paletteTooltipLines, TooltipView, towerTooltipLines } from './view/tooltip.ts';
+import {
+  branchTooltipLines,
+  pointerTooltipLines,
+  sellTooltipLines,
+  specTooltipLines,
+  upgradeTooltipLines,
+  type TooltipLine,
+} from './view/tooltipText.ts';
 import { PopupView } from './view/popup.ts';
 import { FloatingNumbersView } from './view/numbers.ts';
 import { MenuView, type OpenMenu } from './view/menu.ts';
@@ -22,7 +31,7 @@ import { DialogView, type DialogModel } from './view/dialog.ts';
 import { MouseController } from './input/mouse.ts';
 import { EffectsView } from './view/effects.ts';
 import { sfx, type SoundName } from './audio/sfx.ts';
-import type { TowerKind } from './core/towers.ts';
+import type { Branch, TowerKind } from './core/towers.ts';
 import pkg from '../package.json';
 
 const app = new Application();
@@ -359,6 +368,35 @@ app.ticker.add((ticker) => {
   cursor.position.set(mouse.hover.x, mouse.hover.y);
 });
 
+/** The tooltip lines for a HUD spend control, computed from the same functions the click applies. */
+function hudTooltipLines(action: HudAction, s: RunState): TooltipLine[] {
+  const tower = selectedTower(s);
+  switch (action) {
+    case 'pointer':
+      return pointerTooltipLines(s.pointer, s.economy.salvage);
+    case 'upgrade':
+      return tower ? upgradeTooltipLines(tower, s.economy.salvage) : [];
+    case 'branchA':
+    case 'branchB':
+    case 'branchC': {
+      if (!tower) return [];
+      const branch: Branch = action === 'branchA' ? 'A' : action === 'branchB' ? 'B' : 'C';
+      return branchTooltipLines(tower, branch, s.economy.salvage);
+    }
+    case 'sell':
+      return tower ? sellTooltipLines(tower) : [];
+    case 'buyCpu':
+    case 'buyRam':
+    case 'buyGpu':
+    case 'buyDisk': {
+      const kind: SpecKind = action === 'buyCpu' ? 'cpu' : action === 'buyRam' ? 'ram' : action === 'buyGpu' ? 'gpu' : 'disk';
+      return specTooltipLines(kind, s.specs[kind], s.unspentSpecs);
+    }
+    default:
+      return [];
+  }
+}
+
 /** Decide what the pointer is over and hand the tooltip its content (or nothing). */
 function updateTooltip(): void {
   const h = mouse.hover;
@@ -384,6 +422,14 @@ function updateTooltip(): void {
     if (tower) {
       tooltip.update({ key: `tower:${tower.id}`, lines: towerTooltipLines(tower) }, h.x, h.y, viewportW, viewportH);
       return;
+    }
+    const control = hudControlAt(layout, state, h.x, h.y);
+    if (control) {
+      const lines = hudTooltipLines(control.action, state);
+      if (lines.length > 0) {
+        tooltip.update({ key: `hud:${control.action}`, lines }, h.x, h.y, viewportW, viewportH);
+        return;
+      }
     }
   }
 
