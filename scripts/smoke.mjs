@@ -39,6 +39,7 @@ import { spawnPopup, dismissPopup } from '../src/core/popups.ts';
 import { comboMultiplier } from '../src/core/pointer.ts';
 import { loadProfile, saveProfile, defaultProfile } from '../src/core/save.ts';
 import { restartWindows, checkAchievements, enterEndless } from '../src/core/state.ts';
+import { dashRects, offsetSegment, routeOffset } from '../src/view/route.ts';
 
 // All v0.10b levels share a single spawn and exit, so the older maze checks keep a local gate.
 const SPAWN = DEFAULT_LEVEL.starts[0];
@@ -864,6 +865,32 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(sellValue(towerAt(s, 5, 5)) === 0, 'sellValue of a wall is 0');
   check(sellTower(s, 5, 5), 'sell a wall');
   check(s.economy.salvage === before, 'selling a wall refunds nothing');
+}
+
+// --- 19. Route line: reversed segments and per-route offsets ---------------------------------
+{
+  const down = dashRects(10, 0, 10, 20, 4, 4, 3);
+  const up = dashRects(10, 20, 10, 0, 4, 4, 3);
+  const right = dashRects(0, 10, 20, 10, 4, 4, 3);
+  const left = dashRects(20, 10, 0, 10, 4, 4, 3);
+  check(up.length > 0 && up.length === down.length, `northward dashes draw (${up.length} shapes)`);
+  check(left.length > 0 && left.length === right.length, `westward dashes draw (${left.length} shapes)`);
+  check(
+    up.every((r) => r.y >= 0 && r.y + r.h <= 20) && left.every((r) => r.x >= 0 && r.x + r.w <= 20),
+    'reversed dashes stay inside their segment',
+  );
+
+  const cell = 28;
+  check(routeOffset(0, 1, cell) === 0, 'a single route has zero offset');
+  const o0 = routeOffset(0, 2, cell);
+  const o1 = routeOffset(1, 2, cell);
+  check(o0 !== o1 && o0 === -o1, `two routes get distinct, symmetric offsets (${o0}, ${o1})`);
+  const h0 = offsetSegment(0, 0, 10, 0, o0);
+  const h1 = offsetSegment(0, 0, 10, 0, o1);
+  const v0 = offsetSegment(10, 0, 10, 10, o0);
+  const v1 = offsetSegment(10, 0, 10, 10, o1);
+  check(h0.a.y !== h1.a.y && v0.a.x !== v1.a.x,
+    'horizontal and vertical segments separate two routes');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

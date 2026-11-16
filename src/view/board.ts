@@ -11,7 +11,10 @@ import {
 } from '../core/state.ts';
 import { radiusOf, type Enemy, type EnemyKind } from '../core/enemies.ts';
 import { effectiveStats, TOWER_STATS, type Tower, type TowerKind } from '../core/towers.ts';
-import { tileAt, COLS, ROWS, type Grid } from '../core/grid.ts';
+import { tileAt, COLS, ROWS, type Grid, type Tile } from '../core/grid.ts';
+import { dashRects, offsetSegment, routeOffset, type RouteSegment } from './route.ts';
+
+export { dashRects, offsetSegment, routeOffset } from './route.ts';
 
 /**
  * Draws the board: tiles, the live route, towers, enemies, the range ring and the pointer reticle.
@@ -84,7 +87,7 @@ export class BoardView {
       this.drawStatic(state.grid, board, cell);
     }
 
-    this.drawRoute(state, board, cell);
+    this.drawRoute([currentPath(state)], board, cell);
 
     this.entities.clear();
     this.overlay.clear();
@@ -163,23 +166,41 @@ export class BoardView {
     }
   }
 
-  private drawRoute(state: RunState, board: { x: number; y: number; cell: number }, cell: number): void {
-    const route = currentPath(state);
-    const key = route.map((t) => `${t.col},${t.row}`).join('|');
+  private drawRoute(
+    routes: readonly (readonly Tile[])[],
+    board: { x: number; y: number; cell: number },
+    cell: number,
+  ): void {
+    const key = routes
+      .map((route, i) => `${routes.length}:${i}:${route.map((t) => `${t.col},${t.row}`).join('|')}`)
+      .join(';');
     if (key === this.pathKey) return;
     this.pathKey = key;
 
     const g = this.path;
     g.clear();
-    for (let i = 1; i < route.length; i++) {
-      const a = route[i - 1];
-      const b = route[i];
-      const ax = board.x + (a.col + 0.5) * cell;
-      const ay = board.y + (a.row + 0.5) * cell;
-      const bx = board.x + (b.col + 0.5) * cell;
-      const by = board.y + (b.row + 0.5) * cell;
-      dashedLine(g, ax, ay, bx, by, 4, 4, 3, PAL.light);
-    }
+    routes.forEach((route, routeIndex) => {
+      const offset = routeOffset(routeIndex, routes.length, cell);
+      const segments: RouteSegment[] = [];
+      for (let i = 1; i < route.length; i++) {
+        const a = route[i - 1];
+        const b = route[i];
+        const ax = board.x + (a.col + 0.5) * cell;
+        const ay = board.y + (a.row + 0.5) * cell;
+        const bx = board.x + (b.col + 0.5) * cell;
+        const by = board.y + (b.row + 0.5) * cell;
+        const segment = offsetSegment(ax, ay, bx, by, offset);
+        segments.push(segment);
+        dashedLine(g, segment.a.x, segment.a.y, segment.b.x, segment.b.y, 4, 4, 3, PAL.light);
+      }
+
+      for (let i = 1; i < segments.length; i++) {
+        const from = segments[i - 1].b;
+        const to = segments[i].a;
+        if (from.x === to.x && from.y === to.y) continue;
+        g.moveTo(from.x, from.y).lineTo(to.x, to.y).stroke({ width: 3, color: PAL.light });
+      }
+    });
   }
 }
 
@@ -225,7 +246,7 @@ function drawNoBuildRow(
   }
 }
 
-function dashedLine(
+export function dashedLine(
   g: Graphics,
   x0: number,
   y0: number,
@@ -236,19 +257,8 @@ function dashedLine(
   thick: number,
   color: number,
 ): void {
-  const half = Math.floor(thick / 2);
-  if (x0 === x1) {
-    const x = Math.round(x0);
-    for (let y = y0; y < y1; y += dash + gap) {
-      const h = Math.min(dash, y1 - y);
-      g.rect(x - half, Math.round(y), thick, h).fill(color);
-    }
-  } else {
-    const y = Math.round(y0);
-    for (let x = x0; x < x1; x += dash + gap) {
-      const w = Math.min(dash, x1 - x);
-      g.rect(Math.round(x), y - half, w, thick).fill(color);
-    }
+  for (const r of dashRects(x0, y0, x1, y1, dash, gap, thick)) {
+    g.rect(r.x, r.y, r.w, r.h).fill(color);
   }
 }
 
