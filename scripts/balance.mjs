@@ -25,9 +25,10 @@ import {
   spawnTile,
   exitTile,
   cycleLevel,
+  closePopupEnemy,
 } from '../src/core/state.ts';
 import { TOWER_KINDS, TOWER_STATS, upgradeCost } from '../src/core/towers.ts';
-import { radiusOf } from '../src/core/enemies.ts';
+import { radiusOf, isPopupEnemy } from '../src/core/enemies.ts';
 import { buildField, isSealed, pathTiles } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
 import { LEVELS, levelById } from '../src/core/levels.ts';
@@ -51,6 +52,10 @@ const rebootAt = Number.isFinite(rebootAtRaw) ? rebootAtRaw : 60; // 0 disables 
 const accuracy = Math.min(1, Math.max(0, parseFloat(flag('--accuracy', '0.35')) || 0));
 const cps = Math.max(0.1, parseFloat(flag('--cps', '3')) || 3);
 const quiet = hasFlag('--quiet');
+// --click <ticks>: close each pop-up enemy that many ticks after it spawns (a human's reaction
+// time). --no-click never closes them, leaving the shield up for the whole walk as the control.
+const noClick = hasFlag('--no-click');
+const clickDelay = noClick ? null : Math.max(1, parseInt(flag('--click', '45'), 10) || 45);
 // --no-support: run the control (Frost/Beacon replaced by Guns) instead of the standard spread.
 const support = !hasFlag('--no-support');
 // --no-build: a click-only player — never place a tower, spend salvage on the pointer instead.
@@ -494,10 +499,39 @@ function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, 
 function frontMostEnemy(s) {
   let best = null;
   for (const e of s.enemies) {
-    if (e.dead) continue;
+    if (e.dead || isPopupEnemy(e)) continue; // a human clicks enemies, not the window body
     if (!best || e.dist > best.dist) best = e;
   }
   return best;
+}
+
+// --- Pop-up reaction --------------------------------------------------------------------------
+// A human clicks each pop-up's close box a fixed reaction time after it spawns. The harness calls
+// the same reducer the mouse handler uses (closePopupEnemy), so the shield really turns off. With
+// --no-click the tracker only counts spawns and leaks so the punishing case stays comparable.
+function newPopupTracker() {
+  return { spawnTick: new Map(), closed: new Set() };
+}
+
+function popupCounts(tracker, s) {
+  const spawned = tracker.spawnTick.size;
+  const closed = tracker.closed.size;
+  const alive = s.enemies.filter((e) => isPopupEnemy(e) && !e.dead).length;
+  return { spawned, closed, leaked: spawned - closed - alive };
+}
+
+function reactToPopups(s, tracker) {
+  for (const e of s.enemies) {
+    if (!isPopupEnemy(e) || e.dead) continue;
+    if (!tracker.spawnTick.has(e.id)) tracker.spawnTick.set(e.id, s.tick);
+  }
+  if (clickDelay === null) return;
+  for (const e of s.enemies) {
+    if (!isPopupEnemy(e) || e.dead || tracker.closed.has(e.id)) continue;
+    if (s.tick - tracker.spawnTick.get(e.id) >= clickDelay && closePopupEnemy(s, e.id)) {
+      tracker.closed.add(e.id);
+    }
+  }
 }
 
 function doClick(s) {
@@ -530,7 +564,7 @@ function allocateSpecs(profile) {
 
 // --- Wave / session loop ----------------------------------------------------------------------
 
-function playWave(s, wave, leakList) {
+function playWave(s, wave, leakList, popups) {
   if (!startWave(s)) return { status: 'ended' };
   const clickInterval = Math.max(1, Math.round(TICK_HZ / cps));
   const dmgStart = { tower: s.economy.damage.tower, pointer: s.economy.damage.pointer };
@@ -539,6 +573,7 @@ function playWave(s, wave, leakList) {
   while (s.phase === 'wave') {
     if (s.enemies.length > 0 && clicks % clickInterval === 0) doClick(s);
     tick(s);
+    reactToPopups(s, popups);
     clicks++;
     if (++guard > TICK_HZ * 300) break; // safety; a wave never lasts 5 minutes
   }
@@ -565,12 +600,13 @@ function playWave(s, wave, leakList) {
 function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = MAX_TOWERS, coverage = false) {
   const s = createStateOn(profile, levelId);
   const leakList = [];
+  const popups = newPopupTracker();
   const counts = { gun: 0, cannon: 0, taser: 0, frost: 0, laser: 0, beacon: 0 };
   let wallIdx = 0;
   if (!quiet && !silent) console.log(`--- ${label} ---`);
   for (let wave = 1; ; wave++) {
     wallIdx = buildPhase(s, wave, wallIdx, counts, useSupport, false, maxTowers, coverage);
-    const result = playWave(s, wave, leakList);
+    const result = playWave(s, wave, leakList, popups);
     if (result.status === 'died') {
       return {
         reached: false,
@@ -580,6 +616,7 @@ function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = 
         earned: s.economy.earned,
         state: s,
         leakList,
+        popups: popupCounts(popups, s),
       };
     }
     if (result.status === 'reached') {
@@ -591,6 +628,7 @@ function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = 
         earned: s.economy.earned,
         state: s,
         leakList,
+        popups: popupCounts(popups, s),
       };
     }
     if (rebootAtWave > 0 && wave >= rebootAtWave) {
@@ -603,6 +641,7 @@ function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = 
         earned: s.economy.earned,
         state: s,
         leakList,
+        popups: popupCounts(popups, s),
       };
     }
   }
@@ -643,6 +682,7 @@ function playRunCall(profile, label, allAtOnce) {
   const counts = { gun: 0, cannon: 0, taser: 0, frost: 0, laser: 0, beacon: 0 };
   let wallIdx = 0;
   const leakList = [];
+  const popups = newPopupTracker();
   if (!quiet) console.log(`--- ${label} ---`);
 
   for (;;) {
@@ -661,6 +701,7 @@ function playRunCall(profile, label, allAtOnce) {
       if (s.enemies.length > 0 && clicks % clickInterval === 0) doClick(s);
       if (allAtOnce) wallIdx = buildPhase(s, s.wave, wallIdx, counts, true);
       tick(s);
+      reactToPopups(s, popups);
       if (!allAtOnce && s.phase === 'wave' && s.wave < to) {
         const spawning = s.runs.some((r) => r.spawns.length > 0);
         if (!spawning && s.enemies.length > 0) {
@@ -683,6 +724,7 @@ function playRunCall(profile, label, allAtOnce) {
         earned: s.economy.earned,
         state: s,
         leakList,
+        popups: popupCounts(popups, s),
       };
     }
     if (s.phase === 'victory' || s.wave >= to) {
@@ -694,6 +736,7 @@ function playRunCall(profile, label, allAtOnce) {
         earned: s.economy.earned,
         state: s,
         leakList,
+        popups: popupCounts(popups, s),
       };
     }
   }
@@ -705,6 +748,7 @@ function playRunCall(profile, label, allAtOnce) {
     earned: s.economy.earned,
     state: s,
     leakList,
+    popups: popupCounts(popups, s),
   };
 }
 
@@ -736,6 +780,7 @@ function playRunSweep(profile, label, timing) {
   let spanWave = -1;
   let span = 0;
   const leakList = [];
+  const popups = newPopupTracker();
   if (!quiet) console.log(`--- ${label} ---`);
 
   for (;;) {
@@ -747,6 +792,7 @@ function playRunSweep(profile, label, timing) {
     while (s.phase === 'wave') {
       if (s.enemies.length > 0 && clicks % clickInterval === 0) doClick(s);
       tick(s);
+      reactToPopups(s, popups);
       if (timing !== null && s.phase === 'wave' && s.wave < to) {
         if (spanWave !== s.wave) {
           span = waveSpan(s.wave);
@@ -779,6 +825,7 @@ function playRunSweep(profile, label, timing) {
         bonusPaid,
         state: s,
         leakList,
+        popups: popupCounts(popups, s),
       };
     }
     if (s.phase === 'victory' || s.wave >= to) {
@@ -791,6 +838,7 @@ function playRunSweep(profile, label, timing) {
         bonusPaid,
         state: s,
         leakList,
+        popups: popupCounts(popups, s),
       };
     }
   }
@@ -803,6 +851,7 @@ function playRunSweep(profile, label, timing) {
     bonusPaid,
     state: s,
     leakList,
+    popups: popupCounts(popups, s),
   };
 }
 
@@ -854,6 +903,7 @@ function runSummary(final, totalSpecs, reboots, label) {
   console.log(`total salvage: ${final.earned}`);
   console.log(`specs earned: ${totalSpecs}`);
   console.log(`leaks per wave: ${leakSummary || 'none'}`);
+  console.log(`pop-ups: ${final.popups.closed} closed, ${final.popups.leaked} leaked`);
   console.log(`reboots: ${reboots}`);
   return towerTable(final, label);
 }
@@ -913,11 +963,13 @@ if (wallMode) {
   silent = false;
 
   console.log('\n=== maps ===');
-  console.log('  map          waves cleared   integrity   salvage');
+  console.log('  map          waves cleared   integrity   salvage   closed   leaked');
   for (const { level, std } of mapRows) {
+    const p = std.final.popups;
     console.log(
       `  ${level.id.padEnd(11)}  ${String(std.final.clearedWaves).padStart(13)}  ` +
-        `${String(std.final.integrity).padStart(9)}  ${String(std.final.earned).padStart(7)}`,
+        `${String(std.final.integrity).padStart(9)}  ${String(std.final.earned).padStart(7)}  ` +
+        `${String(p.closed).padStart(6)}  ${String(p.leaked).padStart(6)}`,
     );
   }
 
