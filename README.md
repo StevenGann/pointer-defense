@@ -13,7 +13,8 @@ sheets. The chrome is Windows 95 and the board is Desktop Tower Defense.
 
 ## Status
 
-Pre-alpha. Scaffolding and the design document exist; the game does not.
+Pre-alpha, playable. Ten waves, three towers, three enemy types, the click economy and pointer
+upgrades all run. Art and sound are unfinished.
 
 ## Develop
 

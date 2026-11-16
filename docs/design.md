@@ -108,9 +108,9 @@ Personal-computer era optimism, played straight. No irony about the era, no fake
 
 | # | Deliverable | Proof |
 |---|---|---|
-| M0 | repository, toolchain, Pages deployment | the site loads |
-| M1 | grid, path, one enemy, one tower, one wave | enemies walk and die |
-| M2 | salvage economy, build phase, three towers | the tower defense half works |
-| M3 | clicking damage, kill attribution, pointer upgrades | the hybrid rule is live |
-| M4 | enemy families, 100 waves, prestige | a full run is playable |
-| M5 | Windows chrome, sound, polish | it looks like the design |
+| M0 | repository, toolchain, Pages deployment | done — the site loads |
+| M1 | grid, path, one enemy, one tower, one wave | done — enemies walk and die |
+| M2 | salvage economy, build phase, three towers | done |
+| M3 | clicking damage, kill attribution, pointer upgrades | done — `npm run smoke` proves the 1.5x rule |
+| M4 | enemy families, 100 waves, prestige | ten waves in; the other ninety and prestige to go |
+| M5 | Windows chrome, sound, polish | chrome done; sound and polish to go |
