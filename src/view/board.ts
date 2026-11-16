@@ -317,10 +317,14 @@ function drawEnemy(
   const ratio = e.maxHp > 0 ? e.hp / e.maxHp : 0;
   if (ratio < 1) {
     const arcR = r + 4;
-    g.arc(ex, ey, arcR, -Math.PI / 2 - Math.PI * ratio, -Math.PI / 2 + Math.PI * ratio).stroke({
-      width: 2,
-      color: healthColor(ratio),
-    });
+    const a0 = -Math.PI / 2 - Math.PI * ratio;
+    const a1 = -Math.PI / 2 + Math.PI * ratio;
+    g.moveTo(ex + Math.cos(a0) * arcR, ey + Math.sin(a0) * arcR)
+      .arc(ex, ey, arcR, a0, a1)
+      .stroke({
+        width: 2,
+        color: healthColor(ratio),
+      });
   }
 }
 
