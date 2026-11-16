@@ -140,8 +140,9 @@ becoming opaque.
 
 Walls are the asymmetry: every other tower is invulnerable and cannot be targeted, but a wall can be
 destroyed and then it is gone for good. It carries 60 hit points at tier 1, 180 at tier 2 and 540 at
-tier 3; both tier-3 branches double that. A destroyed wall is removed, the route is recomputed in the
-same tick, and nothing is refunded.
+tier 3; the Bulwark and Mesh branches double that, while the Toggle branch keeps the base total and
+pays in control instead. A destroyed wall is removed, the route is recomputed in the same tick, and
+nothing is refunded.
 
 **These are the harness's numbers, not the first draft's.** The first draft (Gun 4 damage at 25,
 Cannon 10 at 60, Taser 2 at 45, Laser 6 at 120, Beacon +15 %) let a scripted player win with Gun and
@@ -177,6 +178,10 @@ Walls break the ladder pattern: they are a three-tier tower. Tier 2 costs 12, th
 | Laser | **Focus** — pierce 8, +50 % damage | **Prism** — splits into 3 short beams at −40 % damage |
 | Beacon | **Command** — +30 % damage aura, no range bonus | **Relay** — extends pointer reach, +50 % pointer damage in radius |
 | Wall | **Bulwark** — hit points doubled again | **Mesh** — hit points doubled and it blocks flyers |
+
+Walls are the one tower with a third branch: **Toggle** (`C`). A Toggle wall is a gate — left-clicking
+it opens it (walkable, cannot be attacked, no ground block) or closes it (blocks exactly like a plain
+wall); closing is refused when it would seal the route.
 
 The tensions are deliberate. Mortar or Flak is "ground or air". Command or Relay is "your towers or
 you" — the one place the pointer gets a tower's help, and the reason a clicker-minded player and a
@@ -528,7 +533,7 @@ Shape carries meaning before colour does — readability, and colour-blind playe
 | Frost | hexagon with a snow cross |
 | Laser | long bar |
 | Beacon | ring with a dot |
-| Wall | brick block |
+| Wall | Windows push button — raised, pressed, or disabled, with Bulwark's inner rim and Mesh's crosshatch |
 
 ### 13.3 Type and layout
 

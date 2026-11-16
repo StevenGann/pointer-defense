@@ -8,7 +8,7 @@ import { dismissPopup } from '../core/popups.ts';
 import { popupCloseHit } from '../view/popupEnemy.ts';
 import { canAfford } from '../core/economy.ts';
 import { tileAt } from '../core/grid.ts';
-import { TOWER_KINDS, TOWER_STATS, type TowerKind } from '../core/towers.ts';
+import { isToggleGate, TOWER_KINDS, TOWER_STATS, type TowerKind } from '../core/towers.ts';
 import { type SpecKind } from '../core/save.ts';
 import {
   cancelSelection,
@@ -26,6 +26,7 @@ import {
   selectTower,
   sellTower,
   startWave,
+  toggleGate,
   togglePause,
   toggleSpeed,
   towerAt,
@@ -216,6 +217,9 @@ export class MouseController {
       const tower = towerAt(s, col, row);
       if (tower) {
         selectPlacedTower(s, tower);
+        if (isToggleGate(tower) && !toggleGate(s, col, row)) {
+          this.ctx.notice('That would seal the route.');
+        }
         return;
       }
       if (s.phase === 'wave' && enemyAt(s, w.x, w.y)) {
@@ -265,9 +269,10 @@ export class MouseController {
         break;
       }
       case 'branchA':
-      case 'branchB': {
+      case 'branchB':
+      case 'branchC': {
         const tower = selectedTower(s);
-        if (tower) chooseBranch(s, tower.col, tower.row, hud === 'branchA' ? 'A' : 'B');
+        if (tower) chooseBranch(s, tower.col, tower.row, hud === 'branchA' ? 'A' : hud === 'branchB' ? 'B' : 'C');
         break;
       }
       case 'sell': {

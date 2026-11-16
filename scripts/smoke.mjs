@@ -26,8 +26,11 @@ import {
   cycleLevel,
   canCycleLevel,
   closePopupEnemy,
+  toggleGate,
+  selectPlacedTower,
+  cancelSelection,
 } from '../src/core/state.ts';
-import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers } from '../src/core/towers.ts';
+import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isToggleGate } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, popupCountForWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
@@ -42,6 +45,16 @@ import { loadProfile, saveProfile, defaultProfile } from '../src/core/save.ts';
 import { restartWindows, checkAchievements, enterEndless } from '../src/core/state.ts';
 import { dashRects, offsetSegment, routeOffset } from '../src/view/route.ts';
 import { enemyDrawOrder, popupCloseHit, popupCloseRect, popupWindowRect } from '../src/view/popupEnemy.ts';
+import {
+  hatchSegments,
+  lerpColor,
+  wallFocusRect,
+  wallFootprintSize,
+  wallSpec,
+  WALL_FACE,
+  WALL_FACE_DISABLED,
+  WALL_FACE_PRESSED,
+} from '../src/view/wallAppearance.ts';
 
 // All v0.10b levels share a single spawn and exit, so the older maze checks keep a local gate.
 const SPAWN = DEFAULT_LEVEL.starts[0];
@@ -883,6 +896,152 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(sellValue(towerAt(s, 5, 5)) === 0, 'sellValue of a wall is 0');
   check(sellTower(s, 5, 5), 'sell a wall');
   check(s.economy.salvage === before, 'selling a wall refunds nothing');
+}
+
+// --- 18f. The Toggle branch: a tier-3 gate that flips open and closed -------------------------
+{
+  // Visual language: every wall state renders a button spec, and none of them carries brick strokes.
+  const states = [
+    { name: 'plain tier 1', wall: { branch: null, open: false, hp: 60, maxHp: 60 } },
+    { name: 'plain tier 2', wall: { branch: null, open: false, hp: 180, maxHp: 180 } },
+    { name: 'toggle closed', wall: { branch: 'C', open: false, hp: 540, maxHp: 540 } },
+    { name: 'toggle open', wall: { branch: 'C', open: true, hp: 540, maxHp: 540 } },
+    { name: 'bulwark', wall: { branch: 'A', open: false, hp: 1080, maxHp: 1080 } },
+    { name: 'mesh', wall: { branch: 'B', open: false, hp: 1080, maxHp: 1080 } },
+    { name: 'damaged high', wall: { branch: 'A', open: false, hp: 900, maxHp: 1080 } },
+    { name: 'damaged mid', wall: { branch: 'A', open: false, hp: 540, maxHp: 1080 } },
+    { name: 'damaged low', wall: { branch: 'A', open: false, hp: 100, maxHp: 1080 } },
+  ];
+  for (const st of states) {
+    const spec = wallSpec(st.wall);
+    check(
+      Number.isInteger(spec.face) && spec.tl.length === 2 && spec.br.length === 2,
+      `${st.name}: wall renders a valid button spec`,
+    );
+    check(!('bricks' in spec), `${st.name}: wall uses no brick strokes`);
+  }
+  check(wallSpec({ branch: null, open: false, hp: 60, maxHp: 60 }).face === WALL_FACE_DISABLED, 'a plain wall reads as disabled');
+  check(wallSpec({ branch: 'C', open: true, hp: 540, maxHp: 540 }).face === WALL_FACE_PRESSED, 'an open Toggle reads as pressed');
+  check(wallSpec({ branch: 'C', open: false, hp: 540, maxHp: 540 }).face === WALL_FACE, 'a closed Toggle reads as raised');
+  check(wallSpec({ branch: 'A', open: false, hp: 1080, maxHp: 1080 }).innerRim, 'Bulwark adds an inner rim');
+  check(wallSpec({ branch: 'B', open: false, hp: 1080, maxHp: 1080 }).crosshatch, 'Mesh adds a crosshatch');
+  check(wallFootprintSize(28) === 22, `wall footprint is cell - 6 (${wallFootprintSize(28)})`);
+  check(hatchSegments(0, 0, 20, 4).length > 0, 'Mesh crosshatch produces diagonal strokes');
+  const focus = wallFocusRect(14, 14, 28);
+  check(focus.w === 20 && focus.h === 20, `focus rect is inset 4 px (${focus.w}x${focus.h})`);
+  check(lerpColor(0x000000, 0xffffff, 0.5) === 0x808080, `lerpColor blends colours (${lerpColor(0x000000, 0xffffff, 0.5).toString(16)})`);
+}
+
+{
+  // 18f continues: the toggle flips only for a Toggle wall; selecting elsewhere never flips it.
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'wall', 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'C');
+  const gate = towerAt(s, 5, 5);
+  check(isToggleGate(gate) && !gate.open, 'a fresh Toggle gate starts closed');
+  check(wallMaxHp(3, 'C') === 540 && gate.maxHp === 540, `Toggle keeps the tier-3 base HP (${gate.maxHp})`);
+
+  selectPlacedTower(s, gate);
+  check(!gate.open, 'selecting the gate does not flip it');
+  cancelSelection(s);
+  check(!gate.open, 'right-click/cancel does not flip it');
+
+  check(toggleGate(s, 5, 5) && gate.open, 'toggleGate opens a closed gate');
+  check(toggleGate(s, 5, 5) && !gate.open, 'toggleGate closes an open gate');
+
+  // Bulwark and Mesh never toggle.
+  const bulwark = createRunState();
+  bulwark.economy.salvage = 10000;
+  placeTower(bulwark, 'wall', 5, 5);
+  upgradeTower(bulwark, 5, 5);
+  chooseBranch(bulwark, 5, 5, 'A');
+  check(!isToggleGate(towerAt(bulwark, 5, 5)) && !toggleGate(bulwark, 5, 5), 'Bulwark is not a Toggle gate');
+  const mesh = createRunState();
+  mesh.economy.salvage = 10000;
+  placeTower(mesh, 'wall', 5, 5);
+  upgradeTower(mesh, 5, 5);
+  chooseBranch(mesh, 5, 5, 'B');
+  check(!isToggleGate(towerAt(mesh, 5, 5)) && !toggleGate(mesh, 5, 5), 'Mesh is not a Toggle gate');
+}
+
+{
+  // An open gate is walkable: the route shortens while open and returns when closed.
+  const s = createRunState(); // corridor
+  const base = currentPath(s).length;
+  s.economy.salvage = 10000;
+  placeTower(s, 'wall', 4, 9);
+  upgradeTower(s, 4, 9);
+  chooseBranch(s, 4, 9, 'C');
+  const closedLen = currentPath(s).length;
+  check(closedLen > base, `a closed gate lengthens the route (${base} -> ${closedLen})`);
+
+  check(toggleGate(s, 4, 9), 'open the gate');
+  check(currentPath(s).length === base, `an open gate is walkable (route ${currentPath(s).length} == ${base})`);
+  check(toggleGate(s, 4, 9), 'close the gate');
+  check(currentPath(s).length === closedLen, `a closed gate blocks again (${currentPath(s).length})`);
+}
+
+{
+  // Closing is refused when it would seal the route, allowed when a detour remains.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  placeTower(s, 'wall', 5, 6);
+  upgradeTower(s, 5, 6);
+  chooseBranch(s, 5, 6, 'C');
+  check(toggleGate(s, 5, 6), 'open the gate at the choke point');
+  for (let r = 0; r < ROWS; r++) {
+    if (r === 6) continue;
+    check(placeTower(s, 'gun', 5, r), `block column 5 at row ${r}`);
+  }
+  check(!toggleGate(s, 5, 6), 'closing is refused when it would seal the route');
+  check(towerAt(s, 5, 6).open, 'the gate stays open after a refused close');
+  check(sellTower(s, 5, 5), 'sell a blocker to open a detour');
+  check(toggleGate(s, 5, 6), 'closing is allowed once a detour exists');
+  check(!towerAt(s, 5, 6).open, 'the gate is now closed');
+}
+
+{
+  // An enemy standing on the tile when it closes is pushed forward along its heading.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  placeTower(s, 'wall', 5, 6);
+  upgradeTower(s, 5, 6);
+  chooseBranch(s, 5, 6, 'C');
+  check(toggleGate(s, 5, 6), 'open the gate');
+  const e = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+  e.x = 5.5;
+  e.y = 6.5;
+  e.prevX = 5.5;
+  e.prevY = 6.5;
+  e.col = 5;
+  e.row = 6;
+  e.heading = 0; // travelling east
+  e.stunUntilTick = 999999;
+  s.enemies.push(e);
+  check(toggleGate(s, 5, 6), 'close the gate under the enemy');
+  check(e.col === 6 && e.row === 6, `enemy pushed forward to (${e.col},${e.row})`);
+  check(towerAt(s, 5, 6).open === false, 'the gate is closed');
+}
+
+{
+  // A breacher walks through an open gate without damaging it.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  const first = stepToward(s.breacherField, SPAWN.col, SPAWN.row);
+  placeTower(s, 'wall', first.col, first.row);
+  upgradeTower(s, first.col, first.row);
+  chooseBranch(s, first.col, first.row, 'C');
+  const gate = towerAt(s, first.col, first.row);
+  check(toggleGate(s, first.col, first.row), 'open the gate on the breacher line');
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const b = createEnemy(1, 'breacher', 12, SPAWN, EXIT);
+  s.enemies.push(b);
+  for (let i = 0; i < 6000 && !b.dead; i++) tick(s);
+  check(gate.hp === gate.maxHp, `breacher never damaged the open gate (${gate.hp}/${gate.maxHp})`);
+  check(b.dist > 0, `breacher walked through the open gate (dist ${b.dist.toFixed(2)})`);
 }
 
 // --- 19. Route line: reversed segments and per-route offsets ---------------------------------

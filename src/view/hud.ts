@@ -41,6 +41,7 @@ export type HudAction =
   | 'target'
   | 'branchA'
   | 'branchB'
+  | 'branchC'
   | 'buyCpu'
   | 'buyRam'
   | 'buyGpu'
@@ -114,15 +115,20 @@ function fitSpecLabel(verbose: string, compact: string, width: number): string {
   return truncateText(compact, Math.max(SPEC_LABEL_MIN, width));
 }
 
-export const BRANCH_NAMES: Readonly<Record<TowerKind, Readonly<Record<Branch, string>>>> = {
+export const BRANCH_NAMES: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch, string>>>>> = {
   gun: { A: 'Marksman', B: 'Repeater' },
   cannon: { A: 'Mortar', B: 'Flak' },
   taser: { A: 'Arc', B: 'Overload' },
   frost: { A: 'Deep Freeze', B: 'Shard' },
   laser: { A: 'Focus', B: 'Prism' },
   beacon: { A: 'Command', B: 'Relay' },
-  wall: { A: 'Bulwark', B: 'Mesh' },
+  wall: { A: 'Bulwark', B: 'Mesh', C: 'Toggle' },
 };
+
+/** The display name of a branch, falling back to the key so an unknown branch still reads. */
+export function branchName(kind: TowerKind, branch: Branch): string {
+  return BRANCH_NAMES[kind][branch] ?? branch;
+}
 
 export const TARGET_LABEL: Readonly<Record<TargetMode, string>> = {
   first: 'First',
@@ -229,11 +235,12 @@ function computeHud(l: Layout, s: RunState): HudLayout {
     const branches: BranchButton[] = [];
     if (tower.tier === 2) {
       const gap = 4;
-      const half = Math.floor((innerW - gap) / 2);
-      branches.push({ branch: 'A', rect: { x: innerX, y: cy, w: half, h: 20 } });
-      branches.push({
-        branch: 'B',
-        rect: { x: innerX + half + gap, y: cy, w: innerW - half - gap, h: 20 },
+      const list: Branch[] = tower.kind === 'wall' ? ['A', 'B', 'C'] : ['A', 'B'];
+      const bw = Math.floor((innerW - gap * (list.length - 1)) / list.length);
+      list.forEach((branch, i) => {
+        const x = innerX + i * (bw + gap);
+        const w = i === list.length - 1 ? innerX + innerW - x : bw;
+        branches.push({ branch, rect: { x, y: cy, w, h: 20 } });
       });
       cy += 20 + 4;
     }
@@ -328,7 +335,9 @@ export function hudButtonAt(l: Layout, s: RunState, px: number, py: number): Hud
     if (h.detail.target && pointInRect(h.detail.target, px, py)) return 'target';
     if (h.detail.upgrade && affordable && pointInRect(h.detail.upgrade, px, py)) return 'upgrade';
     for (const b of h.detail.branches) {
-      if (affordable && pointInRect(b.rect, px, py)) return b.branch === 'A' ? 'branchA' : 'branchB';
+      if (affordable && pointInRect(b.rect, px, py)) {
+        return b.branch === 'A' ? 'branchA' : b.branch === 'B' ? 'branchB' : 'branchC';
+      }
     }
     if (pointInRect(h.detail.sell, px, py)) return 'sell';
   } else {
@@ -451,7 +460,7 @@ export class HudView {
   private readonly towerStats = makeText('');
   private readonly towerRoute = makeText('');
   private readonly upgradeButton = makeText('');
-  private readonly branchButtons: Text[] = [makeText(''), makeText('')];
+  private readonly branchButtons: Text[] = [makeText(''), makeText(''), makeText('')];
   private readonly sellButton = makeText('');
   private readonly targetButton = makeText('');
   private readonly pointerLabel = makeText('');
@@ -662,7 +671,7 @@ export class HudView {
       this.targetButton.visible = d.target !== null;
       for (const text of this.branchButtons) text.visible = true;
 
-      const branch = tower.branch === null ? '' : ` - ${BRANCH_NAMES[tower.kind][tower.branch]}`;
+      const branch = tower.branch === null ? '' : ` - ${branchName(tower.kind, tower.branch)}`;
       this.towerName.text = `${TOWER_STATS[tower.kind].name}  T${tower.tier}${branch}`;
       this.towerName.position.set(d.name.x, d.name.y + Math.floor(d.name.h / 2));
 
@@ -707,8 +716,13 @@ export class HudView {
           continue;
         }
         const enabled = price !== null && canAfford(s.economy, price);
-        drawButton(g, b.rect, enabled, hoverHud === (b.branch === 'A' ? 'branchA' : 'branchB'));
-        text.text = BRANCH_NAMES[tower.kind][b.branch];
+        drawButton(
+          g,
+          b.rect,
+          enabled,
+          hoverHud === (b.branch === 'A' ? 'branchA' : b.branch === 'B' ? 'branchB' : 'branchC'),
+        );
+        text.text = branchName(tower.kind, b.branch);
         text.style.fill = enabled ? PAL.text : PAL.shadow;
         text.position.set(b.rect.x + b.rect.w / 2, b.rect.y + Math.floor(b.rect.h / 2));
       }
@@ -825,7 +839,7 @@ export class HudView {
     const tower = selectedTower(s);
     if (tower) {
       this.pointerTitle.text = 'TOWER';
-      const branch = tower.branch === null ? 'none' : BRANCH_NAMES[tower.kind][tower.branch];
+      const branch = tower.branch === null ? 'none' : branchName(tower.kind, tower.branch);
       const contents = [
         `tier: T${tower.tier}`,
         `branch: ${branch}`,

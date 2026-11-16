@@ -10,6 +10,8 @@ import { createEnemy, ENEMY_STATS, isPopupEnemy, isWeakPointHit, popupCovers, ra
 import {
   createTower,
   effectiveStats,
+  isGateOpen,
+  isToggleGate,
   isWall,
   recomputeAuras,
   refreshWallHp,
@@ -326,10 +328,9 @@ export function canPlace(s: RunState, kind: TowerKind, col: number, row: number)
   if (towerAt(s, col, row)) return false;
   if (!canAfford(s.economy, TOWER_STATS[kind].cost)) return false;
   const idx = row * s.grid.cols + col;
-  s.blocked.add(idx);
-  const sealed = isSealed(s.grid, s.blocked, spawnTile(s), exitTile(s));
-  s.blocked.delete(idx);
-  return !sealed;
+  const blocked = groundBlocked(s);
+  blocked.add(idx);
+  return !isSealed(s.grid, blocked, spawnTile(s), exitTile(s));
 }
 
 /** The live enemy under a world point, preferring the one furthest along the lane. */
@@ -399,6 +400,18 @@ export function currentPath(s: RunState): Tile[] {
   return pathTiles(s.field, spawnTile(s));
 }
 
+/** The set of tile indices that block ground pathing: every tower but an open Toggle gate. */
+function groundBlocked(s: RunState): Set<number> {
+  const out = new Set<number>();
+  for (const i of s.blocked) {
+    const col = i % s.grid.cols;
+    const row = (i - col) / s.grid.cols;
+    const t = towerAt(s, col, row);
+    if (!t || !isGateOpen(t)) out.add(i);
+  }
+  return out;
+}
+
 /** The set of tile indices that block breacher pathing: everything but wall towers. */
 function breacherBlocked(s: RunState): Set<number> {
   const out = new Set<number>();
@@ -420,7 +433,7 @@ function flyerBlocked(s: RunState): Set<number> {
 
 function rebuildField(s: RunState): void {
   const exit = exitTile(s);
-  s.field = buildField(s.grid, s.blocked, exit);
+  s.field = buildField(s.grid, groundBlocked(s), exit);
   s.breacherField = buildField(s.grid, breacherBlocked(s), exit);
   s.flyerField = buildAirField(s.grid.cols, s.grid.rows, flyerBlocked(s), exit);
 }
@@ -465,6 +478,74 @@ export function sellTower(s: RunState, col: number, row: number): boolean {
   if (s.selectedTowerId === t.id) s.selectedTowerId = null;
   rebuildField(s);
   recomputeAuras(s.towers);
+  return true;
+}
+
+/** Move an enemy off a tile that just closed beneath it, along its heading to the nearest open tile. */
+function pushEnemyOffTile(s: RunState, e: Enemy, col: number, row: number): void {
+  const dx = Math.cos(e.heading);
+  const dy = Math.sin(e.heading);
+  let dc = 0;
+  let dr = 0;
+  if (Math.abs(dx) >= Math.abs(dy)) dc = dx >= 0 ? 1 : -1;
+  else dr = dy >= 0 ? 1 : -1;
+
+  const dirs: readonly (readonly [number, number])[] = [
+    [dc, dr],
+    [0, -1],
+    [-1, 0],
+    [1, 0],
+    [0, 1],
+  ];
+  for (const [stepCol, stepRow] of dirs) {
+    const nc = col + stepCol;
+    const nr = row + stepRow;
+    if (!inBounds(nc, nr)) continue;
+    if (s.field[nr * s.grid.cols + nc] < 0) continue;
+    e.x = nc + 0.5;
+    e.y = nr + 0.5;
+    e.prevX = e.x;
+    e.prevY = e.y;
+    e.col = nc;
+    e.row = nr;
+    e.targetCol = -1;
+    e.targetRow = -1;
+    return;
+  }
+}
+
+/**
+ * Flip a Toggle gate open or closed. Opening is always allowed; closing is refused when it would
+ * seal the ground route. Flipping rebuilds the field in this tick and re-paths every enemy.
+ */
+export function toggleGate(s: RunState, col: number, row: number): boolean {
+  const t = towerAt(s, col, row);
+  if (!t || !isToggleGate(t)) return false;
+
+  if (t.open) {
+    const blocked = groundBlocked(s);
+    blocked.add(row * s.grid.cols + col);
+    if (isSealed(s.grid, blocked, spawnTile(s), exitTile(s))) return false;
+    t.open = false;
+  } else {
+    t.open = true;
+  }
+
+  const closing = !t.open;
+  rebuildField(s);
+  for (const e of s.enemies) {
+    if (e.attackWallId === t.id) {
+      e.attackWallId = null;
+      e.targetCol = -1;
+      e.targetRow = -1;
+    }
+    if (closing && e.col === col && e.row === row && e.kind !== 'flyer') {
+      pushEnemyOffTile(s, e, col, row);
+    } else {
+      e.targetCol = -1;
+      e.targetRow = -1;
+    }
+  }
   return true;
 }
 
@@ -764,10 +845,11 @@ function moveEnemies(s: RunState): void {
       if (e.targetCol < 0) {
         const next = stepToward(field, e.col, e.row);
         if (!next) break;
-        // A breacher stops at a wall in its path instead of walking through it.
+        // A breacher stops at a wall in its path instead of walking through it — an open gate is
+        // walkable, so it is never attacked.
         if (e.kind === 'breacher') {
           const wall = towerAt(s, next.col, next.row);
-          if (wall && isWall(wall) && wall.hp > 0) {
+          if (wall && isWall(wall) && wall.hp > 0 && !isGateOpen(wall)) {
             e.attackWallId = wall.id;
             e.targetCol = next.col;
             e.targetRow = next.row;

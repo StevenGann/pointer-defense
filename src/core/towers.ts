@@ -2,7 +2,7 @@ import { secondsToTicks } from './time.ts';
 
 export type TowerKind = 'gun' | 'cannon' | 'taser' | 'frost' | 'laser' | 'beacon' | 'wall';
 
-export type Branch = 'A' | 'B';
+export type Branch = 'A' | 'B' | 'C';
 
 export type Tier = 1 | 2 | 3 | 4 | 5;
 
@@ -156,10 +156,10 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
 /** A wall's hit points at each tier, before the tier-3 branch doubling. */
 const WALL_HP_BY_TIER: Readonly<Record<Tier, number>> = { 1: 60, 2: 180, 3: 540, 4: 540, 5: 540 };
 
-/** The wall's hit points at its current tier and branch (both tier-3 branches double it). */
+/** The wall's hit points at its current tier and branch (Bulwark and Mesh double the tier-3 total). */
 export function wallMaxHp(tier: Tier, branch: Branch | null): number {
   const base = WALL_HP_BY_TIER[tier];
-  return tier >= 3 && branch !== null ? base * 2 : base;
+  return tier >= 3 && branch !== null && branch !== 'C' ? base * 2 : base;
 }
 
 /** True when the tower is a wall — the only tower kind with hit points. */
@@ -170,6 +170,16 @@ export function isWall(tower: Tower): boolean {
 /** True when this wall blocks flyers (the Mesh branch at tier 3). */
 export function wallBlocksFlyers(tower: Tower): boolean {
   return tower.kind === 'wall' && tower.tier >= 3 && tower.branch === 'B';
+}
+
+/** True when this tower is a Toggle-branch wall — the tier-3 branch that flips open and closed. */
+export function isToggleGate(tower: Tower): boolean {
+  return tower.kind === 'wall' && tower.branch === 'C';
+}
+
+/** True when this Toggle gate is currently open (walkable, cannot be attacked). */
+export function isGateOpen(tower: Tower): boolean {
+  return isToggleGate(tower) && tower.open;
 }
 
 /**
@@ -213,6 +223,8 @@ export interface Tower {
   hp: number;
   /** Hit points at full health (walls only; 0 for every other tower). */
   maxHp: number;
+  /** Toggle gates only: true while the gate is open (walkable, cannot be attacked). */
+  open: boolean;
 }
 
 export function createTower(id: number, kind: TowerKind, col: number, row: number): Tower {
@@ -234,6 +246,7 @@ export function createTower(id: number, kind: TowerKind, col: number, row: numbe
     targetMode: 'first',
     hp: kind === 'wall' ? wallMaxHp(1, null) : 0,
     maxHp: kind === 'wall' ? wallMaxHp(1, null) : 0,
+    open: false,
   };
 }
 
@@ -314,7 +327,7 @@ interface BranchEffect {
   readonly auraPointerRange?: number;
 }
 
-const BRANCH_EFFECTS: Readonly<Record<TowerKind, Readonly<Record<Branch, BranchEffect>>>> = {
+const BRANCH_EFFECTS: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch, BranchEffect>>>>> = {
   gun: {
     A: { rangeMul: 1.6, damageMul: 1.8 },
     B: { intervalMul: 0.5, damageAdd: -1 },
@@ -339,11 +352,13 @@ const BRANCH_EFFECTS: Readonly<Record<TowerKind, Readonly<Record<Branch, BranchE
     A: { auraDamage: 0.3, auraRange: 0 },
     B: { auraPointerDamage: 0.5, auraPointerRange: 0.75 },
   },
-  // Walls carry their branch in hit points (and Mesh's flyer block), not in combat stats, so the
-  // branch effect table is empty. It must exist so effectiveStats can look up a branched wall.
+  // Walls carry their branch in hit points (Mesh's flyer block, Toggle's open/closed gate), not in
+  // combat stats, so the branch effect table is empty. It must exist so effectiveStats can look up
+  // a branched wall.
   wall: {
     A: {},
     B: {},
+    C: {},
   },
 };
 
@@ -405,25 +420,27 @@ export function effectiveStats(tower: Tower): EffectiveStats {
   if (tower.branch !== null && tower.tier >= 3) {
     const strength = 1 + 0.5 * (tower.tier - 3);
     const e = BRANCH_EFFECTS[tower.kind][tower.branch];
-    if (e.damageMul !== undefined) damage *= scaledMultiplier(e.damageMul, strength);
-    if (e.rangeMul !== undefined) range *= scaledMultiplier(e.rangeMul, strength);
-    if (e.intervalMul !== undefined) fireInterval *= scaledMultiplier(e.intervalMul, strength);
-    if (e.splashAdd !== undefined) splash += e.splashAdd * strength;
-    if (e.damageAdd !== undefined) damage += e.damageAdd * strength;
-    if (e.flyerDamageMul !== undefined) flyerDamageMult = scaledMultiplier(e.flyerDamageMul, strength);
-    if (e.shieldedDamageMul !== undefined) shieldedDamageMult = scaledMultiplier(e.shieldedDamageMul, strength);
-    if (e.slowFactor !== undefined) slowFactor = e.slowFactor;
-    if (e.slowTicks !== undefined) slowTicks = e.slowTicks;
-    if (e.pierce !== undefined) pierce = e.pierce;
-    if (e.beams !== undefined) beams = e.beams;
-    if (e.beamDamage !== undefined) beamDamage = e.beamDamage;
-    if (e.targetsFlyersOnly !== undefined) targetsFlyersOnly = e.targetsFlyersOnly;
-    if (e.chainCount !== undefined) chainCount = e.chainCount;
-    if (e.chainDamage !== undefined) chainDamage = e.chainDamage;
-    if (e.auraDamage !== undefined) auraDamage = e.auraDamage;
-    if (e.auraRange !== undefined) auraRange = e.auraRange;
-    if (e.auraPointerDamage !== undefined) auraPointerDamage = e.auraPointerDamage;
-    if (e.auraPointerRange !== undefined) auraPointerRange = e.auraPointerRange;
+    if (e !== undefined) {
+      if (e.damageMul !== undefined) damage *= scaledMultiplier(e.damageMul, strength);
+      if (e.rangeMul !== undefined) range *= scaledMultiplier(e.rangeMul, strength);
+      if (e.intervalMul !== undefined) fireInterval *= scaledMultiplier(e.intervalMul, strength);
+      if (e.splashAdd !== undefined) splash += e.splashAdd * strength;
+      if (e.damageAdd !== undefined) damage += e.damageAdd * strength;
+      if (e.flyerDamageMul !== undefined) flyerDamageMult = scaledMultiplier(e.flyerDamageMul, strength);
+      if (e.shieldedDamageMul !== undefined) shieldedDamageMult = scaledMultiplier(e.shieldedDamageMul, strength);
+      if (e.slowFactor !== undefined) slowFactor = e.slowFactor;
+      if (e.slowTicks !== undefined) slowTicks = e.slowTicks;
+      if (e.pierce !== undefined) pierce = e.pierce;
+      if (e.beams !== undefined) beams = e.beams;
+      if (e.beamDamage !== undefined) beamDamage = e.beamDamage;
+      if (e.targetsFlyersOnly !== undefined) targetsFlyersOnly = e.targetsFlyersOnly;
+      if (e.chainCount !== undefined) chainCount = e.chainCount;
+      if (e.chainDamage !== undefined) chainDamage = e.chainDamage;
+      if (e.auraDamage !== undefined) auraDamage = e.auraDamage;
+      if (e.auraRange !== undefined) auraRange = e.auraRange;
+      if (e.auraPointerDamage !== undefined) auraPointerDamage = e.auraPointerDamage;
+      if (e.auraPointerRange !== undefined) auraPointerRange = e.auraPointerRange;
+    }
   }
 
   return {

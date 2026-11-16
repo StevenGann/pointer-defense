@@ -14,6 +14,15 @@ import { effectiveStats, TOWER_STATS, type Tower, type TowerKind } from '../core
 import { tileAt, COLS, ROWS, type Grid, type Tile } from '../core/grid.ts';
 import { dashRects, offsetSegment, routeOffset, type RouteSegment } from './route.ts';
 import {
+  hatchSegments,
+  RAISED_BR,
+  RAISED_TL,
+  wallFocusRect,
+  wallFootprintSize,
+  wallSpec,
+  type WallState,
+} from './wallAppearance.ts';
+import {
   enemyDrawOrder,
   popupCloseHit,
   popupCloseRect,
@@ -141,9 +150,15 @@ export class BoardView {
       if (inspected !== hoveredTower) drawTowerRange(this.overlay, inspected, board, cell, rangeMult);
       const sx = board.x + inspected.col * cell + 0.5;
       const sy = board.y + inspected.row * cell + 0.5;
-      this.overlay
-        .rect(sx, sy, cell - 1, cell - 1)
-        .stroke({ width: 1, color: PAL.title });
+      if (inspected.kind === 'wall') {
+        const cx = board.x + (inspected.col + 0.5) * cell;
+        const cy = board.y + (inspected.row + 0.5) * cell;
+        drawWallFocus(this.overlay, cx, cy, cell);
+      } else {
+        this.overlay
+          .rect(sx, sy, cell - 1, cell - 1)
+          .stroke({ width: 1, color: PAL.title });
+      }
     }
 
     // Pop-up windows draw beneath every other enemy (the shield is blind to towers, not the player).
@@ -177,7 +192,11 @@ export class BoardView {
     if (state.selected && hover.onBoard && canPlace(state, state.selected, hover.col, hover.row)) {
       const cx = board.x + (hover.col + 0.5) * cell;
       const cy = board.y + (hover.row + 0.5) * cell;
-      drawTowerShape(this.overlay, state.selected, cx, cy, cell, 0.5);
+      if (state.selected === 'wall') {
+        drawWallShape(this.overlay, { branch: null, open: false, hp: 1, maxHp: 1 }, cx, cy, cell, 0.5);
+      } else {
+        drawTowerShape(this.overlay, state.selected, cx, cy, cell, 0.5);
+      }
       dashedCircle(this.overlay, cx, cy, TOWER_STATS[state.selected].range * cell, PAL.navy, 1);
     }
 
@@ -340,7 +359,11 @@ function dashedCircle(g: Graphics, cx: number, cy: number, r: number, color: num
 function drawTower(g: Graphics, t: Tower, board: { x: number; y: number; cell: number }, cell: number): void {
   const cx = board.x + (t.col + 0.5) * cell;
   const cy = board.y + (t.row + 0.5) * cell;
-  drawTowerShape(g, t.kind, cx, cy, cell, 1, t.angle);
+  if (t.kind === 'wall') {
+    drawWallShape(g, t, cx, cy, cell, 1);
+  } else {
+    drawTowerShape(g, t.kind, cx, cy, cell, 1, t.angle);
+  }
 
   // A damaged wall shows a health bar above it; an undamaged wall shows nothing.
   if (t.kind === 'wall' && t.maxHp > 0 && t.hp < t.maxHp) {
@@ -436,19 +459,7 @@ function drawTowerShape(
     const bl = Math.round(cell * 0.36);
     drawBarrel(g, cx, cy, angle, Math.round(cx - bw / 2), Math.round(cy - r - bl), bw, bl, fill, outline);
   } else if (kind === 'wall') {
-    const s = Math.round(cell * 0.78);
-    const bx = Math.round(cx - s / 2);
-    const by = Math.round(cy - s / 2);
-    g.rect(bx, by, s, s).fill(fill).stroke({ width: 1, color: PAL.dark, alpha });
-    // Brick joints: a course line plus staggered perpends.
-    g.moveTo(bx, by + Math.round(s / 2)).lineTo(bx + s, by + Math.round(s / 2))
-      .stroke({ width: 1, color: PAL.shadow, alpha });
-    g.moveTo(bx + Math.round(s / 2), by).lineTo(bx + Math.round(s / 2), by + Math.round(s / 2))
-      .stroke({ width: 1, color: PAL.shadow, alpha });
-    g.moveTo(bx + Math.round(s / 4), by + Math.round(s / 2)).lineTo(bx + Math.round(s / 4), by + s)
-      .stroke({ width: 1, color: PAL.shadow, alpha });
-    g.moveTo(bx + Math.round((3 * s) / 4), by + Math.round(s / 2)).lineTo(bx + Math.round((3 * s) / 4), by + s)
-      .stroke({ width: 1, color: PAL.shadow, alpha });
+    // Walls are drawn as buttons by drawWallShape, not here.
   } else {
     const r = Math.round(cell * 0.38);
     g.poly([cx, cy - r, cx + r, cy, cx, cy + r, cx - r, cy]).fill(fill).stroke(outline);
@@ -464,6 +475,69 @@ function drawTowerShape(
       .lineTo(cx - cw, top + 3)
       .lineTo(cx + cw, top + 6)
       .stroke(outline);
+  }
+}
+
+/** A 2 px bevel: two 1 px lines on each side, with the outer edge first. */
+function wallBevel(
+  g: Graphics,
+  x: number,
+  y: number,
+  s: number,
+  tl: readonly [number, number],
+  br: readonly [number, number],
+  alpha: number,
+): void {
+  g.moveTo(x, y + 0.5).lineTo(x + s, y + 0.5).stroke({ width: 1, color: tl[0], alpha });
+  g.moveTo(x, y + 1.5).lineTo(x + s, y + 1.5).stroke({ width: 1, color: tl[1], alpha });
+  g.moveTo(x, y + s - 1.5).lineTo(x + s, y + s - 1.5).stroke({ width: 1, color: br[1], alpha });
+  g.moveTo(x, y + s - 0.5).lineTo(x + s, y + s - 0.5).stroke({ width: 1, color: br[0], alpha });
+  g.moveTo(x + 0.5, y).lineTo(x + 0.5, y + s).stroke({ width: 1, color: tl[0], alpha });
+  g.moveTo(x + 1.5, y).lineTo(x + 1.5, y + s).stroke({ width: 1, color: tl[1], alpha });
+  g.moveTo(x + s - 1.5, y).lineTo(x + s - 1.5, y + s).stroke({ width: 1, color: br[1], alpha });
+  g.moveTo(x + s - 0.5, y).lineTo(x + s - 0.5, y + s).stroke({ width: 1, color: br[0], alpha });
+}
+
+/** Draw a wall tower as a Windows button: face, bevel, and the Bulwark rim or Mesh crosshatch. */
+function drawWallShape(
+  g: Graphics,
+  wall: WallState,
+  cx: number,
+  cy: number,
+  cell: number,
+  alpha: number,
+): void {
+  const spec = wallSpec(wall);
+  const size = wallFootprintSize(cell);
+  const x = Math.round(cx - size / 2);
+  const y = Math.round(cy - size / 2);
+  const s = Math.round(size);
+
+  g.rect(x, y, s, s).fill({ color: spec.face, alpha });
+  wallBevel(g, x, y, s, spec.tl, spec.br, alpha);
+
+  if (spec.innerRim) {
+    wallBevel(g, x + 3, y + 3, s - 6, RAISED_TL, RAISED_BR, alpha);
+  }
+
+  if (spec.crosshatch) {
+    for (const seg of hatchSegments(x + 2, y + 2, s - 4, 4)) {
+      g.moveTo(seg.x1, seg.y1).lineTo(seg.x2, seg.y2).stroke({ width: 1, color: PAL.shadow, alpha });
+    }
+  }
+}
+
+/** A dotted 1 px focus rectangle, drawn around a selected wall. */
+function drawWallFocus(g: Graphics, cx: number, cy: number, cell: number): void {
+  const r = wallFocusRect(cx, cy, cell);
+  const gap = 3;
+  for (let px = r.x; px < r.x + r.w; px += gap) {
+    g.rect(Math.round(px), Math.round(r.y), 1, 1).fill(PAL.title);
+    g.rect(Math.round(px), Math.round(r.y + r.h - 1), 1, 1).fill(PAL.title);
+  }
+  for (let py = r.y; py < r.y + r.h; py += gap) {
+    g.rect(Math.round(r.x), Math.round(py), 1, 1).fill(PAL.title);
+    g.rect(Math.round(r.x + r.w - 1), Math.round(py), 1, 1).fill(PAL.title);
   }
 }
 

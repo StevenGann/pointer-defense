@@ -3,7 +3,7 @@ import { FONT } from './chrome.ts';
 import { effectiveStats, sellValue, TOWER_STATS, type Tower, type TowerKind } from '../core/towers.ts';
 import { formatNumber } from '../core/format.ts';
 import { TICK_HZ } from '../core/time.ts';
-import { BRANCH_NAMES, TARGET_LABEL } from './hud.ts';
+import { branchName, TARGET_LABEL } from './hud.ts';
 
 /**
  * Windows 95 tooltips, drawn as Pixi objects in the same scene (no DOM).
@@ -65,12 +65,19 @@ export function paletteTooltipLines(kind: TowerKind): string[] {
 
 /** Tooltip lines for a placed tower: its live stats with aura bonuses, as the sim sees them. */
 export function towerTooltipLines(tower: Tower): string[] {
-  const branch = tower.branch === null ? '' : ` — ${BRANCH_NAMES[tower.kind][tower.branch]}`;
+  const branch = tower.branch === null ? '' : ` — ${branchName(tower.kind, tower.branch)}`;
   const name = `${TOWER_STATS[tower.kind].name} T${tower.tier}${branch}`;
 
   if (tower.kind === 'wall') {
     const hp = tower.branch === null ? `HP ${Math.ceil(tower.hp)}` : `HP ${Math.ceil(tower.hp)}/${tower.maxHp}`;
-    const blocks = tower.branch === 'B' ? 'Blocks ground and flyers' : 'Blocks ground only';
+    const blocks =
+      tower.branch === 'B'
+        ? 'Blocks ground and flyers'
+        : tower.branch === 'C'
+          ? tower.open
+            ? 'Open — ground passes through'
+            : 'Closed — blocks ground'
+          : 'Blocks ground only';
     return [name, hp, blocks, `Sell $${formatNumber(sellValue(tower))}`];
   }
 
