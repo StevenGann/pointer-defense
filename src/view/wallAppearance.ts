@@ -6,19 +6,23 @@ import type { Branch } from '../core/towers.ts';
  * Graphics calls; the colours are the Win95 button bevel.
  *
  * All states come from bevels: a raised button, a disabled button (softened bevel, lighter face),
- * or a pressed-in button (inverted bevel, darker face). Bulwark adds an inner raised rim, Mesh adds
- * a crosshatch, and damage reads through the bevel.
+ * or a pressed-in button (inverted bevel, darker face). Every state also carries a grey footprint
+ * outline so the control reads at 1x. Bulwark adds an inner raised rim, Mesh adds a crosshatch, and
+ * damage reads through the bevel.
  */
 
 export const WALL_FACE = 0xc0c0c0;
-export const WALL_FACE_DISABLED = 0xd0d0d0;
+export const WALL_FACE_DISABLED = 0xcccccc;
 export const WALL_FACE_PRESSED = 0xb0b0b0;
 
-export const RAISED_TL: readonly [number, number] = [0xffffff, 0xdfdfdf];
-export const RAISED_BR: readonly [number, number] = [0x000000, 0x808080];
+/** The 1 px border that separates the whole footprint from the board tile underneath it. */
+export const WALL_OUTLINE = 0x808080;
 
-const DISABLED_TL: readonly [number, number] = [0xdfdfdf, WALL_FACE_DISABLED];
-const DISABLED_BR: readonly [number, number] = [0x808080, 0xa8a8a8];
+export const RAISED_TL: readonly [number, number] = [0xffffff, 0xdfdfdf];
+export const RAISED_BR: readonly [number, number] = [0x404040, 0x808080];
+
+const DISABLED_TL: readonly [number, number] = [0xe8e8e8, 0xe0e0e0];
+const DISABLED_BR: readonly [number, number] = [0x909090, 0xacacac];
 
 const PRESSED_TL: readonly [number, number] = [0x000000, 0x808080];
 const PRESSED_BR: readonly [number, number] = [0xffffff, 0xdfdfdf];

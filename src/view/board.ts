@@ -20,6 +20,7 @@ import {
   wallFocusRect,
   wallFootprintSize,
   wallSpec,
+  WALL_OUTLINE,
   type WallState,
 } from './wallAppearance.ts';
 import {
@@ -514,14 +515,15 @@ function drawWallShape(
   const s = Math.round(size);
 
   g.rect(x, y, s, s).fill({ color: spec.face, alpha });
-  wallBevel(g, x, y, s, spec.tl, spec.br, alpha);
+  g.rect(x + 0.5, y + 0.5, s - 1, s - 1).stroke({ width: 1, color: WALL_OUTLINE, alpha });
+  wallBevel(g, x + 1, y + 1, s - 2, spec.tl, spec.br, alpha);
 
   if (spec.innerRim) {
-    wallBevel(g, x + 3, y + 3, s - 6, RAISED_TL, RAISED_BR, alpha);
+    wallBevel(g, x + 4, y + 4, s - 8, RAISED_TL, RAISED_BR, alpha);
   }
 
   if (spec.crosshatch) {
-    for (const seg of hatchSegments(x + 2, y + 2, s - 4, 4)) {
+    for (const seg of hatchSegments(x + 3, y + 3, s - 6, 4)) {
       g.moveTo(seg.x1, seg.y1).lineTo(seg.x2, seg.y2).stroke({ width: 1, color: PAL.shadow, alpha });
     }
   }
