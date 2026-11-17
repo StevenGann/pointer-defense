@@ -39,6 +39,8 @@ import {
   toggleAutoWave,
   anyTowerRepairing,
   autoWaveStatus,
+  noBuildActive,
+  NO_BUILD_MESSAGE,
   AUTO_WAVE_DELAY_TICKS,
 } from '../src/core/state.ts';
 import { TOWER_STATS, TOWER_KINDS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
@@ -3441,6 +3443,152 @@ function maintenanceRig(gunHp) {
   selectPlacedTower(s, c);
   const h = computeHud(computeLayout(1280, 720), s);
   check(h.detail !== null && h.detail.branches.length === 3, 'a tier-2 cursor offers three branches');
+}
+
+// --- 35. No-Build freezes the board -----------------------------------------------------------
+
+{
+  // 35a. During a no-build wave all six board/tower actions are refused, and the frozen status
+  // message is the exact string the view surfaces.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 3, 6);
+  placeTower(s, 'wall', 5, 5);
+  const gun = towerAt(s, 3, 6);
+  const wall = towerAt(s, 5, 5);
+  upgradeTower(s, 5, 5); // wall -> tier 2, so it has branches
+  gun.hp = gun.maxHp / 2;
+  gun.targetMode = 'first';
+  s.phase = 'wave';
+  s.modifiers = ['no-build'];
+
+  check(noBuildActive(s), 'no-build is active during the wave');
+  check(NO_BUILD_MESSAGE === 'No-Build — the board is frozen this wave', 'the frozen status message is exact');
+
+  check(!canPlace(s, 'gun', 4, 4), 'placing is refused');
+  check(!upgradeTower(s, 3, 6), 'upgrading is refused');
+  check(gun.tier === 1, 'the refused upgrade leaves the tier unchanged');
+  check(!chooseBranch(s, 5, 5, 'A'), 'branching is refused');
+  check(wall.branch === null, 'the refused branch leaves the wall unbranched');
+  check(!sellTower(s, 3, 6), 'selling is refused');
+  check(towerAt(s, 3, 6) !== undefined, 'the tower survives the refused sell');
+  check(!startRepair(s, 3, 6), 'repairing is refused');
+  check(!isRepairing(gun, s.clock), 'no repair starts');
+  cycleTargetMode(s, 3, 6);
+  check(gun.targetMode === 'first', 'retargeting is refused');
+  check(!('noBuildRow' in s), 'the locked-row field is gone from the state');
+}
+
+{
+  // 35b. The tower-detail and palette buttons render disabled during a no-build wave.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 3, 6);
+  const gun = towerAt(s, 3, 6);
+  gun.hp = gun.maxHp / 2;
+  selectPlacedTower(s, gun);
+  s.phase = 'wave';
+  s.modifiers = ['no-build'];
+  const l = computeLayout(1280, 720);
+  const h = computeHud(l, s);
+  const center = (r) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+  const enabledAt = (r) => hudControlAt(l, s, center(r).x, center(r).y)?.enabled === true;
+  check(h.detail !== null, 'a selected gun opens the detail panel');
+  check(!enabledAt(h.detail.target), 'target button is disabled under no-build');
+  check(!enabledAt(h.detail.upgrade), 'upgrade button is disabled under no-build');
+  check(!enabledAt(h.detail.repair), 'repair button is disabled under no-build');
+  check(!enabledAt(h.detail.sell), 'sell button is disabled under no-build');
+
+  const palette = stateOnLevel('open-field');
+  palette.economy.salvage = 100000;
+  palette.phase = 'wave';
+  palette.modifiers = ['no-build'];
+  const ph = computeHud(l, palette);
+  const p = ph.towers[0];
+  const hit = hudControlAt(l, palette, center(p.rect).x, center(p.rect).y);
+  check(hit !== null && hit.action === 'gun' && hit.enabled === false, 'palette gun button is disabled under no-build');
+}
+
+{
+  // 35c. Between waves and during waves without the modifier, nothing changes.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  check(!noBuildActive(s), 'no-build is not active between waves');
+  check(canPlace(s, 'gun', 4, 4), 'placing still works between waves');
+  placeTower(s, 'gun', 4, 4);
+  s.phase = 'wave';
+  s.modifiers = ['fog'];
+  check(!noBuildActive(s), 'no-build is not active in a fog wave');
+  check(upgradeTower(s, 4, 4), 'upgrading still works in a non-no-build wave');
+
+  const build = createRunState();
+  build.economy.salvage = 100000;
+  const l = computeLayout(1280, 720);
+  const ph = computeHud(l, build);
+  const p = ph.towers[0];
+  const hit = hudControlAt(l, build, p.rect.x + p.rect.w / 2, p.rect.y + p.rect.h / 2);
+  check(hit !== null && hit.enabled === true, 'palette gun button is enabled between waves');
+}
+
+{
+  // 35d. The Repair tower's aura still heals during a no-build wave.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'repair', 5, 5);
+  placeTower(s, 'gun', 6, 5);
+  const gun = towerAt(s, 6, 5);
+  gun.hp = 40;
+  s.phase = 'wave';
+  s.modifiers = ['no-build'];
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const e = stationary(999, 'grunt', 1, 0.5, 0.5);
+  e.hp = 1e9;
+  e.maxHp = 1e9;
+  s.enemies.push(e);
+  for (let i = 0; i < 60; i++) tick(s);
+  check(gun.hp > 40, `repair aura still heals during no-build (${gun.hp})`);
+}
+
+{
+  // 35e. Manual Override still toggles and still retargets during a no-build wave.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 5, 5);
+  s.phase = 'wave';
+  s.modifiers = ['no-build'];
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const natural = stationary(1, 'grunt', 1, 5.5, 4.0);
+  const marked = stationary(2, 'grunt', 1, 5.5, 6.0);
+  natural.dist = 100;
+  marked.dist = 1;
+  natural.hp = 1e9;
+  natural.maxHp = 1e9;
+  marked.hp = 1e9;
+  marked.maxHp = 1e9;
+  s.enemies.push(natural, marked);
+  s.pointer.targetId = marked.id;
+  toggleManualOverride(s);
+  check(s.pointer.manualOverride === true, 'manual override toggles during no-build');
+  for (let i = 0; i < 120; i++) tick(s);
+  check(marked.hp < marked.maxHp, 'override: the gun shoots the marked enemy during no-build');
+  check(natural.hp === natural.maxHp, 'override: the natural target is left alone');
+}
+
+{
+  // 35f. Auto-wave still advances, and a run with a no-build wave can still finish.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 3, 6);
+  toggleAutoWave(s);
+  startWave(s);
+  s.modifiers = ['no-build'];
+  check(s.phase === 'wave' && noBuildActive(s), 'no-build is active on the live wave');
+  for (let i = 0; i < 4000 && s.phase === 'wave'; i++) tick(s);
+  check(s.phase === 'build', 'the no-build wave clears back to build');
+  check(s.wave === 1, 'wave 1 finished');
+  const armed = s.autoWaveAtTick;
+  while (s.phase === 'build' && s.clock < armed) tick(s);
+  check(s.phase === 'wave' && s.wave === 2, 'auto-wave advances past the no-build wave');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

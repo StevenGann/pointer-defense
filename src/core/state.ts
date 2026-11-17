@@ -86,7 +86,6 @@ import {
 import {
   buildSchedule,
   earlyCallBonus,
-  noBuildRow,
   popupAliveCap,
   WAVE_COUNT,
   waveModifiers,
@@ -194,8 +193,6 @@ export interface RunState {
   clock: number;
   /** Modifiers active for the current wave (empty outside a wave). */
   modifiers: readonly ModifierId[];
-  /** Row locked by the no-build modifier, or null. */
-  noBuildRow: number | null;
   /** True once the player chose Endless after clearing wave 100. */
   endless: boolean;
   /** Total ticks simulated this run. */
@@ -295,7 +292,6 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     waveTick: 0,
     clock: 0,
     modifiers: [],
-    noBuildRow: null,
     endless: false,
     tick: 0,
     accumulator: 0,
@@ -380,7 +376,7 @@ export function canPlace(s: RunState, kind: TowerKind, col: number, row: number)
   if (s.phase !== 'build' && s.phase !== 'wave') return false;
   if (!inBounds(col, row) || tileAt(s.grid, col, row) !== 'buildable') return false;
   if (toggleAtTile(s, col, row)) return false; // toggles are permanent map elements
-  if (s.modifiers.includes('no-build') && s.phase === 'wave' && s.noBuildRow === row) return false;
+  if (noBuildActive(s)) return false;
   if (towerAt(s, col, row)) return false;
   if (!canAfford(s.economy, TOWER_STATS[kind].cost)) return false;
   return !wouldSeal(s, row * s.grid.cols + col);
@@ -400,6 +396,14 @@ export function enemyAt(s: RunState, x: number, y: number, slack = CLICK_SLACK):
 
 export function isFinalWave(s: RunState): boolean {
   return !s.endless && s.wave >= WAVE_COUNT;
+}
+
+/** The status-bar message every blocked No-Build action surfaces (docs/design.md §8). */
+export const NO_BUILD_MESSAGE = 'No-Build — the board is frozen this wave';
+
+/** True while a wave with the no-build modifier is running: the whole board is frozen. */
+export function noBuildActive(s: RunState): boolean {
+  return s.modifiers.includes('no-build') && s.phase === 'wave';
 }
 
 /** Tower range multiplier from the fog modifier (docs/design.md §8.3). */
@@ -557,6 +561,7 @@ function rebuildField(s: RunState): void {
 
 export function upgradeTower(s: RunState, col: number, row: number): boolean {
   if (s.phase === 'halted' || s.phase === 'victory') return false;
+  if (noBuildActive(s)) return false;
   const t = towerAt(s, col, row);
   if (!t) return false;
   if (t.tier === 2 && t.kind !== 'repair') return false; // 2 -> 3 is chooseBranch's job (repair never branches)
@@ -572,6 +577,7 @@ export function upgradeTower(s: RunState, col: number, row: number): boolean {
 
 export function chooseBranch(s: RunState, col: number, row: number, branch: Branch): boolean {
   if (s.phase === 'halted' || s.phase === 'victory') return false;
+  if (noBuildActive(s)) return false;
   const t = towerAt(s, col, row);
   if (!t || t.tier !== 2 || t.branch !== null) return false;
   const cost = upgradeCost(t);
@@ -589,6 +595,7 @@ export function chooseBranch(s: RunState, col: number, row: number, branch: Bran
 }
 
 export function sellTower(s: RunState, col: number, row: number): boolean {
+  if (noBuildActive(s)) return false;
   const t = towerAt(s, col, row);
   if (!t) return false;
   const refund = sellValue(t);
@@ -609,6 +616,7 @@ export function sellTower(s: RunState, col: number, row: number): boolean {
  */
 export function startRepair(s: RunState, col: number, row: number): boolean {
   if (s.phase === 'halted' || s.phase === 'victory') return false;
+  if (noBuildActive(s)) return false;
   const t = towerAt(s, col, row);
   if (!t || t.maxHp <= 0) return false;
   if (isRepairing(t, s.clock)) return false;
@@ -706,6 +714,7 @@ export function toggleGate(s: RunState, col: number, row: number): boolean {
  *  mode ignores the player's stored value, so cycling is refused for it. The Cursor's rule is fixed
  *  too (shielded, then nearest to its home tile), so cycling is a no-op for it as well. */
 export function cycleTargetMode(s: RunState, col: number, row: number): void {
+  if (noBuildActive(s)) return;
   const t = towerAt(s, col, row);
   if (!t) return;
   if (t.kind === 'cursor' || t.kind === 'repair') return;
@@ -727,7 +736,6 @@ export function startWave(s: RunState): boolean {
   s.autoWaveAtTick = 0; // any start — manual or automatic — cancels a pending countdown
   s.leaksByWave.set(s.wave, 0);
   s.modifiers = waveModifiers(s.wave);
-  s.noBuildRow = s.modifiers.includes('no-build') ? noBuildRow(s.wave) : null;
   recomputeAuras(s.towers);
   s.events.push({ type: 'waveStarted', wave: s.wave });
   if (early) {
@@ -1978,6 +1986,5 @@ function finishWavePhase(s: RunState): void {
   s.pointer.held = false;
   s.pointer.targetId = null;
   s.modifiers = [];
-  s.noBuildRow = null;
   s.phase = s.wave >= WAVE_COUNT && !s.endless ? 'victory' : 'build';
 }

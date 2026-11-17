@@ -5,6 +5,8 @@ import {
   createRunState,
   cursorMaintenanceStatus,
   enterEndless,
+  noBuildActive,
+  NO_BUILD_MESSAGE,
   restartWindows,
   selectedTower,
   step,
@@ -488,23 +490,30 @@ function hudTooltipLines(action: HudAction, s: RunState): TooltipLine[] {
     case 'pointer':
       return pointerTooltipLines(s.pointer, s.economy.salvage, s.wave);
     case 'override':
-      return ['Manual Override: every tower in range of the marked enemy drops its own priority and shoots it.'];
+      return noBuildActive(s)
+        ? ['Manual Override: every tower in range of the marked enemy drops its own priority and shoots it.', 'No-Build: towers cannot be retargeted this wave.']
+        : ['Manual Override: every tower in range of the marked enemy drops its own priority and shoots it.'];
     case 'auto':
       return ['Auto: start the next wave 1.5 s after the board clears (holds while a tower repairs).'];
     case 'upgrade':
+      if (noBuildActive(s)) return [NO_BUILD_MESSAGE];
       return tower ? upgradeTooltipLines(tower, s.economy.salvage) : [];
     case 'branchA':
     case 'branchB':
     case 'branchC': {
+      if (noBuildActive(s)) return [NO_BUILD_MESSAGE];
       if (!tower) return [];
       const branch: Branch = action === 'branchA' ? 'A' : action === 'branchB' ? 'B' : 'C';
       return branchTooltipLines(tower, branch, s.economy.salvage);
     }
     case 'sell':
+      if (noBuildActive(s)) return [NO_BUILD_MESSAGE];
       return tower ? sellTooltipLines(tower) : [];
     case 'repair':
+      if (noBuildActive(s)) return [NO_BUILD_MESSAGE];
       return tower ? repairTooltipLines(tower, s.clock, s.economy.salvage) : [];
     case 'target': {
+      if (noBuildActive(s)) return [NO_BUILD_MESSAGE];
       if (!tower) return [];
       const reason = targetLockReason(tower.kind);
       return reason === null ? [] : [reason];
@@ -539,7 +548,8 @@ function updateTooltip(): void {
   if (!suppressed) {
     const palette = paletteTowerAt(layout, state, h.x, h.y);
     if (palette !== null) {
-      tooltip.update({ key: `palette:${palette}`, lines: paletteTooltipLines(palette) }, h.x, h.y, viewportW, viewportH);
+      const lines = noBuildActive(state) ? [NO_BUILD_MESSAGE] : paletteTooltipLines(palette);
+      tooltip.update({ key: `palette:${palette}`, lines }, h.x, h.y, viewportW, viewportH);
       return;
     }
     const tower = h.onBoard ? towerAt(state, h.col, h.row) : undefined;

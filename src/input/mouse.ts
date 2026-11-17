@@ -1,6 +1,6 @@
 import type { Application } from 'pixi.js';
 import { menuItemAt, pixelToWorld, pointInRect, type Layout } from '../view/chrome.ts';
-import { hudButtonAt, modalRestartAt, victoryButtonAt, type HudAction } from '../view/hud.ts';
+import { hudButtonAt, hudControlAt, modalRestartAt, victoryButtonAt, type HudAction } from '../view/hud.ts';
 import { adCloseRect } from '../view/ad.ts';
 import { menuEntryAt, type OpenMenu } from '../view/menu.ts';
 import { dialogButtonAt, type DialogModel } from '../view/dialog.ts';
@@ -24,6 +24,8 @@ import {
   cycleLevel,
   cycleTargetMode,
   enemyAt,
+  noBuildActive,
+  NO_BUILD_MESSAGE,
   placeTower,
   placementSealsUnderToggles,
   pointerDown,
@@ -85,12 +87,30 @@ export interface MouseContext {
   notice: (message: string) => void;
 }
 
+/** HUD actions the No-Build modifier disables (placing, upgrading, branching, selling, repairing,
+ *  and retargeting). Used to surface a status message when a greyed button is clicked anyway. */
+const NO_BUILD_HUD_ACTIONS: ReadonlySet<HudAction> = new Set([
+  'gun',
+  'cannon',
+  'taser',
+  'frost',
+  'laser',
+  'beacon',
+  'repair',
+  'wall',
+  'cursor',
+  'upgrade',
+  'branchA',
+  'branchB',
+  'branchC',
+  'sell',
+  'target',
+]);
+
 function refusalReason(s: RunState, kind: TowerKind, col: number, row: number): string {
+  if (noBuildActive(s)) return NO_BUILD_MESSAGE;
   if (tileAt(s.grid, col, row) !== 'buildable') return 'That tile is blocked.';
   if (toggleAtTile(s, col, row)) return 'That tile is a shutter and cannot be built on.';
-  if (s.modifiers.includes('no-build') && s.phase === 'wave' && s.noBuildRow === row) {
-    return 'That row is offline for this wave.';
-  }
   if (towerAt(s, col, row)) return 'There is already a tower there.';
   if (!canAfford(s.economy, TOWER_STATS[kind].cost)) return 'Not enough salvage for that tower.';
   if (placementSealsUnderToggles(s, col, row)) return 'That would seal the route when a shutter closes.';
@@ -218,6 +238,13 @@ export class MouseController {
     if (hud) {
       this.dispatch(hud, s);
       return;
+    }
+    if (noBuildActive(s)) {
+      const control = hudControlAt(l, s, x, y);
+      if (control && !control.enabled && NO_BUILD_HUD_ACTIONS.has(control.action)) {
+        this.ctx.notice(NO_BUILD_MESSAGE);
+        return;
+      }
     }
 
     const w = pixelToWorld(l, x, y);
@@ -369,12 +396,18 @@ export class MouseController {
     }
     if (e.key === 'u' || e.key === 'U') {
       const tower = selectedTower(s);
-      if (tower) upgradeTower(s, tower.col, tower.row);
+      if (tower) {
+        if (noBuildActive(s)) this.ctx.notice(NO_BUILD_MESSAGE);
+        else upgradeTower(s, tower.col, tower.row);
+      }
       return;
     }
     if (e.key === 'x' || e.key === 'X') {
       const tower = selectedTower(s);
-      if (tower) sellTower(s, tower.col, tower.row);
+      if (tower) {
+        if (noBuildActive(s)) this.ctx.notice(NO_BUILD_MESSAGE);
+        else sellTower(s, tower.col, tower.row);
+      }
       return;
     }
     if (e.key === 'Enter') {

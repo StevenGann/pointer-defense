@@ -127,7 +127,7 @@ export function computeLayout(vw: number, vh: number): Layout {
 
   const right: Rect = { x: status.x + status.w - 120, y: status.y, w: 120, h: status.h };
   const speed: Rect = { x: right.x - 46, y: status.y, w: 44, h: status.h };
-  const middle: Rect = { x: speed.x - 122, y: status.y, w: 120, h: status.h };
+  const middle: Rect = { x: speed.x - 180, y: status.y, w: 178, h: status.h };
   const left: Rect = { x: status.x, y: status.y, w: middle.x - 2 - status.x, h: status.h };
 
   return {

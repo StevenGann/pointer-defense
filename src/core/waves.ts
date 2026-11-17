@@ -1,6 +1,5 @@
 import { enemyKillValue, type EnemyKind } from './enemies.ts';
 import { secondsToTicks } from './time.ts';
-import { ROWS } from './grid.ts';
 
 /**
  * Wave generation (docs/design.md §8).
@@ -48,7 +47,7 @@ export const MODIFIER_POOL: readonly ModifierId[] = ['fog', 'no-build', 'fast', 
 
 export const MODIFIER_NAMES: Readonly<Record<ModifierId, string>> = {
   fog: 'Fog',
-  'no-build': 'No-Build Row',
+  'no-build': 'No-Build',
   fast: 'Fast Forward',
   blackout: 'Blackout',
   rush: 'Rush',
@@ -174,11 +173,6 @@ export function waveModifiers(wave: number): readonly ModifierId[] {
   const idx = MODIFIER_POOL.indexOf(first);
   const offset = 1 + (hashInt(wave ^ 0x51ab3) % (MODIFIER_POOL.length - 1));
   return [first, MODIFIER_POOL[(idx + offset) % MODIFIER_POOL.length]];
-}
-
-/** The row locked by the no-build modifier, seeded by the wave number (0..ROWS-1). */
-export function noBuildRow(wave: number): number {
-  return hashInt(wave ^ 0x7f4a7c15) % ROWS;
 }
 
 // ---------------------------------------------------------------------------------------------

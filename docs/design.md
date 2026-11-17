@@ -520,9 +520,17 @@ HP outgrows value on purpose. The curve bends twice: it steepens through the Spe
 bands, then flattens past wave 60 so that one reboot's worth of specs is enough to carry a competent
 player to wave 100. Without the reboot the same player runs out of integrity somewhere in the Siege band.
 
-From wave 51 each wave takes one modifier from a small pool: **fog** (range −20 %), **no-build band**
-(one row cannot be built on), **fast forward** (speed +15 %), **blackout** (salvage hidden until the
-wave ends), **rush** (spawn interval −25 %, value +10 %).
+From wave 51 each wave takes one modifier from a small pool: **fog** (range −20 %), **no-build**
+(the whole board is frozen for the wave), **fast forward** (speed +15 %), **blackout** (salvage
+hidden until the wave ends), **rush** (spawn interval −25 %, value +10 %).
+
+During a **no-build** wave the player cannot change their board or their towers: no placing a tower
+anywhere, no upgrades, no branch choices, no repairs (by hand or by a Maintenance cursor), no
+selling, and no changing a tower's target priority. Towers still fire, the Repair tower's aura still
+heals, the pointer and cursors still click, and the Auto checkbox still runs. Manual Override keeps
+working too — it is a pointer spec, not a tower setting — though towers themselves cannot be
+retargeted. Every blocked action reports `No-Build — the board is frozen this wave` in the status bar
+and the relevant buttons render disabled for the duration of the wave, re-enabling the moment it ends.
 
 ### 8.4 Victory and endless
 
@@ -548,8 +556,8 @@ recent wave started" (ads and the bonus read it) and resets on every start, earl
 
 `startWave` is allowed from **build** (a normal call, no bonus) or from **wave** (an early call). It
 is refused at wave 100 in a normal run. Starting increments the wave number, pushes a `WaveRun`, sets
-phase to wave, resets `waveTick`, applies the new wave's modifiers and no-build row, and — on an early
-call — pays the bonus.
+phase to wave, resets `waveTick`, applies the new wave's modifiers, and — on an early call — pays
+the bonus.
 
 A wave is **cleared** when its queue is empty and no living enemy carries that wave number. Clearing
 awards `waveClearBonus(wave)` and pushes `waveCleared`, exactly as before. The run returns to **build**

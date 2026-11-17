@@ -3,7 +3,7 @@ import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
 import { clickDamage, comboMultiplier, critChance, nextPointerCost, overclockCeiling, pointerInfo } from '../core/pointer.ts';
-import { autoWaveStatus, canCycleLevel, currentPath, cursorMaintenanceStatus, isFinalWave, pointerDamageMult, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
+import { autoWaveStatus, canCycleLevel, currentPath, cursorMaintenanceStatus, isFinalWave, noBuildActive, NO_BUILD_MESSAGE, pointerDamageMult, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
 import { levelById } from '../core/levels.ts';
 import {
   cursorClickDamage,
@@ -470,31 +470,32 @@ export function hudControlAt(l: Layout, s: RunState, px: number, py: number): Hu
     return { action: 'override', enabled: true };
   }
 
+  const frozen = noBuildActive(s);
   const tower = selectedTower(s);
   if (h.detail && tower) {
     const upgradePrice = upgradeCost(tower);
     const affordable = upgradePrice !== null && canAfford(s.economy, upgradePrice);
     if (h.detail.target && pointInRect(h.detail.target, px, py)) {
-      return { action: 'target', enabled: TOWER_STATS[tower.kind].targetLock === null && tower.kind !== 'cursor' };
+      return { action: 'target', enabled: !frozen && TOWER_STATS[tower.kind].targetLock === null && tower.kind !== 'cursor' };
     }
-    if (h.detail.upgrade && pointInRect(h.detail.upgrade, px, py)) return { action: 'upgrade', enabled: affordable };
+    if (h.detail.upgrade && pointInRect(h.detail.upgrade, px, py)) return { action: 'upgrade', enabled: !frozen && affordable };
     for (const b of h.detail.branches) {
       if (pointInRect(b.rect, px, py)) {
         const action = b.branch === 'A' ? 'branchA' : b.branch === 'B' ? 'branchB' : 'branchC';
-        return { action, enabled: affordable };
+        return { action, enabled: !frozen && affordable };
       }
     }
     if (h.detail.repair && pointInRect(h.detail.repair, px, py)) {
       const repairing = isRepairing(tower, s.clock);
       const full = repairHpToRestore(tower) <= 0;
       const affordableRepair = canAfford(s.economy, repairCost(tower));
-      return { action: 'repair', enabled: !repairing && !full && affordableRepair };
+      return { action: 'repair', enabled: !frozen && !repairing && !full && affordableRepair };
     }
-    if (pointInRect(h.detail.sell, px, py)) return { action: 'sell', enabled: true };
+    if (pointInRect(h.detail.sell, px, py)) return { action: 'sell', enabled: !frozen };
   } else {
     for (const t of h.towers) {
       if (pointInRect(t.rect, px, py)) {
-        return { action: t.kind, enabled: canAfford(s.economy, TOWER_STATS[t.kind].cost) };
+        return { action: t.kind, enabled: !frozen && canAfford(s.economy, TOWER_STATS[t.kind].cost) };
       }
     }
   }
@@ -742,12 +743,16 @@ export class HudView {
       this.statusHint.text = '';
     } else {
       this.statusPaused.text = '';
-      this.statusHint.text = this.notice || autoWaveStatus(s) || hintFor(s);
+      this.statusHint.text = this.notice || autoWaveStatus(s) || (noBuildActive(s) ? NO_BUILD_MESSAGE : hintFor(s));
       this.statusHint.position.set(sp.left.x + 4, sp.left.y + Math.floor(sp.left.h / 2));
     }
 
     const displayWave = s.phase === 'build' ? s.wave + 1 : s.wave;
-    this.statusWave.text = s.endless ? `Wave ${displayWave}` : `Wave ${displayWave} / ${WAVE_COUNT}`;
+    let waveLabel = s.endless ? `Wave ${displayWave}` : `Wave ${displayWave} / ${WAVE_COUNT}`;
+    if (s.phase === 'wave' && s.modifiers.length > 0) {
+      waveLabel += ` · ${s.modifiers.map((m) => MODIFIER_NAMES[m]).join(' + ')}`;
+    }
+    this.statusWave.text = waveLabel;
     this.statusWave.position.set(sp.middle.x + 4, sp.middle.y + Math.floor(sp.middle.h / 2));
     this.statusSpeed.text = `×${s.speed}`;
     this.statusSpeed.position.set(sp.speed.x + 4, sp.speed.y + Math.floor(sp.speed.h / 2));
@@ -821,6 +826,7 @@ export class HudView {
 
   private drawTowerControls(s: RunState, h: HudLayout, hoverHud: HudAction | null): void {
     const g = this.g;
+    const frozen = noBuildActive(s);
     const tower = selectedTower(s);
 
     if (h.detail && tower) {
@@ -872,7 +878,7 @@ export class HudView {
       this.towerRoute.position.set(d.route.x, d.route.y + Math.floor(d.route.h / 2));
 
       if (d.target) {
-        const fixed = TOWER_STATS[tower.kind].targetLock !== null || tower.kind === 'cursor';
+        const fixed = frozen || TOWER_STATS[tower.kind].targetLock !== null || tower.kind === 'cursor';
         drawButton(g, d.target, !fixed, hoverHud === 'target' && !fixed);
         this.targetButton.text = 'Target';
         this.targetButton.style.fill = fixed ? PAL.shadow : PAL.text;
@@ -887,7 +893,7 @@ export class HudView {
 
       const price = upgradeCost(tower);
       if (d.upgrade && price !== null) {
-        const enabled = canAfford(s.economy, price);
+        const enabled = !frozen && canAfford(s.economy, price);
         drawButton(g, d.upgrade, enabled, hoverHud === 'upgrade');
         this.upgradeButton.text = `Upgrade $${formatNumber(price)}`;
         this.upgradeButton.style.fill = enabled ? PAL.text : PAL.shadow;
@@ -903,7 +909,7 @@ export class HudView {
           text.text = '';
           continue;
         }
-        const enabled = price !== null && canAfford(s.economy, price);
+        const enabled = !frozen && price !== null && canAfford(s.economy, price);
         drawButton(
           g,
           b.rect,
@@ -919,7 +925,7 @@ export class HudView {
         const repairing = isRepairing(tower, s.clock);
         const hp = repairHpToRestore(tower);
         const cost = repairCost(tower);
-        const enabled = !repairing && hp > 0 && canAfford(s.economy, cost);
+        const enabled = !frozen && !repairing && hp > 0 && canAfford(s.economy, cost);
         drawButton(g, d.repair, enabled, hoverHud === 'repair');
         this.repairButton.text = repairing
           ? `Repairing — ${repairRemainingSeconds(tower, s.clock).toFixed(1)} s`
@@ -932,9 +938,9 @@ export class HudView {
         this.repairButton.text = '';
       }
 
-      drawButton(g, d.sell, true, hoverHud === 'sell');
+      drawButton(g, d.sell, !frozen, hoverHud === 'sell');
       this.sellButton.text = `Sell $${formatNumber(sellValue(tower))}`;
-      this.sellButton.style.fill = PAL.text;
+      this.sellButton.style.fill = frozen ? PAL.shadow : PAL.text;
       this.sellButton.position.set(d.sell.x + 6, d.sell.y + Math.floor(d.sell.h / 2));
       return;
     }
@@ -963,7 +969,7 @@ export class HudView {
     for (let i = 0; i < h.towers.length; i++) {
       this.towerButtons[i].visible = true;
       const { kind, rect } = h.towers[i];
-      const enabled = canAfford(s.economy, TOWER_STATS[kind].cost);
+      const enabled = !frozen && canAfford(s.economy, TOWER_STATS[kind].cost);
       const armed = s.selected === kind;
       // Onboarding: on a fresh profile the Gun button pulses every 2 s until the first placement.
       const pulse =

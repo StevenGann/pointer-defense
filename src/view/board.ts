@@ -250,10 +250,6 @@ export class BoardView {
       dashedCircle(this.overlay, cx, cy, TOWER_STATS[state.selected].range * cell, PAL.navy, 1);
     }
 
-    if (state.modifiers.includes('no-build') && state.phase === 'wave' && state.noBuildRow !== null) {
-      drawNoBuildRow(this.overlay, state.noBuildRow, board, cell);
-    }
-
     if (state.pointer.stage >= 2 && state.phase === 'wave') {
       drawReticle(this.overlay, state, board, cell);
     }
@@ -394,20 +390,6 @@ function edgeRect(g: Graphics, x: number, y: number, s: number, color: number): 
   hline(g, x, x + s, y + s - 0.5, color);
   vline(g, x + 0.5, y, y + s, color);
   vline(g, x + s - 0.5, y, y + s, color);
-}
-
-function drawNoBuildRow(
-  g: Graphics,
-  row: number,
-  board: { x: number; y: number; cell: number },
-  cell: number,
-): void {
-  const y0 = board.y + row * cell;
-  const y1 = y0 + cell;
-  g.rect(board.x, y0, COLS * cell, cell).fill({ color: PAL.dark, alpha: 0.18 });
-  for (let x = board.x; x < board.x + COLS * cell; x += cell * 0.6) {
-    g.moveTo(x, y1).lineTo(x + cell * 0.6, y0).stroke({ width: 1, color: PAL.dark });
-  }
 }
 
 export function dashedLine(
