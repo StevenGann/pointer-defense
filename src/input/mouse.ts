@@ -76,7 +76,7 @@ export interface MouseContext {
   restartWindows: () => void;
   startEndless: () => void;
   newRun: () => void;
-  openMenu: (name: 'file' | 'help' | null) => void;
+  openMenu: (name: 'file' | 'view' | 'help' | null) => void;
   menuAction: (id: string) => void;
   dialogAction: (id: string) => void;
   closeDialog: () => void;
@@ -192,6 +192,10 @@ export class MouseController {
     const mi = menuItemAt(l.menu, x, y);
     if (mi === 0) {
       this.ctx.openMenu('file');
+      return;
+    }
+    if (mi === 1) {
+      this.ctx.openMenu('view');
       return;
     }
     if (mi === 2) {

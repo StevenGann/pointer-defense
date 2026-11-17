@@ -34,6 +34,8 @@ import { DialogView, type DialogModel } from './view/dialog.ts';
 import { MouseController } from './input/mouse.ts';
 import { EffectsView } from './view/effects.ts';
 import { sfx, type SoundName } from './audio/sfx.ts';
+import { CameraShake, shakeImpulseFor } from './view/shake.ts';
+import { backingStorePixelSize, cssViewportSize, liveDevicePixelRatio } from './view/screen.ts';
 import type { Branch, TowerKind } from './core/towers.ts';
 import pkg from '../package.json';
 
@@ -49,9 +51,57 @@ await app.init({
 document.getElementById('app')!.appendChild(app.canvas);
 app.canvas.style.cursor = 'none';
 
+// --- Device pixel ratio ----------------------------------------------------------------------
+// The backing store is created at the ratio in force at boot, but devicePixelRatio changes when the
+// window moves to a display with another scale factor, when the OS scale changes, and when the
+// browser zooms. Pixi's `resizeTo` only reacts to a window resize and never re-reads the ratio, so
+// a ratio change leaves the canvas raster at the old density while the CSS size follows the new one
+// — the upscale that blurs text and lines. Re-apply the live ratio whenever it drifts.
+function applyResolution(): void {
+  const dpr = liveDevicePixelRatio();
+  const size = cssViewportSize();
+  const target = backingStorePixelSize(size.width, size.height, dpr);
+  const current = backingStorePixelSize(app.screen.width, app.screen.height, app.renderer.resolution);
+  if (target.width === current.width && target.height === current.height && dpr === app.renderer.resolution) {
+    return;
+  }
+  app.renderer.resize(size.width, size.height, dpr);
+}
+
+function watchResolution(): void {
+  applyResolution();
+  window.addEventListener('resize', applyResolution);
+
+  // The resolution media query flips exactly when devicePixelRatio changes; re-arm it for the new
+  // ratio after each flip. A plain window resize does not always fire on a pure ratio change.
+  let detach: (() => void) | null = null;
+  const trackDpr = (): void => {
+    detach?.();
+    detach = null;
+    try {
+      const mq = window.matchMedia(`(resolution: ${liveDevicePixelRatio()}dppx)`);
+      const onChange = (): void => {
+        applyResolution();
+        trackDpr();
+      };
+      mq.addEventListener('change', onChange);
+      detach = () => mq.removeEventListener('change', onChange);
+    } catch {
+      // resolution media queries are not available everywhere; the resize listener still covers it.
+    }
+  };
+  trackDpr();
+
+  window.visualViewport?.addEventListener('resize', applyResolution);
+}
+watchResolution();
+
 let profile: Profile = loadProfile();
 let state: RunState = createRunState(profile);
 let layout: Layout = computeLayout(app.screen.width, app.screen.height);
+
+const shake = new CameraShake();
+shake.setEnabled(profile.shakeOn);
 
 const chrome = new ChromeView();
 const board = new BoardView();
@@ -154,11 +204,17 @@ function doNewRun(): void {
   menu = null;
 }
 
-function openMenu(name: 'file' | 'help' | null): void {
+function openMenu(name: 'file' | 'view' | 'help' | null): void {
   menu = name ? buildMenu(name) : null;
 }
 
-function buildMenu(name: 'file' | 'help'): OpenMenu {
+function buildMenu(name: 'file' | 'view' | 'help'): OpenMenu {
+  if (name === 'view') {
+    return {
+      name,
+      entries: [{ id: 'shake', label: profile.shakeOn ? 'Screen shake: On' : 'Screen shake: Off' }],
+    };
+  }
   if (name === 'help') {
     return {
       name,
@@ -239,6 +295,11 @@ function menuAction(id: string): void {
       sfx.setVolume(profile.volume);
       saveProfile(profile);
       break;
+    case 'shake':
+      profile.shakeOn = !profile.shakeOn;
+      shake.setEnabled(profile.shakeOn);
+      saveProfile(profile);
+      break;
   }
 }
 
@@ -316,7 +377,14 @@ function towerSound(kind: TowerKind): SoundName {
 /** Drain the sim's one-shot events into sound and view effects, clearing the queue each frame. */
 function drainEvents(): void {
   if (state.events.length === 0) return;
+  let shakeAmplitude = 0;
+  let shakeFreezeMs = 0;
   for (const ev of state.events) {
+    const impulse = shakeImpulseFor(ev);
+    if (impulse) {
+      shakeAmplitude = Math.max(shakeAmplitude, impulse.amplitude);
+      shakeFreezeMs = Math.max(shakeFreezeMs, impulse.freezeMs);
+    }
     switch (ev.type) {
       case 'shot': {
         const tower = state.towers.find((t) => t.id === ev.towerId);
@@ -375,6 +443,7 @@ function drainEvents(): void {
         break;
     }
   }
+  if (shakeAmplitude > 0) shake.impulse(shakeAmplitude, state.tick, shakeFreezeMs);
   state.events = [];
 }
 
@@ -399,6 +468,8 @@ app.ticker.add((ticker) => {
   dialogView.draw(dialog, layout);
   updateTooltip();
   cursor.position.set(mouse.hover.x, mouse.hover.y);
+  const shakeOffset = shake.offset(state.tick);
+  root.position.set(shakeOffset.x, shakeOffset.y);
 });
 
 /** The tooltip lines for a HUD spend control, computed from the same functions the click applies. */

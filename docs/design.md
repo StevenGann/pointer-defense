@@ -781,6 +781,27 @@ Short and mechanical, measured in ticks at 60 Hz:
 
 No tweening curves anywhere. Windows 95 did not ease.
 
+### 13.5 Screen shake
+
+Camera shake moves the whole window frame — chrome and board together — so the desktop itself shudders
+rather than the play area sliding inside a static frame. It is a render-transform offset only: it never
+touches hit-testing, the tooltip anchor, or the simulation, and its per-frame jitter is seeded from the
+sim tick so a replay is identical.
+
+| Trigger | Amplitude |
+|---|---|
+| enemy death | 1 px |
+| tower takes a hit | 1 px |
+| Pop Up closed | 2 px |
+| boss death | 4 px |
+| leak (costs integrity) | 5 px + a 60 ms freeze-frame |
+| Toggle gate slams shut | 3 px |
+
+Amplitude decays to nothing over about 200 ms and is hard-capped at 400 ms. The subtle 1–2 px events
+read as weight, not as "shake"; the boss, leak and gate events are rare enough that they still land.
+A **Screen shake** toggle in the View menu persists in the profile like sound and volume, and defaults
+**off** for users who prefer reduced motion (`prefers-reduced-motion: reduce`).
+
 ---
 
 ## 14. Audio
@@ -823,6 +844,7 @@ One master volume, remembered in `localStorage`. No music at launch.
 |---|---|
 | Language | TypeScript, strict, `noUnusedLocals`, `noUnusedParameters` |
 | Renderer | PixiJS 8, WebGL/WebGPU, everything through `Graphics` |
+| Resolution | `devicePixelRatio` is read live and re-applied on ratio change (display move, OS scale, browser zoom), so the backing store stays `round(css × dpr)` and text re-rasterises crisp |
 | Bundler | Vite 8, `base: /pointer-defense/` |
 | Hosting | GitHub Pages, `.github/workflows/deploy.yml` on push to `main` |
 | Simulation | fixed 60 Hz accumulator; rendering interpolates; the sim never sees a frame delta |

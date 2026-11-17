@@ -37,6 +37,8 @@ export interface Profile {
   volume: VolumeLevel;
   /** Auto-wave: start the next wave 1.5 s after the board clears. */
   autoWave: boolean;
+  /** Screen shake. Defaults off for users who prefer reduced motion. */
+  shakeOn: boolean;
 }
 
 export const SPEC_KINDS: readonly SpecKind[] = ['cpu', 'ram', 'gpu', 'disk'];
@@ -95,7 +97,19 @@ export function defaultProfile(): Profile {
     soundOn: true,
     volume: 'med',
     autoWave: false,
+    shakeOn: !prefersReducedMotion(),
   };
+}
+
+/** Whether the user has asked the OS to reduce motion (false headless or when unsupported). */
+export function prefersReducedMotion(): boolean {
+  try {
+    const w = globalThis as { matchMedia?: (query: string) => { matches: boolean } };
+    if (typeof w.matchMedia !== 'function') return false;
+    return w.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  } catch {
+    return false;
+  }
 }
 
 export function cloneProfile(p: Profile): Profile {
@@ -109,6 +123,7 @@ export function cloneProfile(p: Profile): Profile {
     soundOn: p.soundOn,
     volume: p.volume,
     autoWave: p.autoWave,
+    shakeOn: p.shakeOn,
   };
 }
 
@@ -177,8 +192,9 @@ function parseProfile(raw: string): Profile | null {
   const soundOn = typeof o.soundOn === 'boolean' ? o.soundOn : true;
   const volume: VolumeLevel = o.volume === 'low' || o.volume === 'high' ? o.volume : 'med';
   const autoWave = typeof o.autoWave === 'boolean' ? o.autoWave : false;
+  const shakeOn = typeof o.shakeOn === 'boolean' ? o.shakeOn : !prefersReducedMotion();
 
-  return { version: SAVE_VERSION, specs, unspentSpecs, achievements, bestWave, reboots, soundOn, volume, autoWave };
+  return { version: SAVE_VERSION, specs, unspentSpecs, achievements, bestWave, reboots, soundOn, volume, autoWave, shakeOn };
 }
 
 /**

@@ -66,7 +66,7 @@ import {
   CRIT_MULTIPLIER,
   MARKED_DAMAGE_MULT,
 } from '../src/core/pointer.ts';
-import { loadProfile, saveProfile, defaultProfile } from '../src/core/save.ts';
+import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion } from '../src/core/save.ts';
 import { restartWindows, checkAchievements, enterEndless, pointerDamageMult } from '../src/core/state.ts';
 import { dashRects, offsetSegment, routeOffset } from '../src/view/route.ts';
 import { enemyDrawOrder, popupCloseHit, popupCloseRect, popupWindowRect } from '../src/view/popupEnemy.ts';
@@ -82,7 +82,16 @@ import {
 } from '../src/view/wallAppearance.ts';
 import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, branchName } from '../src/view/tooltipText.ts';
 import { BoardView, staticLayerKey } from '../src/view/board.ts';
-import { computeLayout } from '../src/view/chrome.ts';
+import { computeLayout, pixelToWorld } from '../src/view/chrome.ts';
+import { backingStorePixelSize } from '../src/view/screen.ts';
+import {
+  CameraShake,
+  shakeImpulseFor,
+  SHAKE_AMPLITUDE,
+  SHAKE_DECAY_TICKS,
+  SHAKE_MAX_TICKS,
+  SHAKE_LEAK_FREEZE_MS,
+} from '../src/view/shake.ts';
 
 // All v0.10b levels share a single spawn and exit, so the older maze checks keep a local gate.
 const SPAWN = DEFAULT_LEVEL.starts[0];
@@ -2542,6 +2551,156 @@ function cursorTower(tier, branch) {
   const parsed = JSON.parse(at30);
   check(parsed[1] === 'wave' && typeof parsed[2] === 'number', 'auto-wave: wave 2 started automatically in the fixed-timestep run');
   check(at30 === at60, 'auto-wave: same start tick at 30 fps and 60 fps');
+}
+
+// --- 27. DPR: the backing store equals CSS size x the live ratio ------------------------------
+{
+  const bs = backingStorePixelSize;
+  check(bs(1280, 800, 1).width === 1280 && bs(1280, 800, 1).height === 800,
+    'dpr 1: backing store equals the CSS size');
+  check(bs(1280, 800, 1.25).width === 1600 && bs(1280, 800, 1.25).height === 1000,
+    'dpr 1.25: 1280x800 -> 1600x1000');
+  check(bs(1280, 800, 1.5).width === 1920 && bs(1280, 800, 1.5).height === 1200,
+    'dpr 1.5: 1280x800 -> 1920x1200');
+  check(bs(1280, 800, 2).width === 2560 && bs(1280, 800, 2).height === 1600,
+    'dpr 2 (a simulated 2x display): 1280x800 -> 2560x1600');
+  check(bs(1366, 768, 1.25).width === 1708, 'a fractional backing width rounds, never truncates (1366 -> 1708)');
+}
+
+{
+  // Coordinate mapping is CSS-pixel based: the pointer position and the layout both live in CSS
+  // pixels, so a ratio change (which only grows the backing store) never moves where a click lands.
+  const layout = computeLayout(1280, 800);
+  const tile = (px, py) => {
+    const w = pixelToWorld(layout, px, py);
+    return [Math.floor(w.x), Math.floor(w.y)];
+  };
+  const cx = layout.board.x + 3.5 * layout.board.cell;
+  const cy = layout.board.y + 4.5 * layout.board.cell;
+  check(tile(cx, cy)[0] === 3 && tile(cx, cy)[1] === 4,
+    'a CSS click on a tile centre maps to that tile after a ratio change');
+  check(tile(layout.board.x, layout.board.y)[0] === 0 && tile(layout.board.x, layout.board.y)[1] === 0,
+    'the board origin maps to tile (0,0)');
+}
+
+// --- 28. Screen shake ------------------------------------------------------------------------
+{
+  // 28a. Amplitude per event, and the events that shake nothing.
+  check(shakeImpulseFor({ type: 'kill', kind: 'grunt' }).amplitude === SHAKE_AMPLITUDE.enemyDeath,
+    'an enemy death shakes 1 px');
+  check(shakeImpulseFor({ type: 'kill', kind: 'boss' }).amplitude === SHAKE_AMPLITUDE.bossDeath,
+    'a boss death shakes 4 px');
+  check(shakeImpulseFor({ type: 'wallDamaged' }).amplitude === SHAKE_AMPLITUDE.towerHit,
+    'a tower taking a hit shakes 1 px');
+  check(shakeImpulseFor({ type: 'popupDismissed' }).amplitude === SHAKE_AMPLITUDE.popupClose,
+    'a Pop Up closing shakes 2 px');
+  check(shakeImpulseFor({ type: 'leak' }).amplitude === SHAKE_AMPLITUDE.leak,
+    'a leak shakes 5 px');
+  check(shakeImpulseFor({ type: 'leak' }).freezeMs === SHAKE_LEAK_FREEZE_MS,
+    'a leak also freezes the frame');
+  check(shakeImpulseFor({ type: 'toggleChanged', open: false }).amplitude === SHAKE_AMPLITUDE.toggleShut,
+    'a Toggle gate slamming shut shakes 3 px');
+  check(shakeImpulseFor({ type: 'toggleChanged', open: true }) === null,
+    'a Toggle gate opening shakes nothing');
+  check(shakeImpulseFor({ type: 'shot' }) === null, 'a tower shot shakes nothing');
+  check(shakeImpulseFor({ type: 'click' }) === null, 'a click shakes nothing');
+}
+
+{
+  // 28b. A single impulse decays to zero inside the hard cap (24 ticks = 400 ms), and the decay
+  // duration sits in the 150-250 ms band.
+  check(SHAKE_DECAY_TICKS >= 9 && SHAKE_DECAY_TICKS <= 15,
+    `decay duration is about 150-250 ms (${SHAKE_DECAY_TICKS} ticks)`);
+  check(SHAKE_MAX_TICKS === 24, 'the hard cap is 400 ms (24 ticks)');
+  const shake = new CameraShake();
+  shake.impulse(5, 1000);
+  const atStart = shake.offset(1000);
+  check(atStart.x !== 0 || atStart.y !== 0, 'a shake is non-zero at its start tick');
+  let lastNonZero = -1;
+  for (let t = 1000; t <= 1000 + SHAKE_MAX_TICKS; t++) {
+    const o = shake.offset(t);
+    if (o.x !== 0 || o.y !== 0) lastNonZero = t;
+  }
+  check(lastNonZero >= 1000 && lastNonZero < 1000 + SHAKE_MAX_TICKS,
+    `shake decays to zero inside ${SHAKE_MAX_TICKS} ticks (last non-zero at tick ${lastNonZero})`);
+}
+
+{
+  // 28c. Determinism: the same impulse at the same tick reproduces the identical offset trail.
+  const trail = () => {
+    const shake = new CameraShake();
+    shake.impulse(4, 500);
+    const out = [];
+    for (let t = 500; t <= 530; t++) {
+      const o = shake.offset(t);
+      out.push(`${o.x.toFixed(6)},${o.y.toFixed(6)}`);
+    }
+    return out.join('|');
+  };
+  check(trail() === trail(), 'shake offset is deterministic from the tick (a replay is identical)');
+}
+
+{
+  // 28d. The toggle disables shake entirely, and re-enabling restores it.
+  const shake = new CameraShake();
+  shake.impulse(5, 100);
+  check(shake.offset(100).x !== 0 || shake.offset(100).y !== 0, 'shake is active before the toggle');
+  shake.setEnabled(false);
+  check(shake.offset(100).x === 0 && shake.offset(100).y === 0, 'the toggle disables shake entirely');
+  shake.setEnabled(true);
+  check(shake.offset(100).x !== 0 || shake.offset(100).y !== 0, 're-enabling restores shake');
+}
+
+{
+  // 28e. A leak's freeze-frame holds the offset at zero for the freeze, then the shake begins.
+  const shake = new CameraShake();
+  shake.impulse(5, 200, SHAKE_LEAK_FREEZE_MS);
+  const freezeTicks = Math.round(SHAKE_LEAK_FREEZE_MS / TICK_MS);
+  check(shake.offset(200).x === 0 && shake.offset(200).y === 0, 'the freeze holds the offset at zero');
+  check(shake.offset(200 + freezeTicks - 1).x === 0 && shake.offset(200 + freezeTicks - 1).y === 0,
+    'the offset is still frozen just before the freeze ends');
+  const after = shake.offset(200 + freezeTicks);
+  check(after.x !== 0 || after.y !== 0, 'the shake begins once the freeze ends');
+}
+
+{
+  // 28f. Hit-testing ignores the shake: the pointer-to-world mapping is CSS-pixel based and never
+  // consumes the render offset, so shaking never moves the tile under the cursor.
+  const layout = computeLayout(1280, 800);
+  const hit = (px, py) => {
+    const w = pixelToWorld(layout, px, py);
+    return [Math.floor(w.x), Math.floor(w.y)];
+  };
+  const tileX = layout.board.x + 6.5 * layout.board.cell;
+  const tileY = layout.board.y + 5.5 * layout.board.cell;
+  const before = hit(tileX, tileY);
+  const shake = new CameraShake();
+  shake.impulse(5, 42);
+  const offset = shake.offset(42);
+  check(offset.x !== 0 || offset.y !== 0, 'the shake is active (a render offset exists)');
+  check(hit(tileX, tileY)[0] === before[0] && hit(tileX, tileY)[1] === before[1],
+    'hit-testing maps the raw CSS coordinate, unaffected by the active shake');
+  check(before[0] === 6 && before[1] === 5, 'the tile under the cursor is (6,5)');
+}
+
+{
+  // 28g. The preference: on by default, off for reduced-motion users, and it round-trips through save.
+  check(defaultProfile().shakeOn === true, 'shake defaults on without a reduced-motion preference');
+  check(prefersReducedMotion() === false, 'headless has no reduced-motion preference');
+  const store = { value: null, getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
+  const p = defaultProfile();
+  p.shakeOn = false;
+  saveProfile(p, store);
+  check(loadProfile(store).shakeOn === false, 'shake preference round-trips through the save');
+
+  const original = globalThis.matchMedia;
+  globalThis.matchMedia = (q) => ({ matches: q.includes('reduce'), addEventListener() {}, removeEventListener() {} });
+  try {
+    check(defaultProfile().shakeOn === false, 'reduced-motion users default shake off');
+  } finally {
+    if (original === undefined) delete globalThis.matchMedia;
+    else globalThis.matchMedia = original;
+  }
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

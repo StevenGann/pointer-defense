@@ -16,12 +16,12 @@ export interface MenuEntry {
 }
 
 export interface OpenMenu {
-  name: 'file' | 'help';
+  name: 'file' | 'view' | 'help';
   entries: MenuEntry[];
 }
 
 /** Menu word index in the chrome's MENU_ITEMS list. */
-export const MENU_INDEX: Readonly<Record<OpenMenu['name'], number>> = { file: 0, help: 2 };
+export const MENU_INDEX: Readonly<Record<OpenMenu['name'], number>> = { file: 0, view: 1, help: 2 };
 
 const ITEM_H = 24;
 const SEP_H = 5;
