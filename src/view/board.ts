@@ -10,7 +10,7 @@ import {
   type RunState,
 } from '../core/state.ts';
 import { radiusOf, type Enemy, type EnemyKind } from '../core/enemies.ts';
-import { cursorRadius, effectiveStats, isFullyUpgraded, isGateLocked, isRepairing, repairProgress, repairRadius, TOWER_STATS, type Branch, type Tower, type TowerKind } from '../core/towers.ts';
+import { cursorRadius, effectiveStats, isFullyUpgraded, isGateLocked, isOffline, isRepairing, repairProgress, repairRadius, TOWER_STATS, type Branch, type Tower, type TowerKind } from '../core/towers.ts';
 import { tileAt, COLS, ROWS, type Grid, type Tile } from '../core/grid.ts';
 import { toggleOpenAt, toggleProgress, type LevelToggle } from '../core/levels.ts';
 import { dashRects, offsetSegment, routeOffset, type RouteSegment } from './route.ts';
@@ -446,6 +446,10 @@ function drawTower(
     drawTowerShape(g, t.kind, cx, cy, cell, 1, t.angle, t.branch);
     if (isRepairing(t, clock)) {
       drawBar(g, cx, cy, cell, repairProgress(t, clock), REPAIR_COLOR);
+    } else if (isOffline(t)) {
+      // Broken-but-fixable, not gone: an empty health bar, a desaturating wash, and a red tag.
+      drawBar(g, cx, cy, cell, 0, healthColor(0));
+      drawOfflineTag(g, cx, cy, cell);
     } else if (t.maxHp > 0 && t.hp < t.maxHp) {
       drawBar(g, cx, cy, cell, t.hp / t.maxHp, healthColor(t.hp / t.maxHp));
     }
@@ -1011,6 +1015,18 @@ function drawBar(g: Graphics, cx: number, cy: number, cell: number, ratio: numbe
   const bar = healthBarRect(cx, cy, cell);
   g.rect(bar.x, bar.y, bar.w, bar.h).fill({ color: PAL.dark });
   g.rect(bar.x + 1, bar.y + 1, Math.max(0, Math.round((bar.w - 2) * r)), 1).fill({ color });
+}
+
+/** An offline tower's marking: a desaturating wash over the body plus a small red crossed wrench. */
+function drawOfflineTag(g: Graphics, cx: number, cy: number, cell: number): void {
+  const half = cell / 2;
+  g.rect(cx - half, cy - half, cell, cell).fill({ color: 0x808080, alpha: 0.35 });
+  const s = Math.max(3, Math.round(cell * 0.16));
+  const x0 = Math.round(cx - half + 3);
+  const y0 = Math.round(cy - half + 3);
+  g.moveTo(x0, y0).lineTo(x0 + s, y0 + s);
+  g.moveTo(x0 + s, y0).lineTo(x0, y0 + s);
+  g.stroke({ width: 2, color: 0xd00000 });
 }
 
 function drawReticle(g: Graphics, state: RunState, board: { x: number; y: number; cell: number }, cell: number): void {
