@@ -33,9 +33,11 @@ import {
   isToggleGate,
   isWall,
   recomputeAuras,
-  refreshWallHp,
+  refreshTowerHp,
   repairCost,
   repairDurationTicks,
+  repairHealRate,
+  repairHealTargets,
   repairHpToRestore,
   TOGGLE_LOCK_TICKS,
   TOWER_STATS,
@@ -554,13 +556,14 @@ function rebuildField(s: RunState): void {
 export function upgradeTower(s: RunState, col: number, row: number): boolean {
   if (s.phase === 'halted' || s.phase === 'victory') return false;
   const t = towerAt(s, col, row);
-  if (!t || t.tier === 2) return false; // 2 -> 3 is chooseBranch's job
+  if (!t) return false;
+  if (t.tier === 2 && t.kind !== 'repair') return false; // 2 -> 3 is chooseBranch's job (repair never branches)
   const cost = upgradeCost(t);
   if (cost === null) return false;
   if (!spend(s.economy, cost)) return false;
   t.tier = (t.tier + 1) as Tier;
   t.spent += cost;
-  refreshWallHp(t);
+  refreshTowerHp(t);
   recomputeAuras(s.towers);
   return true;
 }
@@ -577,7 +580,7 @@ export function chooseBranch(s: RunState, col: number, row: number, branch: Bran
   t.spent += cost;
   // A Toggle gate installs closed: the branch must never silently open the route the player built.
   t.open = false;
-  refreshWallHp(t);
+  refreshTowerHp(t);
   rebuildField(s); // a Mesh branch starts blocking flyers
   recomputeAuras(s.towers);
   return true;
@@ -703,7 +706,7 @@ export function toggleGate(s: RunState, col: number, row: number): boolean {
 export function cycleTargetMode(s: RunState, col: number, row: number): void {
   const t = towerAt(s, col, row);
   if (!t) return;
-  if (t.kind === 'cursor') return;
+  if (t.kind === 'cursor' || t.kind === 'repair') return;
   if (TOWER_STATS[t.kind].targetLock !== null) return;
   t.targetMode = t.targetMode === 'first' ? 'strong' : t.targetMode === 'strong' ? 'close' : 'first';
 }
@@ -959,6 +962,7 @@ export function tick(s: RunState): void {
   s.tick++;
   updateToggles(s);
   tickRepairs(s);
+  tickRepairAuras(s);
   decayCombo(s);
   tickAds(s);
   checkAchievements(s);
@@ -1069,6 +1073,23 @@ function tickRepairs(s: RunState): void {
     for (const e of s.enemies) {
       if (e.dead || e.kind === 'flyer') continue;
       if (e.col === t.col && e.row === t.row) pushEnemyOffTile(s, e, t.col, t.row);
+    }
+  }
+}
+
+/**
+ * Repair towers heal every damaged tower in their radius, in build and wave phases alike. Each tick
+ * adds `healRate / TICK_HZ` hit points to every target, so the per-second rate is exact across the
+ * fixed timestep. Targets are recomputed every tick: a tower that leaves the radius, reaches full
+ * health, or starts a manual repair (and so leaves the field) stops receiving the aura immediately.
+ */
+function tickRepairAuras(s: RunState): void {
+  for (const h of s.towers) {
+    if (h.kind !== 'repair' || h.hp <= 0) continue;
+    if (isRepairing(h, s.clock)) continue; // a repair tower mid-repair is off the field
+    const heal = repairHealRate(h) / TICK_HZ;
+    for (const t of repairHealTargets(s.towers, h, s.clock)) {
+      t.hp = Math.min(t.maxHp, t.hp + heal);
     }
   }
 }

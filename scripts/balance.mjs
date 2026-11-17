@@ -88,6 +88,10 @@ const clickerMode = hasFlag('--clicker') || hasFlag('--advantage');
 // against the standard tower build. The advantage is the cursor build's integrity over the standard
 // run, so the cursor's own contribution is measured against the tower baseline it sits on.
 const cursorMode = hasFlag('--cursor');
+// --repair-tower: the repair-tower scenario — the standard build, but the bot also buys a repair
+// tower once a wave is deep enough to have damaged towers to heal. It proves the harness can place
+// and pay for the new kind; the default plan never buys one, so the standard numbers stay put.
+const repairTowerMode = hasFlag('--repair-tower');
 // --level <id> selects one authored map; the default runs all three and prints one line each.
 const levelFlag = flag('--level', null);
 const activeLevels = levelFlag ? [levelById(levelFlag)] : [...LEVELS];
@@ -418,6 +422,11 @@ function cursorTarget(wave) {
   // scenario; the default baseline buys none.
   return wave >= 60 ? 2 : 0;
 }
+function repairTowerTarget(wave) {
+  // One repair tower from wave 40, a second from wave 70 — a support buy, only consulted by the
+  // --repair-tower scenario. The default plan buys none.
+  return wave >= 70 ? 2 : wave >= 40 ? 1 : 0;
+}
 
 /** Specialist slots still needed to reach wave 100's roster, so extra Guns never crowd them out. */
 function futureSpecialistSlots(counts) {
@@ -543,6 +552,17 @@ function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, 
       if (s.towers.length >= maxTowers || s.economy.salvage < TOWER_STATS.cursor.cost) break;
       const tile = chooseCoverageTile(s, currentPath(s));
       if (!tile || !placeTower(s, 'cursor', tile.col, tile.row)) break;
+    }
+  }
+
+  // Repair towers: a support buy placed at the maze's centre so its aura covers the most towers.
+  // Only the --repair-tower scenario opts in; the default plan buys none.
+  if (repairTowerMode && nextWall >= plan.length) {
+    const want = repairTowerTarget(wave) - s.towers.filter((t) => t.kind === 'repair').length;
+    for (let guard = 0; guard < want; guard++) {
+      if (s.towers.length >= maxTowers || s.economy.salvage < TOWER_STATS.repair.cost) break;
+      const tile = chooseBeaconTile(s, currentPath(s));
+      if (!tile || !placeTower(s, 'repair', tile.col, tile.row)) break;
     }
   }
 
@@ -1168,6 +1188,30 @@ if (cursorMode) {
   silent = false;
   console.log(`\nmax cursor advantage over standard: +${maxAdvantage} integrity`);
   process.exit(cursorReached ? 0 : 1);
+}
+
+if (repairTowerMode) {
+  // The repair-tower scenario: the standard build, but the bot also buys repair towers from wave 40.
+  // It is not a new baseline — the point is that the harness can place and pay for the kind, and the
+  // repair row of the tower table (run with --level) reports a non-zero count while the default plan
+  // reports zero.
+  silent = true;
+  console.log('\n=== repair tower ===');
+  console.log('  map          waves cleared   integrity   salvage   repair towers');
+  let repairReached = true;
+  for (const level of activeLevels) {
+    const run = runSession(support, `repair tower [${level.id}]`, level.id, MAP_MAX_TOWERS, true);
+    const st = run.final.state;
+    const repairs = st.towers.filter((t) => t.kind === 'repair').length;
+    console.log(
+      `  ${level.id.padEnd(11)}  ${String(run.final.clearedWaves).padStart(13)}  ` +
+        `${String(run.final.integrity).padStart(9)}  ${String(run.final.earned).padStart(7)}  ` +
+        `${String(repairs).padStart(13)}`,
+    );
+    if (!run.final.reached) repairReached = false;
+  }
+  silent = false;
+  process.exit(repairReached ? 0 : 1);
 }
 
 if (wallMode) {

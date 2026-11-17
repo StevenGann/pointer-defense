@@ -206,9 +206,10 @@ S.........T.........X
 
 ## 6. Towers
 
-Eight towers. Each has a role, a tier ladder, and **two exclusive branches** at tier 3.
+Nine towers. Each has a role and a tier ladder; eight carry **two exclusive branches** at tier 3, and the
+Repair tower keeps a plain upgrade ladder for now.
 
-### 6.1 The eight
+### 6.1 The nine
 
 | Tower | Cost | Range | Damage | Interval | Turn rate | Targeting | Role | Wants |
 |---|---|---|---|---|---|---|---|---|
@@ -218,6 +219,7 @@ Eight towers. Each has a role, a tier ladder, and **two exclusive branches** at 
 | **Frost** | 70 | 2.2 | 1, slows to 30 % speed for 3.0 s | 0.60 s | instant | closest (fixed) | utility | in front of the damage |
 | **Laser** | 70 | 3.4 | 11, pierces 8 | 0.80 s | 150°/s | first (fixed) | straight lines | corridors you deliberately left open |
 | **Beacon** | 90 | 3.5 | none | — | — (still) | — | +60 % damage to towers in radius | a dense cluster worth buffing |
+| **Repair** | 220 | 4.5 | none (heals 2 HP/s) | — | — (still) | — | heals damaged towers in radius | a cluster of towers worth keeping alive |
 | **Wall** | 8 | — | none | — | — (still) | — | blocks the route, has hit points | a long maze made cheap |
 | **Cursor** | 250 | 2.5 | ½ your click damage | 1.0 s | — (still) | shielded, then nearest (fixed) | an autonomous hand that clicks for you | a pointer ladder worth feeding |
 
@@ -229,20 +231,41 @@ worse. The **Laser** always fires at the leading edge of the column, which reads
 Focus beam pierces along that line. The **Cannon** always swings at the strongest thing it can see and
 lives with its two-second traverse. The **Cursor** carries its own fixed rule rather than one of the
 three named modes: it hunts shielded enemies first, then the nearest enemy to its home tile (§6.7).
-The **Gun** stays fully configurable — it obeys the player — and Beacon has no targeting mode to lock.
+The **Gun** stays fully configurable — it obeys the player — and Beacon and Repair have no targeting
+mode to lock. The Repair tower never fires at enemies at all.
 **Manual Override** (§9.5), the player's explicit mark, wins over every lock: while the marked enemy
 is in range, a locked tower fires at it, which is the only way to aim a locked tower at something
 specific.
 
-Four damage answers and three that are useless alone, plus the Cursor, which is a damage answer that
+Four damage answers and four that are useless alone, plus the Cursor, which is a damage answer that
 borrows its strength from the pointer ladder (§6.7). That is how placement stays interesting without
 becoming opaque.
 
-Walls are the asymmetry: every other tower is invulnerable and cannot be targeted, but a wall can be
-destroyed and then it is gone for good. It carries 60 hit points at tier 1, 180 at tier 2 and 540 at
-tier 3; the Bulwark and Mesh branches double that, while the Toggle branch keeps the base total and
-pays in control instead. A destroyed wall is removed, the route is recomputed in the same tick, and
-nothing is refunded.
+Every tower carries hit points, not just the Wall. The Wall is still the asymmetry because it is the
+one that can be destroyed and then is gone for good: it carries 60 hit points at tier 1, 180 at tier 2
+and 540 at tier 3; the Bulwark and Mesh branches double that, while the Toggle branch keeps the base
+total and pays in control instead. A destroyed wall is removed, the route is recomputed in the same
+tick, and nothing is refunded. The other towers keep a fixed pool (see the HP table below) that
+nothing can damage yet; it exists so the Repair tower has something to heal and the breacher turret,
+queued next, has somewhere to land.
+
+#### Hit points
+
+`maxHp` is set at placement and, for a wall, re-derived from its tier and branch when it changes. An
+upgrade must never heal a tower: it raises the ceiling and leaves the **HP fraction** where it was, so
+a tower at half health stays at half of the new maximum.
+
+| Tower | max HP |
+|---|---|
+| Gun | 100 |
+| Cannon | 140 |
+| Taser | 120 |
+| Laser | 120 |
+| Frost | 90 |
+| Beacon | 80 |
+| Repair | 90 |
+| Cursor | 80 |
+| Wall | 60 / 180 / 540 by tier |
 
 **These are the harness's numbers, not the first draft's.** The first draft (Gun 4 damage at 25,
 Cannon 10 at 60, Taser 2 at 45, Laser 6 at 120, Beacon +15 %) let a scripted player win with Gun and
@@ -266,6 +289,10 @@ because waves 60–100 demand it.
 
 Walls break the ladder pattern: they are a three-tier tower. Tier 2 costs 12, the tier-3 branch costs
 20, and there is no tier 4 or 5 — a branched wall is finished.
+
+The Repair tower also stops at tier 3, but with no branch: tier 2 costs 140 and widens the radius to
+5.0 tiles, tier 3 costs 260 and deepens the heal to 3 HP/s, and then it is done. It never branches, so
+the tier-3 choice is just another Upgrade button, not a branch pair.
 
 ### 6.3 Branches
 
@@ -327,8 +354,8 @@ pre-traverse build.
 
 ### 6.6 Repair
 
-A tower with hit points — today only the Wall — can be repaired. The mechanic is written tower-generic
-so any future tower with HP gets it for free, but the Wall is its only customer.
+Any tower with hit points can be repaired. The mechanic is written tower-generic, so a Gun, a Frost,
+a Repair tower — anything — gets the same Repair button the Wall does the moment it is damaged.
 
 **Cost.** `repairCost = ceil(0.5 × spent × (1 − hp / maxHp))`, where `spent` is the tower's total
 spend (the build price plus everything bought for it). Half the tower's value restores it completely,
@@ -352,8 +379,10 @@ returns to service the moment the timer ends.
 while one is running, no repair at full health, and no refund if the tower is sold mid-repair.
 
 The damaged tower's panel gains a **Repair** button above Sell, showing the price; its tooltip names
-the duration. While repairing, the wall draws with a hatched face and a small progress bar in place
-of its health bar, and the route line shows it as walkable the moment the repair begins.
+the duration. While repairing, a wall draws with a hatched face and a small progress bar in place of
+its health bar, and the route line shows it as walkable the moment the repair begins. A non-wall tower
+shows the same progress bar in place of its health bar, and leaves the field for pathing just as a
+wall does.
 
 ### 6.7 The Cursor tower
 
@@ -377,6 +406,29 @@ tile — a **Shielded** or a **Boss**, whose shield is above zero — and with n
 it clicks the nearest enemy to its home tile. An enemy hidden under a Pop-up window is never a
 candidate. **Manual Override** (§9.5) still wins over this rule, exactly as it beats the Taser's lock:
 while the marked enemy is in range and targetable, the cursor clicks it instead.
+
+### 6.8 The Repair tower and its aura
+
+The **Repair** tower is the board's medic. It never fires at enemies; instead every tick it adds hit
+points to every damaged tower inside its radius, at a rate of **2 HP/s** (tier 3 raises it to 3 HP/s),
+in both the build and the wave phase. It needs no aiming, and it heals several towers at once. The
+radius is **4.5 tiles** at tier 1 and **5.0** from tier 2.
+
+The aura is deliberately narrow in scope:
+
+- **Only damaged towers in radius.** A tower at full health is not a target, and the placed-tower panel
+  and tooltip report `Healing N towers` — the number of damaged towers currently being healed, which
+  reads `0` when the aura has nothing to do.
+- **It cannot revive.** A destroyed tower is gone and out of scope. A wall that is destroyed still
+  re-opens the maze, exactly as if no Repair tower had ever existed.
+- **It never heals an enemy.** The aura reads the tower list only; enemies are untouched.
+- **It never heals itself**, and it does not interfere with a manual repair: a tower being repaired by
+  hand is off the field, so the aura simply does not apply to it while the job runs.
+- **It is not a Beacon.** The Repair tower grants no damage or range bonus, and a Beacon grants no
+  healing — the two support auras do not stack into one tower.
+
+The Repair tower keeps the same HP pool and Repair button as any other tower, so it can be damaged
+(once the breacher turret lands) and must then be healed by another Repair tower or repaired by hand.
 
 ---
 
@@ -730,6 +782,7 @@ about the era, no CRT filter, no retro winking. The Windows look is the game's w
 | teal | `#008080` | Gun |
 | maroon | `#800000` | Cannon |
 | olive | `#808000` | Taser |
+| heal green | `#00a000` | Repair |
 | grey-blue | `#406080` | Armoured |
 | amber | `#806000` | Saboteur's fuse spark |
 
@@ -760,6 +813,7 @@ Shape carries meaning before colour does — readability, and colour-blind playe
 | Frost | hexagon with a snow cross |
 | Laser | long bar |
 | Beacon | ring with a dot |
+| Repair | ring with a white cross |
 | Wall | Windows push button — raised, pressed, or disabled, with Bulwark's inner rim and Mesh's crosshatch |
 
 ### 13.3 Type and layout
@@ -840,7 +894,7 @@ One master volume, remembered in `localStorage`. No music at launch.
 - **Legible at a glance:** route length, integrity, salvage, wave, kills by source.
 - **Pause** on `P`, **×2 fast forward** on `Space` once wave 1 is cleared, **×3** after wave 50.
 - **No confirmation dialogs.** Selling is reversible by rebuilding.
-- Keyboard: `1–6` select a tower, `Esc` cancels, `Enter` starts the wave.
+- Keyboard: `1–9` select a tower, `Esc` cancels, `Enter` starts the wave.
 
 ---
 

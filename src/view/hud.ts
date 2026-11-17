@@ -10,9 +10,13 @@ import {
   cursorClickRate,
   cursorRadius,
   effectiveStats,
+  hasBranches,
   isRepairing,
   repairCost,
+  repairHealRate,
+  repairHealingCount,
   repairHpToRestore,
+  repairRadius,
   repairRemainingSeconds,
   sellValue,
   TOWER_KINDS,
@@ -243,19 +247,19 @@ export function computeHud(l: Layout, s: RunState): HudLayout {
     const routeRow: Rect = { x: x + 6, y: cy, w: w - 12, h: 18 };
     cy += 18 + 4;
 
-    // Walls never target, so they have no target-mode row.
-    const target: Rect | null = tower.kind === 'wall' ? null : { x: innerX, y: cy, w: innerW, h: 24 };
+    // Walls and the repair tower never target, so they have no target-mode row.
+    const target: Rect | null = tower.kind === 'wall' || tower.kind === 'repair' ? null : { x: innerX, y: cy, w: innerW, h: 24 };
     if (target) cy += 24 + 4;
 
     const cost = upgradeCost(tower);
     let upgrade: Rect | null = null;
-    if (tower.tier !== 2 && cost !== null) {
+    if (cost !== null && (tower.tier !== 2 || !hasBranches(tower.kind))) {
       upgrade = { x: innerX, y: cy, w: innerW, h: 24 };
       cy += 24 + 4;
     }
 
     const branches: BranchButton[] = [];
-    if (tower.tier === 2) {
+    if (tower.tier === 2 && hasBranches(tower.kind)) {
       const gap = 4;
       const list: Branch[] = tower.kind === 'wall' ? ['A', 'B', 'C'] : ['A', 'B'];
       const bw = Math.floor((innerW - gap * (list.length - 1)) / list.length);
@@ -267,8 +271,8 @@ export function computeHud(l: Layout, s: RunState): HudLayout {
       cy += 24 + 4;
     }
 
-    // A tower with hit points (a wall) gains a Repair button above Sell. The action is refused at
-    // full health and while a repair runs, but the row always exists so its disabled reason shows.
+    // A tower with hit points gains a Repair button above Sell. The action is refused at full health
+    // and while a repair runs, but the row always exists so its disabled reason shows.
     const repair: Rect | null = tower.maxHp > 0 ? { x: innerX, y: cy, w: innerW, h: 24 } : null;
     if (repair) cy += 24 + 4;
 
@@ -847,6 +851,11 @@ export class HudView {
         const radius = cursorRadius(tower);
         const dmg = cursorClickDamage(tower, clickDamage(s.pointer), pointerDamageMult(s.specs));
         this.towerStats.text = `${rate.toFixed(1)}/s  dmg ${fmtClickDamage(dmg)}  rng ${radius.toFixed(1)}`;
+      } else if (tower.kind === 'repair') {
+        const heal = repairHealRate(tower);
+        const radius = repairRadius(tower);
+        const healed = repairHealingCount(s.towers, tower, s.clock);
+        this.towerStats.text = `${heal.toFixed(1)} HP/s  rng ${radius.toFixed(1)}  healing ${healed}`;
       } else {
         const st = effectiveStats(tower);
         const damage = st.damage * tower.auraDamage;

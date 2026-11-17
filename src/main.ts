@@ -36,7 +36,7 @@ import { EffectsView } from './view/effects.ts';
 import { sfx, type SoundName } from './audio/sfx.ts';
 import { CameraShake, shakeImpulseFor } from './view/shake.ts';
 import { backingStorePixelSize, cssViewportSize, liveDevicePixelRatio } from './view/screen.ts';
-import type { Branch, TowerKind } from './core/towers.ts';
+import { repairHealingCount, type Branch, type TowerKind } from './core/towers.ts';
 import pkg from '../package.json';
 
 const app = new Application();
@@ -370,6 +370,8 @@ function towerSound(kind: TowerKind): SoundName {
       return 'frost';
     case 'beacon':
       return 'cannon';
+    case 'repair':
+      return 'gun';
     case 'wall':
       return 'cannon';
     case 'cursor':
@@ -538,7 +540,8 @@ function updateTooltip(): void {
     }
     const tower = h.onBoard ? towerAt(state, h.col, h.row) : undefined;
     if (tower) {
-      tooltip.update({ key: `tower:${tower.id}`, lines: towerTooltipLines(tower, state.clock, state.pointer, state.specs) }, h.x, h.y, viewportW, viewportH);
+      const healed = tower.kind === 'repair' ? repairHealingCount(state.towers, tower, state.clock) : 0;
+      tooltip.update({ key: `tower:${tower.id}`, lines: towerTooltipLines(tower, state.clock, state.pointer, state.specs, healed) }, h.x, h.y, viewportW, viewportH);
       return;
     }
     const control = hudControlAt(layout, state, h.x, h.y);

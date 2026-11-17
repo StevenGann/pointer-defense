@@ -10,7 +10,7 @@ import {
   type RunState,
 } from '../core/state.ts';
 import { radiusOf, type Enemy, type EnemyKind } from '../core/enemies.ts';
-import { cursorRadius, effectiveStats, isFullyUpgraded, isGateLocked, isRepairing, repairProgress, TOWER_STATS, type Branch, type Tower, type TowerKind } from '../core/towers.ts';
+import { cursorRadius, effectiveStats, isFullyUpgraded, isGateLocked, isRepairing, repairProgress, repairRadius, TOWER_STATS, type Branch, type Tower, type TowerKind } from '../core/towers.ts';
 import { tileAt, COLS, ROWS, type Grid, type Tile } from '../core/grid.ts';
 import { toggleOpenAt, toggleProgress, type LevelToggle } from '../core/levels.ts';
 import { dashRects, offsetSegment, routeOffset, type RouteSegment } from './route.ts';
@@ -60,6 +60,7 @@ export const TOWER_COLOR: Record<TowerKind, number> = {
   frost: 0x3399cc,
   laser: 0xff3300,
   beacon: 0xffcc00,
+  repair: 0x00a000,
   wall: 0x8a8a8a,
   cursor: 0x9a9a9a,
 };
@@ -461,6 +462,11 @@ function drawTower(
     }
   } else {
     drawTowerShape(g, t.kind, cx, cy, cell, 1, t.angle, t.branch);
+    if (isRepairing(t, clock)) {
+      drawBar(g, cx, cy, cell, repairProgress(t, clock), REPAIR_COLOR);
+    } else if (t.maxHp > 0 && t.hp < t.maxHp) {
+      drawBar(g, cx, cy, cell, t.hp / t.maxHp, healthColor(t.hp / t.maxHp));
+    }
   }
 
   if (isFullyUpgraded(t)) {
@@ -480,6 +486,10 @@ function drawTowerRange(
   const cy = board.y + (t.row + 0.5) * cell;
   if (t.kind === 'cursor') {
     dashedCircle(g, cx, cy, cursorRadius(t) * cell, PAL.navy, 1);
+    return;
+  }
+  if (t.kind === 'repair') {
+    dashedCircle(g, cx, cy, repairRadius(t) * cell, PAL.navy, 1);
     return;
   }
   const st = effectiveStats(t);
@@ -584,6 +594,14 @@ function drawTowerShape(
     drawBarrel(g, cx, cy, angle, Math.round(cx - bw / 2), Math.round(cy - r - bl), bw, bl, fill, outline);
   } else if (kind === 'wall') {
     // Walls are drawn as buttons by drawWallShape, not here.
+  } else if (kind === 'repair') {
+    // A healing tower reads as a ring with a white cross: support, never a weapon.
+    const r = Math.round(cell * 0.36);
+    g.circle(cx, cy, r).fill(fill).stroke(outline);
+    const arm = Math.round(cell * 0.26);
+    const thick = Math.max(2, Math.round(cell * 0.08));
+    g.moveTo(cx - arm / 2, cy).lineTo(cx + arm / 2, cy).stroke({ width: thick, color: PAL.highlight, alpha });
+    g.moveTo(cx, cy - arm / 2).lineTo(cx, cy + arm / 2).stroke({ width: thick, color: PAL.highlight, alpha });
   } else if (kind === 'cursor') {
     // A small grey plinth with a cursor-shaped cap, so it reads as a tower when the cursor is away.
     const s = Math.round(cell * 0.4);

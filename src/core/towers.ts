@@ -1,6 +1,6 @@
 import { secondsToTicks, TICK_HZ } from './time.ts';
 
-export type TowerKind = 'gun' | 'cannon' | 'taser' | 'frost' | 'laser' | 'beacon' | 'wall' | 'cursor';
+export type TowerKind = 'gun' | 'cannon' | 'taser' | 'frost' | 'laser' | 'beacon' | 'repair' | 'wall' | 'cursor';
 
 export type Branch = 'A' | 'B' | 'C';
 
@@ -37,7 +37,7 @@ export interface TowerStats {
   readonly targetLock: TargetMode | null;
 }
 
-export const TOWER_KINDS: readonly TowerKind[] = ['gun', 'cannon', 'taser', 'frost', 'laser', 'beacon', 'wall', 'cursor'];
+export const TOWER_KINDS: readonly TowerKind[] = ['gun', 'cannon', 'taser', 'frost', 'laser', 'beacon', 'repair', 'wall', 'cursor'];
 
 /** Data, not code: balance lives here. */
 export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
@@ -140,6 +140,23 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     slowTicks: 0,
     pierce: 0,
     auraDamage: 0.6,
+    auraRange: 0,
+    targetLock: null,
+  },
+  repair: {
+    name: 'Repair',
+    blurb: 'Heals damaged towers in radius',
+    cost: 220,
+    range: 4.5,
+    damage: 0,
+    fireInterval: 0,
+    turnRate: 0,
+    splash: 0,
+    ignoresArmour: false,
+    slowFactor: 1,
+    slowTicks: 0,
+    pierce: 0,
+    auraDamage: 0,
     auraRange: 0,
     targetLock: null,
   },
@@ -249,9 +266,80 @@ export function wallMaxHp(tier: Tier, branch: Branch | null): number {
   return tier >= 3 && branch !== null && branch !== 'C' ? base * 2 : base;
 }
 
-/** True when the tower is a wall — the only tower kind with hit points. */
+/** True when the tower is a wall. */
 export function isWall(tower: Tower): boolean {
   return tower.kind === 'wall';
+}
+
+/**
+ * The hit-point pool of every non-wall tower. Walls use `wallMaxHp` (tier and branch dependent);
+ * every other kind keeps this fixed pool for its whole life, so an upgrade never changes its
+ * ceiling — it only has to not reset current HP.
+ */
+const TOWER_HP: Readonly<Record<TowerKind, number>> = {
+  gun: 100,
+  cannon: 140,
+  taser: 120,
+  laser: 120,
+  frost: 90,
+  beacon: 80,
+  repair: 90,
+  wall: 0, // walls resolve through wallMaxHp
+  cursor: 80,
+};
+
+/** The hit-point ceiling for a kind at a given tier and branch. */
+export function towerMaxHp(kind: TowerKind, tier: Tier, branch: Branch | null): number {
+  return kind === 'wall' ? wallMaxHp(tier, branch) : TOWER_HP[kind];
+}
+
+/**
+ * A repair tower's heal rate (HP/s) and radius (tiles) at each tier. It is a three-tier tower that
+ * stops at tier 3, so tiers 4 and 5 mirror tier 3 rather than being reachable.
+ */
+const REPAIR_HEAL_BY_TIER: Readonly<Record<Tier, number>> = { 1: 2, 2: 2, 3: 3, 4: 3, 5: 3 };
+const REPAIR_RADIUS_BY_TIER: Readonly<Record<Tier, number>> = { 1: 4.5, 2: 5.0, 3: 5.0, 4: 5.0, 5: 5.0 };
+
+/** The repair tower's live heal rate in HP per second. */
+export function repairHealRate(t: Tower): number {
+  return REPAIR_HEAL_BY_TIER[t.tier];
+}
+
+/** The repair tower's live radius in tiles. */
+export function repairRadius(t: Tower): number {
+  return REPAIR_RADIUS_BY_TIER[t.tier];
+}
+
+/**
+ * The damaged towers a repair tower is healing right now: any tower inside its radius that is
+ * missing hit points, except the healer itself and any tower mid-repair (which is off the field).
+ * A tower at zero HP is already destroyed and never counted.
+ */
+export function repairHealTargets(towers: readonly Tower[], healer: Tower, clock: number): Tower[] {
+  if (healer.kind !== 'repair') return [];
+  if (isRepairing(healer, clock)) return []; // a repair tower mid-repair is off the field too
+  const r = repairRadius(healer);
+  const r2 = r * r;
+  const out: Tower[] = [];
+  for (const t of towers) {
+    if (t.id === healer.id) continue;
+    if (t.maxHp <= 0 || t.hp <= 0 || t.hp >= t.maxHp) continue;
+    if (isRepairing(t, clock)) continue;
+    const dx = t.col + 0.5 - (healer.col + 0.5);
+    const dy = t.row + 0.5 - (healer.row + 0.5);
+    if (dx * dx + dy * dy <= r2) out.push(t);
+  }
+  return out;
+}
+
+/** How many damaged towers the repair tower is healing (0 when none or at full health). */
+export function repairHealingCount(towers: readonly Tower[], healer: Tower, clock: number): number {
+  return repairHealTargets(towers, healer, clock).length;
+}
+
+/** True for kinds that offer a branch choice at tier 3 (the repair tower currently does not). */
+export function hasBranches(kind: TowerKind): boolean {
+  return kind !== 'repair';
 }
 
 /** True when this wall blocks flyers (the Mesh branch at tier 3). */
@@ -340,15 +428,15 @@ export function repairProgress(tower: Tower, clock: number): number {
 }
 
 /**
- * Re-derive a wall's hit-point total after a tier or branch change, preserving the damage it has
- * already taken (lost hit points carry across the upgrade rather than being healed away).
+ * Re-derive a tower's hit-point total after a tier or branch change. The HP fraction is preserved,
+ * so an upgrade raises the ceiling without healing the tower: a tower at half health stays at half
+ * of the new maximum.
  */
-export function refreshWallHp(tower: Tower): void {
-  if (tower.kind !== 'wall') return;
-  const lost = tower.maxHp - tower.hp;
-  const next = wallMaxHp(tower.tier, tower.branch);
+export function refreshTowerHp(tower: Tower): void {
+  const next = towerMaxHp(tower.kind, tower.tier, tower.branch);
+  const fraction = tower.maxHp > 0 ? tower.hp / tower.maxHp : 1;
   tower.maxHp = next;
-  tower.hp = Math.max(1, next - lost);
+  tower.hp = Math.min(next, next * fraction);
 }
 
 export interface Tower {
@@ -376,15 +464,15 @@ export interface Tower {
   damageDealt: number;
   /** Which enemy in range this tower prefers. */
   targetMode: TargetMode;
-  /** Current hit points (walls only; every other tower is invulnerable and unused). */
+  /** Current hit points; every tower has a pool now, though nothing damages them yet. */
   hp: number;
-  /** Hit points at full health (walls only; 0 for every other tower). */
+  /** Hit points at full health (the kind's fixed pool, or a wall's tier/branch total). */
   maxHp: number;
   /** Toggle gates only: true while the gate is open (walkable, cannot be attacked). */
   open: boolean;
   /** Toggle gates only: simulation tick before which another flip is refused. */
   toggleReadyAt: number;
-  /** Repair (walls only): 0 when idle, otherwise the clock tick the repair completes. */
+  /** Repair: 0 when idle, otherwise the clock tick the repair completes. */
   repairReadyAt: number;
   /** Hit points at the moment the current repair started (drives the constant restore rate). */
   repairStartHp: number;
@@ -427,8 +515,8 @@ export function createTower(id: number, kind: TowerKind, col: number, row: numbe
     earned: 0,
     damageDealt: 0,
     targetMode: 'first',
-    hp: kind === 'wall' ? wallMaxHp(1, null) : 0,
-    maxHp: kind === 'wall' ? wallMaxHp(1, null) : 0,
+    hp: towerMaxHp(kind, 1, null),
+    maxHp: towerMaxHp(kind, 1, null),
     open: false,
     toggleReadyAt: 0,
     repairReadyAt: 0,
@@ -472,6 +560,13 @@ export function upgradeCost(tower: Tower): number | null {
     if (tower.tier === 4) return 845;
     return null;
   }
+  if (tower.kind === 'repair') {
+    // The repair tower is a three-tier tower with no branch: tier 2 widens the radius, tier 3
+    // deepens the heal, and then it is done.
+    if (tower.tier === 1) return 140;
+    if (tower.tier === 2) return 260;
+    return null;
+  }
   const factor = UPGRADE_COST_FACTOR[tower.tier];
   return factor === null ? null : Math.round(TOWER_STATS[tower.kind].cost * factor);
 }
@@ -484,11 +579,12 @@ export function sellValue(tower: Tower): number {
 
 /**
  * True when the tower has nothing left to buy: a branched tower at its final tier. A standard tower
- * or cursor is finished at tier 5, a wall the moment its tier-3 branch is chosen (walls branch once).
- * A further upgrade that exists but is unaffordable does not count — this is "nothing left to buy",
- * not "you cannot afford the next thing".
+ * or cursor is finished at tier 5, a wall the moment its tier-3 branch is chosen (walls branch once),
+ * and the repair tower at tier 3 (it never branches). A further upgrade that exists but is
+ * unaffordable does not count — this is "nothing left to buy", not "you cannot afford the next thing".
  */
 export function isFullyUpgraded(tower: Tower): boolean {
+  if (tower.kind === 'repair') return tower.tier >= 3;
   return tower.branch !== null && upgradeCost(tower) === null;
 }
 
@@ -568,6 +664,12 @@ const BRANCH_EFFECTS: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch,
   beacon: {
     A: { auraDamage: 0.3, auraRange: 0 },
     B: { auraPointerDamage: 0.5, auraPointerRange: 0.75 },
+  },
+  // The repair tower has no branch yet, so its entry is empty; it must exist so effectiveStats can
+  // look up a repair tower at tier 3+.
+  repair: {
+    A: {},
+    B: {},
   },
   // Walls carry their branch in hit points (Mesh's flyer block, Toggle's open/closed gate), not in
   // combat stats, so the branch effect table is empty. It must exist so effectiveStats can look up

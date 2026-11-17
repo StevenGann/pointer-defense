@@ -40,7 +40,7 @@ import {
   autoWaveStatus,
   AUTO_WAVE_DELAY_TICKS,
 } from '../src/core/state.ts';
-import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded } from '../src/core/towers.ts';
+import { TOWER_STATS, TOWER_KINDS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, popupCountForWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
@@ -81,7 +81,7 @@ import {
   WALL_FACE_DISABLED,
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
-import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, branchName } from '../src/view/tooltipText.ts';
+import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName } from '../src/view/tooltipText.ts';
 import { BoardView, staticLayerKey } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE } from '../src/view/chrome.ts';
@@ -967,15 +967,15 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(placeTower(s, 'wall', 5, 5), 'place a wall to upgrade');
   const wall = towerAt(s, 5, 5);
   check(wallMaxHp(1, null) === 60 && wall.hp === 60, `tier-1 wall has 60 HP (${wall.hp})`);
-  wall.hp = 40; // 20 damage taken
+  wall.hp = 40; // 20 damage taken, two-thirds health
 
   check(upgradeTower(s, 5, 5), 'upgrade wall 1 -> 2');
-  check(wall.tier === 2 && wall.maxHp === 180 && wall.hp === 160,
-    `wall HP survives upgrade (${wall.hp}/180)`);
+  check(wall.tier === 2 && wall.maxHp === 180 && wall.hp === 120,
+    `wall HP fraction survives upgrade (${wall.hp}/180)`);
 
   check(chooseBranch(s, 5, 5, 'A'), 'choose Bulwark (2 -> 3)');
-  check(wall.tier === 3 && wall.branch === 'A' && wall.maxHp === 1080 && wall.hp === 1060,
-    `Bulwark doubles the total and keeps damage (${wall.hp}/1080)`);
+  check(wall.tier === 3 && wall.branch === 'A' && wall.maxHp === 1080 && wall.hp === 720,
+    `Bulwark doubles the total and keeps the damage fraction (${wall.hp}/1080)`);
   check(!wallBlocksFlyers(wall), 'Bulwark does not block flyers');
 
   const mesh = createRunState();
@@ -2845,7 +2845,7 @@ function cursorTower(tier, branch) {
   full.hp = 1080;
   check(pipUsesBottomCorner(full, 0) === false, 'a full-health wall keeps the top-right pip');
   const gun = createTower(6, 'gun', 5, 5);
-  check(pipUsesBottomCorner(gun, 0) === false, 'a non-wall never routes its pip to the bottom');
+  check(pipUsesBottomCorner(gun, 0) === false, 'a full-health non-wall keeps the top-right pip');
 
   const cell = 32;
   const cx = 5.5 * cell;
@@ -2993,6 +2993,162 @@ function cursorTower(tier, branch) {
   const cursorDamage = s.events.filter((ev) => ev.type === 'damage');
   check(cursorDamage.length > 0, `cursor produced ${cursorDamage.length} clicks`);
   check(cursorDamage.every((ev) => shakeImpulseFor(ev) === null), 'a cursor click shakes nothing');
+}
+
+// --- 33. Repair tower: hit points for every kind, the heal aura, and no revives -----------------
+{
+  // 33a. Every kind carries a non-zero hit-point pool that matches the table, and the palette order
+  // puts the repair tower between Beacon and Wall.
+  const HP_TABLE = { gun: 100, cannon: 140, taser: 120, laser: 120, frost: 90, beacon: 80, repair: 90, cursor: 80 };
+  for (const [kind, hp] of Object.entries(HP_TABLE)) {
+    const t = createTower(1, kind, 0, 0);
+    check(t.maxHp === hp && t.hp === hp, `${kind} has a ${hp} HP pool (${t.maxHp})`);
+  }
+  check(createTower(1, 'wall', 0, 0).maxHp === 60, 'wall keeps its tier-1 60 HP');
+  check(TOWER_KINDS.indexOf('repair') === TOWER_KINDS.indexOf('beacon') + 1, 'repair sits after beacon in the palette');
+  check(TOWER_KINDS.indexOf('wall') === TOWER_KINDS.indexOf('repair') + 1, 'repair sits before wall in the palette');
+
+  // 33b. An upgrade raises the ceiling without changing the HP fraction: half stays half.
+  const su = createRunState();
+  su.economy.salvage = 10000;
+  placeTower(su, 'wall', 5, 5);
+  const w = towerAt(su, 5, 5);
+  w.hp = 30; // half of the tier-1 60
+  upgradeTower(su, 5, 5);
+  check(w.maxHp === 180 && w.hp === 90, `upgrade keeps the wall at half of the new maximum (${w.hp}/180)`);
+}
+
+{
+  // 33c. The repair tower heals only within radius, heals several towers at once, and never heals
+  // an enemy.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  check(placeTower(s, 'repair', 5, 5), 'repair tower placed');
+  check(placeTower(s, 'gun', 6, 5), 'in-radius gun placed');
+  check(placeTower(s, 'gun', 5, 6), 'second in-radius gun placed');
+  check(placeTower(s, 'gun', 12, 5), 'out-of-radius gun placed');
+  const a = towerAt(s, 6, 5);
+  const b = towerAt(s, 5, 6);
+  const far = towerAt(s, 12, 5);
+  a.hp = 40;
+  b.hp = 50;
+  far.hp = 40;
+  const e = stationary(999, 'grunt', 1, 5.5, 4.5);
+  e.hp = 7;
+  s.enemies.push(e);
+
+  for (let i = 0; i < 60; i++) tick(s); // 1 second
+  check(a.hp > 40 && a.hp <= a.maxHp, `repair heals a damaged tower in radius (${a.hp})`);
+  check(b.hp > 50 && b.hp <= b.maxHp, `repair heals several towers at once (${b.hp})`);
+  check(far.hp === 40, `repair never heals outside its radius (${far.hp})`);
+  check(e.hp === 7, 'repair never heals an enemy');
+}
+
+{
+  // 33d. A full-health tower is not a target, and the aura reports 0 towers healed.
+  const s = createRunState();
+  s.economy.salvage = 100000;
+  placeTower(s, 'repair', 5, 5);
+  placeTower(s, 'gun', 6, 5);
+  const repair = towerAt(s, 5, 5);
+  check(repairHealingCount(s.towers, repair, s.clock) === 0, 'a full-HP tower is not a heal target');
+  check(repairHealTargets(s.towers, repair, s.clock).length === 0, 'the aura reports 0 towers healed');
+}
+
+{
+  // 33e. A destroyed tower is never revived.
+  const s = createRunState();
+  s.economy.salvage = 100000;
+  placeTower(s, 'repair', 5, 5);
+  placeTower(s, 'gun', 6, 5);
+  const dead = towerAt(s, 6, 5);
+  dead.hp = 0;
+  for (let i = 0; i < 60; i++) tick(s);
+  check(dead.hp === 0, 'a destroyed tower is never revived');
+  check(repairHealingCount(s.towers, towerAt(s, 5, 5), s.clock) === 0, 'a zero-HP tower is not counted as healed');
+}
+
+{
+  // 33f. The repair tower itself can be damaged and shows a health bar, and it never heals itself.
+  const r = createTower(1, 'repair', 5, 5);
+  check(r.maxHp === 90, `repair tower has a 90 HP pool (${r.maxHp})`);
+  r.hp = 45;
+  check(r.hp < r.maxHp, 'the repair tower itself can be damaged');
+  check(pipUsesBottomCorner(r, 0) === true, 'a damaged repair tower routes its pip for a health bar');
+
+  const s = createRunState();
+  s.economy.salvage = 100000;
+  placeTower(s, 'repair', 5, 5);
+  const solo = towerAt(s, 5, 5);
+  solo.hp = 45;
+  for (let i = 0; i < 60; i++) tick(s);
+  check(solo.hp === 45, 'a repair tower does not heal itself');
+}
+
+{
+  // 33g. Fixed-timestep equivalence holds while the aura is running.
+  const run = (frameMs) => {
+    const s = createRunState();
+    s.economy.salvage = 100000;
+    placeTower(s, 'repair', 5, 5);
+    placeTower(s, 'gun', 6, 5);
+    const gun = towerAt(s, 6, 5);
+    gun.hp = 40;
+    for (let t = 0; t < 900 * TICK_MS - frameMs; t += frameMs) step(s, frameMs);
+    while (s.tick < 1000) tick(s);
+    return JSON.stringify([gun.hp, s.tick, s.clock, s.rng]);
+  };
+  const at60 = run(TICK_MS);
+  check(at60 === run(1000 / 144), 'repair aura matches at 60 Hz and 144 Hz frames');
+  check(at60 === run(1000 / 23), 'repair aura matches at 23 Hz frames');
+}
+
+{
+  // 33h. The palette and placed tooltips name the repair tower and the live heal numbers.
+  check(
+    paletteTooltipLines('repair').join(' | ') === 'Repair  $220 | heals 2 HP/s to towers within 4.5 tiles',
+    'palette tooltip reads the repair spec',
+  );
+  const s = createRunState();
+  s.economy.salvage = 100000;
+  placeTower(s, 'repair', 5, 5);
+  placeTower(s, 'gun', 6, 5);
+  const repair = towerAt(s, 5, 5);
+  const gun = towerAt(s, 6, 5);
+  gun.hp = 40;
+  const healed = repairHealingCount(s.towers, repair, s.clock);
+  const lines = towerTooltipLines(repair, s.clock, undefined, undefined, healed).map(tooltipText);
+  check(lines[0] === 'Repair T1', `placed repair tooltip names the tower (${lines[0]})`);
+  check(lines[1] === 'Heals 2.0 HP/s · Radius 4.5', `placed repair tooltip shows rate and radius (${lines[1]})`);
+  check(lines[2] === 'Healing 1 towers', `placed repair tooltip counts healed towers (${lines[2]})`);
+  check(
+    tooltipText(repairUpgradeTooltipLines(repair, s.economy.salvage)[0]).includes('rng 4.5 → 5.0'),
+    'repair upgrade tooltip previews the radius',
+  );
+}
+
+{
+  // 33i. Nine palette buttons fit inside the left panel at the smallest and largest layouts.
+  for (const [vw, vh] of [[1280, 720], [1600, 900]]) {
+    const l = computeLayout(vw, vh);
+    const h = computeHud(l, createRunState());
+    check(
+      h.towers.length === 9 && h.towers.every((t) => t.rect.y + t.rect.h <= l.leftPanel.y + l.leftPanel.h),
+      `${h.towers.length} palette buttons fit in the left panel at ${vw}x${vh}`,
+    );
+  }
+}
+
+{
+  // 33j. A tower being repaired by hand is off the field, so the aura skips it.
+  const s = createRunState();
+  s.economy.salvage = 100000;
+  placeTower(s, 'repair', 5, 5);
+  placeTower(s, 'gun', 6, 5);
+  const gun = towerAt(s, 6, 5);
+  gun.hp = 40;
+  check(startRepair(s, 6, 5), 'manual repair starts on the damaged gun');
+  check(repairHealingCount(s.towers, towerAt(s, 5, 5), s.clock) === 0, 'a repairing tower is not healed by the aura');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

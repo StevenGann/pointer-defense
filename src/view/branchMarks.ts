@@ -130,9 +130,10 @@ const MARK_PRIMITIVES: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch
       { type: 'arc', x: 0, y: 0.2, r: 0.13, a0: Math.PI, a1: Math.PI * 2 },
     ],
   },
-  // Walls and cursors carry their branch identity elsewhere: the wall's button states and the
-  // cursor's flying-arrow behaviour. No mark is drawn for them.
+  // Walls, cursors and the repair tower carry their branch identity elsewhere (the wall's button
+  // states, the cursor's flying arrow, the repair tower's plain upgrade ladder). No mark is drawn.
   wall: {},
+  repair: {},
   cursor: {},
 };
 
@@ -174,7 +175,7 @@ export function pipRect(cx: number, cy: number, cell: number, bottom: boolean): 
   return { x, y, w: PIP_SIZE, h: PIP_SIZE };
 }
 
-/** True when the pip must use the bottom corner to stay clear of a damaged wall's health bar. */
+/** True when the pip must use the bottom corner to stay clear of a damaged tower's health bar. */
 export function pipUsesBottomCorner(tower: Tower, clock: number): boolean {
-  return tower.kind === 'wall' && tower.maxHp > 0 && tower.hp < tower.maxHp && !isRepairing(tower, clock);
+  return tower.maxHp > 0 && tower.hp < tower.maxHp && !isRepairing(tower, clock);
 }

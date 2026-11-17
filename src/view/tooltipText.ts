@@ -10,7 +10,9 @@ import {
   isRepairing,
   repairCost,
   repairDurationTicks,
+  repairHealRate,
   repairHpToRestore,
+  repairRadius,
   repairRemainingSeconds,
   sellValue,
   TOWER_STATS,
@@ -70,6 +72,7 @@ export const BRANCH_NAMES: Readonly<Record<TowerKind, Readonly<Partial<Record<Br
   frost: { A: 'Deep Freeze', B: 'Shard' },
   laser: { A: 'Focus', B: 'Prism' },
   beacon: { A: 'Command', B: 'Relay' },
+  repair: {},
   wall: { A: 'Bulwark', B: 'Mesh', C: 'Toggle' },
   cursor: { A: 'Overclock', B: 'Wide Search' },
 };
@@ -149,6 +152,9 @@ export function paletteTooltipLines(kind: TowerKind): string[] {
   if (kind === 'cursor') {
     return ['Cursor  $250', 'a cursor that clicks for 50% of your click damage, 2.5 tiles'];
   }
+  if (kind === 'repair') {
+    return ['Repair  $220', 'heals 2 HP/s to towers within 4.5 tiles'];
+  }
   const b = TOWER_STATS[kind];
   const name = `${b.name}  $${formatNumber(b.cost)}`;
   if (kind === 'wall') {
@@ -163,7 +169,13 @@ export function paletteTooltipLines(kind: TowerKind): string[] {
 }
 
 /** Tooltip lines for a placed tower: its live stats with aura bonuses, as the sim sees them. */
-export function towerTooltipLines(tower: Tower, clock: number, pointer?: PointerState, specs?: SpecLevels): string[] {
+export function towerTooltipLines(
+  tower: Tower,
+  clock: number,
+  pointer?: PointerState,
+  specs?: SpecLevels,
+  healedCount = 0,
+): string[] {
   if (tower.kind === 'cursor') {
     const lines = pointer && specs ? cursorTooltipLines(tower, pointer, specs) : [`Cursor T${tower.tier}`];
     if (isFullyUpgraded(tower)) lines.push('Fully upgraded');
@@ -171,6 +183,19 @@ export function towerTooltipLines(tower: Tower, clock: number, pointer?: Pointer
   }
   const branch = tower.branch === null ? '' : ` — ${branchName(tower.kind, tower.branch)}`;
   const name = `${TOWER_STATS[tower.kind].name} T${tower.tier}${branch}`;
+
+  if (tower.kind === 'repair') {
+    const heal = repairHealRate(tower);
+    const radius = repairRadius(tower);
+    const lines = [
+      name,
+      `Heals ${heal.toFixed(1)} HP/s · Radius ${radius.toFixed(1)}`,
+      `Healing ${healedCount} towers`,
+      `Sell $${formatNumber(sellValue(tower))}`,
+    ];
+    if (isFullyUpgraded(tower)) lines.push('Fully upgraded');
+    return lines;
+  }
 
   if (tower.kind === 'wall') {
     const hp = tower.branch === null ? `HP ${Math.ceil(tower.hp)}` : `HP ${Math.ceil(tower.hp)}/${tower.maxHp}`;
@@ -283,12 +308,33 @@ function good(n: string): TooltipSegment {
   return { text: n, color: TOOLTIP_GOOD };
 }
 
+/** Tooltip for a repair tower's Upgrade button: tier 2 widens the radius, tier 3 deepens the heal. */
+export function repairUpgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[] {
+  const cost = upgradeCost(tower);
+  if (cost === null) return [];
+  if (salvage < cost) return [cannotAffordText(salvage, cost)];
+  const next = (tower.tier + 1) as Tier;
+  const beforeHeal = repairHealRate(tower);
+  const afterHeal = repairHealRate({ ...tower, tier: next });
+  const beforeRng = repairRadius(tower);
+  const afterRng = repairRadius({ ...tower, tier: next });
+  const segments: TooltipSegment[] = [{ text: `Repair T${tower.tier} → T${next} — ` }];
+  if (afterRng !== beforeRng) segments.push({ text: `rng ${fmt1(beforeRng)} → ` }, good(fmt1(afterRng)));
+  if (afterHeal !== beforeHeal) {
+    if (segments.length > 1) segments.push({ text: ' · ' });
+    segments.push({ text: `heal ${fmt1(beforeHeal)} → ` }, good(`${fmt1(afterHeal)} HP/s`));
+  }
+  segments.push({ text: `, $${formatNumber(cost)}` });
+  return [segments];
+}
+
 /**
  * Tooltip for the Upgrade button on a selected tower: the result of spending the upgrade cost,
  * computed from the same `effectiveStats` / `wallMaxHp` path the purchase uses.
  */
 export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[] {
   if (tower.kind === 'cursor') return cursorUpgradeTooltipLines(tower, salvage);
+  if (tower.kind === 'repair') return repairUpgradeTooltipLines(tower, salvage);
   const cost = upgradeCost(tower);
   if (cost === null) return [];
   if (salvage < cost) return [cannotAffordText(salvage, cost)];
