@@ -57,8 +57,10 @@ import {
   comboMultiplier,
   clickDamage,
   MAX_OVERCLOCK_LEVEL,
+  OVERCLOCK_COST_BASE,
   OVERCLOCK_COST_GROWTH,
   OVERCLOCK_DAMAGE_GROWTH,
+  overclockMilestoneMult,
   overclockCeiling,
   overclockUnlockWave,
   holdDps,
@@ -2042,17 +2044,17 @@ function chokeWalls(gaps) {
   check(upgradePointer(s), 'pointer upgrades stage 1 -> 2');
   check(s.pointer.stage === 2, 'pointer is at stage 2');
   check(s.pointer.clickLevel === 0, 'clickLevel starts at 0');
-  check(nextOverclockCost(s.pointer) === Math.round(120 * 6.0 ** 0), 'first overclock costs 120');
+  check(nextOverclockCost(s.pointer) === OVERCLOCK_COST_BASE, `first overclock costs ${OVERCLOCK_COST_BASE}`);
   check(clickDamage(s.pointer) === 4, 'stage-2 click damage is 4 at level 0');
   check(holdDps(s.pointer) === 10, 'stage-2 hold dps is 10 at level 0');
 
   const sal = s.economy.salvage;
   check(upgradePointer(s), 'buy overclock level 1');
   check(s.pointer.clickLevel === 1, 'clickLevel becomes 1');
-  check(s.economy.salvage === sal - 120, 'level 1 costs 120');
+  check(s.economy.salvage === sal - OVERCLOCK_COST_BASE, `level 1 costs ${OVERCLOCK_COST_BASE}`);
   check(Math.abs(clickDamage(s.pointer) - 4 * OVERCLOCK_DAMAGE_GROWTH) < 1e-9, 'click damage follows the damage growth constant');
   check(Math.abs(holdDps(s.pointer) - clickDamage(s.pointer) * 2.5) < 1e-9, 'hold dps scales with click');
-  check(nextOverclockCost(s.pointer) === Math.round(120 * OVERCLOCK_COST_GROWTH ** 1), 'next overclock cost follows the formula');
+  check(nextOverclockCost(s.pointer) === Math.round(OVERCLOCK_COST_BASE * OVERCLOCK_COST_GROWTH ** 1), 'next overclock cost follows the formula');
   check(nextPointerCost(s.pointer) === nextOverclockCost(s.pointer), 'nextPointerCost is the overclock cost at stage 2');
 
   // Buying the level the tooltip previewed must raise the damage to the tooltip's "after" value.
@@ -2061,6 +2063,22 @@ function chokeWalls(gaps) {
   check(tooltipText(tooltipLine).includes(previewAfter), `overclock tooltip previews the applied damage (${tooltipText(tooltipLine)})`);
   upgradePointer(s);
   check(fmtClickDamage(clickDamage(s.pointer)) === previewAfter, 'the tooltip after-value matches the damage applied after buying');
+}
+
+{
+  // 24a1. The damage milestones: level 5 doubles click damage and level 10 doubles it again, so the
+  // ladder is a few visible jumps rather than one smooth 1.12 curve.
+  const proto = createRunState().pointer;
+  const dmg = (level) => clickDamage({ ...proto, stage: 2, clickLevel: level });
+  check(overclockMilestoneMult(4) === 1, 'no milestone below level 5');
+  check(overclockMilestoneMult(5) === 2, 'level 5 doubles the milestone multiplier');
+  check(overclockMilestoneMult(9) === 2, 'the level-5 milestone persists to level 9');
+  check(overclockMilestoneMult(10) === 4, 'level 10 doubles it again (x4 total)');
+  check(overclockMilestoneMult(12) === 4, 'the multiplier holds through the cap');
+  check(Math.abs(dmg(4) - 4 * OVERCLOCK_DAMAGE_GROWTH ** 4) < 1e-9, 'level 4 follows the plain growth curve');
+  check(Math.abs(dmg(5) - 2 * 4 * OVERCLOCK_DAMAGE_GROWTH ** 5) < 1e-9, 'level 5 doubles the growth curve');
+  check(Math.abs(dmg(10) - 4 * 4 * OVERCLOCK_DAMAGE_GROWTH ** 10) < 1e-9, 'level 10 doubles again');
+  check(Math.abs(dmg(12) - 4 * 4 * OVERCLOCK_DAMAGE_GROWTH ** 12) < 1e-9, 'level 12 carries both milestones');
 }
 
 {

@@ -649,15 +649,20 @@ Above stage 2 the pointer keeps a cost curve of its own. **Overclock levels** ar
 wave-gated so click power grows with the content instead of ahead of it:
 
 ```
-cost(level)  = round(120 × 1.95^level)   // buying level+1 from level
-damage       = 4 × 1.25^level            // the reticle's base click, compounded
-holdDps      = damage × 2.5              // so the reticle keeps pace with the click
+cost(level)  = round(1845 × 1.25^level)   // buying level+1 from level; ~100k for the whole ladder
+damage       = 4 × 1.12^level × milestone(level)
+holdDps      = damage × 2.5               // so the reticle keeps pace with the click
 ceiling(wave) = clamp(floor(wave / 8), 0, 12)
+milestone(level) = ×2 at level 5, and ×2 again at level 10
 ```
 
-The 1.25 growth is a coarse, measured constant, not a fit. It lands the click at **~37 by
-level 10** and **~58 by level 12** (against ~55 and ~93 under the old 1.30). It is not tuned any
-further: the cost curve, crit chances and the marked multiplier stay as written.
+The cost base is derived from the closed form so the full ladder still costs about **100k** of salvage —
+the same total spend the old 1.95 curve charged for the climb — while the per-level growth flattens to
+1.25, turning the last two walls into thirteen small steps. The damage growth is 1.12 with **explicit
+×2 milestones at level 5 and level 10**: each milestone doubles the click (and the hold DPS that tracks
+it) the moment it is reached, so the ladder reads as a few visible jumps rather than one smooth curve.
+The milestone is the reason level 12 still lands near the old power — **~62** — without a steep
+per-level curve. The crit chances and the marked multiplier stay as written.
 
 The highest level the current wave permits is `floor(wave / 8)`, clamped to 0..12
 (`OVERCLOCK_WAVE_DIVISOR = 8` in pointer.ts): level 1 unlocks at wave 8, level 2 at wave 16, and so
