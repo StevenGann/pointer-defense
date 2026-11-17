@@ -34,13 +34,36 @@ export const POINTER_STAGES: Readonly<Record<PointerStage, PointerStageInfo>> = 
   2: { name: 'Reticle', cost: 80, clickDamage: 4, holdDps: 10 },
 };
 
-/** Overclock cost: `round(120 * 1.95 ^ clickLevel)`. */
-export const OVERCLOCK_COST_BASE = 120;
-export const OVERCLOCK_COST_GROWTH = 1.95;
-/** Overclock damage: `reticleBase * 1.25 ^ clickLevel`. */
-export const OVERCLOCK_DAMAGE_GROWTH = 1.25;
+/**
+ * Overclock cost: `round(OVERCLOCK_COST_BASE * OVERCLOCK_COST_GROWTH ^ clickLevel)`. The base is
+ * derived from the closed form so the whole ladder (levels 1–12) costs ~100k of salvage, keeping the
+ * climb as expensive as the old 1.95 curve while the per-level growth flattens to 1.25.
+ */
+export const OVERCLOCK_COST_BASE = 1845;
+export const OVERCLOCK_COST_GROWTH = 1.25;
+/** Overclock damage: `reticleBase * OVERCLOCK_DAMAGE_GROWTH ^ clickLevel * milestone(clickLevel)`. */
+export const OVERCLOCK_DAMAGE_GROWTH = 1.12;
+/**
+ * Explicit damage milestones, applied cumulatively once the level is reached. Each entry is a
+ * `[level, multiplier]` pair: reaching that level multiplies click damage (and the hold DPS that
+ * tracks it) by the multiplier, on top of the per-level growth. Used to shape the ladder into a
+ * few visible jumps instead of one smooth curve.
+ */
+export const OVERCLOCK_MILESTONES: ReadonlyArray<readonly [number, number]> = [
+  [5, 2],
+  [10, 2],
+];
 /** Hold damage tracks click damage: `holdDps = clickDamage * 2.5`. */
 export const HOLD_DPS_MULT = 2.5;
+
+/** Cumulative damage multiplier from every milestone at or below the given overclock level. */
+export function overclockMilestoneMult(level: number): number {
+  let mult = 1;
+  for (const [at, factor] of OVERCLOCK_MILESTONES) {
+    if (level >= at) mult *= factor;
+  }
+  return mult;
+}
 
 /** One overclock level unlocks every this many waves: `floor(wave / 8)`, capped at 12. */
 export const OVERCLOCK_WAVE_DIVISOR = 8;
@@ -109,7 +132,7 @@ export function pointerInfo(p: PointerState): PointerStageInfo {
 export function clickDamage(p: PointerState): number {
   const base = POINTER_STAGES[p.stage].clickDamage;
   if (p.stage < MAX_POINTER_STAGE) return base;
-  return base * Math.pow(OVERCLOCK_DAMAGE_GROWTH, p.clickLevel);
+  return base * Math.pow(OVERCLOCK_DAMAGE_GROWTH, p.clickLevel) * overclockMilestoneMult(p.clickLevel);
 }
 
 /** Hold damage per second: zero before the reticle, then click damage scaled to keep pace. */
