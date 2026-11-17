@@ -137,7 +137,7 @@ export type GameEvent =
   | { type: 'leak'; x: number; y: number }
   | { type: 'shot'; towerId: number; x: number; y: number; splash: number }
   | { type: 'click'; x: number; y: number; hit: boolean }
-  | { type: 'damage'; x: number; y: number; amount: number; weak: boolean; crit?: boolean }
+  | { type: 'damage'; x: number; y: number; amount: number; weak: boolean; crit?: boolean; id: number; dirX?: number; dirY?: number }
   | { type: 'shieldHit'; x: number; y: number; absorbed: number; left: number }
   | { type: 'waveStarted'; wave: number }
   | { type: 'waveCleared'; wave: number; bonus: number }
@@ -1738,7 +1738,22 @@ function damageEnemy(
   e.hp -= dmg;
   s.economy.damage[source] += dmg;
   if (source === 'tower' && tower) tower.damageDealt += dmg;
-  s.events.push({ type: 'damage', x: e.x, y: e.y, amount: dmg, weak: source === 'pointer' && weak, crit: crit && source === 'pointer' });
+  // The view nudges the hit enemy along the shot direction for a cosmetic knockback. Carrying the
+  // unit direction here (rather than re-deriving it from a matching shot) keeps splash/beam/chain
+  // hits correct, and it is view data only — the simulation's position, pathing and targeting are
+  // untouched by it.
+  let dirX: number | undefined;
+  let dirY: number | undefined;
+  if (tower) {
+    const dx = e.x - (tower.col + 0.5);
+    const dy = e.y - (tower.row + 0.5);
+    const d = Math.hypot(dx, dy);
+    if (d > 0) {
+      dirX = dx / d;
+      dirY = dy / d;
+    }
+  }
+  s.events.push({ type: 'damage', x: e.x, y: e.y, amount: dmg, weak: source === 'pointer' && weak, crit: crit && source === 'pointer', id: e.id, dirX, dirY });
   if (e.hp <= 1e-9) {
     e.hp = 0;
     e.dead = true;

@@ -66,15 +66,20 @@ export function staticLayerKey(
   return `${state.levelId}|${state.grid.cols}x${state.grid.rows}|${board.x},${board.y},${board.cell}`;
 }
 
+/**
+ * Enemy bodies live in one grey/blue family: shape and outline carry identity, colour only shades
+ * it. Each value is a slightly different blue-grey so a mixed wave reads as one coherent force, not
+ * a rainbow of blobs.
+ */
 export const ENEMY_COLOR: Record<EnemyKind, number> = {
-  grunt: PAL.navy,
-  runner: PAL.purple,
-  shielded: PAL.maroon,
-  flyer: 0x8000ff,
+  grunt: 0x35506a,
+  runner: 0x577489,
+  shielded: 0x2f4b62,
+  flyer: 0x6b8598,
   armoured: 0x406080,
-  saboteur: 0x808000,
-  boss: 0x806000,
-  breacher: 0xa04040,
+  saboteur: 0x4a637a,
+  boss: 0x27495d,
+  breacher: 0x5a7183,
   popup: 0x000080,
 };
 
@@ -136,7 +141,13 @@ export class BoardView {
     return this.popupTexts[i];
   }
 
-  draw(state: RunState, l: Layout, alpha: number, hover: BoardHover): void {
+  draw(
+    state: RunState,
+    l: Layout,
+    alpha: number,
+    hover: BoardHover,
+    knockbackFor?: (id: number, tick: number) => { dx: number; dy: number } | null,
+  ): void {
     const { board } = l;
     const cell = board.cell;
 
@@ -208,7 +219,8 @@ export class BoardView {
 
     for (const e of layers.others) {
       if (e.dead) continue;
-      drawEnemy(this.enemies, e, board, cell, alpha, state.tick < e.slowUntilTick);
+      const kb = knockbackFor ? knockbackFor(e.id, state.tick) : null;
+      drawEnemy(this.enemies, e, board, cell, alpha, state.tick < e.slowUntilTick, kb);
     }
 
     // The flying cursor arrows live above the enemy layer so they are always visible.
@@ -664,8 +676,9 @@ function drawWallFocus(g: Graphics, cx: number, cy: number, cell: number): void 
 }
 
 /**
- * The enemy's body shape, shared by the live draw and the death collapse. `r` is the radius in
- * pixels; `alpha` lets the death animation fade the shape as it shrinks toward a point.
+ * The enemy's body shape, shared by the live draw. `r` is the radius in pixels and `heading` orients
+ * the leading edge (the weak point) of the asymmetric shapes. Each kind is a distinct silhouette at
+ * 1x inside a cell: shape and outline carry the identity, colour only shades it.
  */
 export function drawEnemyShape(
   g: Graphics,
@@ -679,6 +692,11 @@ export function drawEnemyShape(
 ): void {
   const fill = { color, alpha };
   const outline = { width: 1, color: PAL.dark, alpha };
+  const thickOutline = { width: 2, color: PAL.dark, alpha };
+  const cos = Math.cos(heading);
+  const sin = Math.sin(heading);
+  const perpX = -sin;
+  const perpY = cos;
   const hex = (radius: number): number[] => {
     const pts: number[] = [];
     for (let i = 0; i < 6; i++) {
@@ -688,48 +706,133 @@ export function drawEnemyShape(
     return pts;
   };
 
-  if (kind === 'grunt') {
-    g.circle(x, y, r).fill(fill).stroke(outline);
-  } else if (kind === 'runner') {
-    const tipX = x + Math.cos(heading) * r * 1.25;
-    const tipY = y + Math.sin(heading) * r * 1.25;
-    const a1 = heading + Math.PI * 0.72;
-    const a2 = heading - Math.PI * 0.72;
-    const p1x = x + Math.cos(a1) * r;
-    const p1y = y + Math.sin(a1) * r;
-    const p2x = x + Math.cos(a2) * r;
-    const p2y = y + Math.sin(a2) * r;
-    g.poly([tipX, tipY, p1x, p1y, p2x, p2y]).fill(fill).stroke(outline);
-  } else if (kind === 'flyer') {
-    const tipX = x + Math.cos(heading) * r;
-    const tipY = y + Math.sin(heading) * r;
-    const bx = x - Math.cos(heading) * r * 0.6;
-    const by = y - Math.sin(heading) * r * 0.6;
-    const px = -Math.sin(heading) * r;
-    const py = Math.cos(heading) * r;
-    g.moveTo(bx + px, by + py).lineTo(tipX, tipY);
-    g.moveTo(bx - px, by - py).lineTo(tipX, tipY);
-    g.stroke({ width: 2, color, alpha });
-  } else if (kind === 'armoured') {
-    const s = r * 1.6;
-    g.rect(x - s / 2, y - s / 2, s, s).fill(fill).stroke({ width: 3, color: PAL.dark, alpha });
-  } else if (kind === 'saboteur') {
-    g.circle(x, y, r).fill(fill).stroke(outline);
-  } else if (kind === 'boss') {
-    g.poly(hex(r)).fill(fill).stroke({ width: 2, color: PAL.dark, alpha });
-    g.circle(x, y, r * 1.1).stroke({ width: 1, color: PAL.dark, alpha });
-    g.circle(x, y, r * 1.18).stroke({ width: 1, color: PAL.dark, alpha });
-  } else if (kind === 'breacher') {
-    const s = r * 1.6;
-    g.rect(x - s / 2, y - s / 2, s, s).fill(fill).stroke({ width: 3, color: PAL.dark, alpha });
-    // The battering ram: a short bar jutting from the leading edge.
-    const bx = x + Math.cos(heading) * s * 0.5;
-    const by = y + Math.sin(heading) * s * 0.5;
-    const rx = x + Math.cos(heading) * (s * 0.5 + r * 0.8);
-    const ry = y + Math.sin(heading) * (s * 0.5 + r * 0.8);
-    g.moveTo(bx, by).lineTo(rx, ry).stroke({ width: 3, color: PAL.dark, alpha });
-  } else {
-    g.poly(hex(r)).fill(fill).stroke(outline);
+  switch (kind) {
+    case 'grunt': {
+      // The filler enemy: a small circle with a 1 px inner dot, kept cheap because there are many.
+      g.circle(x, y, r).fill(fill).stroke(outline);
+      g.circle(x, y, 1).fill({ color: PAL.dark, alpha });
+      break;
+    }
+    case 'runner': {
+      // A narrow triangle pointing along its heading, with two short streaks trailing behind it.
+      const nose = r * 1.5;
+      const tail = r * 0.7;
+      const halfW = r * 0.5;
+      const tipX = x + cos * nose;
+      const tipY = y + sin * nose;
+      const bx = x - cos * tail;
+      const by = y - sin * tail;
+      g.poly([
+        tipX, tipY,
+        bx + perpX * halfW, by + perpY * halfW,
+        bx - perpX * halfW, by - perpY * halfW,
+      ]).fill(fill).stroke(outline);
+      for (const s of [-1, 1]) {
+        const sx = bx + perpX * halfW * s;
+        const sy = by + perpY * halfW * s;
+        g.moveTo(sx, sy).lineTo(sx - cos * r * 0.6, sy - sin * r * 0.6);
+      }
+      g.stroke({ width: 1, color: PAL.dark, alpha });
+      break;
+    }
+    case 'shielded': {
+      // A circle inside a hexagonal ring; the ring is drawn dimmer than the body.
+      g.circle(x, y, r).fill(fill).stroke(outline);
+      g.poly(hex(r * 1.35)).stroke({ width: 1, color, alpha: alpha * 0.45 });
+      break;
+    }
+    case 'flyer': {
+      // The elliptical shadow sits on the tile below the body; the body is a circle with two swept
+      // wings trailing back off the heading.
+      g.ellipse(x, y + r * 0.55, r * 1.15, r * 0.42).fill({ color: 0x17222b, alpha: alpha * 0.4 });
+      g.circle(x, y, r * 0.62).fill(fill).stroke(outline);
+      for (const s of [-1, 1]) {
+        const rootX = x + perpX * s * r * 0.4;
+        const rootY = y + perpY * s * r * 0.4;
+        g.moveTo(rootX, rootY).lineTo(x - cos * r * 0.9 + perpX * s * r * 1.15, y - sin * r * 0.9 + perpY * s * r * 1.15);
+      }
+      g.stroke({ width: 2, color, alpha });
+      break;
+    }
+    case 'armoured': {
+      // A square with four corner rivets and a thicker 2 px outline.
+      const s = r * 1.6;
+      const x0 = x - s / 2;
+      const y0 = y - s / 2;
+      g.rect(x0, y0, s, s).fill(fill).stroke(thickOutline);
+      for (const [rx, ry] of [[x0, y0], [x0 + s, y0], [x0, y0 + s], [x0 + s, y0 + s]]) {
+        g.circle(rx, ry, 1.3).fill({ color: PAL.light, alpha });
+      }
+      break;
+    }
+    case 'saboteur': {
+      // A diamond with a small fuse spark at the rear corner (opposite the heading).
+      g.poly([x, y - r, x + r, y, x, y + r, x - r, y]).fill(fill).stroke(outline);
+      const rearX = x - cos * r;
+      const rearY = y - sin * r;
+      const sparkR = Math.max(2, r * 0.55);
+      for (let i = 0; i < 3; i++) {
+        const a = heading + Math.PI + (i - 1) * 0.6;
+        g.moveTo(rearX, rearY).lineTo(rearX + Math.cos(a) * sparkR, rearY + Math.sin(a) * sparkR);
+      }
+      g.stroke({ width: 1, color: PAL.amber, alpha });
+      break;
+    }
+    case 'breacher': {
+      // A rounded square with a jaw-notch cut into the leading edge and three teeth marks.
+      const s = r * 1.6;
+      const x0 = x - s / 2;
+      const y0 = y - s / 2;
+      g.roundRect(x0, y0, s, s, r * 0.35).fill(fill).stroke(thickOutline);
+      const fx = x + cos * (s / 2);
+      const fy = y + sin * (s / 2);
+      const jawW = s * 0.5;
+      const jawD = r * 0.75;
+      const o1x = fx + perpX * (jawW / 2);
+      const o1y = fy + perpY * (jawW / 2);
+      const o2x = fx - perpX * (jawW / 2);
+      const o2y = fy - perpY * (jawW / 2);
+      g.poly([
+        o1x, o1y,
+        o2x, o2y,
+        o2x - cos * jawD, o2y - sin * jawD,
+        o1x - cos * jawD, o1y - sin * jawD,
+      ]).fill({ color: PAL.dark, alpha });
+      for (let k = 0; k < 3; k++) {
+        const t = k / 2;
+        const bx = o1x + (o2x - o1x) * t - cos * jawD;
+        const by = o1y + (o2y - o1y) * t - sin * jawD;
+        const tw = r * 0.16;
+        g.poly([
+          bx + perpX * tw, by + perpY * tw,
+          bx - perpX * tw, by - perpY * tw,
+          bx + cos * r * 0.5, by + sin * r * 0.5,
+        ]).fill({ color: PAL.highlight, alpha });
+      }
+      break;
+    }
+    case 'boss': {
+      // A large circle with a segmented outer rim and a crown notch at the top.
+      g.circle(x, y, r).fill(fill).stroke(thickOutline);
+      const rimR = r * 1.28;
+      const span = (Math.PI * 2) / 12;
+      for (let i = 0; i < 12; i++) {
+        const a0 = span * i;
+        const a1 = a0 + span * 0.65;
+        g.moveTo(x + Math.cos(a0) * rimR, y + Math.sin(a0) * rimR)
+          .arc(x, y, rimR, a0, a1)
+          .stroke({ width: 1, color: PAL.dark, alpha });
+      }
+      const nw = r * 0.32;
+      g.moveTo(x - nw, y - r).lineTo(x, y - r - r * 0.18).lineTo(x + nw, y - r).stroke({ width: 1, color: PAL.dark, alpha });
+      break;
+    }
+    default: {
+      // Pop-up (and any future kind) falls back to a plain hexagon; the live window is drawn by
+      // drawPopupWindow, not here.
+      g.poly(hex(r)).fill(fill).stroke(outline);
+      break;
+    }
   }
 }
 
@@ -758,18 +861,19 @@ function drawEnemy(
   cell: number,
   alpha: number,
   slowed: boolean,
+  knockback?: { dx: number; dy: number } | null,
 ): void {
-  const ex = (e.prevX + (e.x - e.prevX) * alpha) * cell + board.x;
-  const ey = (e.prevY + (e.y - e.prevY) * alpha) * cell + board.y;
+  let ex = (e.prevX + (e.x - e.prevX) * alpha) * cell + board.x;
+  let ey = (e.prevY + (e.y - e.prevY) * alpha) * cell + board.y;
+  if (knockback) {
+    ex += knockback.dx;
+    ey += knockback.dy;
+  }
   const r = radiusOf(e) * cell;
   const color = ENEMY_COLOR[e.kind];
 
   drawEnemyShape(g, e.kind, ex, ey, r, color, e.heading);
 
-  if (e.kind === 'saboteur') {
-    const sy = ey - r - 2;
-    g.moveTo(ex - r * 0.4, sy).lineTo(ex + r * 0.1, sy + r * 0.7).lineTo(ex - r * 0.1, sy + r * 0.7).lineTo(ex + r * 0.4, sy + r * 1.4).stroke({ width: 1, color: PAL.amber });
-  }
   // The shield ring is on whenever a shield remains, and its alpha tracks the fraction left, so a
   // Boss entering at full shield reads as heavily protected and a nearly-stripped one is faint.
   if (e.shield > 0) {
@@ -801,7 +905,13 @@ function drawEnemy(
   }
 
   const ratio = e.maxHp > 0 ? e.hp / e.maxHp : 0;
-  if (ratio < 1) {
+  if (e.kind === 'boss') {
+    // A boss always shows a health bar, even at full health, so its durability reads at a glance.
+    const bw = r * 2.2;
+    const by0 = ey - r - 8;
+    g.rect(ex - bw / 2, by0, bw, 3).fill({ color: PAL.dark });
+    g.rect(ex - bw / 2 + 1, by0 + 1, Math.max(0, (bw - 2) * ratio), 1).fill({ color: healthColor(ratio) });
+  } else if (ratio < 1) {
     const arcR = r + 4;
     const a0 = -Math.PI / 2 - Math.PI * ratio;
     const a1 = -Math.PI / 2 + Math.PI * ratio;

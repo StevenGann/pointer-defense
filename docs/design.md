@@ -723,11 +723,13 @@ about the era, no CRT filter, no retro winking. The Windows look is the game's w
 | dark | `#000000` | outlines, text |
 | title | `#000080` | title bars, selection |
 | teal | `#008080` | Gun |
-| maroon | `#800000` | Cannon, Shielded |
+| maroon | `#800000` | Cannon |
 | olive | `#808000` | Taser |
-| purple | `#800080` | Runner, Flyer |
 | grey-blue | `#406080` | Armoured |
-| amber | `#806000` | Boss |
+| amber | `#806000` | Saboteur's fuse spark |
+
+Enemies are drawn in a single grey/blue family (blue-grey from `#27495d` to `#6b8598`): shape and
+outline carry identity, colour only shades it.
 
 Everything is a vector drawn at runtime. No image assets, no sprite sheets, no external fonts. The
 whole game weighs less than one photograph and scales to any DPI.
@@ -738,14 +740,14 @@ Shape carries meaning before colour does — readability, and colour-blind playe
 
 | Thing | Shape |
 |---|---|
-| Grunt | circle |
-| Runner | triangle, pointing along its heading |
-| Shielded | hexagon with a cyan outer ring while shielded (alpha tracks shield remaining) |
-| Flyer | chevron with two motion ticks |
-| Armoured | square with a thick outline |
-| Saboteur | circle with a spark |
-| Boss | large hexagon with a double ring |
-| Breacher | square with a forward battering ram |
+| Grunt | small circle with a 1 px inner dot |
+| Runner | narrow triangle pointing along its heading, with two short streaks behind it |
+| Shielded | circle inside a dimmer hexagonal ring |
+| Flyer | circle with two swept wings and an elliptical shadow on the tile below it |
+| Armoured | square with four corner rivets and a thicker 2 px outline |
+| Saboteur | diamond with a small fuse spark at the rear corner |
+| Boss | large circle with a segmented outer rim and a crown notch at the top |
+| Breacher | rounded square with a jaw-notch cut into the leading edge and three teeth |
 | Pop-up | Win95 window with a title bar and close box |
 | Gun | small square with a barrel |
 | Cannon | circle with a thick barrel |
@@ -768,13 +770,14 @@ Short and mechanical, measured in ticks at 60 Hz:
 
 | Event | Length |
 |---|---|
-| muzzle flash | 4 ticks |
+| muzzle flash | 2 ticks, weapon-shaped: a wedge (gun), a puff (cannon/frost), a cross-spark (laser), an arc flicker (taser), nothing (beacon) |
 | tracer | 6 ticks |
-| hit flash | 3 ticks |
+| hit spark | 3 short lines from the impact for 4 ticks; shielded/boss show a shield arc instead |
+| knockback | a 1 px nudge along the shot direction, decaying over 3 ticks (cosmetic only) |
 | shield hit | cyan arc at the impact (8 ticks) plus a cyan `SHD` floater (30 ticks) |
-| death | 8 ticks, the shape collapsing to a point |
+| death | 6 ticks: a ring that expands and fades, with 3 small pieces |
 | pop-up appear | 6 ticks, snapped, no easing |
-| damage number | 30 ticks, rising 12 px, fading in the last 10 |
+| damage number | 30 ticks, rising 12 px, fading in the last 10, scaled by the size of the hit |
 
 No tweening curves anywhere. Windows 95 did not ease.
 

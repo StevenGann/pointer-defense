@@ -238,7 +238,7 @@ function applyScreensaver(s: RunState): void {
     if (e.kind === 'popup') continue; // the window only dies to its close box
     e.stunUntilTick = s.tick + secondsToTicks(0.5);
     e.hp -= 25;
-    s.events.push({ type: 'damage', x: e.x, y: e.y, amount: 25, weak: false });
+    s.events.push({ type: 'damage', x: e.x, y: e.y, amount: 25, weak: false, id: e.id });
     if (e.hp <= 1e-9) {
       e.hp = 0;
       e.dead = true;

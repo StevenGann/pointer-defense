@@ -324,16 +324,26 @@ function drainEvents(): void {
         if (tower) sfx.play(towerSound(tower.kind));
         break;
       }
-      case 'damage':
-        effects.addHitFlash(ev.x, ev.y);
+      case 'damage': {
+        // A shielded or boss enemy shows a shield arc instead of a hit spark.
+        const target = state.enemies.find((e) => e.id === ev.id);
+        if (target && (target.kind === 'shielded' || target.kind === 'boss')) {
+          effects.addShieldHit(ev.x, ev.y);
+        } else {
+          effects.addHitSpark(ev.x, ev.y);
+        }
+        if (ev.dirX !== undefined && ev.dirY !== undefined) {
+          effects.addKnockback(ev.id, ev.dirX, ev.dirY, state.tick);
+        }
         numbers.addDamage(ev.x, ev.y, ev.amount, ev.weak, !!ev.crit, state.tick);
         break;
+      }
       case 'shieldHit':
         effects.addShieldHit(ev.x, ev.y);
         numbers.addShield(ev.x, ev.y, ev.absorbed, state.tick);
         break;
       case 'kill':
-        effects.addDeath(ev.kind, ev.x, ev.y, ev.heading);
+        effects.addDeath(ev.kind, ev.x, ev.y);
         sfx.play('kill', { pitch: 1 + 0.06 * Math.min(state.pointer.combo, 12) });
         break;
       case 'leak':
@@ -346,10 +356,10 @@ function drainEvents(): void {
         sfx.play('waveClear');
         break;
       case 'wallDamaged':
-        effects.addHitFlash(ev.x, ev.y);
+        effects.addHitSpark(ev.x, ev.y);
         break;
       case 'wallDestroyed':
-        effects.addHitFlash(ev.x, ev.y);
+        effects.addHitSpark(ev.x, ev.y);
         sfx.play('cannon');
         break;
       case 'popupSpawned':
@@ -375,7 +385,13 @@ app.ticker.add((ticker) => {
   syncBestWave();
   chrome.draw(layout, mouse.hover.menuItem);
   menuView.draw(layout.menu, menu, mouse.hover.menuHover);
-  board.draw(state, layout, alpha, { col: mouse.hover.col, row: mouse.hover.row, onBoard: mouse.hover.onBoard, x: mouse.hover.x, y: mouse.hover.y });
+  board.draw(
+    state,
+    layout,
+    alpha,
+    { col: mouse.hover.col, row: mouse.hover.row, onBoard: mouse.hover.onBoard, x: mouse.hover.x, y: mouse.hover.y },
+    (id, tick) => effects.knockbackOffset(id, tick),
+  );
   effects.draw(state, layout);
   numbers.draw(state, layout);
   hud.draw(state, layout, mouse.hover.hud);

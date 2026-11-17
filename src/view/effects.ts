@@ -1,33 +1,36 @@
 import { Container, Graphics } from 'pixi.js';
 import { PAL, worldToPixel, type Layout } from './chrome.ts';
 import { ENEMY_STATS, type EnemyKind } from '../core/enemies.ts';
-import type { Tower } from '../core/towers.ts';
+import type { Tower, TowerKind } from '../core/towers.ts';
 import type { RunState } from '../core/state.ts';
-import { drawEnemyShape, ENEMY_COLOR, SHIELD_COLOR, TOWER_COLOR } from './board.ts';
+import { ENEMY_COLOR, SHIELD_COLOR, TOWER_COLOR } from './board.ts';
 
 /**
- * Short-lived combat effects, timed in fixed ticks (docs/design.md §13.4): a muzzle flash (4
- * ticks), a tracer (6), a hit flash (3) and a death collapse (8). No easing — each effect fades
- * linearly over its lifetime. The sim pushes events; this view holds the resulting sprites.
+ * Short-lived combat effects, timed in fixed ticks so a 30 fps and a 60 fps frame show the same
+ * effect for the same simulation ticks. Every pool is capped, and effects are removed in place (no
+ * unbounded allocation), so a wave of forty enemies at x3 speed cannot balloon the draw. The sim
+ * pushes events; this view holds the resulting sprites and never touches the simulation.
  */
 
-const MUZZLE_TICKS = 4;
+const MUZZLE_TICKS = 2;
 const TRACER_TICKS = 6;
-const HIT_TICKS = 3;
-const DEATH_TICKS = 8;
-/** Shield-absorption arcs linger a touch longer than a hit flash so they read as shield damage. */
+const HIT_TICKS = 4;
 const SHIELD_ARC_TICKS = 8;
+const DEATH_TICKS = 6;
+const KNOCKBACK_TICKS = 3;
+
+const CAP_MUZZLE = 96;
+const CAP_TRACER = 256;
+const CAP_SPARK = 96;
+const CAP_SHIELD = 96;
+const CAP_DEATH = 96;
 
 interface Muzzle {
   x: number;
   y: number;
+  angle: number;
+  kind: TowerKind;
   color: number;
-  born: number;
-}
-
-interface ShieldArc {
-  x: number;
-  y: number;
   born: number;
 }
 
@@ -40,7 +43,13 @@ interface Tracer {
   born: number;
 }
 
-interface Hit {
+interface Spark {
+  x: number;
+  y: number;
+  born: number;
+}
+
+interface ShieldArc {
   x: number;
   y: number;
   born: number;
@@ -50,8 +59,27 @@ interface Death {
   kind: EnemyKind;
   x: number;
   y: number;
-  heading: number;
   born: number;
+}
+
+interface Knockback {
+  dx: number;
+  dy: number;
+  born: number;
+}
+
+function pushCap<T>(arr: T[], cap: number, item: T): void {
+  if (arr.length >= cap) arr.shift();
+  arr.push(item);
+}
+
+/** Remove expired effects in place, keeping the array length within the cap without reallocating. */
+function compact(arr: { born: number }[], now: number, life: number): void {
+  let w = 0;
+  for (let i = 0; i < arr.length; i++) {
+    if (now - arr[i].born < life) arr[w++] = arr[i];
+  }
+  arr.length = w;
 }
 
 export class EffectsView {
@@ -60,32 +88,65 @@ export class EffectsView {
 
   private muzzles: Muzzle[] = [];
   private tracers: Tracer[] = [];
-  private hits: Hit[] = [];
+  private sparks: Spark[] = [];
   private shieldArcs: ShieldArc[] = [];
   private deaths: Death[] = [];
+  private readonly knockbacks = new Map<number, Knockback>();
 
   constructor() {
     this.root.addChild(this.g);
   }
 
   addShot(tower: Tower | undefined, x: number, y: number): void {
-    const color = tower ? TOWER_COLOR[tower.kind] : PAL.text;
-    const ox = tower ? tower.col + 0.5 : x;
-    const oy = tower ? tower.row + 0.5 : y;
-    this.muzzles.push({ x: ox, y: oy, color, born: 0 });
-    this.tracers.push({ x0: ox, y0: oy, x1: x, y1: y, color, born: 0 });
+    if (!tower || tower.kind === 'beacon') return;
+    const ox = tower.col + 0.5;
+    const oy = tower.row + 0.5;
+    pushCap(this.muzzles, CAP_MUZZLE, {
+      x: ox,
+      y: oy,
+      angle: Math.atan2(y - oy, x - ox),
+      kind: tower.kind,
+      color: TOWER_COLOR[tower.kind],
+      born: 0,
+    });
+    pushCap(this.tracers, CAP_TRACER, {
+      x0: ox,
+      y0: oy,
+      x1: x,
+      y1: y,
+      color: TOWER_COLOR[tower.kind],
+      born: 0,
+    });
   }
 
-  addHitFlash(x: number, y: number): void {
-    this.hits.push({ x, y, born: 0 });
+  addHitSpark(x: number, y: number): void {
+    pushCap(this.sparks, CAP_SPARK, { x, y, born: 0 });
   }
 
   addShieldHit(x: number, y: number): void {
-    this.shieldArcs.push({ x, y, born: 0 });
+    pushCap(this.shieldArcs, CAP_SHIELD, { x, y, born: 0 });
   }
 
-  addDeath(kind: EnemyKind, x: number, y: number, heading: number): void {
-    this.deaths.push({ kind, x, y, heading, born: 0 });
+  addDeath(kind: EnemyKind, x: number, y: number): void {
+    pushCap(this.deaths, CAP_DEATH, { kind, x, y, born: 0 });
+  }
+
+  /** A cosmetic 1 px nudge along the shot direction; stored by enemy id for the board draw. */
+  addKnockback(id: number, dx: number, dy: number, tick: number): void {
+    this.knockbacks.set(id, { dx, dy, born: tick });
+  }
+
+  /** The pixel offset for an enemy this tick, or null once the nudge has decayed. */
+  knockbackOffset(id: number, tick: number): { dx: number; dy: number } | null {
+    const k = this.knockbacks.get(id);
+    if (!k) return null;
+    const age = tick - k.born;
+    if (age < 0 || age >= KNOCKBACK_TICKS) {
+      this.knockbacks.delete(id);
+      return null;
+    }
+    const m = 1 - age / KNOCKBACK_TICKS;
+    return { dx: k.dx * m, dy: k.dy * m };
   }
 
   /** Stamp `born` with the current sim tick for every effect queued since the last draw. */
@@ -93,15 +154,18 @@ export class EffectsView {
     const now = state.tick;
     for (const m of this.muzzles) if (m.born === 0) m.born = now;
     for (const t of this.tracers) if (t.born === 0) t.born = now;
-    for (const h of this.hits) if (h.born === 0) h.born = now;
+    for (const s of this.sparks) if (s.born === 0) s.born = now;
     for (const s of this.shieldArcs) if (s.born === 0) s.born = now;
     for (const d of this.deaths) if (d.born === 0) d.born = now;
 
-    this.muzzles = this.muzzles.filter((m) => now - m.born < MUZZLE_TICKS);
-    this.tracers = this.tracers.filter((t) => now - t.born < TRACER_TICKS);
-    this.hits = this.hits.filter((h) => now - h.born < HIT_TICKS);
-    this.shieldArcs = this.shieldArcs.filter((s) => now - s.born < SHIELD_ARC_TICKS);
-    this.deaths = this.deaths.filter((d) => now - d.born < DEATH_TICKS);
+    compact(this.muzzles, now, MUZZLE_TICKS);
+    compact(this.tracers, now, TRACER_TICKS);
+    compact(this.sparks, now, HIT_TICKS);
+    compact(this.shieldArcs, now, SHIELD_ARC_TICKS);
+    compact(this.deaths, now, DEATH_TICKS);
+    for (const [id, k] of this.knockbacks) {
+      if (now - k.born >= KNOCKBACK_TICKS) this.knockbacks.delete(id);
+    }
 
     const g = this.g;
     g.clear();
@@ -119,19 +183,26 @@ export class EffectsView {
       const age = now - m.born;
       const a = 1 - age / MUZZLE_TICKS;
       const p = worldToPixel(layout, m.x, m.y);
-      g.circle(p.x, p.y, cell * 0.18).fill({ color: m.color, alpha: a });
-      g.circle(p.x, p.y, cell * 0.08).fill({ color: PAL.highlight, alpha: a });
+      const ox = p.x + Math.cos(m.angle) * cell * 0.25;
+      const oy = p.y + Math.sin(m.angle) * cell * 0.25;
+      drawMuzzle(g, m.kind, m.color, ox, oy, m.angle, cell, a);
     }
 
-    for (const h of this.hits) {
-      const age = now - h.born;
+    // A hit spark: three short lines radiating from the impact point.
+    for (const s of this.sparks) {
+      const age = now - s.born;
       const a = 1 - age / HIT_TICKS;
-      const p = worldToPixel(layout, h.x, h.y);
-      g.circle(p.x, p.y, cell * 0.14).stroke({ width: 1, color: PAL.highlight, alpha: a });
+      const p = worldToPixel(layout, s.x, s.y);
+      const r = cell * 0.22;
+      for (let i = 0; i < 3; i++) {
+        const ang = (Math.PI * 2 * i) / 3 + 0.4;
+        g.moveTo(p.x + Math.cos(ang) * r * 0.4, p.y + Math.sin(ang) * r * 0.4)
+          .lineTo(p.x + Math.cos(ang) * r, p.y + Math.sin(ang) * r);
+      }
+      g.stroke({ width: 1, color: PAL.highlight, alpha: a });
     }
 
-    // A shield hit draws a cyan arc at the impact point: a partial circle that fades like a flash,
-    // so a fully absorbed click still shows something happening on the enemy.
+    // A shield hit draws a cyan arc at the impact point instead of a spark.
     for (const s of this.shieldArcs) {
       const age = now - s.born;
       const a = 1 - age / SHIELD_ARC_TICKS;
@@ -142,21 +213,69 @@ export class EffectsView {
         .stroke({ width: 2, color: SHIELD_COLOR, alpha: a });
     }
 
+    // A death pop: a ring that expands and fades, with three small pieces flying outward.
     for (const d of this.deaths) {
       const age = now - d.born;
       const t = age / DEATH_TICKS;
-      const scale = 1 - t;
       const p = worldToPixel(layout, d.x, d.y);
-      drawEnemyShape(
-        g,
-        d.kind,
-        p.x,
-        p.y,
-        cell * ENEMY_STATS[d.kind].radius * scale,
-        ENEMY_COLOR[d.kind],
-        d.heading,
-        1 - t,
-      );
+      const color = ENEMY_COLOR[d.kind];
+      const r0 = cell * ENEMY_STATS[d.kind].radius;
+      const a = 1 - t;
+      g.circle(p.x, p.y, r0 * (1 + t * 1.5)).stroke({ width: 2, color, alpha: a });
+      for (let i = 0; i < 3; i++) {
+        const ang = (Math.PI * 2 * i) / 3 + t * 0.7;
+        const dist = r0 * (0.35 + t * 1.4);
+        g.circle(
+          p.x + Math.cos(ang) * dist,
+          p.y + Math.sin(ang) * dist,
+          Math.max(1, r0 * 0.16 * (1 - t)),
+        ).fill({ color, alpha: a });
+      }
     }
+  }
+}
+
+/**
+ * The weapon-specific muzzle flash: a bright wedge for the gun, a round puff for the cannon (and
+ * frost), a cross-spark for the laser, and an arc flicker for the taser. The beacon has none.
+ */
+function drawMuzzle(
+  g: Graphics,
+  kind: TowerKind,
+  color: number,
+  x: number,
+  y: number,
+  angle: number,
+  cell: number,
+  alpha: number,
+): void {
+  const s = cell * 0.26;
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const px = -sin;
+  const py = cos;
+
+  if (kind === 'gun') {
+    const tipX = x + cos * s * 1.5;
+    const tipY = y + sin * s * 1.5;
+    const bx = x - cos * s * 0.5;
+    const by = y - sin * s * 0.5;
+    g.poly([
+      tipX, tipY,
+      bx + px * s * 0.55, by + py * s * 0.55,
+      bx - px * s * 0.55, by - py * s * 0.55,
+    ]).fill({ color: PAL.highlight, alpha });
+  } else if (kind === 'cannon' || kind === 'frost') {
+    g.circle(x, y, s).fill({ color: PAL.highlight, alpha });
+    g.circle(x, y, s * 0.45).fill({ color, alpha });
+  } else if (kind === 'laser') {
+    const l = s * 1.4;
+    g.moveTo(x - cos * l, y - sin * l).lineTo(x + cos * l, y + sin * l);
+    g.moveTo(x - px * l, y - py * l).lineTo(x + px * l, y + py * l);
+    g.stroke({ width: 2, color: PAL.highlight, alpha });
+  } else {
+    g.moveTo(x + Math.cos(angle - 0.8) * s, y + Math.sin(angle - 0.8) * s)
+      .arc(x, y, s, angle - 0.8, angle + 0.8)
+      .stroke({ width: 2, color: PAL.highlight, alpha });
   }
 }

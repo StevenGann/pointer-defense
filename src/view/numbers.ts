@@ -32,6 +32,13 @@ function formatAmount(n: number): string {
   return Math.abs(n - rounded) < 1e-6 ? String(rounded) : n.toFixed(1);
 }
 
+/** Damage numbers grow with the size of the hit (log-scaled), so a 6 and a 90 read at a glance. */
+function damageFontSize(amount: number, weak: boolean, crit: boolean): number {
+  const base = weak || crit ? 16 : 12;
+  const scale = Math.min(2.2, 0.85 + 0.4 * Math.log10(Math.max(1, amount) + 1));
+  return Math.round(base * scale);
+}
+
 export class FloatingNumbersView {
   readonly root = new Container();
   private active: Float[] = [];
@@ -63,7 +70,7 @@ export class FloatingNumbersView {
       const age = now - f.bornTick;
       const p = worldToPixel(layout, f.x, f.y);
       t.style.fill = f.shield ? SHIELD_COLOR : f.crit ? CRIT_COLOR : f.weak ? PAL.navy : PAL.text;
-      t.style.fontSize = f.shield ? 12 : f.crit ? 16 : f.weak ? 16 : 12;
+      t.style.fontSize = f.shield ? 12 : damageFontSize(f.amount, f.weak, f.crit);
       t.text = f.shield ? `SHD ${formatAmount(f.amount)}` : f.crit ? `CRIT ${formatAmount(f.amount)}` : formatAmount(f.amount);
       t.alpha = age >= LIFE_TICKS - FADE_TICKS ? (LIFE_TICKS - age) / FADE_TICKS : 1;
       t.position.set(p.x, p.y - (RISE_PX * age) / LIFE_TICKS);
