@@ -84,7 +84,7 @@ const callSweepMode = hasFlag('--call-sweep');
 // at all, and against the standard tower build. The advantage is the clicker-first integrity over the
 // standard run; the pointer ladder may pull ahead, but it must not dominate (cap +8 integrity).
 const clickerMode = hasFlag('--clicker') || hasFlag('--advantage');
-// --cursor: the cursor comparison — the standard plan plus two cursors bought from wave 25, judged
+// --cursor: the cursor comparison — the standard plan plus two cursors bought from wave 60, judged
 // against the standard tower build. The advantage is the cursor build's integrity over the standard
 // run, so the cursor's own contribution is measured against the tower baseline it sits on.
 const cursorMode = hasFlag('--cursor');
@@ -413,9 +413,10 @@ function cannonTarget(wave) {
   return wave >= 4 ? Math.min(5, 1 + Math.floor((wave - 4) / 15)) : 0;
 }
 function cursorTarget(wave) {
-  // Cursors are a mid-game buy: two of them once the board and the click ladder are established.
-  // This target is only consulted by the --cursor scenario; the default baseline buys none.
-  return wave >= 25 ? 2 : 0;
+  // Cursors are a late buy: two of them once the click ladder is strong enough to feed them, at
+  // wave 60 when click damage is roughly 20+. This target is only consulted by the --cursor
+  // scenario; the default baseline buys none.
+  return wave >= 60 ? 2 : 0;
 }
 
 /** Specialist slots still needed to reach wave 100's roster, so extra Guns never crowd them out. */
@@ -1134,7 +1135,7 @@ if (clickerMode) {
 
 if (cursorMode) {
   // The cursor comparison: the standard tower build against the same build plus two cursors bought
-  // from wave 25. The cursor's clicks are pointer-sourced, so both legs use the same click rate and
+  // from wave 60. The cursor's clicks are pointer-sourced, so both legs use the same click rate and
   // the only difference is the two cursors — the integrity gap is the cursor's own contribution.
   silent = true;
   console.log('\n=== pointer cursor ===');

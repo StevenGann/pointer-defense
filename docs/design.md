@@ -556,10 +556,14 @@ wave-gated so click power grows with the content instead of ahead of it:
 
 ```
 cost(level)  = round(120 × 1.95^level)   // buying level+1 from level
-damage       = 4 × 1.30^level            // the reticle's base click, compounded
+damage       = 4 × 1.25^level            // the reticle's base click, compounded
 holdDps      = damage × 2.5              // so the reticle keeps pace with the click
 ceiling(wave) = clamp(floor(wave / 8), 0, 12)
 ```
+
+The 1.25 growth is a coarse, measured constant, not a fit. It lands the click at **~37 by
+level 10** and **~58 by level 12** (against ~55 and ~93 under the old 1.30). It is not tuned any
+further: the cost curve, crit chances and the marked multiplier stay as written.
 
 The highest level the current wave permits is `floor(wave / 8)`, clamped to 0..12
 (`OVERCLOCK_WAVE_DIVISOR = 8` in pointer.ts): level 1 unlocks at wave 8, level 2 at wave 16, and so
