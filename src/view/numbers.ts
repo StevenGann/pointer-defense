@@ -1,5 +1,6 @@
 import { Container, Text } from 'pixi.js';
 import { FONT, PAL, worldToPixel, type Layout } from './chrome.ts';
+import { SHIELD_COLOR } from './board.ts';
 import type { RunState } from '../core/state.ts';
 
 /**
@@ -22,6 +23,7 @@ interface Float {
   amount: number;
   weak: boolean;
   crit: boolean;
+  shield: boolean;
   bornTick: number;
 }
 
@@ -36,7 +38,11 @@ export class FloatingNumbersView {
   private readonly texts: Text[] = [];
 
   addDamage(x: number, y: number, amount: number, weak: boolean, crit: boolean, tick: number): void {
-    this.active.push({ x, y, amount, weak, crit, bornTick: tick });
+    this.active.push({ x, y, amount, weak, crit, shield: false, bornTick: tick });
+  }
+
+  addShield(x: number, y: number, amount: number, tick: number): void {
+    this.active.push({ x, y, amount, weak: false, crit: false, shield: true, bornTick: tick });
   }
 
   draw(state: RunState, layout: Layout): void {
@@ -56,9 +62,9 @@ export class FloatingNumbersView {
       const t = this.texts[i];
       const age = now - f.bornTick;
       const p = worldToPixel(layout, f.x, f.y);
-      t.style.fill = f.crit ? CRIT_COLOR : f.weak ? PAL.navy : PAL.text;
-      t.style.fontSize = f.crit ? 16 : f.weak ? 14 : 11;
-      t.text = f.crit ? `CRIT ${formatAmount(f.amount)}` : formatAmount(f.amount);
+      t.style.fill = f.shield ? SHIELD_COLOR : f.crit ? CRIT_COLOR : f.weak ? PAL.navy : PAL.text;
+      t.style.fontSize = f.shield ? 11 : f.crit ? 16 : f.weak ? 14 : 11;
+      t.text = f.shield ? `SHD ${formatAmount(f.amount)}` : f.crit ? `CRIT ${formatAmount(f.amount)}` : formatAmount(f.amount);
       t.alpha = age >= LIFE_TICKS - FADE_TICKS ? (LIFE_TICKS - age) / FADE_TICKS : 1;
       t.position.set(p.x, p.y - (RISE_PX * age) / LIFE_TICKS);
       t.visible = true;

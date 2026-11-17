@@ -322,6 +322,10 @@ function drainEvents(): void {
         effects.addHitFlash(ev.x, ev.y);
         numbers.addDamage(ev.x, ev.y, ev.amount, ev.weak, !!ev.crit, state.tick);
         break;
+      case 'shieldHit':
+        effects.addShieldHit(ev.x, ev.y);
+        numbers.addShield(ev.x, ev.y, ev.absorbed, state.tick);
+        break;
       case 'kill':
         effects.addDeath(ev.kind, ev.x, ev.y, ev.heading);
         sfx.play('kill', { pitch: 1 + 0.06 * Math.min(state.pointer.combo, 12) });

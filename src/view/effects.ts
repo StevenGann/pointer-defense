@@ -3,7 +3,7 @@ import { PAL, worldToPixel, type Layout } from './chrome.ts';
 import { ENEMY_STATS, type EnemyKind } from '../core/enemies.ts';
 import type { Tower } from '../core/towers.ts';
 import type { RunState } from '../core/state.ts';
-import { drawEnemyShape, ENEMY_COLOR, TOWER_COLOR } from './board.ts';
+import { drawEnemyShape, ENEMY_COLOR, SHIELD_COLOR, TOWER_COLOR } from './board.ts';
 
 /**
  * Short-lived combat effects, timed in fixed ticks (docs/design.md §13.4): a muzzle flash (4
@@ -15,11 +15,19 @@ const MUZZLE_TICKS = 4;
 const TRACER_TICKS = 6;
 const HIT_TICKS = 3;
 const DEATH_TICKS = 8;
+/** Shield-absorption arcs linger a touch longer than a hit flash so they read as shield damage. */
+const SHIELD_ARC_TICKS = 8;
 
 interface Muzzle {
   x: number;
   y: number;
   color: number;
+  born: number;
+}
+
+interface ShieldArc {
+  x: number;
+  y: number;
   born: number;
 }
 
@@ -53,6 +61,7 @@ export class EffectsView {
   private muzzles: Muzzle[] = [];
   private tracers: Tracer[] = [];
   private hits: Hit[] = [];
+  private shieldArcs: ShieldArc[] = [];
   private deaths: Death[] = [];
 
   constructor() {
@@ -71,6 +80,10 @@ export class EffectsView {
     this.hits.push({ x, y, born: 0 });
   }
 
+  addShieldHit(x: number, y: number): void {
+    this.shieldArcs.push({ x, y, born: 0 });
+  }
+
   addDeath(kind: EnemyKind, x: number, y: number, heading: number): void {
     this.deaths.push({ kind, x, y, heading, born: 0 });
   }
@@ -81,11 +94,13 @@ export class EffectsView {
     for (const m of this.muzzles) if (m.born === 0) m.born = now;
     for (const t of this.tracers) if (t.born === 0) t.born = now;
     for (const h of this.hits) if (h.born === 0) h.born = now;
+    for (const s of this.shieldArcs) if (s.born === 0) s.born = now;
     for (const d of this.deaths) if (d.born === 0) d.born = now;
 
     this.muzzles = this.muzzles.filter((m) => now - m.born < MUZZLE_TICKS);
     this.tracers = this.tracers.filter((t) => now - t.born < TRACER_TICKS);
     this.hits = this.hits.filter((h) => now - h.born < HIT_TICKS);
+    this.shieldArcs = this.shieldArcs.filter((s) => now - s.born < SHIELD_ARC_TICKS);
     this.deaths = this.deaths.filter((d) => now - d.born < DEATH_TICKS);
 
     const g = this.g;
@@ -113,6 +128,18 @@ export class EffectsView {
       const a = 1 - age / HIT_TICKS;
       const p = worldToPixel(layout, h.x, h.y);
       g.circle(p.x, p.y, cell * 0.14).stroke({ width: 1, color: PAL.highlight, alpha: a });
+    }
+
+    // A shield hit draws a cyan arc at the impact point: a partial circle that fades like a flash,
+    // so a fully absorbed click still shows something happening on the enemy.
+    for (const s of this.shieldArcs) {
+      const age = now - s.born;
+      const a = 1 - age / SHIELD_ARC_TICKS;
+      const p = worldToPixel(layout, s.x, s.y);
+      const r = cell * 0.22;
+      g.moveTo(p.x + r, p.y)
+        .arc(p.x, p.y, r, 0, Math.PI * 1.5)
+        .stroke({ width: 2, color: SHIELD_COLOR, alpha: a });
     }
 
     for (const d of this.deaths) {

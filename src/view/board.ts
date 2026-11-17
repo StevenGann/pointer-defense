@@ -78,6 +78,9 @@ export const ENEMY_COLOR: Record<EnemyKind, number> = {
   popup: 0x000080,
 };
 
+/** The single cyan for shield visuals: the shield ring, the impact arc and the `SHD` floater. */
+export const SHIELD_COLOR = 0x00d0d0;
+
 const AURA_COLOR = 0x6699ff;
 const SLOW_COLOR = 0x00d0ff;
 
@@ -767,8 +770,15 @@ function drawEnemy(
     const sy = ey - r - 2;
     g.moveTo(ex - r * 0.4, sy).lineTo(ex + r * 0.1, sy + r * 0.7).lineTo(ex - r * 0.1, sy + r * 0.7).lineTo(ex + r * 0.4, sy + r * 1.4).stroke({ width: 1, color: PAL.amber });
   }
-  if (e.shield > 0 && (e.kind === 'boss' || e.kind === 'shielded')) {
-    g.circle(ex, ey, r + (e.kind === 'boss' ? 7 : 3)).stroke({ width: 1, color: PAL.teal });
+  // The shield ring is on whenever a shield remains, and its alpha tracks the fraction left, so a
+  // Boss entering at full shield reads as heavily protected and a nearly-stripped one is faint.
+  if (e.shield > 0) {
+    const frac = e.maxShield > 0 ? Math.max(0, Math.min(1, e.shield / e.maxShield)) : 0;
+    g.circle(ex, ey, r + (e.kind === 'boss' ? 7 : 3)).stroke({
+      width: 2,
+      color: SHIELD_COLOR,
+      alpha: 0.25 + 0.75 * frac,
+    });
   }
 
   // Weak-point notch: a short tick on the leading edge where a precision click pays double.

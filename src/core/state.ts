@@ -135,6 +135,7 @@ export type GameEvent =
   | { type: 'shot'; towerId: number; x: number; y: number; splash: number }
   | { type: 'click'; x: number; y: number; hit: boolean }
   | { type: 'damage'; x: number; y: number; amount: number; weak: boolean; crit?: boolean }
+  | { type: 'shieldHit'; x: number; y: number; absorbed: number; left: number }
   | { type: 'waveStarted'; wave: number }
   | { type: 'waveCleared'; wave: number; bonus: number }
   | { type: 'wallDamaged'; x: number; y: number; amount: number }
@@ -683,10 +684,12 @@ export function toggleGate(s: RunState, col: number, row: number): boolean {
 }
 
 /** Cycle a tower's targeting priority First -> Strong -> Close -> First. A kind locked to a fixed
- *  mode ignores the player's stored value, so cycling is refused for it. */
+ *  mode ignores the player's stored value, so cycling is refused for it. The Cursor's rule is fixed
+ *  too (shielded, then nearest to its home tile), so cycling is a no-op for it as well. */
 export function cycleTargetMode(s: RunState, col: number, row: number): void {
   const t = towerAt(s, col, row);
   if (!t) return;
+  if (t.kind === 'cursor') return;
   if (TOWER_STATS[t.kind].targetLock !== null) return;
   t.targetMode = t.targetMode === 'first' ? 'strong' : t.targetMode === 'strong' ? 'close' : 'first';
 }
@@ -1409,18 +1412,44 @@ function cursorCanTarget(s: RunState, e: Enemy): boolean {
   return !e.dead && !shieldedByPopup(s, e);
 }
 
-/** The enemy the cursor would acquire right now, per its targeting mode, inside its radius. */
+/** Whether an enemy is inside the cursor's radius, measured to its home tile (not its arrow). */
+function cursorInRadius(t: Tower, e: Enemy): boolean {
+  const home = cursorHome(t);
+  const dx = e.x - home.x;
+  const dy = e.y - home.y;
+  return dx * dx + dy * dy <= cursorRadius(t) ** 2;
+}
+
+/**
+ * The enemy the cursor would acquire right now. Its rule is fixed, not a player choice:
+ * shielded enemies first (nearest to the home tile), otherwise the nearest enemy to the home tile.
+ * Pop-up concealment already removed those enemies as candidates, so a hidden enemy never wins.
+ */
 function cursorAcquire(s: RunState, t: Tower): Enemy | undefined {
   const home = cursorHome(t);
   const radius = cursorRadius(t);
-  const candidates: Enemy[] = [];
+  const r2 = radius * radius;
+  let shielded: Enemy | undefined;
+  let shieldedD2 = Infinity;
+  let nearest: Enemy | undefined;
+  let nearestD2 = Infinity;
   for (const e of s.enemies) {
     if (!cursorCanTarget(s, e)) continue;
     const dx = e.x - home.x;
     const dy = e.y - home.y;
-    if (dx * dx + dy * dy <= radius * radius) candidates.push(e);
+    const d2 = dx * dx + dy * dy;
+    if (d2 > r2) continue;
+    if (e.shield > 0) {
+      if (d2 < shieldedD2) {
+        shieldedD2 = d2;
+        shielded = e;
+      }
+    } else if (d2 < nearestD2) {
+      nearestD2 = d2;
+      nearest = e;
+    }
   }
-  return pickTarget(t, candidates);
+  return shielded ?? nearest;
 }
 
 /** Whether a proposed cursor position stays off authored wall tiles (towers do not stop it). */
@@ -1505,15 +1534,16 @@ function tickCursors(s: RunState): void {
     if (t.cursorClickFx > 0) t.cursorClickFx--;
 
     let target: Enemy | undefined;
-    if (t.cursorTargetId !== null) {
+    // Manual Override wins over the fixed rule, exactly as it beats a tower's lock: while the marked
+    // enemy is in range and targetable, the cursor flies to and clicks it instead of its own priority.
+    if (s.phase === 'wave' && s.pointer.manualOverride && s.pointer.targetId !== null) {
+      const marked = s.enemies.find((e) => e.id === s.pointer.targetId && !e.dead);
+      if (marked && cursorCanTarget(s, marked) && cursorInRadius(t, marked)) target = marked;
+    }
+    if (!target && t.cursorTargetId !== null) {
       target = s.enemies.find((e) => e.id === t.cursorTargetId && !e.dead);
       if (target && !cursorCanTarget(s, target)) target = undefined;
-      if (target) {
-        const home = cursorHome(t);
-        const dx = target.x - home.x;
-        const dy = target.y - home.y;
-        if (dx * dx + dy * dy > cursorRadius(t) ** 2) target = undefined;
-      }
+      if (target && !cursorInRadius(t, target)) target = undefined;
     }
     if (!target) {
       if (s.phase === 'wave') target = cursorAcquire(s, t);
@@ -1648,6 +1678,9 @@ function damageEnemy(
     const absorbed = Math.min(e.shield, dmg);
     e.shield -= absorbed;
     dmg -= absorbed;
+    // A shield absorbing the hit is still a hit the player must see: emit a distinct event even when
+    // nothing overflows into hit points, so a cursor stripping a shield is not silently invisible.
+    s.events.push({ type: 'shieldHit', x: e.x, y: e.y, absorbed, left: e.shield });
   } else if (source === 'tower') {
     if (e.shield > 0) return;
     if (!ignoresArmour) dmg = Math.max(1, dmg - ENEMY_STATS[e.kind].armour);

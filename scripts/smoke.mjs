@@ -2248,24 +2248,125 @@ function cursorTower(tier, branch) {
 }
 
 {
-  // 25f. A Strong cursor takes the brute over the closer grunt.
+  // 25f. The cursor's targeting is fixed, not configurable: shielded enemies first (nearest to the
+  // home tile), otherwise the nearest enemy to the home tile. Its stored target mode is ignored.
   const s = stateOnLevel('open-field');
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   const c = s.towers.find((t) => t.kind === 'cursor');
-  c.targetMode = 'strong';
+  c.targetMode = 'close'; // must be ignored: the rule is fixed
   s.phase = 'wave';
   s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
-  const brute = stationary(1, 'grunt', 1, 5.5, 4.5);
-  brute.hp = 500;
-  brute.maxHp = 500;
-  const grunt = stationary(2, 'grunt', 1, 5.5, 5.2);
-  grunt.hp = 20;
-  grunt.maxHp = 20;
-  s.enemies.push(brute, grunt);
-  for (let i = 0; i < 60; i++) tick(s);
-  check(brute.hp < 500, `strong cursor takes the brute over the closer grunt (brute hp ${brute.hp})`);
-  check(grunt.hp === 20, `strong cursor leaves the closer grunt alone (grunt hp ${grunt.hp})`);
+  const closer = stationary(1, 'grunt', 1, 5.5, 5.3); // unshielded, nearer the home tile
+  const shielded = stationary(2, 'shielded', 1, 5.5, 4.5); // shielded, farther away
+  s.enemies.push(closer, shielded);
+  for (let i = 0; i < 120; i++) tick(s);
+  check(shielded.shield < shielded.maxShield,
+    `cursor takes the shielded enemy over the closer unshielded one (shield ${shielded.shield})`);
+  check(closer.hp === closer.maxHp, `the closer unshielded enemy is untouched (hp ${closer.hp})`);
+}
+
+{
+  // 25f2. Two shielded enemies in radius: the cursor takes the one nearer its home tile.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const near = stationary(1, 'shielded', 1, 5.5, 4.5); // dist 1.0
+  const far = stationary(2, 'shielded', 1, 5.5, 3.5); // dist 2.0
+  s.enemies.push(near, far);
+  for (let i = 0; i < 120; i++) tick(s);
+  check(near.shield < near.maxShield,
+    `cursor takes the shielded enemy nearer its home tile (shield ${near.shield})`);
+  check(far.shield === far.maxShield, `the farther shielded enemy is untouched (shield ${far.shield})`);
+}
+
+{
+  // 25f3. No shielded enemy in radius: the cursor takes the nearest enemy to its home tile.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const near = stationary(1, 'grunt', 1, 5.5, 4.5); // dist 1.0
+  const far = stationary(2, 'grunt', 1, 5.5, 3.5); // dist 2.0
+  s.enemies.push(near, far);
+  for (let i = 0; i < 120; i++) tick(s);
+  check(near.hp < near.maxHp, `cursor takes the nearest unshielded enemy (hp ${near.hp})`);
+  check(far.hp === far.maxHp, `the farther unshielded enemy is untouched (hp ${far.hp})`);
+}
+
+{
+  // 25f4. A shielded enemy hidden under a Pop Up is not a candidate, even though it has shield.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const shielded = stationary(1, 'shielded', 15, 5.5, 4.5);
+  const popup = stationary(2, 'popup', 15, 5.5, 4.5);
+  s.enemies.push(shielded, popup);
+  for (let i = 0; i < 120; i++) tick(s);
+  check(shielded.shield === shielded.maxShield, 'cursor skips a shielded enemy hidden under a Pop Up');
+  check(!popup.dead, 'cursor does not close the Pop Up window');
+}
+
+{
+  // 25f5. Manual Override still wins over the fixed rule: while the marked enemy is in range and
+  // targetable, the cursor clicks it instead of the shielded enemy the rule would have chosen.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const shielded = stationary(1, 'shielded', 1, 5.5, 4.5);
+  const marked = stationary(2, 'grunt', 1, 5.5, 3.2); // in radius, marked, unshielded
+  marked.hp = 100000;
+  marked.maxHp = 100000;
+  s.enemies.push(shielded, marked);
+  s.pointer.targetId = marked.id;
+  toggleManualOverride(s);
+  for (let i = 0; i < 120; i++) tick(s);
+  check(shielded.shield === shielded.maxShield,
+    'override: cursor ignores the shielded enemy the rule would have taken');
+  check(marked.hp < marked.maxHp, 'override: cursor clicks the marked enemy instead');
+}
+
+{
+  // 25f6. The panel reads a fixed label, and cycling the target is a no-op for a cursor.
+  check(targetModeDisplay(createTower(1, 'cursor', 0, 0)) === 'Shielded, then nearest (fixed)',
+    'cursor panel reads "Shielded, then nearest (fixed)"');
+  check(targetLockReason('cursor') === 'A cursor hunts shielded enemies first, then the nearest to its home tile — it cannot be changed.',
+    'cursor tooltip explains the fixed rule and that it cannot be changed');
+
+  const s = createRunState();
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  const cursor = towerAt(s, 5, 5);
+  cursor.targetMode = 'strong';
+  cycleTargetMode(s, 5, 5);
+  check(cursor.targetMode === 'strong', 'cycleTargetMode is a no-op for a cursor');
+}
+
+{
+  // 25f7. A shield-absorbed cursor click emits a shieldHit with the absorbed and remaining amounts,
+  // and still emits no hp-damage event.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const shielded = stationary(1, 'shielded', 1, 5.5, 5.5); // on the home tile, so the first tick clicks
+  s.enemies.push(shielded);
+  tick(s);
+  const shieldHits = s.events.filter((ev) => ev.type === 'shieldHit');
+  const hpEvents = s.events.filter((ev) => ev.type === 'damage');
+  check(shieldHits.length === 1, `a fully absorbed cursor click emits one shieldHit (${shieldHits.length})`);
+  check(shieldHits[0].absorbed === 1.5, `shieldHit absorbed is the full cursor click (${shieldHits[0].absorbed})`);
+  check(shieldHits[0].left === 15 - 1.5, `shieldHit left is the remaining shield (${shieldHits[0].left})`);
+  check(hpEvents.length === 0, 'a fully absorbed hit emits no hp-damage event');
+  check(shielded.hp === shielded.maxHp, 'enemy hp is unchanged after an absorbed hit');
 }
 
 {

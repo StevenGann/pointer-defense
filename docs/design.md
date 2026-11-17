@@ -219,17 +219,18 @@ Eight towers. Each has a role, a tier ladder, and **two exclusive branches** at 
 | **Laser** | 70 | 3.4 | 11, pierces 8 | 0.80 s | 150°/s | first (fixed) | straight lines | corridors you deliberately left open |
 | **Beacon** | 90 | 3.5 | none | — | — (still) | — | +60 % damage to towers in radius | a dense cluster worth buffing |
 | **Wall** | 8 | — | none | — | — (still) | — | blocks the route, has hit points | a long maze made cheap |
-| **Cursor** | 250 | 2.5 | ½ your click damage | 1.0 s | — (still) | player's choice | an autonomous hand that clicks for you | a pointer ladder worth feeding |
+| **Cursor** | 250 | 2.5 | ½ your click damage | 1.0 s | — (still) | shielded, then nearest (fixed) | an autonomous hand that clicks for you | a pointer ladder worth feeding |
 
 Three towers are **locked** to one targeting mode and ignore the player's choice. The **Taser** always
 fires at the nearest enemy in range — a Tesla coil discharges into whatever is nearest, so its
 placement is the decision, not its priority. The **Laser** always fires at the leading edge of the
 column, which reads correctly when its Focus beam pierces along that line. The **Cannon** always
-swings at the strongest thing it can see and lives with its two-second traverse. The **Gun** and the
-**Cursor** stay fully configurable — they obey the player — and Frost and Beacon have no targeting
-mode to lock. **Manual Override** (§9.5), the player's explicit mark, wins over every lock: while the
-marked enemy is in range, a locked tower fires at it, which is the only way to aim a locked tower at
-something specific.
+swings at the strongest thing it can see and lives with its two-second traverse. The **Cursor** carries
+its own fixed rule rather than one of the three named modes: it hunts shielded enemies first, then the
+nearest enemy to its home tile (§6.7). The **Gun** stays fully configurable — it obeys the player — and
+Frost and Beacon have no targeting mode to lock. **Manual Override** (§9.5), the player's explicit
+mark, wins over every lock: while the marked enemy is in range, a locked tower fires at it, which is
+the only way to aim a locked tower at something specific.
 
 Four damage answers and three that are useless alone, plus the Cursor, which is a damage answer that
 borrows its strength from the pointer ladder (§6.7). That is how placement stays interesting without
@@ -366,8 +367,14 @@ The relationship is the point. The pointer ladder was a personal weapon; the Cur
 value. A click level that adds damage to your hand now adds half that to every Cursor on the field,
 so the ladder is worth buying partly because of these towers — a clicker-minded player climbs the
 ladder and a tower-minded player's Cursors still benefit, which is what keeps the two halves feeding
-each other instead of drifting apart. Cursors never crit, never mark, and ignore held pointer, combo,
-weak points and Manual Override: the ladder feeds them through click damage and nothing else.
+each other instead of drifting apart. Cursors never crit, never mark, and ignore held pointer, combo
+and weak points: the ladder feeds them through click damage and nothing else.
+
+A cursor's targeting is fixed, not a player choice. It clicks the nearest shielded enemy to its home
+tile — a **Shielded** or a **Boss**, whose shield is above zero — and with no shielded enemy in radius
+it clicks the nearest enemy to its home tile. An enemy hidden under a Pop-up window is never a
+candidate. **Manual Override** (§9.5) still wins over this rule, exactly as it beats the Taser's lock:
+while the marked enemy is in range and targetable, the cursor clicks it instead.
 
 ---
 
@@ -388,6 +395,11 @@ weak points and Manual Override: the ladder feeds them through click damage and 
 Armour is **flat subtraction** on tower hits, floored at 1. Clicks ignore armour entirely. Shields
 absorb tower damage completely until broken, and only the pointer can break them. That is pillar 1
 stated as arithmetic.
+
+Shield damage is visible, not a silent clock: every enemy whose shield is above zero draws a cyan
+shield ring whose alpha tracks the fraction remaining (a Boss entering at 120 reads as heavily
+protected, one nearly stripped as faint), and every hit the shield absorbs pops a cyan `SHD` floater
+with a short arc at the impact, so a fully absorbed click still shows something happening.
 
 The pop-up window is a **spatial shield**, not a stat: any enemy whose centre is inside its rectangle
 is untargetable by towers, and no tower damage — including flak bursts — reaches it while the window
@@ -713,7 +725,7 @@ Shape carries meaning before colour does — readability, and colour-blind playe
 |---|---|
 | Grunt | circle |
 | Runner | triangle, pointing along its heading |
-| Shielded | hexagon with an outer ring while shielded |
+| Shielded | hexagon with a cyan outer ring while shielded (alpha tracks shield remaining) |
 | Flyer | chevron with two motion ticks |
 | Armoured | square with a thick outline |
 | Saboteur | circle with a spark |
@@ -742,6 +754,7 @@ Short and mechanical, measured in ticks at 60 Hz:
 | muzzle flash | 4 ticks |
 | tracer | 6 ticks |
 | hit flash | 3 ticks |
+| shield hit | cyan arc at the impact (8 ticks) plus a cyan `SHD` floater (30 ticks) |
 | death | 8 ticks, the shape collapsing to a point |
 | pop-up appear | 6 ticks, snapped, no easing |
 | damage number | 30 ticks, rising 12 px, fading in the last 10 |

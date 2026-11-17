@@ -348,7 +348,7 @@ export function hudControlAt(l: Layout, s: RunState, px: number, py: number): Hu
     const upgradePrice = upgradeCost(tower);
     const affordable = upgradePrice !== null && canAfford(s.economy, upgradePrice);
     if (h.detail.target && pointInRect(h.detail.target, px, py)) {
-      return { action: 'target', enabled: TOWER_STATS[tower.kind].targetLock === null };
+      return { action: 'target', enabled: TOWER_STATS[tower.kind].targetLock === null && tower.kind !== 'cursor' };
     }
     if (h.detail.upgrade && pointInRect(h.detail.upgrade, px, py)) return { action: 'upgrade', enabled: affordable };
     for (const b of h.detail.branches) {
@@ -750,7 +750,7 @@ export class HudView {
       this.towerRoute.position.set(d.route.x, d.route.y + Math.floor(d.route.h / 2));
 
       if (d.target) {
-        const fixed = TOWER_STATS[tower.kind].targetLock !== null;
+        const fixed = TOWER_STATS[tower.kind].targetLock !== null || tower.kind === 'cursor';
         drawButton(g, d.target, !fixed, hoverHud === 'target' && !fixed);
         this.targetButton.text = `Target: ${targetModeDisplay(tower)}`;
         this.targetButton.style.fill = fixed ? PAL.shadow : PAL.text;
