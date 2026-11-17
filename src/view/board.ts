@@ -12,9 +12,11 @@ import {
 import { radiusOf, type Enemy, type EnemyKind } from '../core/enemies.ts';
 import { effectiveStats, TOWER_STATS, type Tower, type TowerKind } from '../core/towers.ts';
 import { tileAt, COLS, ROWS, type Grid, type Tile } from '../core/grid.ts';
+import { toggleOpenAt, toggleProgress, type LevelToggle } from '../core/levels.ts';
 import { dashRects, offsetSegment, routeOffset, type RouteSegment } from './route.ts';
 import {
   hatchSegments,
+  lerpColor,
   RAISED_BR,
   RAISED_TL,
   wallFocusRect,
@@ -78,6 +80,7 @@ export class BoardView {
   readonly root = new Container();
   private readonly tiles = new Graphics();
   private readonly path = new Graphics();
+  private readonly toggles = new Graphics();
   private readonly towers = new Graphics();
   private readonly popups = new Container();
   private readonly popupGfx = new Graphics();
@@ -97,7 +100,7 @@ export class BoardView {
   constructor() {
     this.note.anchor.set(0, 0.5);
     this.popups.addChild(this.popupGfx);
-    this.root.addChild(this.tiles, this.path, this.towers, this.popups, this.enemies, this.overlay, this.note);
+    this.root.addChild(this.tiles, this.path, this.toggles, this.towers, this.popups, this.enemies, this.overlay, this.note);
   }
 
   /** The caption and message Text objects for the `i`-th live pop-up, creating them on demand. */
@@ -137,6 +140,11 @@ export class BoardView {
     this.enemies.clear();
     this.popupGfx.clear();
     this.overlay.clear();
+
+    this.toggles.clear();
+    for (const tg of state.toggles) {
+      drawShutter(this.toggles, tg, board, cell, state.clock);
+    }
 
     for (const t of state.towers) {
       drawTower(this.towers, t, board, cell);
@@ -293,6 +301,42 @@ function drawTile(g: Graphics, kind: 'buildable' | 'blocked', px: number, py: nu
   } else {
     g.rect(px, py, cell, cell).fill(0xa0a0a0);
     edgeRect(g, px, py, cell, 0x707070);
+  }
+}
+
+/** Warm colour a shutter's outline drifts toward as it is about to close. */
+const SHUTTER_WARM = 0xff6a00;
+const SHUTTER_EDGE = 0x707070;
+
+/** Draw one map toggle: a solid shutter when closed, a faint outline plus countdown bar when open. */
+function drawShutter(
+  g: Graphics,
+  tg: LevelToggle,
+  board: { x: number; y: number; cell: number },
+  cell: number,
+  clock: number,
+): void {
+  const px = board.x + tg.col * cell;
+  const py = board.y + tg.row * cell;
+  const open = toggleOpenAt(tg, clock);
+  const cycles = tg.openTicks > 0 && tg.openTicks < tg.periodTicks;
+  const progress = cycles ? toggleProgress(tg, clock) : 0;
+
+  if (open) {
+    // The shutter edge stays as a faint outline so the player can read where it will close, warming
+    // as the close approaches.
+    const color = cycles ? lerpColor(SHUTTER_EDGE, SHUTTER_WARM, progress) : SHUTTER_EDGE;
+    g.rect(px + 0.5, py + 0.5, cell - 1, cell - 1).stroke({ width: 1, color, alpha: 0.6 });
+  } else {
+    g.rect(px, py, cell, cell).fill(0xa0a0a0);
+    edgeRect(g, px, py, cell, 0x707070);
+  }
+
+  if (cycles) {
+    // The countdown bar fills as the next state change approaches; different periods read as
+    // different bar speeds.
+    const w = Math.round(cell * progress);
+    g.rect(px, py, Math.max(0, w), 3).fill({ color: SHUTTER_WARM });
   }
 }
 

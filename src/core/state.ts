@@ -4,7 +4,18 @@ import {
   type Grid,
   type Tile,
 } from './grid.ts';
-import { createGrid, DEFAULT_LEVEL, LEVELS, levelById } from './levels.ts';
+import {
+  createGrid,
+  DEFAULT_LEVEL,
+  LEVELS,
+  levelById,
+  toggleCombinations,
+  toggleIndex,
+  toggleOpenAt,
+  validateLevel,
+  type Level,
+  type LevelToggle,
+} from './levels.ts';
 import { buildAirField, buildField, isSealed, pathTiles, stepToward } from './pathfield.ts';
 import { createEnemy, ENEMY_STATS, isPopupEnemy, isWeakPointHit, popupCovers, radiusOf, speedPerTick, type Enemy, type EnemyKind } from './enemies.ts';
 import {
@@ -111,7 +122,8 @@ export type GameEvent =
   | { type: 'wallDamaged'; x: number; y: number; amount: number }
   | { type: 'wallDestroyed'; x: number; y: number }
   | { type: 'popupSpawned'; kind: PopupKind }
-  | { type: 'popupDismissed'; kind: PopupKind };
+  | { type: 'popupDismissed'; kind: PopupKind }
+  | { type: 'toggleChanged'; index: number; open: boolean };
 
 /** One started wave's live spawn queue. Spawn ticks are relative to `startTick`. */
 export interface WaveRun {
@@ -124,6 +136,8 @@ export interface RunState {
   grid: Grid;
   /** Authored map id (see levels.ts); carried in state so a cycle rebuilds the board. */
   levelId: string;
+  /** Authored map toggles (shutters); each one's state is a pure function of `clock`. */
+  toggles: readonly LevelToggle[];
   /** Distance-in-tiles to the exit for every walkable, unblocked tile; -1 unreachable. */
   field: Int32Array;
   /** Ground field for breachers: walls are walkable, other towers still block. */
@@ -214,10 +228,12 @@ export interface RunState {
   placedFirstTower: boolean;
 }
 
-export function createRunState(profile: Profile = defaultProfile()): RunState {
-  const level = DEFAULT_LEVEL;
+export function createRunState(profile: Profile = defaultProfile(), level: Level = DEFAULT_LEVEL): RunState {
+  const reason = validateLevel(level);
+  if (reason !== null) throw new Error(`Level ${level.id} rejected: ${reason}`);
   const grid = createGrid(level);
   const blocked = new Set<number>();
+  const toggles = level.toggles ?? [];
   const specs: SpecLevels = {
     cpu: profile.specs.cpu,
     ram: profile.specs.ram,
@@ -227,7 +243,8 @@ export function createRunState(profile: Profile = defaultProfile()): RunState {
   return {
     grid,
     levelId: level.id,
-    field: buildField(grid, blocked, level.exits[0]),
+    toggles,
+    field: buildField(grid, initialGroundBlocked(toggles), level.exits[0]),
     breacherField: buildField(grid, blocked, level.exits[0]),
     flyerField: buildAirField(grid.cols, grid.rows, blocked, level.exits[0]),
     blocked,
@@ -303,12 +320,13 @@ export function cycleLevel(s: RunState): boolean {
   if (!canCycleLevel(s)) return false;
   const idx = LEVELS.findIndex((l) => l.id === s.levelId);
   const next = LEVELS[(idx + 1 + LEVELS.length) % LEVELS.length];
+  const reason = validateLevel(next);
+  if (reason !== null) throw new Error(`Level ${next.id} rejected: ${reason}`);
   s.levelId = next.id;
   s.grid = createGrid(next);
   s.blocked = new Set();
-  s.field = buildField(s.grid, s.blocked, next.exits[0]);
-  s.breacherField = buildField(s.grid, s.blocked, next.exits[0]);
-  s.flyerField = buildAirField(s.grid.cols, s.grid.rows, s.blocked, next.exits[0]);
+  s.toggles = next.toggles ?? [];
+  rebuildField(s);
   return true;
 }
 
@@ -324,13 +342,11 @@ export function selectedTower(s: RunState): Tower | undefined {
 export function canPlace(s: RunState, kind: TowerKind, col: number, row: number): boolean {
   if (s.phase !== 'build' && s.phase !== 'wave') return false;
   if (!inBounds(col, row) || tileAt(s.grid, col, row) !== 'buildable') return false;
+  if (toggleAtTile(s, col, row)) return false; // toggles are permanent map elements
   if (s.modifiers.includes('no-build') && s.phase === 'wave' && s.noBuildRow === row) return false;
   if (towerAt(s, col, row)) return false;
   if (!canAfford(s.economy, TOWER_STATS[kind].cost)) return false;
-  const idx = row * s.grid.cols + col;
-  const blocked = groundBlocked(s);
-  blocked.add(idx);
-  return !isSealed(s.grid, blocked, spawnTile(s), exitTile(s));
+  return !wouldSeal(s, row * s.grid.cols + col);
 }
 
 /** The live enemy under a world point, preferring the one furthest along the lane. */
@@ -400,8 +416,13 @@ export function currentPath(s: RunState): Tile[] {
   return pathTiles(s.field, spawnTile(s));
 }
 
-/** The set of tile indices that block ground pathing: every tower but an open Toggle gate. */
-function groundBlocked(s: RunState): Set<number> {
+/** The authored toggle on a tile, if any. */
+export function toggleAtTile(s: RunState, col: number, row: number): LevelToggle | undefined {
+  return s.toggles.find((t) => t.col === col && t.row === row);
+}
+
+/** The set of tile indices blocked by towers alone (every tower but an open Toggle gate). */
+function towerBlockedSet(s: RunState): Set<number> {
   const out = new Set<number>();
   for (const i of s.blocked) {
     const col = i % s.grid.cols;
@@ -410,6 +431,46 @@ function groundBlocked(s: RunState): Set<number> {
     if (!t || !isGateOpen(t)) out.add(i);
   }
   return out;
+}
+
+/** The set of tile indices that block ground pathing: towers plus closed map toggles. */
+function groundBlocked(s: RunState): Set<number> {
+  const out = towerBlockedSet(s);
+  for (const t of s.toggles) if (!toggleOpenAt(t, s.clock)) out.add(toggleIndex(t));
+  return out;
+}
+
+/** The set of tile indices that block ground pathing at the start of a run (clock 0). */
+function initialGroundBlocked(toggles: readonly LevelToggle[]): Set<number> {
+  const out = new Set<number>();
+  for (const t of toggles) if (!toggleOpenAt(t, 0)) out.add(toggleIndex(t));
+  return out;
+}
+
+/**
+ * Whether placing a tower on tile `idx` would seal the spawn-to-exit route in any combination of
+ * map-toggle states, not just the current one.
+ */
+function wouldSeal(s: RunState, idx: number): boolean {
+  const base = towerBlockedSet(s);
+  const spawn = spawnTile(s);
+  const exit = exitTile(s);
+  for (const closed of toggleCombinations(s.toggles)) {
+    const blocked = new Set(base);
+    blocked.add(idx);
+    for (const i of closed) blocked.add(i);
+    if (isSealed(s.grid, blocked, spawn, exit)) return true;
+  }
+  return false;
+}
+
+/** True when a placement is legal right now but would seal under some other toggle state. */
+export function placementSealsUnderToggles(s: RunState, col: number, row: number): boolean {
+  const idx = row * s.grid.cols + col;
+  const blocked = groundBlocked(s);
+  blocked.add(idx);
+  if (isSealed(s.grid, blocked, spawnTile(s), exitTile(s))) return false; // a plain seal
+  return wouldSeal(s, idx);
 }
 
 /** The set of tile indices that block breacher pathing: everything but wall towers. */
@@ -755,6 +816,7 @@ export function step(s: RunState, dtMs: number): number {
 /** One fixed 1/60 s simulation tick. */
 export function tick(s: RunState): void {
   s.tick++;
+  updateToggles(s);
   decayCombo(s);
   tickPopups(s);
   checkAchievements(s);
@@ -771,6 +833,40 @@ export function tick(s: RunState): void {
     }
   }
   s.clock++;
+}
+
+/**
+ * Flip every map toggle whose state changed from the previous tick, in this tick: recompute the
+ * ground field and re-path every enemy from its current tile. Ground enemies caught inside a tile
+ * that just closed are pushed to the nearest open tile along their heading, never left in a wall.
+ */
+function updateToggles(s: RunState): void {
+  if (s.toggles.length === 0) return;
+  const c = s.clock;
+  if (c === 0) return; // the field was already built for clock 0
+  const closedNow: LevelToggle[] = [];
+  const events: { index: number; open: boolean }[] = [];
+  for (let i = 0; i < s.toggles.length; i++) {
+    const t = s.toggles[i];
+    const open = toggleOpenAt(t, c);
+    if (open === toggleOpenAt(t, c - 1)) continue;
+    if (!open) closedNow.push(t);
+    events.push({ index: i + 1, open });
+  }
+  if (events.length === 0) return;
+
+  rebuildField(s);
+  for (const e of s.enemies) {
+    e.targetCol = -1;
+    e.targetRow = -1;
+  }
+  for (const t of closedNow) {
+    for (const e of s.enemies) {
+      if (e.dead || e.kind === 'flyer' || e.kind === 'breacher') continue;
+      if (e.col === t.col && e.row === t.row) pushEnemyOffTile(s, e, t.col, t.row);
+    }
+  }
+  for (const ev of events) s.events.push({ type: 'toggleChanged', index: ev.index, open: ev.open });
 }
 
 /** The combo counts down every tick and expires (back to x1) when it reaches zero. */

@@ -18,6 +18,7 @@ import {
   cycleTargetMode,
   enemyAt,
   placeTower,
+  placementSealsUnderToggles,
   pointerDown,
   pointerMove,
   pointerUp,
@@ -26,6 +27,7 @@ import {
   selectTower,
   sellTower,
   startWave,
+  toggleAtTile,
   toggleGate,
   togglePause,
   toggleSpeed,
@@ -75,11 +77,13 @@ export interface MouseContext {
 
 function refusalReason(s: RunState, kind: TowerKind, col: number, row: number): string {
   if (tileAt(s.grid, col, row) !== 'buildable') return 'That tile is blocked.';
+  if (toggleAtTile(s, col, row)) return 'That tile is a shutter and cannot be built on.';
   if (s.modifiers.includes('no-build') && s.phase === 'wave' && s.noBuildRow === row) {
     return 'That row is offline for this wave.';
   }
   if (towerAt(s, col, row)) return 'There is already a tower there.';
   if (!canAfford(s.economy, TOWER_STATS[kind].cost)) return 'Not enough salvage for that tower.';
+  if (placementSealsUnderToggles(s, col, row)) return 'That would seal the route when a shutter closes.';
   return 'That would seal the route.';
 }
 

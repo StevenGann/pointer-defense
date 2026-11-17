@@ -344,6 +344,9 @@ function drainEvents(): void {
       case 'popupDismissed':
         sfx.play('popupClose');
         break;
+      case 'toggleChanged':
+        hud.showNotice(`Shutter ${ev.index} ${ev.open ? 'opened' : 'closed'}`, 120);
+        break;
       case 'click':
         break;
     }

@@ -117,6 +117,68 @@ rows 3-11. Dumbbell's walls are columns 2 and 17 rows 2-9, row 2 and row 9 colum
 the neck walls at columns 8 and 11 rows 5-7. Open Field keeps the ten decorative tiles from the
 original board. All three spawn at (0,6) and exit at (19,6).
 
+### 5.6 Map toggles (shutters)
+
+A **map toggle** is a buildable tile that flips between open floor and closed wall on its own timer,
+so the board itself becomes a moving field while the enemies stay the same creatures. It is a map
+element, never a tower: it cannot be built over, sold, upgraded, or damaged. A breacher walks
+through it (a shutter is not a wall to chew) and a flyer ignores it, exactly as the wall-breaking and
+air fields already do.
+
+Each toggle owns its period; two toggles on one map are expected to differ so their bars do not move
+in lockstep.
+
+#### Level format
+
+`Level` gains an optional array:
+
+```
+toggles?: {
+  col: number;
+  row: number;
+  periodTicks: number;   // full open/closed cycle, e.g. 900 = 15 s at 60 Hz
+  openTicks: number;     // ticks of the cycle the shutter is open
+  phaseTicks: number;    // offset so two toggles do not move in lockstep
+}[]
+```
+
+A toggle is **open** while `(clock + phaseTicks) % periodTicks < openTicks`, closed otherwise. State
+is a pure function of the clock: the same tick always yields the same state. At most **four** toggles
+per level, so load and placement need check at most sixteen combinations.
+
+Legend: `#` wall, `.` buildable, `S` start, `X` exit, `T` toggle tile.
+
+```
+....................    The shutter at (10,6) blocks the straight lane when
+....................    closed, forcing a two-tile detour, and reopens on
+....................    its own timer. Two shutters with different periods
+....................    read as two different countdown-bar speeds.
+....................
+S.........T.........X
+....................
+....................
+....................
+....................
+....................
+....................
+```
+
+#### Safety rules
+
+- **Placement** is refused if it would leave any start unable to reach an exit in *any* combination
+  of toggle states, not just the current one. The refusal message names the shutter: *"That would
+  seal the route when a shutter closes."*
+- **Loading** rejects a level whose toggles can seal the route in any combination, with a named
+  reason (`"toggle combination seals the route"`, `"too many toggles"`, and so on).
+- A closed shutter is a blocked tile for ground pathing only. It never enters the breacher or flyer
+  fields, so a breacher will not divert around a shutter that is about to close.
+- When any toggle changes state the distance field is recomputed in that same tick and every enemy
+  is re-pathed from the tile it occupies. Enemies never teleport; a ground enemy caught inside a
+  tile that closes on it is pushed to the nearest open tile in the direction it was heading, never
+  left inside a wall.
+- A toggle's countdown bar fills as the next change approaches, and the shutter's colour shifts warm
+  as it is about to close.
+
 ---
 
 ## 6. Towers

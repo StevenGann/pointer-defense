@@ -29,6 +29,8 @@ import {
   toggleGate,
   selectPlacedTower,
   cancelSelection,
+  placementSealsUnderToggles,
+  toggleAtTile,
 } from '../src/core/state.ts';
 import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isToggleGate } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
@@ -37,7 +39,7 @@ import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, popupCountFor
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
-import { LEVELS, DEFAULT_LEVEL, createGrid, levelById } from '../src/core/levels.ts';
+import { LEVELS, DEFAULT_LEVEL, createGrid, levelById, toggleOpenAt, validateLevel, MAX_TOGGLES } from '../src/core/levels.ts';
 import { createEnemy } from '../src/core/enemies.ts';
 import { spawnPopup, dismissPopup } from '../src/core/popups.ts';
 import { comboMultiplier } from '../src/core/pointer.ts';
@@ -1213,6 +1215,140 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(matches, 'every wave schedule matches its pop-up count');
   check(present > 0, 'pop-ups appear on at least one wave (15..100)');
   check(popupCountForWave(60) === popupCountForWave(60), 'the same wave produces the same pop-up count');
+}
+
+// --- 21. Map toggles (shutters) -------------------------------------------------------------
+
+/** A minimal test level: open field, spawn (0,6), exit (19,6), with optional walls and toggles. */
+function toggleLevel(toggles, walls = []) {
+  return {
+    id: 'toggle-test',
+    name: 'Toggle Test',
+    walls,
+    starts: [{ col: 0, row: 6 }],
+    exits: [{ col: 19, row: 6 }],
+    toggles,
+  };
+}
+
+/** A full-height column at x=5 except for the two rows named in `gaps`. */
+function chokeWalls(gaps) {
+  const walls = [];
+  for (let r = 0; r < ROWS; r++) if (!gaps.includes(r)) walls.push([5, r]);
+  return walls;
+}
+
+// 21a. Toggle state is a pure function of the clock: same tick, same state.
+{
+  const t = { col: 5, row: 6, periodTicks: 100, openTicks: 40, phaseTicks: 0 };
+  check(toggleOpenAt(t, 10) === toggleOpenAt(t, 10), 'toggle state is a pure function of the clock');
+  check(toggleOpenAt(t, 39) === true && toggleOpenAt(t, 40) === false, 'open before the window, closed at it');
+  const a = { ...t, phaseTicks: 0 };
+  const b = { ...t, phaseTicks: 50 };
+  check(toggleOpenAt(a, 0) !== toggleOpenAt(b, 0), 'phaseTicks offsets two toggles out of lockstep');
+  check(MAX_TOGGLES === 4, 'at most four toggles per level (16 combinations)');
+}
+
+// 21b. A closing shutter that would strand an enemy pushes it forward, not into a wall.
+{
+  const s = createRunState(undefined, toggleLevel([{ col: 5, row: 6, periodTicks: 100, openTicks: 50, phaseTicks: 0 }]));
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const e = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+  e.x = 5.5;
+  e.y = 6.5;
+  e.prevX = 5.5;
+  e.prevY = 6.5;
+  e.col = 5;
+  e.row = 6;
+  e.heading = 0; // travelling east
+  e.stunUntilTick = 999999;
+  s.enemies.push(e);
+
+  let guard = 0;
+  while (e.col === 5 && e.row === 6 && guard < 200) {
+    tick(s);
+    guard++;
+  }
+  check(e.col === 6 && e.row === 6, `enemy pushed forward off the closing shutter (${e.col},${e.row})`);
+  check(toggleAtTile(s, 5, 6) !== undefined, 'the closed tile is still an authored shutter');
+}
+
+// 21c. The route lengthens when a toggle closes and returns when it opens.
+{
+  const s = createRunState(undefined, toggleLevel([{ col: 10, row: 6, periodTicks: 100, openTicks: 50, phaseTicks: 0 }]));
+  const openLen = currentPath(s).length; // clock 0, open
+  while (s.clock < 60) tick(s); // into the closed window
+  const closedLen = currentPath(s).length;
+  while (s.clock < 110) tick(s); // back into the open window
+  const reopenedLen = currentPath(s).length;
+  check(openLen === 20, `open route is 20 tiles (${openLen})`);
+  check(closedLen > openLen, `route lengthens when the shutter closes (${openLen} -> ${closedLen})`);
+  check(reopenedLen === openLen, `route returns when the shutter reopens (${reopenedLen})`);
+}
+
+// 21d. Placement refused when it would seal under a closed toggle, accepted when permanently open.
+{
+  const walls = chokeWalls([5, 6]); // the only crossings are the two gaps at rows 5 and 6
+  const toggling = [{ col: 5, row: 6, periodTicks: 100, openTicks: 50, phaseTicks: 0 }];
+  const s = createRunState(undefined, toggleLevel(toggling, walls));
+  check(!canPlace(s, 'gun', 5, 6), 'cannot build on a shutter tile');
+  check(!canPlace(s, 'gun', 5, 5), 'placement refused when it would seal under a closed shutter');
+  check(placementSealsUnderToggles(s, 5, 5), 'the refusal names a shutter combination as the cause');
+  check(canPlace(s, 'gun', 4, 6), 'a placement away from the choke stays legal');
+
+  const alwaysOpen = [{ col: 5, row: 6, periodTicks: 100, openTicks: 100, phaseTicks: 0 }];
+  const s2 = createRunState(undefined, toggleLevel(alwaysOpen, walls));
+  check(canPlace(s2, 'gun', 5, 5), 'accepted when the shutter is permanently open');
+  check(!placementSealsUnderToggles(s2, 5, 5), 'a permanently-open shutter never seals a combination');
+}
+
+// 21e. Loading a level whose toggles can seal it is rejected with a named reason.
+{
+  const walls = chokeWalls([5]); // a single gap at row 5, filled by the shutter
+  const level = {
+    id: 'sealed-toggle',
+    name: 'Sealed Toggle',
+    walls,
+    starts: [{ col: 0, row: 6 }],
+    exits: [{ col: 19, row: 6 }],
+    toggles: [{ col: 5, row: 5, periodTicks: 100, openTicks: 50, phaseTicks: 0 }],
+  };
+  check(validateLevel(level) === 'toggle combination seals the route', 'loading a sealing toggle level is rejected with a named reason');
+
+  let threw = false;
+  try {
+    createRunState(undefined, level);
+  } catch {
+    threw = true;
+  }
+  check(threw, 'createRunState throws for a level whose toggles seal it');
+
+  const tooMany = { ...level, toggles: [0, 1, 2, 3, 4].map((i) => ({ col: i, row: 0, periodTicks: 100, openTicks: 50, phaseTicks: 0 })) };
+  check(validateLevel(tooMany) === 'too many toggles', 'more than four toggles is rejected');
+}
+
+// 21f. Fixed-timestep equivalence still holds with toggles running.
+{
+  const level = toggleLevel([{ col: 10, row: 6, periodTicks: 90, openTicks: 45, phaseTicks: 0 }]);
+  const run = (frameMs) => {
+    const s = createRunState(undefined, level);
+    placeTower(s, 'gun', 3, 6);
+    startWave(s);
+    for (let t = 0; t < 900 * TICK_MS - frameMs; t += frameMs) step(s, frameMs);
+    while (s.tick < 1000) tick(s);
+    return JSON.stringify([
+      s.economy,
+      s.integrity,
+      s.enemies.map((e) => [e.id, e.hp, e.dist]),
+      s.rng,
+      s.clock,
+      s.field,
+    ]);
+  };
+  const at60 = run(TICK_MS);
+  check(at60 === run(1000 / 144), 'toggles: same result at 60 Hz and 144 Hz frames');
+  check(at60 === run(1000 / 23), 'toggles: same result at 23 Hz frames');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
