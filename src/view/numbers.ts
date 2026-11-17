@@ -63,7 +63,7 @@ export class FloatingNumbersView {
       const age = now - f.bornTick;
       const p = worldToPixel(layout, f.x, f.y);
       t.style.fill = f.shield ? SHIELD_COLOR : f.crit ? CRIT_COLOR : f.weak ? PAL.navy : PAL.text;
-      t.style.fontSize = f.shield ? 11 : f.crit ? 16 : f.weak ? 14 : 11;
+      t.style.fontSize = f.shield ? 12 : f.crit ? 16 : f.weak ? 16 : 12;
       t.text = f.shield ? `SHD ${formatAmount(f.amount)}` : f.crit ? `CRIT ${formatAmount(f.amount)}` : formatAmount(f.amount);
       t.alpha = age >= LIFE_TICKS - FADE_TICKS ? (LIFE_TICKS - age) / FADE_TICKS : 1;
       t.position.set(p.x, p.y - (RISE_PX * age) / LIFE_TICKS);

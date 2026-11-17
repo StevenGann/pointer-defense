@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import { bevel, FONT, menuWordRects, PAL, pointInRect, type Rect } from './chrome.ts';
+import { bevel, FONT, FONT_SIZE, menuWordRects, PAL, pointInRect, type Rect } from './chrome.ts';
 
 /**
  * Windows 95 dropdown menus for the File and Help menu words. Drawn in Pixi like the rest of the
@@ -23,7 +23,7 @@ export interface OpenMenu {
 /** Menu word index in the chrome's MENU_ITEMS list. */
 export const MENU_INDEX: Readonly<Record<OpenMenu['name'], number>> = { file: 0, help: 2 };
 
-const ITEM_H = 18;
+const ITEM_H = 24;
 const SEP_H = 5;
 const PAD = 2;
 
@@ -34,7 +34,7 @@ export interface MenuLayout {
 
 export function computeMenu(menu: Rect, open: OpenMenu): MenuLayout {
   const word = menuWordRects(menu)[MENU_INDEX[open.name]];
-  const width = Math.max(128, ...open.entries.map((e) => e.label.length * 6 + 28 + (e.checked ? 14 : 0)));
+  const width = Math.max(144, ...open.entries.map((e) => e.label.length * 7 + 30 + (e.checked ? 14 : 0)));
   let h = PAD * 2;
   for (const e of open.entries) h += e.separator ? SEP_H : ITEM_H;
   const rect: Rect = { x: word.x, y: menu.y + menu.h - 1, w: width, h };
@@ -66,7 +66,7 @@ export function menuEntryAt(menu: Rect, open: OpenMenu, px: number, py: number):
 }
 
 function makeText(text: string): Text {
-  return new Text({ text, style: { fontFamily: FONT, fontSize: 11, fill: PAL.text } });
+  return new Text({ text, style: { fontFamily: FONT, fontSize: FONT_SIZE.body, fill: PAL.text } });
 }
 
 /** A small Win95 check mark for a selected menu entry. */

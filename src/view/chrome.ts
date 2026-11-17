@@ -8,12 +8,12 @@ import { COLS, ROWS } from '../core/grid.ts';
  *
  *   window:     x, y, w, h
  *     frame:    2px raised bevel around the whole window
- *     title:    x+2, y+2,          w-4, 18    navy #000080
- *     menu:     x+2, y+20,         w-4, 18    face #c0c0c0
- *     client:   x+2, y+38,         w-4, h-60  three columns: a 148px build palette, a sunken
- *                                             board well, and a 148px info panel, each split by
+ *     title:    x+2, y+2,          w-4, 22    navy #000080
+ *     menu:     x+2, y+24,         w-4, 22    face #c0c0c0
+ *     client:   x+2, y+46,         w-4, h-72  three columns: a 168px build palette, a sunken
+ *                                             board well, and a 168px info panel, each split by
  *                                             a 2px separator
- *     status:   x+2, y+h-20,       w-4, 18    sunken panes
+ *     status:   x+2, y+h-24,       w-4, 22    sunken panes
  */
 
 export interface Rect {
@@ -43,9 +43,19 @@ export const PAL = {
 
 export const FONT = 'Tahoma, Verdana, Geneva, sans-serif';
 
-const TITLE_H = 18;
-const MENU_H = 18;
-const STATUS_H = 18;
+/**
+ * The type scale: body / list rows / tooltips at 13 px, section labels / small rows / stats at
+ * 11 px, and the tiny board labels at 10 px. Everything keeps Tahoma and the existing palette.
+ */
+export const FONT_SIZE = {
+  body: 13,
+  small: 11,
+  board: 10,
+} as const;
+
+const TITLE_H = 22;
+const MENU_H = 22;
+const STATUS_H = 22;
 const WINDOW_MARGIN = 24;
 
 export interface BoardGeometry {
@@ -84,11 +94,16 @@ export function computeLayout(vw: number, vh: number): Layout {
     h: vh - WINDOW_MARGIN * 2,
   };
   const title: Rect = { x: win.x + 2, y: win.y + 2, w: win.w - 4, h: TITLE_H };
-  const menu: Rect = { x: win.x + 2, y: win.y + 20, w: win.w - 4, h: MENU_H };
-  const client: Rect = { x: win.x + 2, y: win.y + 38, w: win.w - 4, h: win.h - 60 };
-  const status: Rect = { x: win.x + 2, y: win.y + win.h - 20, w: win.w - 4, h: STATUS_H };
+  const menu: Rect = { x: win.x + 2, y: win.y + 2 + TITLE_H, w: win.w - 4, h: MENU_H };
+  const client: Rect = {
+    x: win.x + 2,
+    y: win.y + 2 + TITLE_H + MENU_H,
+    w: win.w - 4,
+    h: win.h - 4 - TITLE_H - MENU_H - 2 - STATUS_H,
+  };
+  const status: Rect = { x: win.x + 2, y: win.y + win.h - 2 - STATUS_H, w: win.w - 4, h: STATUS_H };
 
-  const PANEL_W = 148;
+  const PANEL_W = 168;
   const leftPanel: Rect = { x: client.x, y: client.y, w: PANEL_W, h: client.h };
   const boardCol: Rect = {
     x: client.x + PANEL_W + 2,
@@ -173,7 +188,7 @@ export function menuWordRects(menu: Rect): Rect[] {
   const out: Rect[] = [];
   let x = menu.x + 6;
   for (const word of MENU_ITEMS) {
-    const width = word.length * 6;
+    const width = word.length * 7;
     out.push({ x, y: menu.y, w: width, h: menu.h });
     x += width + 8;
   }
@@ -232,12 +247,12 @@ export class ChromeView {
     this.root.addChild(this.frame);
     this.titleText = new Text({
       text: 'Pointer Defense',
-      style: { fontFamily: FONT, fontSize: 11, fontWeight: 'bold', fill: PAL.titleInverse },
+      style: { fontFamily: FONT, fontSize: FONT_SIZE.body, fontWeight: 'bold', fill: PAL.titleInverse },
     });
     this.titleText.anchor.set(0, 0.5);
     this.root.addChild(this.titleText);
     this.menuTexts = MENU_ITEMS.map(
-      (word) => new Text({ text: word, style: { fontFamily: FONT, fontSize: 11, fill: PAL.text } }),
+      (word) => new Text({ text: word, style: { fontFamily: FONT, fontSize: FONT_SIZE.body, fill: PAL.text } }),
     );
     for (const t of this.menuTexts) {
       t.anchor.set(0, 0.5);

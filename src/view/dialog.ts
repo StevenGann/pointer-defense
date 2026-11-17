@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import { bevel, FONT, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
+import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
 
 /**
  * A small Windows 95 modal dialog, drawn in Pixi: a navy title bar, a body of text rows and one or
@@ -29,17 +29,17 @@ export interface DialogLayout {
   buttons: { id: string; rect: Rect }[];
 }
 
-const TITLE_H = 18;
-const ROW_H = 14;
-const PAD = 10;
-const BUTTON_W = 76;
-const BUTTON_H = 22;
+const TITLE_H = 20;
+const ROW_H = 20;
+const PAD = 12;
+const BUTTON_W = 84;
+const BUTTON_H = 28;
 const BUTTON_GAP = 6;
 
 export function computeDialog(l: Layout, model: DialogModel): DialogLayout {
-  const titleW = model.title.length * 7 + 24;
+  const titleW = model.title.length * 8 + 24;
   const buttonsW = model.buttons.length * BUTTON_W + Math.max(0, model.buttons.length - 1) * BUTTON_GAP;
-  const bodyW = Math.max(titleW, 160, ...model.rows.map((r) => r.text.length * 6 + 20), buttonsW + 8);
+  const bodyW = Math.max(titleW, 180, ...model.rows.map((r) => r.text.length * 7 + 20), buttonsW + 8);
   const w = Math.min(bodyW, l.client.w - 40);
   const h = TITLE_H + PAD + model.rows.length * ROW_H + PAD + BUTTON_H + PAD;
   const rect: Rect = {
@@ -69,7 +69,7 @@ export function dialogButtonAt(l: Layout, model: DialogModel, px: number, py: nu
 function makeText(text: string, fill: number, bold = false): Text {
   return new Text({
     text,
-    style: { fontFamily: FONT, fontSize: 11, fill, fontWeight: bold ? 'bold' : 'normal' },
+    style: { fontFamily: FONT, fontSize: FONT_SIZE.body, fill, fontWeight: bold ? 'bold' : 'normal' },
   });
 }
 

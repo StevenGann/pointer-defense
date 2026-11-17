@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import { bevel, FONT, PAL, type Rect } from './chrome.ts';
+import { bevel, FONT, FONT_SIZE, PAL, type Rect } from './chrome.ts';
 import { POPUP_SPECS, type Popup } from '../core/popups.ts';
 import type { RunState } from '../core/state.ts';
 
@@ -8,7 +8,7 @@ import type { RunState } from '../core/state.ts';
  * owned by the sim so the input layer and this view hit-test the same rect.
  */
 
-export const POPUP_TITLE_H = 14;
+export const POPUP_TITLE_H = 18;
 const CLOSE_W = 11;
 const CLOSE_H = 9;
 const POPUP_APPEAR_TICKS = 6;
@@ -17,14 +17,14 @@ const POPUP_APPEAR_TICKS = 6;
 export function popupCloseRect(popup: Popup): Rect {
   return {
     x: popup.x + popup.w - CLOSE_W - 2,
-    y: popup.y + 4,
+    y: popup.y + Math.floor((POPUP_TITLE_H - CLOSE_H) / 2) + 2,
     w: CLOSE_W,
     h: CLOSE_H,
   };
 }
 
 function makeText(text: string): Text {
-  return new Text({ text, style: { fontFamily: FONT, fontSize: 11, fill: PAL.text } });
+  return new Text({ text, style: { fontFamily: FONT, fontSize: FONT_SIZE.body, fill: PAL.text } });
 }
 
 export class PopupView {

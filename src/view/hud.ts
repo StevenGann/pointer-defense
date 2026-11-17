@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import { bevel, FONT, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
+import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
 import { clickDamage, comboMultiplier, nextPointerCost, overclockCeiling, pointerInfo } from '../core/pointer.ts';
@@ -65,12 +65,12 @@ const SPEC_ACTION: Readonly<Record<SpecKind, HudAction>> = {
 
 const NOTICE_TICKS = 150;
 
-const SPEC_FONT_SIZE = 10;
+const SPEC_FONT_SIZE = FONT_SIZE.small;
 const SPEC_BUTTON_PAD = 12;
-const SPEC_BUTTON_MIN = 44;
+const SPEC_BUTTON_MIN = 48;
 const SPEC_BUTTON_MAX = 64;
 const SPEC_LABEL_GAP = 6;
-const SPEC_LABEL_MIN = 40;
+const SPEC_LABEL_MIN = 44;
 
 let metricsText: Text | null = null;
 
@@ -179,15 +179,15 @@ function computeHud(l: Layout, s: RunState): HudLayout {
   const y = l.leftPanel.y + pad;
 
   let cy = y;
-  const integrity: Rect = { x, y: cy, w, h: 22 };
-  cy += 22 + 4;
+  const integrity: Rect = { x, y: cy, w, h: 26 };
+  cy += 26 + 4;
 
   const tower = selectedTower(s);
 
   let route: Rect | null = null;
   if (!tower) {
-    route = { x, y: cy, w, h: 14 };
-    cy += 14 + 6;
+    route = { x, y: cy, w, h: 18 };
+    cy += 18 + 6;
   }
 
   let towers: { kind: TowerKind; rect: Rect }[] = [];
@@ -195,8 +195,8 @@ function computeHud(l: Layout, s: RunState): HudLayout {
 
   if (!tower) {
     towers = TOWER_KINDS.map((kind) => {
-      const rect: Rect = { x, y: cy, w, h: 20 };
-      cy += 20 + 6;
+      const rect: Rect = { x, y: cy, w, h: 24 };
+      cy += 24 + 6;
       return { kind, rect };
     });
   } else {
@@ -204,22 +204,22 @@ function computeHud(l: Layout, s: RunState): HudLayout {
     const innerX = x + 4;
     const innerW = w - 8;
     cy += 6;
-    const name: Rect = { x: x + 6, y: cy, w: w - 12, h: 16 };
-    cy += 16;
-    const stats: Rect = { x: x + 6, y: cy, w: w - 12, h: 14 };
-    cy += 14;
-    const routeRow: Rect = { x: x + 6, y: cy, w: w - 12, h: 14 };
-    cy += 14 + 4;
+    const name: Rect = { x: x + 6, y: cy, w: w - 12, h: 20 };
+    cy += 20;
+    const stats: Rect = { x: x + 6, y: cy, w: w - 12, h: 18 };
+    cy += 18;
+    const routeRow: Rect = { x: x + 6, y: cy, w: w - 12, h: 18 };
+    cy += 18 + 4;
 
     // Walls never target, so they have no target-mode row.
-    const target: Rect | null = tower.kind === 'wall' ? null : { x: innerX, y: cy, w: innerW, h: 20 };
-    if (target) cy += 20 + 4;
+    const target: Rect | null = tower.kind === 'wall' ? null : { x: innerX, y: cy, w: innerW, h: 24 };
+    if (target) cy += 24 + 4;
 
     const cost = upgradeCost(tower);
     let upgrade: Rect | null = null;
     if (tower.tier !== 2 && cost !== null) {
-      upgrade = { x: innerX, y: cy, w: innerW, h: 20 };
-      cy += 20 + 4;
+      upgrade = { x: innerX, y: cy, w: innerW, h: 24 };
+      cy += 24 + 4;
     }
 
     const branches: BranchButton[] = [];
@@ -230,48 +230,48 @@ function computeHud(l: Layout, s: RunState): HudLayout {
       list.forEach((branch, i) => {
         const x = innerX + i * (bw + gap);
         const w = i === list.length - 1 ? innerX + innerW - x : bw;
-        branches.push({ branch, rect: { x, y: cy, w, h: 20 } });
+        branches.push({ branch, rect: { x, y: cy, w, h: 24 } });
       });
-      cy += 20 + 4;
+      cy += 24 + 4;
     }
 
     // A tower with hit points (a wall) gains a Repair button above Sell. The action is refused at
     // full health and while a repair runs, but the row always exists so its disabled reason shows.
-    const repair: Rect | null = tower.maxHp > 0 ? { x: innerX, y: cy, w: innerW, h: 20 } : null;
-    if (repair) cy += 20 + 4;
+    const repair: Rect | null = tower.maxHp > 0 ? { x: innerX, y: cy, w: innerW, h: 24 } : null;
+    if (repair) cy += 24 + 4;
 
-    const sell: Rect = { x: innerX, y: cy, w: innerW, h: 20 };
-    cy += 20;
+    const sell: Rect = { x: innerX, y: cy, w: innerW, h: 24 };
+    cy += 24;
     const box: Rect = { x, y: boxTop, w, h: cy - boxTop + 6 };
     detail = { box, name, stats, route: routeRow, target, upgrade, branches, repair, sell };
     cy = box.y + box.h + 6;
   }
 
-  const pointerPanel: Rect = { x, y: cy, w, h: 66 };
-  const pointerUpgrade: Rect = { x: x + 4, y: cy + 22, w: w - 8, h: 18 };
+  const pointerPanel: Rect = { x, y: cy, w, h: 76 };
+  const pointerUpgrade: Rect = { x: x + 4, y: cy + 24, w: w - 8, h: 22 };
   // The Manual Override checkbox is only offered once the reticle exists (stage 2).
-  const pointerOverride: Rect | null = s.pointer.stage >= 2 ? { x: x + 4, y: cy + 44, w: w - 8, h: 18 } : null;
-  cy += 66 + 8;
+  const pointerOverride: Rect | null = s.pointer.stage >= 2 ? { x: x + 4, y: cy + 50, w: w - 8, h: 22 } : null;
+  cy += 76 + 8;
 
   let map: MapRow | null = null;
   if (canCycleLevel(s)) {
-    const row: Rect = { x, y: cy, w, h: 18 };
-    const nextW = 40;
-    const next: Rect = { x: row.x + row.w - nextW, y: row.y + 1, w: nextW, h: 16 };
+    const row: Rect = { x, y: cy, w, h: 22 };
+    const nextW = 44;
+    const next: Rect = { x: row.x + row.w - nextW, y: row.y + 1, w: nextW, h: 20 };
     map = { row, next };
-    cy += 18 + 6;
+    cy += 22 + 6;
   }
 
-  const wave: Rect = { x, y: cy, w, h: 28 };
-  cy += 28 + 8;
+  const wave: Rect = { x, y: cy, w, h: 32 };
+  cy += 32 + 8;
 
   let specs: SpecShopLayout | null = null;
   if (s.phase === 'build') {
-    const header: Rect = { x, y: cy, w, h: 14 };
-    cy += 14 + 4;
+    const header: Rect = { x, y: cy, w, h: 18 };
+    cy += 18 + 4;
     const rows = SPEC_KINDS.map((kind) => {
-      const row: Rect = { x, y: cy, w, h: 18 };
-      cy += 18 + 3;
+      const row: Rect = { x, y: cy, w, h: 22 };
+      cy += 22 + 3;
 
       const level = s.specs[kind];
       const cap = SPEC_CAPS[kind];
@@ -284,7 +284,7 @@ function computeHud(l: Layout, s: RunState): HudLayout {
         SPEC_BUTTON_MAX,
         Math.max(SPEC_BUTTON_MIN, Math.ceil(textWidth(buttonText, SPEC_FONT_SIZE)) + SPEC_BUTTON_PAD),
       );
-      const button: Rect = { x: row.x + row.w - buttonW, y: row.y + 1, w: buttonW, h: 16 };
+      const button: Rect = { x: row.x + row.w - buttonW, y: row.y + 1, w: buttonW, h: 20 };
 
       const labelX = row.x + 2;
       const label: Rect = {
@@ -408,7 +408,7 @@ function modalRect(l: Layout): Rect {
 
 function restartRect(m: Rect): Rect {
   const w = 96;
-  const h = 24;
+  const h = 26;
   return { x: m.x + Math.floor((m.w - w) / 2), y: m.y + m.h - h - 10, w, h };
 }
 
@@ -434,11 +434,11 @@ interface VictoryButtons {
 }
 
 function victoryButtons(m: Rect): VictoryButtons {
-  const bh = 24;
+  const bh = 26;
   const pad = 10;
   const gap = 6;
-  const restartW = 110;
-  const endlessW = 64;
+  const restartW = 118;
+  const endlessW = 68;
   const y = m.y + m.h - bh - pad;
   const restart: Rect = { x: m.x + m.w - pad - restartW, y, w: restartW, h: bh };
   const endless: Rect = { x: restart.x - gap - endlessW, y, w: endlessW, h: bh };
@@ -475,7 +475,7 @@ function hintFor(s: RunState): string {
 function makeText(text: string, bold = false): Text {
   return new Text({
     text,
-    style: { fontFamily: FONT, fontSize: 11, fill: PAL.text, fontWeight: bold ? 'bold' : 'normal' },
+    style: { fontFamily: FONT, fontSize: FONT_SIZE.body, fill: PAL.text, fontWeight: bold ? 'bold' : 'normal' },
   });
 }
 
@@ -566,9 +566,9 @@ export class HudView {
     }
     for (const t of this.branchButtons) t.anchor.set(0.5, 0.5);
     this.mapNext.anchor.set(0.5, 0.5);
-    for (const t of this.specLabels) t.style.fontSize = 10;
+    for (const t of this.specLabels) t.style.fontSize = FONT_SIZE.small;
     for (const t of this.specButtons) {
-      t.style.fontSize = 10;
+      t.style.fontSize = FONT_SIZE.small;
       t.anchor.set(0.5, 0.5);
     }
     this.root.addChild(this.modalG);
@@ -641,7 +641,7 @@ export class HudView {
       s.pointer.stage >= 2
         ? `Overclock ${s.pointer.clickLevel} / ${overclockCeiling(s.wave)}`
         : `Pointer: ${pointerName}`;
-    this.pointerLabel.position.set(h.pointerPanel.x + 6, h.pointerPanel.y + 11);
+    this.pointerLabel.position.set(h.pointerPanel.x + 6, h.pointerPanel.y + 13);
 
     const cost = nextPointerCost(s.pointer);
     const pointerEnabled = cost !== null && canAfford(s.economy, cost);
@@ -895,9 +895,9 @@ export class HudView {
     const mult = comboMultiplier(s.pointer);
     if (mult > 1) {
       this.comboText.text = `COMBO x${mult.toFixed(1)}`;
-      this.comboText.position.set(x + 2, y + 8);
+      this.comboText.position.set(x + 2, y + 10);
       this.comboText.visible = true;
-      y += 16;
+      y += 20;
     } else {
       this.comboText.text = '';
       this.comboText.visible = false;
@@ -949,8 +949,8 @@ export class HudView {
     w: number,
     contents: string[],
   ): number {
-    const titleH = 16;
-    const rowH = 13;
+    const titleH = 18;
+    const rowH = 18;
     const padTop = 6;
     const padBottom = 6;
     const h = padTop + titleH + contents.length * rowH + padBottom;
@@ -974,12 +974,12 @@ export class HudView {
     g.rect(l.client.x, l.client.y, l.client.w, l.client.h).fill({ color: PAL.dark, alpha: 0.4 });
 
     bevel(g, m, true, PAL.face);
-    g.rect(m.x + 2, m.y + 2, m.w - 4, 18).fill(PAL.title);
+    g.rect(m.x + 2, m.y + 2, m.w - 4, 20).fill(PAL.title);
     this.modalTitle.text = 'Game Over';
-    this.modalTitle.position.set(m.x + 6, m.y + 2 + 9);
+    this.modalTitle.position.set(m.x + 6, m.y + 2 + 10);
 
     this.modalMessage.text = `The lane broke at wave ${s.wave}.`;
-    this.modalMessage.position.set(m.x + 12, m.y + 2 + 18 + 16);
+    this.modalMessage.position.set(m.x + 12, m.y + 2 + 20 + 16);
     this.modalButton2.text = '';
 
     const r = restartRect(m);
@@ -994,9 +994,9 @@ export class HudView {
     g.rect(l.client.x, l.client.y, l.client.w, l.client.h).fill({ color: PAL.dark, alpha: 0.4 });
 
     bevel(g, m, true, PAL.face);
-    g.rect(m.x + 2, m.y + 2, m.w - 4, 18).fill(PAL.title);
+    g.rect(m.x + 2, m.y + 2, m.w - 4, 20).fill(PAL.title);
     this.modalTitle.text = 'Victory';
-    this.modalTitle.position.set(m.x + 6, m.y + 2 + 9);
+    this.modalTitle.position.set(m.x + 6, m.y + 2 + 10);
 
     this.modalMessage.text = [
       'All one hundred waves cleared.',
@@ -1004,7 +1004,7 @@ export class HudView {
       `Salvage earned: $${formatNumber(s.economy.earned)}`,
       `Integrity remaining: ${s.integrity}`,
     ].join('\n');
-    this.modalMessage.position.set(m.x + 12, m.y + 2 + 18 + 14);
+    this.modalMessage.position.set(m.x + 12, m.y + 2 + 20 + 16);
 
     const b = victoryButtons(m);
     bevel(g, b.endless, true, PAL.face);

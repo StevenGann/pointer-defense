@@ -746,8 +746,10 @@ Shape carries meaning before colour does — readability, and colour-blind playe
 
 ### 13.3 Type and layout
 
-Tahoma / MS Sans Serif, **11 px and 13 px only**. Chrome geometry is derived from one window rect:
-title bar 18, menu bar 18, client well, status bar 18, all inset 2, left and right edges identical.
+Tahoma / MS Sans Serif. The type scale is **13 px** for body text, list rows and tooltips,
+**11 px** for section labels, small rows and stats, and **10 px** for the tiny board labels, with
+floating damage numbers at 12/16 px. Chrome geometry is derived from one window rect: title bar 22,
+menu bar 22, client well, status bar 22, all inset 2, with two 168 px side panels flanking the board.
 
 ### 13.4 Motion
 

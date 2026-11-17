@@ -297,7 +297,7 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
       width: 1280,
       height: 800,
       window: { x: 24, y: 24, w: 1232, h: 752 },
-      rightPanel: { x: 1106, y: 62, w: 148, h: 692 },
+      rightPanel: { x: 1086, y: 70, w: 168, h: 680 },
     },
     specs,
     unspentSpecs: profile.unspentSpecs,

@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import { FONT } from './chrome.ts';
+import { FONT, FONT_SIZE } from './chrome.ts';
 import type { TooltipLine, TooltipSegment } from './tooltipText.ts';
 
 /**
@@ -124,7 +124,7 @@ export class TooltipView {
     while (row.texts.length <= index) {
       const t = new Text({
         text: '',
-        style: { fontFamily: FONT, fontSize: 11, fill: TEXT_COLOR },
+        style: { fontFamily: FONT, fontSize: FONT_SIZE.body, fill: TEXT_COLOR },
       });
       t.anchor.set(0, 0.5);
       row.texts.push(t);

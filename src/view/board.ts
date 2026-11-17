@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import { bevel, FONT, PAL, type BoardGeometry, type Layout } from './chrome.ts';
+import { bevel, FONT, FONT_SIZE, PAL, type BoardGeometry, type Layout } from './chrome.ts';
 import {
   enemyAt,
   canPlace,
@@ -104,7 +104,7 @@ export class BoardView {
   private readonly overlay = new Graphics();
   private readonly note = new Text({
     text: 'Build a maze. Towers block the route.',
-    style: { fontFamily: FONT, fontSize: 11, fill: PAL.text },
+    style: { fontFamily: FONT, fontSize: FONT_SIZE.body, fill: PAL.text },
   });
   private readonly popupTexts: { title: Text; message: Text }[] = [];
 
@@ -122,12 +122,12 @@ export class BoardView {
     while (this.popupTexts.length <= i) {
       const title = new Text({
         text: '',
-        style: { fontFamily: FONT, fontSize: 10, fontWeight: 'bold', fill: PAL.titleInverse },
+        style: { fontFamily: FONT, fontSize: FONT_SIZE.small, fontWeight: 'bold', fill: PAL.titleInverse },
       });
       title.anchor.set(0, 0.5);
       const message = new Text({
         text: '',
-        style: { fontFamily: FONT, fontSize: 9, fill: PAL.text, wordWrap: true },
+        style: { fontFamily: FONT, fontSize: FONT_SIZE.board, fill: PAL.text, wordWrap: true },
       });
       message.anchor.set(0, 0.5);
       this.popupTexts.push({ title, message });
@@ -244,8 +244,8 @@ export class BoardView {
   }
 
   private drawFirstRunNote(l: Layout): void {
-    const w = 190;
-    const h = 26;
+    const w = 232;
+    const h = 30;
     const gap = 6;
     const rect = {
       x: l.board.x + Math.floor((l.boardW - w) / 2),
