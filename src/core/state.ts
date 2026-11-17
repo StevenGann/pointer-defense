@@ -138,6 +138,7 @@ export function pointerDamageMult(specs: SpecLevels): number {
 export type GameEvent =
   | { type: 'kill'; x: number; y: number; reward: number; source: DamageSource; kind: EnemyKind; heading: number }
   | { type: 'leak'; x: number; y: number }
+  | { type: 'popupEscaped'; x: number; y: number }
   | { type: 'shot'; towerId: number; x: number; y: number; splash: number }
   | { type: 'click'; x: number; y: number; hit: boolean }
   | { type: 'damage'; x: number; y: number; amount: number; weak: boolean; crit?: boolean; marked?: boolean; id: number; dirX?: number; dirY?: number }
@@ -1200,7 +1201,8 @@ function moveEnemies(s: RunState): void {
         e.col = e.targetCol;
         e.row = e.targetRow;
         if (e.col === exit.col && e.row === exit.row) {
-          leak(s, e);
+          if (isPopupEnemy(e)) popupEscaped(s, e);
+          else leak(s, e);
           break;
         }
         e.targetCol = -1;
@@ -1255,6 +1257,16 @@ function leak(s: RunState, e: Enemy): void {
     s.phase = 'halted';
     s.pointer.held = false;
   }
+}
+
+/**
+ * A pop-up that reaches the exit leaves the board without costing integrity: it is not a leak, so it
+ * never touches the leak counters, the integrity bar, or the end-of-run report. It still departs
+ * silently, so a distinct event lets the view show a neutral status line instead of the leak effects.
+ */
+function popupEscaped(s: RunState, e: Enemy): void {
+  e.dead = true;
+  s.events.push({ type: 'popupEscaped', x: e.x, y: e.y });
 }
 
 /**

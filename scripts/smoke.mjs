@@ -1591,6 +1591,84 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(popupCountForWave(60) === popupCountForWave(60), 'the same wave produces the same pop-up count');
 }
 
+{
+  // 20h. A pop-up driven to the exit costs no integrity, counts as no leak, and emits popupEscaped
+  // rather than the integrity-loss leak event.
+  const s = stateOnLevel('open-field');
+  s.phase = 'wave';
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const integrityBefore = s.integrity;
+  const popup = createEnemy(1, 'popup', 15, SPAWN, EXIT);
+  s.enemies.push(popup);
+  let t = 0;
+  while (s.enemies.length > 0 && t < 5000) {
+    tick(s);
+    t++;
+  }
+  check(popup.dead, 'the pop-up reached the exit and left the board');
+  check(s.integrity === integrityBefore, `a pop-up escape leaves integrity unchanged (${s.integrity})`);
+  check((s.leaksByWave.get(15) ?? 0) === 0, 'a pop-up escape increments no leak counter');
+  check(
+    s.events.some((e) => e.type === 'popupEscaped') && !s.events.some((e) => e.type === 'leak'),
+    'a pop-up escape emits popupEscaped, not leak',
+  );
+}
+
+{
+  // 20i. An idle run (auto-wave on, no clicking) through a wave that contains a pop-up loses nothing
+  // to it: the pop-up walks off and integrity and the leak counter are untouched by its escape.
+  let popupWave = 0;
+  for (let w = 15; w <= 100; w++) {
+    if (popupCountForWave(w) > 0) {
+      popupWave = w;
+      break;
+    }
+  }
+  check(popupWave > 0, `a pop-up wave exists for the idle test (wave ${popupWave})`);
+
+  const s = stateOnLevel('open-field');
+  toggleAutoWave(s);
+  s.wave = popupWave - 1;
+  s.phase = 'build';
+  startWave(s);
+  // Drop every non-popup spawn so no other enemy can leak and confound the pop-up's own accounting.
+  s.runs[0].spawns = s.runs[0].spawns.filter((sp) => sp.kind === 'popup');
+  const integrityBefore = s.integrity;
+  let escaped = false;
+  for (let i = 0; i < 6000 && !escaped; i++) {
+    tick(s);
+    if (s.events.some((e) => e.type === 'popupEscaped')) escaped = true;
+  }
+  check(escaped, 'the pop-up escaped during the idle auto-wave run');
+  check(s.integrity === integrityBefore, `the idle run loses nothing to the pop-up (integrity ${s.integrity})`);
+  check((s.leaksByWave.get(popupWave) ?? 0) === 0, 'the pop-up wave records no leak');
+  check(s.autoWave === true, 'auto-wave stays on for the next wave');
+}
+
+{
+  // 20j. Every other enemy kind still costs integrity exactly as it does today: a boss costs 3,
+  // every non-boss costs 1.
+  const leakCost = (kind) => {
+    const s = stateOnLevel('open-field');
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const start = s.integrity;
+    const e = createEnemy(1, kind, 6, SPAWN, EXIT);
+    s.enemies.push(e);
+    let t = 0;
+    while (s.enemies.length > 0 && t < 10000) {
+      tick(s);
+      t++;
+    }
+    return start - s.integrity;
+  };
+  check(leakCost('boss') === 3, 'a boss still costs 3 integrity');
+  check(leakCost('grunt') === 1, 'a grunt still costs 1 integrity');
+  for (const kind of ['runner', 'shielded', 'flyer', 'armoured', 'saboteur', 'breacher']) {
+    check(leakCost(kind) === 1, `a ${kind} still costs 1 integrity`);
+  }
+}
+
 // --- 21. Map toggles (shutters) -------------------------------------------------------------
 
 /** A minimal test level: open field, spawn (0,6), exit (19,6), with optional walls and toggles. */

@@ -423,6 +423,9 @@ function drainEvents(): void {
       case 'leak':
         sfx.play('leak');
         break;
+      case 'popupEscaped':
+        hud.showNotice('Pop-up left — no damage');
+        break;
       case 'waveStarted':
         sfx.play('waveStart');
         break;

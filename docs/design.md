@@ -473,6 +473,14 @@ is untargetable by towers, and no tower damage — including flak bursts — rea
 lives. The pointer is unaffected and can still shoot those enemies; the window itself only dies when
 its close box is clicked, which pays the normal salvage and releases whatever it was covering.
 
+A pop-up that reaches the exit **costs no integrity**. It is the only enemy that can only be removed
+by clicking its close box, so if it also damaged integrity on arrival, idling would be impossible by
+construction — the one enemy the player must be present for would also be the one that punishes not
+being present. The pop-up's job is to blind the towers and take the player's attention for a moment,
+not to end a run the player left alone. When it reaches the exit it leaves the board harmlessly: it is
+not a leak, it does not shake or flash or play the damage sound, and it shows a neutral status line
+(`Pop-up left — no damage`) instead.
+
 If an enemy could be answered equally well by either half, it is not doing its job.
 
 ---
