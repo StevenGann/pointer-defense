@@ -2,6 +2,11 @@ import {
   effectiveStats,
   gateLockRemainingSeconds,
   isGateLocked,
+  isRepairing,
+  repairCost,
+  repairDurationTicks,
+  repairHpToRestore,
+  repairRemainingSeconds,
   sellValue,
   TOWER_STATS,
   upgradeCost,
@@ -302,6 +307,19 @@ export function sellTooltipLines(tower: Tower): TooltipLine[] {
   const value = sellValue(tower);
   if (tower.kind === 'wall') return ['Sell for $0 (walls refund nothing)'];
   return [`Sell for $${formatNumber(value)} (70% of $${formatNumber(tower.spent)} spent)`];
+}
+
+/** Tooltip for the Repair button: the amount restored, its price, and how long the job takes. */
+export function repairTooltipLines(tower: Tower, clock: number, salvage: number): TooltipLine[] {
+  if (isRepairing(tower, clock)) {
+    return [`Repairing — ${repairRemainingSeconds(tower, clock).toFixed(1)} s`];
+  }
+  const hp = repairHpToRestore(tower);
+  if (hp <= 0) return ['No damage to repair'];
+  const cost = repairCost(tower);
+  if (salvage < cost) return [cannotAffordText(salvage, cost)];
+  const duration = repairDurationTicks(tower) / TICK_HZ;
+  return [`Repair ${Math.ceil(hp)} HP — $${formatNumber(cost)}, ${duration.toFixed(1)} s`];
 }
 
 /** Tooltip for a spec shop row: the effect the game actually applies at the next level. */

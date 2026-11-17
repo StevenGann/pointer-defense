@@ -32,8 +32,9 @@ import {
   placementSealsUnderToggles,
   toggleAtTile,
   cycleTargetMode,
+  startRepair,
 } from '../src/core/state.ts';
-import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, TOGGLE_LOCK_TICKS } from '../src/core/towers.ts';
+import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, popupCountForWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
@@ -1012,6 +1013,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     { name: 'damaged high', wall: { branch: 'A', open: false, hp: 900, maxHp: 1080 } },
     { name: 'damaged mid', wall: { branch: 'A', open: false, hp: 540, maxHp: 1080 } },
     { name: 'damaged low', wall: { branch: 'A', open: false, hp: 100, maxHp: 1080 } },
+    { name: 'repairing', wall: { branch: 'A', open: false, hp: 540, maxHp: 1080, repairing: true } },
   ];
   for (const st of states) {
     const spec = wallSpec(st.wall);
@@ -1026,6 +1028,9 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(wallSpec({ branch: 'C', open: false, hp: 540, maxHp: 540 }).face === WALL_FACE, 'a closed Toggle reads as raised');
   check(wallSpec({ branch: 'A', open: false, hp: 1080, maxHp: 1080 }).innerRim, 'Bulwark adds an inner rim');
   check(wallSpec({ branch: 'B', open: false, hp: 1080, maxHp: 1080 }).crosshatch, 'Mesh adds a crosshatch');
+  check(wallSpec({ branch: 'A', open: false, hp: 540, maxHp: 1080, repairing: true }).hatched, 'a repairing wall draws a hatch');
+  check(!wallSpec({ branch: 'A', open: false, hp: 540, maxHp: 1080, repairing: true }).crosshatch,
+    'a repairing wall drops the branch marks for the repair hatch');
   check(wallFootprintSize(28) === 22, `wall footprint is cell - 6 (${wallFootprintSize(28)})`);
   check(hatchSegments(0, 0, 20, 4).length > 0, 'Mesh crosshatch produces diagonal strokes');
   const focus = wallFocusRect(14, 14, 28);
@@ -1242,6 +1247,170 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(midLock[6] === true && midLock[8] === true, 'the gate is still open and locked at the end');
   check(at60 === run(1000 / 144), 'a gate mid-lock: same result at 60 Hz and 144 Hz frames');
   check(at60 === run(1000 / 23), 'a gate mid-lock: same result at 23 Hz frames');
+}
+
+// --- 18j. Repair: cost formula, duration, and the "not functional" rule ----------------------
+{
+  // A Bulwark wall costs 40 spent and holds 1080 HP; its repair cost is half that, pro rata.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  placeTower(s, 'wall', 5, 6);
+  upgradeTower(s, 5, 6);
+  chooseBranch(s, 5, 6, 'A');
+  const wall = towerAt(s, 5, 6);
+  const spent = wall.spent;
+  const max = wall.maxHp;
+  check(spent === 40, `a Bulwark wall costs 40 spent (${spent})`);
+  check(max === 1080, `a Bulwark wall holds 1080 HP (${max})`);
+
+  const costAt = (damage) => {
+    wall.hp = max * (1 - damage);
+    return repairCost(wall);
+  };
+  const c100 = costAt(1);
+  const c50 = costAt(0.5);
+  const c1 = costAt(0.01);
+  check(c100 === Math.ceil(0.5 * spent), `repair at 100% damage costs half the spent (${c100})`);
+  check(c50 === Math.ceil(0.5 * spent * 0.5), `repair at 50% damage costs ${c50}`);
+  check(c1 === Math.ceil(0.5 * spent * 0.01), `repair at 1% damage costs ${c1}`);
+  check(c100 < spent && c50 < spent && c1 < spent, 'repair cost is always under the tower spend');
+
+  // A half-damaged wall repairs in 2.5 s, pays up front, and lands back at full health exactly.
+  wall.hp = max / 2;
+  const missing = max - wall.hp;
+  const salv = s.economy.salvage;
+  const price = repairCost(wall);
+  check(repairDurationTicks(wall) === secondsToTicks(2.5), 'a half-damaged repair schedules 2.5 s');
+  check(startRepair(s, 5, 6), 'a half-damaged wall starts repairing');
+  check(s.economy.salvage === salv - price, `the repair cost is paid up front (${price})`);
+  check(isRepairing(wall, s.clock), 'the wall is mid-repair immediately');
+  let ticks = 0;
+  while (isRepairing(wall, s.clock) && ticks < 1000) {
+    tick(s);
+    ticks++;
+  }
+  check(ticks === secondsToTicks(2.5), `a half-damaged repair takes 2.5 s (${ticks} ticks)`);
+  check(wall.hp === wall.maxHp, `the repair restores exactly the missing hit points (${missing})`);
+}
+
+{
+  // A repairing wall is off the field: the route shortens the moment the repair starts and returns
+  // the moment it finishes.
+  const s = createRunState(); // corridor
+  const open = currentPath(s).length;
+  s.economy.salvage = 10000;
+  placeTower(s, 'wall', 4, 9);
+  upgradeTower(s, 4, 9);
+  chooseBranch(s, 4, 9, 'A');
+  const wall = towerAt(s, 4, 9);
+  const blocked = currentPath(s).length;
+  check(blocked > open, `a wall lengthens the route (${open} -> ${blocked})`);
+  wall.hp = wall.maxHp / 2;
+  check(startRepair(s, 4, 9), 'the repair starts');
+  check(currentPath(s).length === open, `a repairing wall is walkable (route ${currentPath(s).length} == ${open})`);
+  while (isRepairing(wall, s.clock)) tick(s);
+  check(currentPath(s).length === blocked, `the route closes again when the repair finishes (${currentPath(s).length})`);
+}
+
+{
+  // A breacher chewing the wall is released when a repair starts, and cannot damage it while it runs.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  const first = stepToward(s.breacherField, SPAWN.col, SPAWN.row);
+  placeTower(s, 'wall', first.col, first.row);
+  upgradeTower(s, first.col, first.row);
+  chooseBranch(s, first.col, first.row, 'A');
+  const wall = towerAt(s, first.col, first.row);
+  wall.hp = wall.maxHp / 2;
+
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const b = createEnemy(1, 'breacher', 12, SPAWN, EXIT);
+  b.attackWallId = wall.id;
+  b.x = wall.col + 0.5 - 0.6;
+  b.y = wall.row + 0.5;
+  b.prevX = b.x;
+  b.prevY = b.y;
+  b.col = wall.col - 1;
+  b.row = wall.row;
+  s.enemies.push(b);
+
+  const hpBefore = wall.hp;
+  check(startRepair(s, first.col, first.row), 'the repair starts under a breacher');
+  check(b.attackWallId === null, 'starting a repair releases the breacher');
+  for (let i = 0; i < secondsToTicks(2.4); i++) tick(s);
+  check(isRepairing(wall, s.clock), 'the wall is still repairing mid-window');
+  check(wall.hp >= hpBefore, `a breacher cannot damage a repairing wall (${wall.hp} >= ${hpBefore})`);
+  while (isRepairing(wall, s.clock)) tick(s);
+  check(wall.hp === wall.maxHp, 'the wall finishes the repair at full health');
+}
+
+{
+  // One repair at a time, and none at full health.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  placeTower(s, 'wall', 5, 6);
+  upgradeTower(s, 5, 6);
+  chooseBranch(s, 5, 6, 'A');
+  const wall = towerAt(s, 5, 6);
+  wall.hp = wall.maxHp / 2;
+  check(startRepair(s, 5, 6), 'the first repair starts');
+  check(!startRepair(s, 5, 6), 'a second repair is refused while one runs');
+  while (isRepairing(wall, s.clock)) tick(s);
+  check(wall.hp === wall.maxHp, 'the repair finished at full health');
+  check(!startRepair(s, 5, 6), 'a repair at full health is refused');
+}
+
+{
+  // Selling mid-repair refunds only the standard value and the timer resurrects nothing.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  placeTower(s, 'wall', 5, 6);
+  upgradeTower(s, 5, 6);
+  chooseBranch(s, 5, 6, 'A');
+  const wall = towerAt(s, 5, 6);
+  wall.hp = wall.maxHp / 2;
+  const salv = s.economy.salvage;
+  const price = repairCost(wall);
+  check(startRepair(s, 5, 6), 'the repair starts');
+  check(sellTower(s, 5, 6), 'selling mid-repair succeeds');
+  check(s.economy.salvage === salv - price, 'selling mid-repair refunds only the standard value (walls refund $0)');
+  check(!s.towers.some((t) => t.id === wall.id), 'the sold tower is gone');
+  for (let i = 0; i < 300; i++) tick(s);
+  check(!s.towers.some((t) => t.id === wall.id), 'the timer does not resurrect a sold tower');
+}
+
+// --- 18k. Fixed-timestep equivalence still holds with a repair in flight ---------------------
+{
+  const run = (frameMs) => {
+    const s = stateOnLevel('open-field');
+    s.economy.salvage = 10000;
+    placeTower(s, 'wall', 5, 6);
+    upgradeTower(s, 5, 6);
+    chooseBranch(s, 5, 6, 'A');
+    const wall = towerAt(s, 5, 6);
+    wall.hp = wall.maxHp / 2;
+    startRepair(s, 5, 6);
+    startWave(s);
+    for (let t = 0; t < 100 * TICK_MS - frameMs; t += frameMs) step(s, frameMs);
+    while (s.clock < 130) tick(s);
+    return JSON.stringify([
+      s.economy,
+      s.integrity,
+      s.enemies.map((e) => [e.id, e.hp, e.dist]),
+      s.rng,
+      s.clock,
+      s.field,
+      wall.hp,
+      wall.repairReadyAt,
+      isRepairing(wall, s.clock),
+    ]);
+  };
+  const at60 = run(TICK_MS);
+  const parsed = JSON.parse(at60);
+  check(parsed[8] === true, 'the repair is still in flight at the sampled clock');
+  check(at60 === run(1000 / 144), 'a repair in flight: same result at 60 Hz and 144 Hz frames');
+  check(at60 === run(1000 / 23), 'a repair in flight: same result at 23 Hz frames');
 }
 
 // --- 19. Route line: reversed segments and per-route offsets ---------------------------------

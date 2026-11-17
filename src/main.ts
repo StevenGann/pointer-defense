@@ -19,6 +19,7 @@ import { paletteTooltipLines, TooltipView, towerTooltipLines } from './view/tool
 import {
   branchTooltipLines,
   pointerTooltipLines,
+  repairTooltipLines,
   sellTooltipLines,
   specTooltipLines,
   targetLockReason,
@@ -389,6 +390,8 @@ function hudTooltipLines(action: HudAction, s: RunState): TooltipLine[] {
     }
     case 'sell':
       return tower ? sellTooltipLines(tower) : [];
+    case 'repair':
+      return tower ? repairTooltipLines(tower, s.clock, s.economy.salvage) : [];
     case 'target': {
       if (!tower) return [];
       const reason = targetLockReason(tower.kind);

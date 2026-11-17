@@ -10,7 +10,7 @@ import {
   type RunState,
 } from '../core/state.ts';
 import { radiusOf, type Enemy, type EnemyKind } from '../core/enemies.ts';
-import { effectiveStats, isGateLocked, TOWER_STATS, type Tower, type TowerKind } from '../core/towers.ts';
+import { effectiveStats, isGateLocked, isRepairing, repairProgress, TOWER_STATS, type Tower, type TowerKind } from '../core/towers.ts';
 import { tileAt, COLS, ROWS, type Grid, type Tile } from '../core/grid.ts';
 import { toggleOpenAt, toggleProgress, type LevelToggle } from '../core/levels.ts';
 import { dashRects, offsetSegment, routeOffset, type RouteSegment } from './route.ts';
@@ -420,19 +420,16 @@ function drawTower(
   const cx = board.x + (t.col + 0.5) * cell;
   const cy = board.y + (t.row + 0.5) * cell;
   if (t.kind === 'wall') {
-    drawWallShape(g, { ...t, locked: isGateLocked(t, clock) }, cx, cy, cell, 1);
+    const repairing = isRepairing(t, clock);
+    drawWallShape(g, { ...t, locked: isGateLocked(t, clock), repairing }, cx, cy, cell, 1);
+    if (repairing) {
+      // A repair replaces the health bar with a progress bar: how far the job has to run.
+      drawBar(g, cx, cy, cell, repairProgress(t, clock), REPAIR_COLOR);
+    } else if (t.maxHp > 0 && t.hp < t.maxHp) {
+      drawBar(g, cx, cy, cell, t.hp / t.maxHp, healthColor(t.hp / t.maxHp));
+    }
   } else {
     drawTowerShape(g, t.kind, cx, cy, cell, 1, t.angle);
-  }
-
-  // A damaged wall shows a health bar above it; an undamaged wall shows nothing.
-  if (t.kind === 'wall' && t.maxHp > 0 && t.hp < t.maxHp) {
-    const ratio = t.maxHp > 0 ? t.hp / t.maxHp : 0;
-    const w = Math.round(cell * 0.8);
-    const x0 = Math.round(cx - w / 2);
-    const y0 = Math.round(cy - cell * 0.5 - 6);
-    g.rect(x0, y0, w, 3).fill({ color: PAL.dark });
-    g.rect(x0 + 1, y0 + 1, Math.max(0, Math.round((w - 2) * ratio)), 1).fill({ color: healthColor(ratio) });
   }
 }
 
@@ -586,6 +583,23 @@ function drawWallShape(
       g.moveTo(seg.x1, seg.y1).lineTo(seg.x2, seg.y2).stroke({ width: 1, color: PAL.shadow, alpha });
     }
   }
+
+  if (spec.hatched) {
+    for (const seg of repairHatch(x + 1, y + 1, s - 2, 4)) {
+      g.moveTo(seg.x1, seg.y1).lineTo(seg.x2, seg.y2).stroke({ width: 1, color: PAL.shadow, alpha });
+    }
+  }
+}
+
+/** One family of down-right diagonal strokes across the square, for the repair hatch. */
+function repairHatch(x: number, y: number, size: number, spacing: number): { x1: number; y1: number; x2: number; y2: number }[] {
+  const out: { x1: number; y1: number; x2: number; y2: number }[] = [];
+  for (let c = y - (x + size); c <= y + size - x; c += spacing) {
+    const xin = Math.max(x, y - c);
+    const xout = Math.min(x + size, y + size - c);
+    if (xin < xout) out.push({ x1: xin, y1: xin + c, x2: xout, y2: xout + c });
+  }
+  return out;
 }
 
 /** A dotted 1 px focus rectangle, drawn around a selected wall. */
@@ -750,6 +764,19 @@ function healthColor(ratio: number): number {
   const red = Math.round(0xc0 * (1 - ratio));
   const green = Math.round(0xc0 * ratio);
   return (red << 16) | (green << 8);
+}
+
+/** The repair progress bar colour: a blue that never reads as health (green/red). */
+const REPAIR_COLOR = 0x0080c0;
+
+/** A thin bar above a wall: dark track with a `ratio`-wide fill in `color`. */
+function drawBar(g: Graphics, cx: number, cy: number, cell: number, ratio: number, color: number): void {
+  const r = Math.max(0, Math.min(1, ratio));
+  const w = Math.round(cell * 0.8);
+  const x0 = Math.round(cx - w / 2);
+  const y0 = Math.round(cy - cell * 0.5 - 6);
+  g.rect(x0, y0, w, 3).fill({ color: PAL.dark });
+  g.rect(x0 + 1, y0 + 1, Math.max(0, Math.round((w - 2) * r)), 1).fill({ color });
 }
 
 function drawReticle(g: Graphics, state: RunState, board: { x: number; y: number; cell: number }, cell: number): void {

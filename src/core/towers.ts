@@ -194,6 +194,9 @@ export function isGateOpen(tower: Tower): boolean {
 /** A successful gate flip locks that gate for three seconds (180 fixed ticks). */
 export const TOGGLE_LOCK_TICKS = secondsToTicks(3);
 
+/** A full repair (0 HP to max) takes this many seconds; duration scales with the damage restored. */
+export const REPAIR_SECONDS = 5;
+
 /** True while this Toggle gate's flip cooldown has not elapsed at the given simulation clock. */
 export function isGateLocked(tower: Tower, clock: number): boolean {
   return isToggleGate(tower) && clock < tower.toggleReadyAt;
@@ -208,6 +211,54 @@ export function gateLockRemainingTicks(tower: Tower, clock: number): number {
 /** Seconds left on a Toggle gate's lock, for the status bar and tooltip. */
 export function gateLockRemainingSeconds(tower: Tower, clock: number): number {
   return gateLockRemainingTicks(tower, clock) / TICK_HZ;
+}
+
+/** Hit points missing from the tower's current total (0 at full health). */
+export function repairHpToRestore(tower: Tower): number {
+  if (tower.maxHp <= 0) return 0;
+  return Math.max(0, tower.maxHp - tower.hp);
+}
+
+/**
+ * The cost to fully repair the tower's current damage: half its spent value, pro rata for the
+ * fraction of hit points missing, rounded up. Restoring a damaged tower is always cheaper than
+ * rebuilding it, and much cheaper the earlier the repair is started.
+ */
+export function repairCost(tower: Tower): number {
+  if (tower.maxHp <= 0) return 0;
+  const missing = repairHpToRestore(tower);
+  if (missing <= 0) return 0;
+  return Math.ceil(0.5 * tower.spent * (missing / tower.maxHp));
+}
+
+/** How many fixed ticks a full repair of the current damage takes (scales with damage restored). */
+export function repairDurationTicks(tower: Tower): number {
+  if (tower.maxHp <= 0) return 0;
+  const fraction = Math.max(0, Math.min(1, repairHpToRestore(tower) / tower.maxHp));
+  return secondsToTicks(REPAIR_SECONDS * fraction);
+}
+
+/** True while this tower's repair job is still running at the given simulation clock. */
+export function isRepairing(tower: Tower, clock: number): boolean {
+  return tower.repairReadyAt !== 0 && clock < tower.repairReadyAt;
+}
+
+/** Ticks left on a running repair at the given clock (0 when idle or just finished). */
+export function repairRemainingTicks(tower: Tower, clock: number): number {
+  if (!isRepairing(tower, clock)) return 0;
+  return tower.repairReadyAt - clock;
+}
+
+/** Seconds left on a running repair, for the button and tooltip. */
+export function repairRemainingSeconds(tower: Tower, clock: number): number {
+  return repairRemainingTicks(tower, clock) / TICK_HZ;
+}
+
+/** Repair progress 0..1 at the given clock (0 when idle), for the progress bar. */
+export function repairProgress(tower: Tower, clock: number): number {
+  if (!isRepairing(tower, clock) || tower.repairDurationTicks <= 0) return 0;
+  const remaining = tower.repairReadyAt - clock;
+  return Math.max(0, Math.min(1, (tower.repairDurationTicks - remaining) / tower.repairDurationTicks));
 }
 
 /**
@@ -255,6 +306,14 @@ export interface Tower {
   open: boolean;
   /** Toggle gates only: simulation tick before which another flip is refused. */
   toggleReadyAt: number;
+  /** Repair (walls only): 0 when idle, otherwise the clock tick the repair completes. */
+  repairReadyAt: number;
+  /** Hit points at the moment the current repair started (drives the constant restore rate). */
+  repairStartHp: number;
+  /** Hit points missing when the current repair started (maxHp - startHp). */
+  repairMissing: number;
+  /** Length of the current repair in fixed ticks. */
+  repairDurationTicks: number;
 }
 
 export function createTower(id: number, kind: TowerKind, col: number, row: number): Tower {
@@ -278,6 +337,10 @@ export function createTower(id: number, kind: TowerKind, col: number, row: numbe
     maxHp: kind === 'wall' ? wallMaxHp(1, null) : 0,
     open: false,
     toggleReadyAt: 0,
+    repairReadyAt: 0,
+    repairStartHp: 0,
+    repairMissing: 0,
+    repairDurationTicks: 0,
   };
 }
 

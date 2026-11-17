@@ -27,7 +27,8 @@ import {
   cycleLevel,
   closePopupEnemy,
 } from '../src/core/state.ts';
-import { TOWER_KINDS, TOWER_STATS, upgradeCost } from '../src/core/towers.ts';
+import { TOWER_KINDS, TOWER_STATS, upgradeCost, repairCost } from '../src/core/towers.ts';
+import { spend } from '../src/core/economy.ts';
 import { radiusOf, isPopupEnemy } from '../src/core/enemies.ts';
 import { buildField, isSealed, pathTiles } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
@@ -62,7 +63,16 @@ const support = !hasFlag('--no-support');
 const noBuild = hasFlag('--no-build');
 // --wall: the standard build, but the maze is built from wall towers instead of Guns, and the
 // walls are kept upgraded so breachers have something to chew on.
-const wallMode = hasFlag('--wall');
+// --repair: the wall build, judged twice — once as-is and once with the bot auto-repairing any wall
+// below 50% HP during the build phase — so the breacher-heavy run reports with and without repairs.
+// --repair implies --wall (the breacher-heavy maze is what repairs are tested against).
+const repairMode = hasFlag('--repair');
+const wallMode = hasFlag('--wall') || repairMode;
+// Toggled by the --repair comparison; when true the build phase patches damaged walls. Mutable
+// because the comparison runs the same wall build with the switch off and on.
+let autoRepair = false;
+/** Salvage spent on repairs in the current run (reset by playRun, summed by runSession). */
+let repairSpend = 0;
 // --call: run normally, calling the next wave once the current spawn queue is exhausted and enemies
 // are still on the board. --call-all: chain every remaining wave at tick zero (a stress test).
 // --call-sweep: call every wave at 25%, 50% and 75% of its spawn window, one run per timing.
@@ -432,6 +442,24 @@ function upgradePass(s) {
   }
 }
 
+/**
+ * Auto-repair: patch any wall below 50% HP during the build phase. The build phase has no enemies and
+ * no time pressure, so the repair is modelled as its up-front cost returning the wall to full before
+ * the next wave — the timed, off-the-field risk only bites when a repair runs mid-battle, which this
+ * bot deliberately avoids. Repair spending competes with tower purchases, so walls stay alive longer
+ * without becoming immortal.
+ */
+function repairWallsDuringBuild(s) {
+  for (let guard = 0; guard < 10000; guard++) {
+    const target = s.towers.find((t) => t.kind === 'wall' && t.hp < t.maxHp * 0.5);
+    if (!target) break;
+    const cost = repairCost(target);
+    if (!spend(s.economy, cost)) break;
+    repairSpend += cost;
+    target.hp = target.maxHp;
+  }
+}
+
 /** Build-phase policy: finish the maze, upgrade cheaply, then place coverage towers. */
 function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, maxTowers = MAX_TOWERS, coverage = false) {
   if (noBuild) {
@@ -506,6 +534,8 @@ function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, 
       if (!acted) break;
     }
   }
+
+  if (wallMode && autoRepair) repairWallsDuringBuild(s);
 
   if (spendSurplus) {
     // The normal policy stops once every specialist slot is filled, so its early-call bonus sits in
@@ -646,6 +676,7 @@ function playWave(s, wave, leakList, popups) {
 /** Play one full run from a fresh state; returns the outcome. */
 function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = MAX_TOWERS, coverage = false) {
   resetClickRng();
+  repairSpend = 0;
   const s = createStateOn(profile, levelId);
   const leakList = [];
   const popups = newPopupTracker();
@@ -700,11 +731,13 @@ function runSession(useSupport, label, levelId, maxTowers = MAX_TOWERS, coverage
   let profile = defaultProfile();
   let totalSpecs = 0;
   let reboots = 0;
+  let totalRepairSpend = 0;
   let final = null;
 
   for (let run = 1; ; run++) {
     const result = playRun(profile, run === 1 ? rebootAt : 0, `${label} run ${run}`, useSupport, levelId, maxTowers, coverage);
     reboots = run - 1;
+    totalRepairSpend += repairSpend;
     if (result.reached || !result.reboot) {
       final = result;
       break;
@@ -716,7 +749,7 @@ function runSession(useSupport, label, levelId, maxTowers = MAX_TOWERS, coverage
     if (!quiet && !silent) console.log(`reboot at wave ${result.wave} -> ${gained} specs`);
   }
 
-  return { final, totalSpecs, reboots };
+  return { final, totalSpecs, reboots, repairSpend: totalRepairSpend };
 }
 
 /**
@@ -986,6 +1019,38 @@ let allReached = true;
 silent = !singleLevel;
 const loopMaxTowers = MAP_MAX_TOWERS;
 const loopCoverage = true;
+
+if (repairMode) {
+  // The breacher-heavy repair comparison: the same wall build, run with and without the bot
+  // auto-repairing any wall below 50% HP during the build phase. Repair spend competes with tower
+  // purchases, so repairs keep more walls alive at a real salvage cost without making them immortal.
+  silent = true;
+  console.log('\n=== wall repair ===');
+  console.log('  map          mode  waves cleared   integrity   salvage   breacher dmg   walls left   repair spent');
+  let repairReached = true;
+  for (const level of activeLevels) {
+    autoRepair = false;
+    const off = runSession(true, 'repair off', level.id, MAP_MAX_TOWERS, true);
+    autoRepair = true;
+    const on = runSession(true, 'repair on', level.id, MAP_MAX_TOWERS, true);
+    for (const [mode, run] of [
+      ['off', off],
+      ['on ', on],
+    ]) {
+      const st = run.final.state;
+      const wallsLeft = st.towers.filter((t) => t.kind === 'wall').length;
+      console.log(
+        `  ${level.id.padEnd(11)}  ${mode}  ${String(run.final.clearedWaves).padStart(13)}  ` +
+          `${String(run.final.integrity).padStart(9)}  ${String(run.final.earned).padStart(7)}  ` +
+          `${String(Math.round(st.wallDamageTaken)).padStart(13)}  ${String(wallsLeft).padStart(10)}  ` +
+          `${String(run.repairSpend).padStart(12)}`,
+      );
+    }
+    if (!on.final.reached) repairReached = false;
+  }
+  silent = false;
+  process.exit(repairReached ? 0 : 1);
+}
 
 if (wallMode) {
   // The wall-heavy scenario: the standard build, but the maze is walls (kept upgraded) rather than

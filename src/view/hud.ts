@@ -7,6 +7,10 @@ import { canCycleLevel, currentPath, isFinalWave, selectedTower, STARTING_INTEGR
 import { levelById } from '../core/levels.ts';
 import {
   effectiveStats,
+  isRepairing,
+  repairCost,
+  repairHpToRestore,
+  repairRemainingSeconds,
   sellValue,
   TOWER_KINDS,
   TOWER_STATS,
@@ -38,6 +42,7 @@ export type HudAction =
   | 'map'
   | 'upgrade'
   | 'sell'
+  | 'repair'
   | 'target'
   | 'branchA'
   | 'branchB'
@@ -128,6 +133,7 @@ interface TowerDetailLayout {
   target: Rect | null;
   upgrade: Rect | null;
   branches: BranchButton[];
+  repair: Rect | null;
   sell: Rect;
 }
 
@@ -224,10 +230,15 @@ function computeHud(l: Layout, s: RunState): HudLayout {
       cy += 20 + 4;
     }
 
+    // A tower with hit points (a wall) gains a Repair button above Sell. The action is refused at
+    // full health and while a repair runs, but the row always exists so its disabled reason shows.
+    const repair: Rect | null = tower.maxHp > 0 ? { x: innerX, y: cy, w: innerW, h: 20 } : null;
+    if (repair) cy += 20 + 4;
+
     const sell: Rect = { x: innerX, y: cy, w: innerW, h: 20 };
     cy += 20;
     const box: Rect = { x, y: boxTop, w, h: cy - boxTop + 6 };
-    detail = { box, name, stats, route: routeRow, target, upgrade, branches, sell };
+    detail = { box, name, stats, route: routeRow, target, upgrade, branches, repair, sell };
     cy = box.y + box.h + 6;
   }
 
@@ -334,6 +345,12 @@ export function hudControlAt(l: Layout, s: RunState, px: number, py: number): Hu
         const action = b.branch === 'A' ? 'branchA' : b.branch === 'B' ? 'branchB' : 'branchC';
         return { action, enabled: affordable };
       }
+    }
+    if (h.detail.repair && pointInRect(h.detail.repair, px, py)) {
+      const repairing = isRepairing(tower, s.clock);
+      const full = repairHpToRestore(tower) <= 0;
+      const affordableRepair = canAfford(s.economy, repairCost(tower));
+      return { action: 'repair', enabled: !repairing && !full && affordableRepair };
     }
     if (pointInRect(h.detail.sell, px, py)) return { action: 'sell', enabled: true };
   } else {
@@ -468,6 +485,7 @@ export class HudView {
   private readonly towerRoute = makeText('');
   private readonly upgradeButton = makeText('');
   private readonly branchButtons: Text[] = [makeText(''), makeText(''), makeText('')];
+  private readonly repairButton = makeText('');
   private readonly sellButton = makeText('');
   private readonly targetButton = makeText('');
   private readonly pointerLabel = makeText('');
@@ -510,6 +528,7 @@ export class HudView {
       this.towerRoute,
       this.upgradeButton,
       ...this.branchButtons,
+      this.repairButton,
       this.sellButton,
       this.targetButton,
       this.pointerLabel,
@@ -675,6 +694,7 @@ export class HudView {
       this.towerRoute.visible = true;
       this.upgradeButton.visible = true;
       this.sellButton.visible = true;
+      this.repairButton.visible = d.repair !== null;
       this.targetButton.visible = d.target !== null;
       for (const text of this.branchButtons) text.visible = true;
 
@@ -735,6 +755,23 @@ export class HudView {
         text.position.set(b.rect.x + b.rect.w / 2, b.rect.y + Math.floor(b.rect.h / 2));
       }
 
+      if (d.repair) {
+        const repairing = isRepairing(tower, s.clock);
+        const hp = repairHpToRestore(tower);
+        const cost = repairCost(tower);
+        const enabled = !repairing && hp > 0 && canAfford(s.economy, cost);
+        drawButton(g, d.repair, enabled, hoverHud === 'repair');
+        this.repairButton.text = repairing
+          ? `Repairing — ${repairRemainingSeconds(tower, s.clock).toFixed(1)} s`
+          : hp <= 0
+            ? 'No damage'
+            : `Repair ${Math.ceil(hp)} HP  $${formatNumber(cost)}`;
+        this.repairButton.style.fill = enabled ? PAL.text : PAL.shadow;
+        this.repairButton.position.set(d.repair.x + 6, d.repair.y + Math.floor(d.repair.h / 2));
+      } else {
+        this.repairButton.text = '';
+      }
+
       drawButton(g, d.sell, true, hoverHud === 'sell');
       this.sellButton.text = `Sell $${formatNumber(sellValue(tower))}`;
       this.sellButton.style.fill = PAL.text;
@@ -746,12 +783,14 @@ export class HudView {
     this.towerStats.text = '';
     this.towerRoute.text = '';
     this.upgradeButton.text = '';
+    this.repairButton.text = '';
     this.sellButton.text = '';
     this.targetButton.text = '';
     this.towerName.visible = false;
     this.towerStats.visible = false;
     this.towerRoute.visible = false;
     this.upgradeButton.visible = false;
+    this.repairButton.visible = false;
     this.sellButton.visible = false;
     this.targetButton.visible = false;
     for (const text of this.branchButtons) {

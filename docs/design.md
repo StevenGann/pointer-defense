@@ -319,6 +319,36 @@ The barrel facing is a sim value stored on the tower in radians (`0` = north, in
 and drawn at that angle. Angle 0 is the classic north-facing barrel and renders identically to the
 pre-traverse build.
 
+### 6.6 Repair
+
+A tower with hit points — today only the Wall — can be repaired. The mechanic is written tower-generic
+so any future tower with HP gets it for free, but the Wall is its only customer.
+
+**Cost.** `repairCost = ceil(0.5 × spent × (1 − hp / maxHp))`, where `spent` is the tower's total
+spend (the build price plus everything bought for it). Half the tower's value restores it completely,
+pro rata for partial damage: a Bulwark wall (spent 40, max 1080 HP) costs 20 to repair from 1 HP to
+full, and 4 to repair at 80% health. Repairs are always cheaper than rebuilding, and much cheaper the
+earlier you repair.
+
+**Time.** A repair is a job, not a transaction. A full repair (1 HP to max) takes **5 seconds**, and
+the duration scales linearly with the damage restored, so a half-damaged wall takes 2.5 s. The cost
+is paid up front when the repair starts.
+
+**Not functional while repairing.** While the timer runs the tower is out of service. For a wall that
+means it stops blocking: it is off the field for pathing exactly as an open Toggle gate is, which
+re-paths the enemies and may open a short cut straight through the maze. That is the risk that makes
+a mid-battle repair a decision rather than a reflex. A repairing wall cannot be attacked by breachers
+— the enemies simply walk past it and hit something else — so a repair cannot be used as a shield
+against damage that is already arriving. Hit points tick back at a constant rate and the tower
+returns to service the moment the timer ends.
+
+**Spam prevention** falls out of the time and the price: one repair at a time per tower, no repair
+while one is running, no repair at full health, and no refund if the tower is sold mid-repair.
+
+The damaged tower's panel gains a **Repair** button above Sell, showing the price; its tooltip names
+the duration. While repairing, the wall draws with a hatched face and a small progress bar in place
+of its health bar, and the route line shows it as walkable the moment the repair begins.
+
 ---
 
 ## 7. Enemies

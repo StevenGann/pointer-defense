@@ -38,6 +38,8 @@ export interface WallState {
   readonly maxHp: number;
   /** A Toggle gate whose flip cooldown is still running: draw it as a disabled button. */
   readonly locked?: boolean;
+  /** A wall mid-repair: draw it as a disabled button with a diagonal hatch over the face. */
+  readonly repairing?: boolean;
 }
 
 export interface WallSpec {
@@ -50,6 +52,8 @@ export interface WallSpec {
   readonly innerRim: boolean;
   /** Mesh: draw a crosshatch fill. */
   readonly crosshatch: boolean;
+  /** Repair: draw a diagonal hatch over the whole face. */
+  readonly hatched: boolean;
 }
 
 /** Linear interpolation between two 0xRRGGBB colours. */
@@ -71,13 +75,20 @@ export function wallSpec(wall: WallState): WallSpec {
   const branch = wall.branch;
   const open = wall.open;
   const locked = wall.locked === true;
+  const repairing = wall.repairing === true;
 
   let face = WALL_FACE;
   let tl: readonly [number, number] = RAISED_TL;
   let br: readonly [number, number] = RAISED_BR;
   let pressed = false;
 
-  if (branch === null || locked) {
+  if (repairing) {
+    // A mid-repair wall is off the field: a disabled button under a diagonal hatch, so the player
+    // reads "out of service" at a glance and the progress bar owns the health readout.
+    face = WALL_FACE_DISABLED;
+    tl = DISABLED_TL;
+    br = DISABLED_BR;
+  } else if (branch === null || locked) {
     // A plain wall is a raised but disabled button: softened bevel, a shade lighter face. A locked
     // Toggle uses the same disabled look so the player can see it is not pressable.
     face = WALL_FACE_DISABLED;
@@ -91,9 +102,9 @@ export function wallSpec(wall: WallState): WallSpec {
     pressed = true;
   }
 
-  // Damage reads through the bevel. An open gate cannot be damaged, but the guard keeps a dying
-  // pressed wall from being read as anything else.
-  if (wall.hp < wall.maxHp && !pressed && !locked) {
+  // Damage reads through the bevel. An open gate cannot be damaged, and a repair has already painted
+  // its own state, so neither participates in the damage read.
+  if (!repairing && wall.hp < wall.maxHp && !pressed && !locked) {
     const ratio = wall.maxHp > 0 ? wall.hp / wall.maxHp : 0;
     if (ratio < 1 / 3) {
       face = WALL_FACE_PRESSED;
@@ -109,8 +120,9 @@ export function wallSpec(wall: WallState): WallSpec {
     face,
     tl,
     br,
-    innerRim: branch === 'A',
-    crosshatch: branch === 'B',
+    innerRim: !repairing && branch === 'A',
+    crosshatch: !repairing && branch === 'B',
+    hatched: repairing,
   };
 }
 

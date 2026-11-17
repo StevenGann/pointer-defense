@@ -23,10 +23,14 @@ import {
   effectiveStats,
   isGateLocked,
   isGateOpen,
+  isRepairing,
   isToggleGate,
   isWall,
   recomputeAuras,
   refreshWallHp,
+  repairCost,
+  repairDurationTicks,
+  repairHpToRestore,
   TOGGLE_LOCK_TICKS,
   TOWER_STATS,
   sellValue,
@@ -423,14 +427,17 @@ export function toggleAtTile(s: RunState, col: number, row: number): LevelToggle
   return s.toggles.find((t) => t.col === col && t.row === row);
 }
 
-/** The set of tile indices blocked by towers alone (every tower but an open Toggle gate). */
+/**
+ * The set of tile indices blocked by towers alone: every tower but an open Toggle gate and a wall
+ * that is mid-repair (both are walkable, so the route can cut straight through them).
+ */
 function towerBlockedSet(s: RunState): Set<number> {
   const out = new Set<number>();
   for (const i of s.blocked) {
     const col = i % s.grid.cols;
     const row = (i - col) / s.grid.cols;
     const t = towerAt(s, col, row);
-    if (!t || !isGateOpen(t)) out.add(i);
+    if (!t || (!isGateOpen(t) && !isRepairing(t, s.clock))) out.add(i);
   }
   return out;
 }
@@ -487,10 +494,12 @@ function breacherBlocked(s: RunState): Set<number> {
   return out;
 }
 
-/** The set of tile indices that block flyer pathing: only Mesh walls. */
+/** The set of tile indices that block flyer pathing: only Mesh walls (a repairing wall does not). */
 function flyerBlocked(s: RunState): Set<number> {
   const out = new Set<number>();
-  for (const t of s.towers) if (wallBlocksFlyers(t)) out.add(t.row * s.grid.cols + t.col);
+  for (const t of s.towers) {
+    if (wallBlocksFlyers(t) && !isRepairing(t, s.clock)) out.add(t.row * s.grid.cols + t.col);
+  }
   return out;
 }
 
@@ -543,6 +552,37 @@ export function sellTower(s: RunState, col: number, row: number): boolean {
   if (s.selectedTowerId === t.id) s.selectedTowerId = null;
   rebuildField(s);
   recomputeAuras(s.towers);
+  return true;
+}
+
+/**
+ * Start a repair job on a tower's tile. The full cost is paid up front; while the repair runs the
+ * tower is not functional, so a wall leaves the pathing field exactly as an open Toggle gate does and
+ * breachers walk straight past it. One repair per tower at a time, refused at full health, and the
+ * cost is never refunded if the tower is sold before the timer ends.
+ */
+export function startRepair(s: RunState, col: number, row: number): boolean {
+  if (s.phase === 'halted' || s.phase === 'victory') return false;
+  const t = towerAt(s, col, row);
+  if (!t || t.maxHp <= 0) return false;
+  if (isRepairing(t, s.clock)) return false;
+  if (t.hp >= t.maxHp) return false;
+  const cost = repairCost(t);
+  if (!spend(s.economy, cost)) return false;
+
+  t.repairStartHp = t.hp;
+  t.repairMissing = repairHpToRestore(t);
+  t.repairDurationTicks = repairDurationTicks(t);
+  t.repairReadyAt = s.clock + t.repairDurationTicks;
+
+  // The tile is off the field while the repair runs, so the route re-paths immediately. Any breacher
+  // already chewing this wall stops; everything else simply picks a new step on the next tick.
+  rebuildField(s);
+  for (const e of s.enemies) {
+    if (e.attackWallId === t.id) e.attackWallId = null;
+    e.targetCol = -1;
+    e.targetRow = -1;
+  }
   return true;
 }
 
@@ -823,6 +863,7 @@ export function step(s: RunState, dtMs: number): number {
 export function tick(s: RunState): void {
   s.tick++;
   updateToggles(s);
+  tickRepairs(s);
   decayCombo(s);
   tickPopups(s);
   checkAchievements(s);
@@ -873,6 +914,48 @@ function updateToggles(s: RunState): void {
     }
   }
   for (const ev of events) s.events.push({ type: 'toggleChanged', index: ev.index, open: ev.open });
+}
+
+/**
+ * Advance every running repair one tick and finish the ones whose timer has elapsed. Hit points tick
+ * back at a constant rate; the finishing tick snaps the tower to full health, returns it to service,
+ * and rebuilds the field so the route closes again. Runs in every phase, so repairs made during the
+ * build phase heal before the next wave starts.
+ */
+function tickRepairs(s: RunState): void {
+  const finished: Tower[] = [];
+  for (const t of s.towers) {
+    if (t.repairReadyAt === 0) continue;
+    if (!isRepairing(t, s.clock)) {
+      // The clock has reached (or passed) the ready tick: the job is done.
+      t.hp = t.maxHp;
+      t.repairReadyAt = 0;
+      finished.push(t);
+      continue;
+    }
+    const remaining = t.repairReadyAt - s.clock;
+    const done = t.repairDurationTicks - remaining + 1; // ticks elapsed through this tick
+    if (done >= t.repairDurationTicks) {
+      t.hp = t.maxHp;
+      t.repairReadyAt = 0;
+      finished.push(t);
+    } else {
+      t.hp = t.repairStartHp + (t.repairMissing * done) / t.repairDurationTicks;
+    }
+  }
+
+  if (finished.length === 0) return;
+  rebuildField(s);
+  for (const e of s.enemies) {
+    e.targetCol = -1;
+    e.targetRow = -1;
+  }
+  for (const t of finished) {
+    for (const e of s.enemies) {
+      if (e.dead || e.kind === 'flyer') continue;
+      if (e.col === t.col && e.row === t.row) pushEnemyOffTile(s, e, t.col, t.row);
+    }
+  }
 }
 
 /** The combo counts down every tick and expires (back to x1) when it reaches zero. */
@@ -935,7 +1018,7 @@ function moveEnemies(s: RunState): void {
     // A breacher locked onto a wall stands still and chews it for damage per second.
     if (e.attackWallId !== null) {
       const wall = s.towers.find((t) => t.id === e.attackWallId);
-      if (wall && isWall(wall) && wall.hp > 0) {
+      if (wall && isWall(wall) && wall.hp > 0 && !isRepairing(wall, s.clock)) {
         faceWall(e, wall);
         if (wallDps > 0) damageWall(s, wall, wallDps / TICK_HZ);
         continue;
@@ -953,7 +1036,7 @@ function moveEnemies(s: RunState): void {
         // walkable, so it is never attacked.
         if (e.kind === 'breacher') {
           const wall = towerAt(s, next.col, next.row);
-          if (wall && isWall(wall) && wall.hp > 0 && !isGateOpen(wall)) {
+          if (wall && isWall(wall) && wall.hp > 0 && !isGateOpen(wall) && !isRepairing(wall, s.clock)) {
             e.attackWallId = wall.id;
             e.targetCol = next.col;
             e.targetRow = next.row;

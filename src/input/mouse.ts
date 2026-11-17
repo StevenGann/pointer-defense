@@ -33,6 +33,7 @@ import {
   selectPlacedTower,
   selectTower,
   sellTower,
+  startRepair,
   startWave,
   toggleAtTile,
   toggleGate,
@@ -293,6 +294,11 @@ export class MouseController {
       case 'sell': {
         const tower = selectedTower(s);
         if (tower) sellTower(s, tower.col, tower.row);
+        break;
+      }
+      case 'repair': {
+        const tower = selectedTower(s);
+        if (tower) startRepair(s, tower.col, tower.row);
         break;
       }
       case 'target': {
