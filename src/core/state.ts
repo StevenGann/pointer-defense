@@ -61,10 +61,14 @@ import {
   COMBO_TICKS,
   comboMultiplier,
   createPointer,
+  clickDamage,
+  CRIT_MULTIPLIER,
   holdDamagePerTick,
+  MARKED_DAMAGE_MULT,
   MAX_POINTER_STAGE,
+  nextCritRoll,
+  nextOverclockCost,
   nextStageCost,
-  pointerInfo,
   RETICLE_STICKY,
   type PointerStage,
   type PointerState,
@@ -122,7 +126,7 @@ export type GameEvent =
   | { type: 'leak'; x: number; y: number }
   | { type: 'shot'; towerId: number; x: number; y: number; splash: number }
   | { type: 'click'; x: number; y: number; hit: boolean }
-  | { type: 'damage'; x: number; y: number; amount: number; weak: boolean }
+  | { type: 'damage'; x: number; y: number; amount: number; weak: boolean; crit?: boolean }
   | { type: 'waveStarted'; wave: number }
   | { type: 'waveCleared'; wave: number; bonus: number }
   | { type: 'wallDamaged'; x: number; y: number; amount: number }
@@ -698,10 +702,22 @@ export function enterEndless(s: RunState): void {
 }
 
 export function upgradePointer(s: RunState): boolean {
-  const cost = nextStageCost(s.pointer);
-  if (cost === null || s.phase === 'halted' || !spend(s.economy, cost)) return false;
-  s.pointer.stage = Math.min(MAX_POINTER_STAGE, s.pointer.stage + 1) as PointerStage;
+  if (s.phase === 'halted') return false;
+  const stageCost = nextStageCost(s.pointer);
+  if (stageCost !== null) {
+    if (!spend(s.economy, stageCost)) return false;
+    s.pointer.stage = Math.min(MAX_POINTER_STAGE, s.pointer.stage + 1) as PointerStage;
+    return true;
+  }
+  const overclockCost = nextOverclockCost(s.pointer);
+  if (overclockCost === null || !spend(s.economy, overclockCost)) return false;
+  s.pointer.clickLevel += 1;
   return true;
+}
+
+/** Flip the Manual Override checkbox: while on, towers fire at the marked enemy when in range. */
+export function toggleManualOverride(s: RunState): void {
+  s.pointer.manualOverride = !s.pointer.manualOverride;
 }
 
 /** Spend one banked spec on a permanent upgrade. Capped rows and an empty bank are refused. */
@@ -781,6 +797,7 @@ export function pointerDown(s: RunState, x: number, y: number): boolean {
   s.pointer.x = x;
   s.pointer.y = y;
   if (s.phase !== 'wave') return false;
+  const previousTargetId = s.pointer.targetId;
   s.pointer.held = true;
   const relay = relayPointerBonus(s, x, y);
   const target = enemyAt(s, x, y, CLICK_SLACK + relay.slack);
@@ -791,9 +808,20 @@ export function pointerDown(s: RunState, x: number, y: number): boolean {
     s.pointer.comboTicks = 0;
     return false;
   }
+  // The reticle's locked enemy is marked; clicking an already-marked enemy pays +50 % and a better
+  // crit chance, so holding the reticle on one enemy (a boss) makes the next clicks hurt more.
+  const marked = target.id === previousTargetId;
+  const roll = nextCritRoll(s.rng, marked, weak);
+  s.rng = roll.next;
   s.pointer.targetId = target.id;
-  const base = pointerInfo(s.pointer).clickDamage * relay.damage * pointerDamageMult(s.specs);
-  damageEnemy(s, target, base * comboMultiplier(s.pointer) * (weak ? 2 : 1), 'pointer', true, undefined, weak);
+  const base = clickDamage(s.pointer) * relay.damage * pointerDamageMult(s.specs);
+  const amount =
+    base *
+    comboMultiplier(s.pointer) *
+    (weak ? 2 : 1) *
+    (marked ? MARKED_DAMAGE_MULT : 1) *
+    (roll.crit ? CRIT_MULTIPLIER : 1);
+  damageEnemy(s, target, amount, 'pointer', true, undefined, weak, roll.crit);
   if (weak) {
     s.weakPointHits++;
     s.pointer.combo++;
@@ -1344,14 +1372,31 @@ function fireTowers(s: RunState): void {
     const range = (st.range + t.auraRange) * towerRangeMult(s);
     const dmg = st.damage * t.auraDamage * buff * towerDamageMult(s.specs);
 
+    // Manual Override: while it is on, the marked enemy is this tower's target whenever it is in
+    // range, overriding every targeting mode and lock. Pop-up shields are never pierced.
+    let overrideTarget: Enemy | undefined;
+    if (s.pointer.manualOverride && s.pointer.targetId !== null) {
+      const marked = s.enemies.find((e) => e.id === s.pointer.targetId && !e.dead);
+      if (
+        marked &&
+        towerCanHurt(s, marked) &&
+        (!st.targetsFlyersOnly || marked.kind === 'flyer') &&
+        inRange(t, marked, range)
+      ) {
+        overrideTarget = marked;
+      }
+    }
+
     // Pick the target(s) exactly as before, so targeting priorities are unchanged by traverse.
     const targets =
-      st.beams > 1
-        ? acquireTargets(s, t, st, range, st.beams)
-        : ((): Enemy[] => {
-            const tg = acquireTarget(s, t, st, range);
-            return tg ? [tg] : [];
-          })();
+      overrideTarget !== undefined
+        ? [overrideTarget]
+        : st.beams > 1
+          ? acquireTargets(s, t, st, range, st.beams)
+          : ((): Enemy[] => {
+              const tg = acquireTarget(s, t, st, range);
+              return tg ? [tg] : [];
+            })();
 
     // Cooldown ticks down regardless of facing; the barrel keeps tracking while it cools down.
     if (t.cooldown > 0) {
@@ -1414,6 +1459,7 @@ function damageEnemy(
   ignoresArmour: boolean,
   tower?: Tower,
   weak = false,
+  crit = false,
 ): void {
   if (e.dead || amount <= 0) return;
   if (source === 'tower') e.towerDamaged = true;
@@ -1430,7 +1476,7 @@ function damageEnemy(
   e.hp -= dmg;
   s.economy.damage[source] += dmg;
   if (source === 'tower' && tower) tower.damageDealt += dmg;
-  s.events.push({ type: 'damage', x: e.x, y: e.y, amount: dmg, weak: source === 'pointer' && weak });
+  s.events.push({ type: 'damage', x: e.x, y: e.y, amount: dmg, weak: source === 'pointer' && weak, crit: crit && source === 'pointer' });
   if (e.hp <= 1e-9) {
     e.hp = 0;
     e.dead = true;

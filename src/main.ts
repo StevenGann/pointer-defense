@@ -318,7 +318,7 @@ function drainEvents(): void {
       }
       case 'damage':
         effects.addHitFlash(ev.x, ev.y);
-        numbers.addDamage(ev.x, ev.y, ev.amount, ev.weak, state.tick);
+        numbers.addDamage(ev.x, ev.y, ev.amount, ev.weak, !!ev.crit, state.tick);
         break;
       case 'kill':
         effects.addDeath(ev.kind, ev.x, ev.y, ev.heading);
@@ -379,6 +379,8 @@ function hudTooltipLines(action: HudAction, s: RunState): TooltipLine[] {
   switch (action) {
     case 'pointer':
       return pointerTooltipLines(s.pointer, s.economy.salvage);
+    case 'override':
+      return ['Manual Override: every tower in range of the marked enemy drops its own priority and shoots it.'];
     case 'upgrade':
       return tower ? upgradeTooltipLines(tower, s.economy.salvage) : [];
     case 'branchA':

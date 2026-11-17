@@ -226,9 +226,9 @@ placement is the decision, not its priority. The **Laser** always fires at the l
 column, which reads correctly when its Focus beam pierces along that line. The **Cannon** always
 swings at the strongest thing it can see and lives with its two-second traverse. The **Gun** stays
 fully configurable — it is the one tower that obeys the player — and Frost and Beacon have no
-targeting mode to lock. A future **Manual Override** (v0.16a), the player's explicit mark, must win
-over every lock: while the marked enemy is in range, a locked tower fires at it, which is the only
-way to aim a locked tower at something specific.
+targeting mode to lock. **Manual Override** (§9.5), the player's explicit mark, wins over every lock:
+while the marked enemy is in range, a locked tower fires at it, which is the only way to aim a locked
+tower at something specific.
 
 Four damage answers and three that are useless alone. That is how placement stays interesting without
 becoming opaque.
@@ -503,22 +503,36 @@ balance number.
 
 ## 9. The pointer
 
-The OS cursor is hidden; a drawn arrow replaces it, hotspot at the tip.
+The OS cursor is hidden; a drawn arrow replaces it, hotspot at the tip. The pointer is the clicker half
+of the game: it has its own ladder, its own cost curve and a reason to keep clicking during a wave.
 
 ### 9.1 Stages
+
+Two stages. The first is the bare click; the second adds the reticle.
 
 | Stage | Name | Cost | Click damage | Effect |
 |---|---|---|---|---|
 | 1 | **Click** | — | 3 | a bare click |
-| 2 | **Reticle** | 80 | 4 | hold to lock: 10 dps on the locked target |
-| 3 | **Designator** | 220 | 5 | the marked target takes +25 % tower damage |
-| 4 | **Drone** | 600 | 6 | auto-clicks the reticle target twice a second |
-| 5 | **Swarm** | 1,600 | 8 | three drones; the player directs instead of clicking |
+| 2 | **Reticle** | 80 | 4 | hold to lock: damage over time on the locked target, and the enemy it locks is *marked* |
 
-From stage 4 the hands leave the mouse. The swarm works, and what the player spends attention on
-becomes targeting rather than rate — the idle promise kept honestly instead of an offline multiplier.
+Click damage ignores armour and is the only thing that can break shields (§7).
 
-### 9.2 Precision
+### 9.2 The overclock ladder
+
+Above stage 2 the pointer keeps a cost curve of its own. **Overclock levels** are unbounded in
+principle but tuned to about twelve:
+
+```
+cost(level)  = round(120 × 1.55^level)   // buying level+1 from level
+damage       = 4 × 1.35^level            // the reticle's base click, compounded
+holdDps      = damage × 2.5              // so the reticle keeps pace with the click
+```
+
+Level 1 costs 120, level 5 about 690, level 10 about 6,200, level 12 about 9,600 — and level 12 is
+about 147 damage a click before the combo. The curve is deliberately steep: the last levels compete
+with a tower for the same salvage and should lose to neither.
+
+### 9.3 Precision
 
 Every enemy carries a **weak point**: a 25 % arc on its leading edge, drawn as a small notch. Clicking
 it deals **×2** damage and marks the kill for the 2× payout. Clicking elsewhere deals normal damage.
@@ -530,10 +544,37 @@ without a hit, resets to ×1.
 The combo is the clicker half's skill expression. It exists so that clicking is *aiming* rather than
 *spamming* — the Sanctum lesson, applied to the mouse.
 
-### 9.3 What the pointer is for
+### 9.4 The mark, and crits
 
-Precision and utility, not bulk damage. If clicks ever out-damage an equivalent spend in towers, the
-design has failed: tower kills do the work, pointer kills pay the bonus.
+The reticle earns its keep beyond the damage tick. The enemy the reticle is locked on is **marked**,
+drawn with a corner-bracket reticle so it is unmistakable. The mark pays two ways:
+
+- **Clicks on a marked enemy deal +50 % damage.** Focusing one enemy (a boss) makes the next click on
+  it hurt more than a click on a fresh target.
+- **Crits.** A click can crit for **2.5×**. The base chance is 10 %, plus 15 % when the target is
+  marked and plus 20 % when the click lands on the weak point. A crit pops a loud `CRIT` so a lucky
+  streak is visible.
+
+Clicks are rolled against the seeded run PRNG, so a crit is part of the deterministic simulation — a
+given click always lands the same way on the same run.
+
+### 9.5 Manual Override
+
+From stage 2 the pointer panel gains an **Override** checkbox, per-run state drawn as a Windows
+checkbox. While it is on, any tower whose range holds the marked enemy **ignores its targeting mode
+(and any per-kind lock) and shoots the marked enemy**. Point at a boss and the whole board focuses.
+
+The trade is real: every tower in range drops its own priority for the mark. Enemies hidden by a
+Pop-up window are still untargetable — override does not defeat the shield — and when the marked enemy
+dies or leaves range, towers return to their own mode immediately.
+
+### 9.6 What the pointer is for
+
+The pointer is a real weapon now, not just a bonus printer. Its precision — the weak point, the mark,
+the combo — rewards aiming, and the overclock ladder gives a clicker-minded player a bulk-damage path
+of their own that competes with towers for the same salvage. Manual Override is the clicker's answer
+to a boss the board is ignoring. The balance harness keeps the two honest: a clicker build clears the
+hundred at parity with a tower build, never strictly better.
 
 ---
 

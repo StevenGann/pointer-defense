@@ -24,7 +24,7 @@ src/
     enemies.ts     enemy types and stats
     towers.ts      tower types and stats
     economy.ts     salvage, costs, kill attribution
-    pointer.ts     the cursor's damage profile and upgrades
+    pointer.ts     the cursor's damage profile, overclock ladder, crits and the mark
     state.ts       the run state and its reducers
   view/
     board.ts       draws the grid, towers, enemies

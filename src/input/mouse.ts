@@ -37,6 +37,7 @@ import {
   startWave,
   toggleAtTile,
   toggleGate,
+  toggleManualOverride,
   togglePause,
   toggleSpeed,
   towerAt,
@@ -272,6 +273,9 @@ export class MouseController {
         break;
       case 'pointer':
         upgradePointer(s);
+        break;
+      case 'override':
+        toggleManualOverride(s);
         break;
       case 'wave':
         startWave(s);

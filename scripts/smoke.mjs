@@ -33,6 +33,8 @@ import {
   toggleAtTile,
   cycleTargetMode,
   startRepair,
+  upgradePointer,
+  toggleManualOverride,
 } from '../src/core/state.ts';
 import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
@@ -44,7 +46,17 @@ import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
 import { LEVELS, DEFAULT_LEVEL, createGrid, levelById, toggleOpenAt, validateLevel, MAX_TOGGLES } from '../src/core/levels.ts';
 import { createEnemy, isPopupEnemy } from '../src/core/enemies.ts';
 import { spawnPopup, dismissPopup } from '../src/core/popups.ts';
-import { comboMultiplier } from '../src/core/pointer.ts';
+import {
+  comboMultiplier,
+  clickDamage,
+  holdDps,
+  nextOverclockCost,
+  nextPointerCost,
+  nextCritRoll,
+  critChance,
+  CRIT_MULTIPLIER,
+  MARKED_DAMAGE_MULT,
+} from '../src/core/pointer.ts';
 import { loadProfile, saveProfile, defaultProfile } from '../src/core/save.ts';
 import { restartWindows, checkAchievements, enterEndless } from '../src/core/state.ts';
 import { dashRects, offsetSegment, routeOffset } from '../src/view/route.ts';
@@ -59,7 +71,7 @@ import {
   WALL_FACE_DISABLED,
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
-import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay, targetLockReason } from '../src/view/tooltipText.ts';
+import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage } from '../src/view/tooltipText.ts';
 import { BoardView, staticLayerKey } from '../src/view/board.ts';
 import { computeLayout } from '../src/view/chrome.ts';
 
@@ -1869,6 +1881,200 @@ function chokeWalls(gaps) {
   g.targetMode = 'first';
   cycleTargetMode(s, 6, 5);
   check(g.targetMode === 'strong', 'the target key/click still cycles a configurable gun');
+}
+
+// --- 24. Pointer overclock ladder, crits and Manual Override --------------------------------
+{
+  // 24a. The ladder: cost and damage follow the formulas, and the tooltip's "after" is the value
+  // actually applied once the level is bought.
+  const s = createRunState();
+  s.economy.salvage = 100000;
+  check(upgradePointer(s), 'pointer upgrades stage 1 -> 2');
+  check(s.pointer.stage === 2, 'pointer is at stage 2');
+  check(s.pointer.clickLevel === 0, 'clickLevel starts at 0');
+  check(nextOverclockCost(s.pointer) === Math.round(120 * 1.55 ** 0), 'first overclock costs 120');
+  check(clickDamage(s.pointer) === 4, 'stage-2 click damage is 4 at level 0');
+  check(holdDps(s.pointer) === 10, 'stage-2 hold dps is 10 at level 0');
+
+  const sal = s.economy.salvage;
+  check(upgradePointer(s), 'buy overclock level 1');
+  check(s.pointer.clickLevel === 1, 'clickLevel becomes 1');
+  check(s.economy.salvage === sal - 120, 'level 1 costs 120');
+  check(Math.abs(clickDamage(s.pointer) - 4 * 1.35) < 1e-9, 'click damage follows 4 * 1.35^1');
+  check(Math.abs(holdDps(s.pointer) - clickDamage(s.pointer) * 2.5) < 1e-9, 'hold dps scales with click');
+  check(nextOverclockCost(s.pointer) === Math.round(120 * 1.55 ** 1), 'next overclock cost follows the formula');
+  check(nextPointerCost(s.pointer) === nextOverclockCost(s.pointer), 'nextPointerCost is the overclock cost at stage 2');
+
+  // Buying the level the tooltip previewed must raise the damage to the tooltip's "after" value.
+  const tooltipLine = pointerTooltipLines(s.pointer, s.economy.salvage)[0];
+  const previewAfter = fmtClickDamage(clickDamage({ ...s.pointer, clickLevel: s.pointer.clickLevel + 1 }));
+  check(tooltipText(tooltipLine).includes(previewAfter), `overclock tooltip previews the applied damage (${tooltipText(tooltipLine)})`);
+  upgradePointer(s);
+  check(fmtClickDamage(clickDamage(s.pointer)) === previewAfter, 'the tooltip after-value matches the damage applied after buying');
+}
+
+{
+  // 24b. A click on a marked enemy deals 1.5x an unmarked click (crits suppressed by a chosen seed).
+  const findNoCritSeed = (seed) => {
+    let r = seed;
+    for (let i = 0; i < 10000; i++) {
+      if (!nextCritRoll(r, true, false).crit) return r; // marked worst-case chance (25%) does not crit
+      r = nextCritRoll(r, true, false).next;
+    }
+    throw new Error('no non-crit seed found');
+  };
+  const noCritSeed = findNoCritSeed(0x9e3779b9);
+
+  const make = () => {
+    const s = createRunState();
+    s.phase = 'wave';
+    const e = stationary(1, 'grunt', 1, 10.5, 5.5);
+    e.hp = 100000;
+    e.maxHp = 100000;
+    s.enemies.push(e);
+    s.rng = noCritSeed;
+    return { s, e };
+  };
+
+  const unmarked = make();
+  pointerDown(unmarked.s, unmarked.e.x, unmarked.e.y + 0.15);
+  const unmarkedDmg = unmarked.e.maxHp - unmarked.e.hp;
+
+  const marked = make();
+  marked.s.pointer.targetId = marked.e.id; // mark without clicking
+  pointerDown(marked.s, marked.e.x, marked.e.y + 0.15);
+  const markedDmg = marked.e.maxHp - marked.e.hp;
+
+  check(Math.abs(markedDmg - unmarkedDmg * MARKED_DAMAGE_MULT) < 1e-9,
+    `a marked click deals ${MARKED_DAMAGE_MULT}x an unmarked click (${markedDmg} vs ${unmarkedDmg})`);
+}
+
+{
+  // 24c. Crits: with a forced seed, clicks crit at the base rate over a thousand samples, and a
+  // crit deals 2.5x.
+  check(critChance(false, false) === 0.1, 'base crit chance is 10%');
+  check(critChance(true, false) === 0.25, 'marked crit chance is 25%');
+  check(critChance(false, true) === 0.3, 'weak-point crit chance is 30%');
+
+  const s = createRunState();
+  s.phase = 'wave';
+  const e = stationary(1, 'grunt', 1, 10.5, 5.5);
+  e.hp = 1e9;
+  e.maxHp = 1e9;
+  s.enemies.push(e);
+  s.rng = 0x12345678; // forced seed
+  let crits = 0;
+  for (let i = 0; i < 1000; i++) {
+    s.pointer.targetId = null; // unmarked
+    const before = e.hp;
+    pointerDown(s, e.x, e.y + 0.15); // non-weak
+    if (before - e.hp > 3.1) crits++; // base click is 3, a crit is 7.5
+  }
+  check(crits >= 60 && crits <= 140, `clicks crit at ~10% over 1000 samples (${crits} crits)`);
+
+  const findSeed = (seed, wantCrit) => {
+    let r = seed;
+    for (let i = 0; i < 10000; i++) {
+      const roll = nextCritRoll(r, false, false);
+      if (roll.crit === wantCrit) return r;
+      r = roll.next;
+    }
+    throw new Error('no crit seed found');
+  };
+
+  const make = (seed) => {
+    const st = createRunState();
+    st.phase = 'wave';
+    const en = stationary(1, 'grunt', 1, 10.5, 5.5);
+    en.hp = 100000;
+    en.maxHp = 100000;
+    st.enemies.push(en);
+    st.rng = seed;
+    return { s: st, e: en };
+  };
+
+  const normal = make(findSeed(0xabcdef01, false));
+  pointerDown(normal.s, normal.e.x, normal.e.y + 0.15);
+  const normalDmg = normal.e.maxHp - normal.e.hp;
+
+  const crit = make(findSeed(0xabcdef01, true));
+  pointerDown(crit.s, crit.e.x, crit.e.y + 0.15);
+  const critDmg = crit.e.maxHp - crit.e.hp;
+
+  check(Math.abs(critDmg - normalDmg * CRIT_MULTIPLIER) < 1e-9,
+    `a crit deals ${CRIT_MULTIPLIER}x (${critDmg} vs ${normalDmg})`);
+}
+
+{
+  // 24d. Manual Override: a strong-mode tower fires at the marked weak enemy while on, and returns
+  // to strong once the marked enemy dies.
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'cannon', 5, 5); // locked to 'strong'
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const marked = stationary(1, 'grunt', 1, 5.5, 4.0);
+  marked.hp = 5; // one cannon shot kills it
+  const strong = stationary(2, 'grunt', 1, 7.5, 4.0);
+  strong.hp = 500;
+  s.enemies.push(marked, strong);
+  s.pointer.targetId = marked.id;
+  toggleManualOverride(s);
+
+  tick(s);
+  check(marked.dead, 'override: the cannon kills the marked weak enemy');
+  check(strong.hp === 500, 'override: the stronger enemy is untouched while the mark lives');
+
+  const strongHp = strong.hp;
+  for (let i = 0; i < 200 && strong.hp === strongHp; i++) tick(s);
+  check(strong.hp < strongHp, 'override: the tower returns to strong mode once the mark dies');
+}
+
+{
+  // 24e. Override never pierces a pop-up shield.
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 5, 5);
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const grunt = stationary(1, 'grunt', 15, 5.5, 4.0);
+  const popup = stationary(2, 'popup', 15, 5.5, 4.0);
+  s.enemies.push(grunt, popup);
+  s.pointer.targetId = grunt.id;
+  toggleManualOverride(s);
+
+  for (let i = 0; i < 30; i++) tick(s);
+  check(grunt.hp === grunt.maxHp, 'override: a pop-up-shielded marked enemy is never targeted');
+}
+
+{
+  // 24f. Fixed-timestep equivalence still holds with a click (and its crit roll) in the mix.
+  const run = (frameMs) => {
+    const s = stateOnLevel('open-field');
+    s.economy.salvage = 10000;
+    placeTower(s, 'gun', 3, 6);
+    startWave(s);
+    for (let t = 0; t < 900 * TICK_MS - frameMs; t += frameMs) step(s, frameMs);
+    let clicked = false;
+    while (s.tick < 1000) {
+      if (!clicked && s.tick === 500) {
+        const e = s.enemies.find((x) => !x.dead && !isPopupEnemy(x));
+        if (e) pointerDown(s, e.x, e.y + 0.15);
+        clicked = true;
+      }
+      tick(s);
+    }
+    return JSON.stringify([
+      s.economy,
+      s.integrity,
+      s.enemies.map((e) => [e.id, e.hp, e.dist]),
+      s.rng,
+      s.nextPopupAttemptTick,
+    ]);
+  };
+  const at60 = run(TICK_MS);
+  check(at60 === run(1000 / 144), 'a click in the mix: same result at 60 Hz and 144 Hz frames');
+  check(at60 === run(1000 / 23), 'a click in the mix: same result at 23 Hz frames');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

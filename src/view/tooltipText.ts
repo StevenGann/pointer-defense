@@ -18,7 +18,14 @@ import {
   type TowerKind,
 } from '../core/towers.ts';
 import { formatNumber } from '../core/format.ts';
-import { nextStageCost, pointerInfo, type PointerState, type PointerStage } from '../core/pointer.ts';
+import {
+  clickDamage,
+  nextOverclockCost,
+  nextStageCost,
+  pointerInfo,
+  type PointerState,
+  type PointerStage,
+} from '../core/pointer.ts';
 import { SPEC_CAPS, SPEC_NAMES, specEffectText, type SpecKind } from '../core/save.ts';
 import { TICK_HZ } from '../core/time.ts';
 
@@ -286,18 +293,34 @@ export function branchTooltipLines(tower: Tower, branch: Branch, salvage: number
   return [segments];
 }
 
-/** Tooltip for the pointer Upgrade button: the next stage's click damage and its cost. */
+/** Format a click-damage value: whole numbers stay bare, fractions keep one decimal. */
+export function fmtClickDamage(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+/** Tooltip for the pointer Upgrade button: the next stage or overclock level's click damage and cost. */
 export function pointerTooltipLines(p: PointerState, salvage: number): TooltipLine[] {
-  const cost = nextStageCost(p);
+  const stageCost = nextStageCost(p);
+  if (stageCost !== null) {
+    if (salvage < stageCost) return [cannotAffordText(salvage, stageCost)];
+    const next = (p.stage + 1) as PointerStage;
+    const before = pointerInfo(p).clickDamage;
+    const after = pointerInfo({ ...p, stage: next }).clickDamage;
+    return [[
+      { text: `Pointer T${p.stage} → T${next} — click damage ${before} → ` },
+      good(String(after)),
+      { text: `, $${formatNumber(stageCost)}` },
+    ]];
+  }
+
+  const cost = nextOverclockCost(p);
   if (cost === null) return ['Max level'];
   if (salvage < cost) return [cannotAffordText(salvage, cost)];
-
-  const next = (p.stage + 1) as PointerStage;
-  const before = pointerInfo(p).clickDamage;
-  const after = pointerInfo({ ...p, stage: next }).clickDamage;
+  const before = fmtClickDamage(clickDamage(p));
+  const after = fmtClickDamage(clickDamage({ ...p, clickLevel: p.clickLevel + 1 }));
   return [[
-    { text: `Pointer T${p.stage} → T${next} — click damage ${before} → ` },
-    good(String(after)),
+    { text: `Click damage ${before} → ` },
+    good(after),
     { text: `, $${formatNumber(cost)}` },
   ]];
 }

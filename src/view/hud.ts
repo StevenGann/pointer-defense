@@ -2,7 +2,7 @@ import { Container, Graphics, Text } from 'pixi.js';
 import { bevel, FONT, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
-import { comboMultiplier, nextStageCost, pointerInfo } from '../core/pointer.ts';
+import { comboMultiplier, nextPointerCost, pointerInfo } from '../core/pointer.ts';
 import { canCycleLevel, currentPath, isFinalWave, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
 import { levelById } from '../core/levels.ts';
 import {
@@ -38,6 +38,7 @@ import { branchName, targetModeDisplay } from './tooltipText.ts';
 export type HudAction =
   | TowerKind
   | 'pointer'
+  | 'override'
   | 'wave'
   | 'map'
   | 'upgrade'
@@ -161,6 +162,7 @@ interface HudLayout {
   detail: TowerDetailLayout | null;
   pointerPanel: Rect;
   pointerUpgrade: Rect;
+  pointerOverride: Rect | null;
   towers: ReadonlyArray<{ kind: TowerKind; rect: Rect }>;
   wave: Rect;
   map: MapRow | null;
@@ -242,9 +244,11 @@ function computeHud(l: Layout, s: RunState): HudLayout {
     cy = box.y + box.h + 6;
   }
 
-  const pointerPanel: Rect = { x, y: cy, w, h: 44 };
+  const pointerPanel: Rect = { x, y: cy, w, h: 66 };
   const pointerUpgrade: Rect = { x: x + 4, y: cy + 22, w: w - 8, h: 18 };
-  cy += 44 + 8;
+  // The Manual Override checkbox is only offered once the reticle exists (stage 2).
+  const pointerOverride: Rect | null = s.pointer.stage >= 2 ? { x: x + 4, y: cy + 44, w: w - 8, h: 18 } : null;
+  cy += 66 + 8;
 
   let map: MapRow | null = null;
   if (canCycleLevel(s)) {
@@ -296,7 +300,7 @@ function computeHud(l: Layout, s: RunState): HudLayout {
     specs = { header, rows };
   }
 
-  return { integrity, route, detail, pointerPanel, pointerUpgrade, towers, wave, map, specs };
+  return { integrity, route, detail, pointerPanel, pointerUpgrade, pointerOverride, towers, wave, map, specs };
 }
 
 /**
@@ -327,9 +331,13 @@ export function hudControlAt(l: Layout, s: RunState, px: number, py: number): Hu
   const h = computeHud(l, s);
 
   {
-    const cost = nextStageCost(s.pointer);
+    const cost = nextPointerCost(s.pointer);
     const enabled = cost !== null && canAfford(s.economy, cost);
     if (pointInRect(h.pointerUpgrade, px, py)) return { action: 'pointer', enabled };
+  }
+
+  if (h.pointerOverride && pointInRect(h.pointerOverride, px, py)) {
+    return { action: 'override', enabled: true };
   }
 
   const tower = selectedTower(s);
@@ -493,6 +501,7 @@ export class HudView {
   private noticeUntilTick = 0;
   private lastTick = 0;
   private readonly pointerButton = makeText('');
+  private readonly pointerOverrideButton = makeText('');
   private readonly towerButtons: Text[];
   private readonly waveButton = makeText('', true);
   private readonly mapLabel = makeText('');
@@ -533,6 +542,7 @@ export class HudView {
       this.targetButton,
       this.pointerLabel,
       this.pointerButton,
+      this.pointerOverrideButton,
       ...this.towerButtons,
       this.waveButton,
       this.mapLabel,
@@ -623,10 +633,12 @@ export class HudView {
     }
 
     bevel(g, h.pointerPanel, true, PAL.face);
-    this.pointerLabel.text = `Pointer: ${pointerInfo(s.pointer).name}`;
+    const pointerName = pointerInfo(s.pointer).name;
+    this.pointerLabel.text =
+      s.pointer.stage >= 2 ? `Pointer: ${pointerName} L${s.pointer.clickLevel}` : `Pointer: ${pointerName}`;
     this.pointerLabel.position.set(h.pointerPanel.x + 6, h.pointerPanel.y + 11);
 
-    const cost = nextStageCost(s.pointer);
+    const cost = nextPointerCost(s.pointer);
     const pointerEnabled = cost !== null && canAfford(s.economy, cost);
     this.pointerButton.text = cost === null ? 'Max level' : `Upgrade $${formatNumber(cost)}`;
     drawButton(g, h.pointerUpgrade, pointerEnabled, hoverHud === 'pointer');
@@ -635,6 +647,18 @@ export class HudView {
       h.pointerUpgrade.x + 6,
       h.pointerUpgrade.y + Math.floor(h.pointerUpgrade.h / 2),
     );
+
+    if (h.pointerOverride) {
+      drawCheckbox(g, h.pointerOverride, s.pointer.manualOverride);
+      this.pointerOverrideButton.text = 'Override';
+      this.pointerOverrideButton.style.fill = PAL.text;
+      this.pointerOverrideButton.position.set(
+        h.pointerOverride.x + 20,
+        h.pointerOverride.y + Math.floor(h.pointerOverride.h / 2),
+      );
+    } else {
+      this.pointerOverrideButton.text = '';
+    }
 
     if (h.map) {
       const name = levelById(s.levelId).name;
@@ -896,8 +920,12 @@ export class HudView {
       this.drawInfoBox(g, this.pointerTitle, this.pointerRows, x, y, w, contents);
     } else {
       this.pointerTitle.text = 'POINTER';
-      const cost = nextStageCost(s.pointer);
-      const pointer = [pointerInfo(s.pointer).name, cost === null ? 'Max level' : `Upgrade $${formatNumber(cost)}`];
+      const cost = nextPointerCost(s.pointer);
+      const name = pointerInfo(s.pointer).name;
+      const pointer = [
+        s.pointer.stage >= 2 ? `${name} L${s.pointer.clickLevel}` : name,
+        cost === null ? 'Max level' : `Upgrade $${formatNumber(cost)}`,
+      ];
       this.drawInfoBox(g, this.pointerTitle, this.pointerRows, x, y, w, pointer);
     }
   }
@@ -976,6 +1004,15 @@ export class HudView {
     bevel(g, b.restart, true, PAL.face);
     this.modalRestart.text = 'Restart Windows';
     this.modalRestart.position.set(b.restart.x + b.restart.w / 2, b.restart.y + b.restart.h / 2);
+  }
+}
+
+/** A Windows checkbox: a white sunken box with the standard tick glyph when checked. */
+function drawCheckbox(g: Graphics, r: Rect, checked: boolean): void {
+  const box: Rect = { x: r.x, y: r.y + Math.floor((r.h - 12) / 2), w: 12, h: 12 };
+  bevel(g, box, false, PAL.highlight);
+  if (checked) {
+    g.moveTo(box.x + 2, box.y + 6).lineTo(box.x + 5, box.y + 9).lineTo(box.x + 10, box.y + 3).stroke({ width: 1, color: PAL.text });
   }
 }
 

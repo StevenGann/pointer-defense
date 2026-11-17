@@ -79,6 +79,9 @@ let repairSpend = 0;
 const callMode = hasFlag('--call');
 const callAllMode = hasFlag('--call-all');
 const callSweepMode = hasFlag('--call-sweep');
+// --clicker: the clicker comparison — a player clicking at 2 clicks/s and buying pointer levels
+// whenever affordable, judged against the same build with no clicking at all.
+const clickerMode = hasFlag('--clicker');
 // --level <id> selects one authored map; the default runs all three and prints one line each.
 const levelFlag = flag('--level', null);
 const activeLevels = levelFlag ? [levelById(levelFlag)] : [...LEVELS];
@@ -461,7 +464,7 @@ function repairWallsDuringBuild(s) {
 }
 
 /** Build-phase policy: finish the maze, upgrade cheaply, then place coverage towers. */
-function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, maxTowers = MAX_TOWERS, coverage = false) {
+function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, maxTowers = MAX_TOWERS, coverage = false, buyPointer = false) {
   if (noBuild) {
     // Click-only player: no towers, spend salvage on the pointer when it is affordable.
     while (upgradePointer(s)) {
@@ -477,6 +480,13 @@ function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, 
     const t = plan[nextWall];
     if (!placeTower(s, mazeKind, t.col, t.row)) break;
     nextWall++;
+  }
+  // A clicker spends on the pointer before tower upgrades: the maze keeps the lane, then the pointer
+  // gets priority so the click ladder is what carries the run.
+  if (buyPointer) {
+    while (upgradePointer(s)) {
+      /* keep spending while affordable */
+    }
   }
   upgradePass(s);
   const path = currentPath(s);
@@ -641,14 +651,14 @@ function allocateSpecs(profile) {
 
 // --- Wave / session loop ----------------------------------------------------------------------
 
-function playWave(s, wave, leakList, popups) {
+function playWave(s, wave, leakList, popups, clicksPerSec = cps, clicking = true) {
   if (!startWave(s)) return { status: 'ended' };
-  const clickInterval = Math.max(1, Math.round(TICK_HZ / cps));
+  const clickInterval = Math.max(1, Math.round(TICK_HZ / clicksPerSec));
   const dmgStart = { tower: s.economy.damage.tower, pointer: s.economy.damage.pointer };
   let clicks = 0;
   let guard = 0;
   while (s.phase === 'wave') {
-    if (s.enemies.length > 0 && clicks % clickInterval === 0) doClick(s);
+    if (clicking && s.enemies.length > 0 && clicks % clickInterval === 0) doClick(s);
     tick(s);
     reactToPopups(s, popups);
     clicks++;
@@ -674,7 +684,7 @@ function playWave(s, wave, leakList, popups) {
 }
 
 /** Play one full run from a fresh state; returns the outcome. */
-function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = MAX_TOWERS, coverage = false) {
+function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = MAX_TOWERS, coverage = false, clicksPerSec = cps, clicking = true, buyPointer = false) {
   resetClickRng();
   repairSpend = 0;
   const s = createStateOn(profile, levelId);
@@ -684,8 +694,8 @@ function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = 
   let wallIdx = 0;
   if (!quiet && !silent) console.log(`--- ${label} ---`);
   for (let wave = 1; ; wave++) {
-    wallIdx = buildPhase(s, wave, wallIdx, counts, useSupport, false, maxTowers, coverage);
-    const result = playWave(s, wave, leakList, popups);
+    wallIdx = buildPhase(s, wave, wallIdx, counts, useSupport, false, maxTowers, coverage, buyPointer);
+    const result = playWave(s, wave, leakList, popups, clicksPerSec, clicking);
     if (result.status === 'died') {
       return {
         reached: false,
@@ -727,7 +737,7 @@ function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = 
 }
 
 /** Play a full session (reboot at --reboot-at, then run to completion) with a given support policy. */
-function runSession(useSupport, label, levelId, maxTowers = MAX_TOWERS, coverage = false) {
+function runSession(useSupport, label, levelId, maxTowers = MAX_TOWERS, coverage = false, clicksPerSec = cps, clicking = true, buyPointer = false) {
   let profile = defaultProfile();
   let totalSpecs = 0;
   let reboots = 0;
@@ -735,7 +745,7 @@ function runSession(useSupport, label, levelId, maxTowers = MAX_TOWERS, coverage
   let final = null;
 
   for (let run = 1; ; run++) {
-    const result = playRun(profile, run === 1 ? rebootAt : 0, `${label} run ${run}`, useSupport, levelId, maxTowers, coverage);
+    const result = playRun(profile, run === 1 ? rebootAt : 0, `${label} run ${run}`, useSupport, levelId, maxTowers, coverage, clicksPerSec, clicking, buyPointer);
     reboots = run - 1;
     totalRepairSpend += repairSpend;
     if (result.reached || !result.reboot) {
@@ -1050,6 +1060,35 @@ if (repairMode) {
   }
   silent = false;
   process.exit(repairReached ? 0 : 1);
+}
+
+if (clickerMode) {
+  // The clicker comparison: a player clicking at 2 clicks/s and buying pointer levels whenever
+  // affordable, against the same build with no clicking. Both legs use the canonical map board.
+  const CLICKER_CPS = 2;
+  silent = true;
+  console.log('\n=== pointer clicker ===');
+  console.log('  map          mode      waves cleared   integrity   salvage   click dmg%');
+  let clickerReached = true;
+  for (const level of activeLevels) {
+    const clicker = runSession(true, 'clicker', level.id, MAP_MAX_TOWERS, true, CLICKER_CPS, true, true);
+    const noclick = runSession(true, 'no-click', level.id, MAP_MAX_TOWERS, true, CLICKER_CPS, false, false);
+    for (const [mode, run] of [
+      ['clicker', clicker],
+      ['no-click', noclick],
+    ]) {
+      const f = run.final;
+      const total = f.state.economy.damage.tower + f.state.economy.damage.pointer;
+      const pct = total > 0 ? Math.round((f.state.economy.damage.pointer / total) * 100) : 0;
+      console.log(
+        `  ${level.id.padEnd(11)}  ${mode.padEnd(8)}  ${String(f.clearedWaves).padStart(13)}  ` +
+          `${String(f.integrity).padStart(9)}  ${String(f.earned).padStart(7)}  ${String(pct).padStart(9)}%`,
+      );
+    }
+    if (!clicker.final.reached) clickerReached = false;
+  }
+  silent = false;
+  process.exit(clickerReached ? 0 : 1);
 }
 
 if (wallMode) {
