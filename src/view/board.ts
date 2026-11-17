@@ -10,7 +10,7 @@ import {
   type RunState,
 } from '../core/state.ts';
 import { radiusOf, type Enemy, type EnemyKind } from '../core/enemies.ts';
-import { cursorRadius, effectiveStats, isGateLocked, isRepairing, repairProgress, TOWER_STATS, type Tower, type TowerKind } from '../core/towers.ts';
+import { cursorRadius, effectiveStats, isFullyUpgraded, isGateLocked, isRepairing, repairProgress, TOWER_STATS, type Branch, type Tower, type TowerKind } from '../core/towers.ts';
 import { tileAt, COLS, ROWS, type Grid, type Tile } from '../core/grid.ts';
 import { toggleOpenAt, toggleProgress, type LevelToggle } from '../core/levels.ts';
 import { dashRects, offsetSegment, routeOffset, type RouteSegment } from './route.ts';
@@ -25,6 +25,16 @@ import {
   WALL_OUTLINE,
   type WallState,
 } from './wallAppearance.ts';
+import {
+  branchMarkSpec,
+  healthBarRect,
+  PIP_FILL,
+  PIP_HIGHLIGHT,
+  pipRect,
+  pipUsesBottomCorner,
+  type MarkPrimitive,
+  type Rect,
+} from './branchMarks.ts';
 import {
   enemyDrawOrder,
   popupCloseHit,
@@ -450,7 +460,12 @@ function drawTower(
       drawBar(g, cx, cy, cell, t.hp / t.maxHp, healthColor(t.hp / t.maxHp));
     }
   } else {
-    drawTowerShape(g, t.kind, cx, cy, cell, 1, t.angle);
+    drawTowerShape(g, t.kind, cx, cy, cell, 1, t.angle, t.branch);
+  }
+
+  if (isFullyUpgraded(t)) {
+    const r = pipRect(cx, cy, cell, pipUsesBottomCorner(t, clock));
+    drawPip(g, r);
   }
 }
 
@@ -547,6 +562,7 @@ function drawTowerShape(
   cell: number,
   alpha: number,
   angle = 0,
+  branch: Branch | null = null,
 ): void {
   const color = TOWER_COLOR[kind];
   const fill = { color, alpha };
@@ -592,9 +608,65 @@ function drawTowerShape(
       .lineTo(cx + cw, top + 6)
       .stroke(outline);
   }
+
+  drawBranchMark(g, kind, branch, cx, cy, cell, fill, outline);
 }
 
-/** A 2 px bevel: two 1 px lines on each side, with the outer edge first. */
+/** Draw a branch mark from its Pixi-free spec, using the tower's own fill and outline colours. */
+function drawBranchMark(
+  g: Graphics,
+  kind: TowerKind,
+  branch: Branch | null,
+  cx: number,
+  cy: number,
+  cell: number,
+  fill: { color: number; alpha: number },
+  outline: { width: number; color: number; alpha: number },
+): void {
+  const spec = branchMarkSpec(kind, branch);
+  if (spec === null) return;
+  for (const p of spec.primitives) {
+    drawMarkPrimitive(g, p, cx, cy, cell, fill, outline);
+  }
+}
+
+function drawMarkPrimitive(
+  g: Graphics,
+  p: MarkPrimitive,
+  cx: number,
+  cy: number,
+  cell: number,
+  fill: { color: number; alpha: number },
+  outline: { width: number; color: number; alpha: number },
+): void {
+  switch (p.type) {
+    case 'rect':
+      g.rect(cx + p.x * cell, cy + p.y * cell, p.w * cell, p.h * cell).fill(fill).stroke(outline);
+      break;
+    case 'line':
+      g.moveTo(cx + p.x1 * cell, cy + p.y1 * cell).lineTo(cx + p.x2 * cell, cy + p.y2 * cell).stroke(outline);
+      break;
+    case 'poly':
+      g.poly(p.pts.map((v, i) => (i % 2 === 0 ? cx : cy) + v * cell)).fill(fill).stroke(outline);
+      break;
+    case 'ring':
+      g.circle(cx + p.x * cell, cy + p.y * cell, p.r * cell).stroke(outline);
+      break;
+    case 'arc':
+      g.moveTo(cx + (p.x + Math.cos(p.a0) * p.r) * cell, cy + (p.y + Math.sin(p.a0) * p.r) * cell)
+        .arc(cx + p.x * cell, cy + p.y * cell, p.r * cell, p.a0, p.a1)
+        .stroke(outline);
+      break;
+  }
+}
+
+/** The fully-upgraded pip: a saturated green 4x4 square with a 1 px bright top-left highlight. */
+function drawPip(g: Graphics, r: Rect): void {
+  g.rect(r.x, r.y, r.w, r.h).fill({ color: PIP_FILL });
+  g.rect(r.x, r.y, r.w, 1).fill({ color: PIP_HIGHLIGHT });
+  g.rect(r.x, r.y, 1, r.h).fill({ color: PIP_HIGHLIGHT });
+}
+
 function wallBevel(
   g: Graphics,
   x: number,
@@ -936,11 +1008,9 @@ const REPAIR_COLOR = 0x0080c0;
 /** A thin bar above a wall: dark track with a `ratio`-wide fill in `color`. */
 function drawBar(g: Graphics, cx: number, cy: number, cell: number, ratio: number, color: number): void {
   const r = Math.max(0, Math.min(1, ratio));
-  const w = Math.round(cell * 0.8);
-  const x0 = Math.round(cx - w / 2);
-  const y0 = Math.round(cy - cell * 0.5 - 6);
-  g.rect(x0, y0, w, 3).fill({ color: PAL.dark });
-  g.rect(x0 + 1, y0 + 1, Math.max(0, Math.round((w - 2) * r)), 1).fill({ color });
+  const bar = healthBarRect(cx, cy, cell);
+  g.rect(bar.x, bar.y, bar.w, bar.h).fill({ color: PAL.dark });
+  g.rect(bar.x + 1, bar.y + 1, Math.max(0, Math.round((bar.w - 2) * r)), 1).fill({ color });
 }
 
 function drawReticle(g: Graphics, state: RunState, board: { x: number; y: number; cell: number }, cell: number): void {

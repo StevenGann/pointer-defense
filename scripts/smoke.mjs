@@ -40,7 +40,7 @@ import {
   autoWaveStatus,
   AUTO_WAVE_DELAY_TICKS,
 } from '../src/core/state.ts';
-import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor } from '../src/core/towers.ts';
+import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, popupCountForWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
@@ -82,6 +82,7 @@ import {
 } from '../src/view/wallAppearance.ts';
 import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, branchName } from '../src/view/tooltipText.ts';
 import { BoardView, staticLayerKey } from '../src/view/board.ts';
+import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld } from '../src/view/chrome.ts';
 import { backingStorePixelSize } from '../src/view/screen.ts';
 import {
@@ -2701,6 +2702,100 @@ function cursorTower(tier, branch) {
     if (original === undefined) delete globalThis.matchMedia;
     else globalThis.matchMedia = original;
   }
+}
+
+// --- 29. Branch marks and the fully-upgraded pip ----------------------------------------------
+{
+  // 29a. Every kind/branch combination produces a distinct mark, and unbranched or unmarked kinds
+  // (walls, cursors) draw none.
+  const markedKinds = ['gun', 'cannon', 'taser', 'frost', 'laser', 'beacon'];
+  const seen = new Set();
+  let distinct = true;
+  for (const kind of markedKinds) {
+    for (const branch of ['A', 'B']) {
+      const spec = branchMarkSpec(kind, branch);
+      if (spec === null) {
+        distinct = false;
+        continue;
+      }
+      const key = JSON.stringify(spec.primitives);
+      if (seen.has(key)) distinct = false;
+      seen.add(key);
+    }
+  }
+  check(distinct && seen.size === 12, 'every kind/branch combination produces a distinct mark');
+  check(
+    branchMarkSpec('wall', 'A') === null && branchMarkSpec('wall', 'B') === null && branchMarkSpec('wall', 'C') === null,
+    'walls carry no branch mark (their button states do)',
+  );
+  check(branchMarkSpec('cursor', 'A') === null && branchMarkSpec('cursor', 'B') === null,
+    'cursors carry no branch mark');
+  check(branchMarkSpec('gun', null) === null, 'an unbranched tower carries no mark');
+}
+
+{
+  // 29b. The pip appears exactly at the maximum tier and disappears while a further upgrade exists.
+  const gun = createTower(1, 'gun', 5, 5);
+  gun.tier = 4;
+  gun.branch = 'A';
+  check(!isFullyUpgraded(gun), 'a tier-4 branched gun is not fully upgraded');
+  check(!towerTooltipLines(gun, 0).map(tooltipText).includes('Fully upgraded'),
+    'the tooltip does not name the pip while a further upgrade exists');
+  gun.tier = 5;
+  check(isFullyUpgraded(gun), 'a tier-5 branched gun is fully upgraded');
+  check(towerTooltipLines(gun, 0).map(tooltipText).includes('Fully upgraded'),
+    'the tooltip names the pip at the maximum tier');
+
+  const cursor = createTower(2, 'cursor', 5, 5);
+  cursor.tier = 5;
+  cursor.branch = 'B';
+  check(isFullyUpgraded(cursor), 'a tier-5 branched cursor is fully upgraded');
+  check(towerTooltipLines(cursor, 0).map(tooltipText).includes('Fully upgraded'),
+    'the cursor tooltip names the pip too');
+}
+
+{
+  // 29c. The pip is absent at tier 3 with no branch and present once the wall's branch is chosen.
+  const wall = createTower(3, 'wall', 5, 5);
+  wall.tier = 3;
+  wall.branch = null;
+  check(!isFullyUpgraded(wall), 'a wall at tier 3 with no branch is not fully upgraded');
+  check(!towerTooltipLines(wall, 0).map(tooltipText).includes('Fully upgraded'),
+    'the tooltip does not name the pip before the wall branches');
+  wall.branch = 'A';
+  check(isFullyUpgraded(wall), 'a branched wall is fully upgraded (walls branch once)');
+  check(towerTooltipLines(wall, 0).map(tooltipText).includes('Fully upgraded'),
+    'the tooltip names the pip after the wall branches');
+}
+
+{
+  // 29d. A damaged wall's pip sits in the corner the health bar does not use.
+  const intersects = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+  const damaged = createTower(4, 'wall', 5, 5);
+  damaged.tier = 3;
+  damaged.branch = 'A';
+  damaged.maxHp = 1080;
+  damaged.hp = 540;
+  check(pipUsesBottomCorner(damaged, 0) === true, 'a damaged wall routes its pip to the bottom corner');
+
+  const full = createTower(5, 'wall', 5, 5);
+  full.tier = 3;
+  full.branch = 'A';
+  full.maxHp = 1080;
+  full.hp = 1080;
+  check(pipUsesBottomCorner(full, 0) === false, 'a full-health wall keeps the top-right pip');
+  const gun = createTower(6, 'gun', 5, 5);
+  check(pipUsesBottomCorner(gun, 0) === false, 'a non-wall never routes its pip to the bottom');
+
+  const cell = 32;
+  const cx = 5.5 * cell;
+  const cy = 5.5 * cell;
+  const bar = healthBarRect(cx, cy, cell);
+  const bottomPip = pipRect(cx, cy, cell, true);
+  check(!intersects(bottomPip, bar), 'a damaged wall pip does not collide with its health bar');
+  check(pipRect(cx, cy, cell, false).x > cx && pipRect(cx, cy, cell, false).y < cy,
+    'the normal pip sits in the tower tile top-right corner');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

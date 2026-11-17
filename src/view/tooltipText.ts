@@ -5,6 +5,7 @@ import {
   cursorRadius,
   effectiveStats,
   gateLockRemainingSeconds,
+  isFullyUpgraded,
   isGateLocked,
   isRepairing,
   repairCost,
@@ -163,7 +164,9 @@ export function paletteTooltipLines(kind: TowerKind): string[] {
 /** Tooltip lines for a placed tower: its live stats with aura bonuses, as the sim sees them. */
 export function towerTooltipLines(tower: Tower, clock: number, pointer?: PointerState, specs?: SpecLevels): string[] {
   if (tower.kind === 'cursor') {
-    return pointer && specs ? cursorTooltipLines(tower, pointer, specs) : [`Cursor T${tower.tier}`];
+    const lines = pointer && specs ? cursorTooltipLines(tower, pointer, specs) : [`Cursor T${tower.tier}`];
+    if (isFullyUpgraded(tower)) lines.push('Fully upgraded');
+    return lines;
   }
   const branch = tower.branch === null ? '' : ` — ${branchName(tower.kind, tower.branch)}`;
   const name = `${TOWER_STATS[tower.kind].name} T${tower.tier}${branch}`;
@@ -181,7 +184,9 @@ export function towerTooltipLines(tower: Tower, clock: number, pointer?: Pointer
               ? 'Open — ground passes through'
               : 'Closed — blocks ground'
             : 'Blocks ground only';
-    return [name, hp, blocks, `Sell $${formatNumber(sellValue(tower))}`];
+    const lines = [name, hp, blocks, `Sell $${formatNumber(sellValue(tower))}`];
+    if (isFullyUpgraded(tower)) lines.push('Fully upgraded');
+    return lines;
   }
 
   const st = effectiveStats(tower);
@@ -190,7 +195,7 @@ export function towerTooltipLines(tower: Tower, clock: number, pointer?: Pointer
   const firing = st.fireInterval > 0;
   const rate = firing ? TICK_HZ / st.fireInterval : 0;
   const dps = firing ? damage * rate : 0;
-  return [
+  const lines = [
     name,
     `Damage ${damage.toFixed(1)} · Range ${range.toFixed(1)}`,
     `Rate ${firing ? rate.toFixed(1) + '/s' : '—'} · DPS ${firing ? dps.toFixed(1) : '—'}`,
@@ -198,6 +203,8 @@ export function towerTooltipLines(tower: Tower, clock: number, pointer?: Pointer
     turnText(st.turnRate),
     `Sell $${formatNumber(sellValue(tower))}`,
   ];
+  if (isFullyUpgraded(tower)) lines.push('Fully upgraded');
+  return lines;
 }
 
 /** Tooltip lines for a placed cursor tower: its rate, radius and the ladder-derived click damage. */

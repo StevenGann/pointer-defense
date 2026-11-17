@@ -483,6 +483,16 @@ export function sellValue(tower: Tower): number {
 }
 
 /**
+ * True when the tower has nothing left to buy: a branched tower at its final tier. A standard tower
+ * or cursor is finished at tier 5, a wall the moment its tier-3 branch is chosen (walls branch once).
+ * A further upgrade that exists but is unaffordable does not count — this is "nothing left to buy",
+ * not "you cannot afford the next thing".
+ */
+export function isFullyUpgraded(tower: Tower): boolean {
+  return tower.branch !== null && upgradeCost(tower) === null;
+}
+
+/**
  * Recompute every tower's beacon aura bonuses. Idempotent; called whenever the set of towers
  * changes. Each tower starts at 1x damage / +0 range, then beacons in range multiply/add.
  */
