@@ -79,9 +79,11 @@ let repairSpend = 0;
 const callMode = hasFlag('--call');
 const callAllMode = hasFlag('--call-all');
 const callSweepMode = hasFlag('--call-sweep');
-// --clicker: the clicker comparison — a player clicking at 2 clicks/s and buying pointer levels
-// whenever affordable, judged against the same build with no clicking at all.
-const clickerMode = hasFlag('--clicker');
+// --clicker (alias --advantage): the clicker comparison — a player clicking at 2 clicks/s and buying
+// pointer levels whenever affordable (clicker-first), judged against the same build with no clicking
+// at all, and against the standard tower build. The advantage is the clicker-first integrity over the
+// standard run; the pointer ladder may pull ahead, but it must not dominate (cap +8 integrity).
+const clickerMode = hasFlag('--clicker') || hasFlag('--advantage');
 // --level <id> selects one authored map; the default runs all three and prints one line each.
 const levelFlag = flag('--level', null);
 const activeLevels = levelFlag ? [levelById(levelFlag)] : [...LEVELS];
@@ -1067,16 +1069,24 @@ if (clickerMode) {
   // affordable, against the same board with the pointer switched off. The clicker leg is the
   // clicker-first policy (pointer bought before tower upgrades); the no-click leg is the standard
   // build policy with clicking disabled, so a weak no-click row cannot be blamed on the clicker's
-  // build. Both legs use the canonical map board.
+  // build. The standard leg is the tower build at the normal click rate, so the advantage — how far
+  // the clicker-first pointer gets ahead of the tower build — is measured against it directly. All
+  // three legs use the canonical map board.
   const CLICKER_CPS = 2;
+  const ADVANTAGE_CAP = 8;
   silent = true;
   console.log('\n=== pointer clicker ===');
   console.log('  map          mode      waves cleared   integrity   salvage   click dmg%');
   let clickerReached = true;
+  let maxAdvantage = -Infinity;
   for (const level of activeLevels) {
+    const standard = runSession(support, 'standard', level.id, MAP_MAX_TOWERS, true, cps, true, false);
     const clicker = runSession(true, 'clicker', level.id, MAP_MAX_TOWERS, true, CLICKER_CPS, true, true);
     const noclick = runSession(true, 'no-click', level.id, MAP_MAX_TOWERS, true, cps, false, false);
+    const advantage = clicker.final.integrity - standard.final.integrity;
+    maxAdvantage = Math.max(maxAdvantage, advantage);
     for (const [mode, run] of [
+      ['standard', standard],
       ['clicker', clicker],
       ['no-click', noclick],
     ]) {
@@ -1088,9 +1098,16 @@ if (clickerMode) {
           `${String(f.integrity).padStart(9)}  ${String(f.earned).padStart(7)}  ${String(pct).padStart(9)}%`,
       );
     }
+    console.log(
+      `  ${level.id.padEnd(11)}  advantage  clicker ${clicker.final.integrity} - standard ${standard.final.integrity} = +${advantage}  (clicker overclock L${clicker.final.state.pointer.clickLevel})`,
+    );
     if (!clicker.final.reached) clickerReached = false;
   }
   silent = false;
+  console.log(`\nmax clicker advantage over standard: +${maxAdvantage} integrity (cap +${ADVANTAGE_CAP})`);
+  if (maxAdvantage > ADVANTAGE_CAP) {
+    console.log(`WARNING: the clicker-first pointer is ${maxAdvantage - ADVANTAGE_CAP} integrity too far ahead of the tower build.`);
+  }
   process.exit(clickerReached ? 0 : 1);
 }
 
