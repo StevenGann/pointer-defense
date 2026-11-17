@@ -26,7 +26,7 @@ into every future run.
 | Key | Action |
 | --- | --- |
 | Mouse | Click to place towers and shoot enemies; right-click cancels a selection |
-| `1`–`7` | Select the seven tower kinds, in palette order (also works during a wave) |
+| `1`–`8` | Select the eight tower kinds, in palette order (also works during a wave) |
 | `Esc` | Clear the current selection and close any open menu |
 | `U` | Upgrade the selected tower |
 | `X` | Sell the selected tower |

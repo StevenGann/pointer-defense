@@ -408,6 +408,10 @@ function taserTarget(wave) {
 function cannonTarget(wave) {
   return wave >= 4 ? Math.min(5, 1 + Math.floor((wave - 4) / 15)) : 0;
 }
+function cursorTarget(wave) {
+  // Cursors are a late-game buy: two of them, once the board and the click ladder are established.
+  return wave >= 40 ? 2 : 0;
+}
 
 /** Specialist slots still needed to reach wave 100's roster, so extra Guns never crowd them out. */
 function futureSpecialistSlots(counts) {
@@ -466,7 +470,7 @@ function repairWallsDuringBuild(s) {
 }
 
 /** Build-phase policy: finish the maze, upgrade cheaply, then place coverage towers. */
-function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, maxTowers = MAX_TOWERS, coverage = false, buyPointer = false) {
+function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, maxTowers = MAX_TOWERS, coverage = false, buyPointer = false, buyCursor = true) {
   if (noBuild) {
     // Click-only player: no towers, spend salvage on the pointer when it is affordable.
     while (upgradePointer(s)) {
@@ -521,6 +525,18 @@ function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, 
       if (s.economy.salvage < TOWER_STATS.gun.cost) break;
       const tile = chooseCoverageTile(s, currentPath(s));
       if (!tile || !placeTower(s, 'gun', tile.col, tile.row)) break;
+    }
+  }
+
+  // Cursor towers: a late-game buy that turns the click ladder into autonomous board damage. The
+  // standard plan carries two; they are upgraded to tier 2 by the pass above like every cheap tower.
+  // The clicker comparison turns them off so the ladder's own advantage stays the measured thing.
+  if (buyCursor && nextWall >= plan.length) {
+    const want = cursorTarget(wave) - s.towers.filter((t) => t.kind === 'cursor').length;
+    for (let guard = 0; guard < want; guard++) {
+      if (s.towers.length >= maxTowers || s.economy.salvage < TOWER_STATS.cursor.cost) break;
+      const tile = chooseCoverageTile(s, currentPath(s));
+      if (!tile || !placeTower(s, 'cursor', tile.col, tile.row)) break;
     }
   }
 
@@ -686,7 +702,7 @@ function playWave(s, wave, leakList, popups, clicksPerSec = cps, clicking = true
 }
 
 /** Play one full run from a fresh state; returns the outcome. */
-function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = MAX_TOWERS, coverage = false, clicksPerSec = cps, clicking = true, buyPointer = false) {
+function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = MAX_TOWERS, coverage = false, clicksPerSec = cps, clicking = true, buyPointer = false, buyCursor = true) {
   resetClickRng();
   repairSpend = 0;
   const s = createStateOn(profile, levelId);
@@ -696,7 +712,7 @@ function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = 
   let wallIdx = 0;
   if (!quiet && !silent) console.log(`--- ${label} ---`);
   for (let wave = 1; ; wave++) {
-    wallIdx = buildPhase(s, wave, wallIdx, counts, useSupport, false, maxTowers, coverage, buyPointer);
+    wallIdx = buildPhase(s, wave, wallIdx, counts, useSupport, false, maxTowers, coverage, buyPointer, buyCursor);
     const result = playWave(s, wave, leakList, popups, clicksPerSec, clicking);
     if (result.status === 'died') {
       return {
@@ -739,7 +755,7 @@ function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = 
 }
 
 /** Play a full session (reboot at --reboot-at, then run to completion) with a given support policy. */
-function runSession(useSupport, label, levelId, maxTowers = MAX_TOWERS, coverage = false, clicksPerSec = cps, clicking = true, buyPointer = false) {
+function runSession(useSupport, label, levelId, maxTowers = MAX_TOWERS, coverage = false, clicksPerSec = cps, clicking = true, buyPointer = false, buyCursor = true) {
   let profile = defaultProfile();
   let totalSpecs = 0;
   let reboots = 0;
@@ -747,7 +763,7 @@ function runSession(useSupport, label, levelId, maxTowers = MAX_TOWERS, coverage
   let final = null;
 
   for (let run = 1; ; run++) {
-    const result = playRun(profile, run === 1 ? rebootAt : 0, `${label} run ${run}`, useSupport, levelId, maxTowers, coverage, clicksPerSec, clicking, buyPointer);
+    const result = playRun(profile, run === 1 ? rebootAt : 0, `${label} run ${run}`, useSupport, levelId, maxTowers, coverage, clicksPerSec, clicking, buyPointer, buyCursor);
     reboots = run - 1;
     totalRepairSpend += repairSpend;
     if (result.reached || !result.reboot) {
@@ -1080,9 +1096,9 @@ if (clickerMode) {
   let clickerReached = true;
   let maxAdvantage = -Infinity;
   for (const level of activeLevels) {
-    const standard = runSession(support, 'standard', level.id, MAP_MAX_TOWERS, true, cps, true, false);
-    const clicker = runSession(true, 'clicker', level.id, MAP_MAX_TOWERS, true, CLICKER_CPS, true, true);
-    const noclick = runSession(true, 'no-click', level.id, MAP_MAX_TOWERS, true, cps, false, false);
+    const standard = runSession(support, 'standard', level.id, MAP_MAX_TOWERS, true, cps, true, false, false);
+    const clicker = runSession(true, 'clicker', level.id, MAP_MAX_TOWERS, true, CLICKER_CPS, true, true, false);
+    const noclick = runSession(true, 'no-click', level.id, MAP_MAX_TOWERS, true, cps, false, false, false);
     const advantage = clicker.final.integrity - standard.final.integrity;
     maxAdvantage = Math.max(maxAdvantage, advantage);
     for (const [mode, run] of [

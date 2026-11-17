@@ -2,10 +2,13 @@ import { Container, Graphics, Text } from 'pixi.js';
 import { bevel, FONT, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
-import { comboMultiplier, nextPointerCost, pointerInfo } from '../core/pointer.ts';
-import { canCycleLevel, currentPath, isFinalWave, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
+import { clickDamage, comboMultiplier, nextPointerCost, pointerInfo } from '../core/pointer.ts';
+import { canCycleLevel, currentPath, isFinalWave, pointerDamageMult, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
 import { levelById } from '../core/levels.ts';
 import {
+  cursorClickDamage,
+  cursorClickRate,
+  cursorRadius,
   effectiveStats,
   isRepairing,
   repairCost,
@@ -27,7 +30,7 @@ import {
   specEffectText,
   type SpecKind,
 } from '../core/save.ts';
-import { branchName, targetModeDisplay } from './tooltipText.ts';
+import { branchName, fmtClickDamage, targetModeDisplay } from './tooltipText.ts';
 
 /**
  * The HUD: status-bar text (hint / wave / salvage), the integrity readout, the pointer stage and
@@ -728,6 +731,11 @@ export class HudView {
 
       if (tower.kind === 'wall') {
         this.towerStats.text = tower.branch === null ? `HP ${Math.ceil(tower.hp)}` : `HP ${Math.ceil(tower.hp)}/${tower.maxHp}`;
+      } else if (tower.kind === 'cursor') {
+        const rate = cursorClickRate(tower);
+        const radius = cursorRadius(tower);
+        const dmg = cursorClickDamage(tower, clickDamage(s.pointer), pointerDamageMult(s.specs));
+        this.towerStats.text = `${rate.toFixed(1)}/s  dmg ${fmtClickDamage(dmg)}  rng ${radius.toFixed(1)}`;
       } else {
         const st = effectiveStats(tower);
         const damage = st.damage * tower.auraDamage;

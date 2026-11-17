@@ -1,4 +1,8 @@
 import {
+  cursorClickDamage,
+  cursorClickDamageFactor,
+  cursorClickRate,
+  cursorRadius,
   effectiveStats,
   gateLockRemainingSeconds,
   isGateLocked,
@@ -26,7 +30,8 @@ import {
   type PointerState,
   type PointerStage,
 } from '../core/pointer.ts';
-import { SPEC_CAPS, SPEC_NAMES, specEffectText, type SpecKind } from '../core/save.ts';
+import { SPEC_CAPS, SPEC_NAMES, specEffectText, type SpecKind, type SpecLevels } from '../core/save.ts';
+import { pointerDamageMult } from '../core/state.ts';
 import { TICK_HZ } from '../core/time.ts';
 
 /**
@@ -62,6 +67,7 @@ export const BRANCH_NAMES: Readonly<Record<TowerKind, Readonly<Partial<Record<Br
   laser: { A: 'Focus', B: 'Prism' },
   beacon: { A: 'Command', B: 'Relay' },
   wall: { A: 'Bulwark', B: 'Mesh', C: 'Toggle' },
+  cursor: { A: 'Overclock', B: 'Wide Search' },
 };
 
 /** The display name of a branch, falling back to the key so an unknown branch still reads. */
@@ -132,6 +138,9 @@ function traits(st: {
 
 /** Tooltip lines for a build-palette button (the tower's base, un-upgraded stats). */
 export function paletteTooltipLines(kind: TowerKind): string[] {
+  if (kind === 'cursor') {
+    return ['Cursor  $250', 'a cursor that clicks for 50% of your click damage, 2.5 tiles'];
+  }
   const b = TOWER_STATS[kind];
   const name = `${b.name}  $${formatNumber(b.cost)}`;
   if (kind === 'wall') {
@@ -146,7 +155,10 @@ export function paletteTooltipLines(kind: TowerKind): string[] {
 }
 
 /** Tooltip lines for a placed tower: its live stats with aura bonuses, as the sim sees them. */
-export function towerTooltipLines(tower: Tower, clock: number): string[] {
+export function towerTooltipLines(tower: Tower, clock: number, pointer?: PointerState, specs?: SpecLevels): string[] {
+  if (tower.kind === 'cursor') {
+    return pointer && specs ? cursorTooltipLines(tower, pointer, specs) : [`Cursor T${tower.tier}`];
+  }
   const branch = tower.branch === null ? '' : ` — ${branchName(tower.kind, tower.branch)}`;
   const name = `${TOWER_STATS[tower.kind].name} T${tower.tier}${branch}`;
 
@@ -182,6 +194,64 @@ export function towerTooltipLines(tower: Tower, clock: number): string[] {
   ];
 }
 
+/** Tooltip lines for a placed cursor tower: its rate, radius and the ladder-derived click damage. */
+export function cursorTooltipLines(tower: Tower, pointer: PointerState, specs: SpecLevels): string[] {
+  const branch = tower.branch === null ? '' : ` — ${branchName('cursor', tower.branch)}`;
+  const name = `Cursor T${tower.tier}${branch}`;
+  const rate = cursorClickRate(tower);
+  const radius = cursorRadius(tower);
+  const player = clickDamage(pointer);
+  const dmg = cursorClickDamage(tower, player, pointerDamageMult(specs));
+  return [
+    name,
+    `Rate ${rate.toFixed(1)}/s · Radius ${radius.toFixed(1)}`,
+    `Click damage ${fmtClickDamage(dmg)} (50% of ${fmtClickDamage(player)})`,
+    `Target: ${targetModeDisplay(tower)}`,
+    `Sell $${formatNumber(sellValue(tower))}`,
+  ];
+}
+
+/** Tooltip for a cursor's Upgrade button: the rate (and radius) change for the next tier. */
+export function cursorUpgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[] {
+  const cost = upgradeCost(tower);
+  if (cost === null) return [];
+  if (salvage < cost) return [cannotAffordText(salvage, cost)];
+  const next = (tower.tier + 1) as Tier;
+  const beforeRate = cursorClickRate(tower);
+  const afterRate = cursorClickRate({ ...tower, tier: next });
+  const beforeRng = cursorRadius(tower);
+  const afterRng = cursorRadius({ ...tower, tier: next });
+  const segments: TooltipSegment[] = [
+    { text: `Cursor T${tower.tier} → T${next} — rate ${fmt1(beforeRate)} → ` },
+    good(`${fmt1(afterRate)}/s`),
+  ];
+  if (afterRng !== beforeRng) segments.push({ text: ` · rng ${fmt1(beforeRng)} → ` }, good(fmt1(afterRng)));
+  segments.push({ text: `, $${formatNumber(cost)}` });
+  return [segments];
+}
+
+/** Tooltip for a cursor's tier-3 branch button: rate, radius and click-damage changes. */
+export function cursorBranchTooltipLines(tower: Tower, branch: Branch, salvage: number): TooltipLine[] {
+  const cost = upgradeCost(tower);
+  if (cost === null) return [];
+  if (salvage < cost) return [cannotAffordText(salvage, cost)];
+  const name = branchName('cursor', branch);
+  const beforeRate = cursorClickRate(tower);
+  const afterRate = cursorClickRate({ ...tower, tier: 3, branch });
+  const beforeRng = cursorRadius(tower);
+  const afterRng = cursorRadius({ ...tower, tier: 3, branch });
+  const beforeDmg = cursorClickDamageFactor(tower);
+  const afterDmg = cursorClickDamageFactor({ ...tower, tier: 3, branch });
+  const segments: TooltipSegment[] = [
+    { text: `${name} — rate ${fmt1(beforeRate)} → ` },
+    good(`${fmt1(afterRate)}/s`),
+  ];
+  if (afterRng !== beforeRng) segments.push({ text: ` · rng ${fmt1(beforeRng)} → ` }, good(fmt1(afterRng)));
+  if (afterDmg !== beforeDmg) segments.push({ text: ` · click dmg ×${fmt1(beforeDmg)} → ` }, good(`×${fmt1(afterDmg)}`));
+  segments.push({ text: `, $${formatNumber(cost)}` });
+  return [segments];
+}
+
 /** Disabled-reason text for a purchase the player cannot yet afford. */
 export function cannotAffordText(salvage: number, cost: number): string {
   return `Cannot afford ($${formatNumber(salvage)} of $${formatNumber(cost)})`;
@@ -204,6 +274,7 @@ function good(n: string): TooltipSegment {
  * computed from the same `effectiveStats` / `wallMaxHp` path the purchase uses.
  */
 export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[] {
+  if (tower.kind === 'cursor') return cursorUpgradeTooltipLines(tower, salvage);
   const cost = upgradeCost(tower);
   if (cost === null) return [];
   if (salvage < cost) return [cannotAffordText(salvage, cost)];
@@ -247,6 +318,7 @@ const BRANCH_BEHAVIOUR: Readonly<Partial<Record<TowerKind, Readonly<Partial<Reco
  * read differently and a branch that adds a behaviour says so in words.
  */
 export function branchTooltipLines(tower: Tower, branch: Branch, salvage: number): TooltipLine[] {
+  if (tower.kind === 'cursor') return cursorBranchTooltipLines(tower, branch, salvage);
   const cost = upgradeCost(tower);
   if (cost === null) return [];
   if (salvage < cost) return [cannotAffordText(salvage, cost)];

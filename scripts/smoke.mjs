@@ -36,7 +36,7 @@ import {
   upgradePointer,
   toggleManualOverride,
 } from '../src/core/state.ts';
-import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS } from '../src/core/towers.ts';
+import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, popupCountForWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
@@ -60,7 +60,7 @@ import {
   MARKED_DAMAGE_MULT,
 } from '../src/core/pointer.ts';
 import { loadProfile, saveProfile, defaultProfile } from '../src/core/save.ts';
-import { restartWindows, checkAchievements, enterEndless } from '../src/core/state.ts';
+import { restartWindows, checkAchievements, enterEndless, pointerDamageMult } from '../src/core/state.ts';
 import { dashRects, offsetSegment, routeOffset } from '../src/view/route.ts';
 import { enemyDrawOrder, popupCloseHit, popupCloseRect, popupWindowRect } from '../src/view/popupEnemy.ts';
 import {
@@ -73,7 +73,7 @@ import {
   WALL_FACE_DISABLED,
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
-import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage } from '../src/view/tooltipText.ts';
+import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, branchName } from '../src/view/tooltipText.ts';
 import { BoardView, staticLayerKey } from '../src/view/board.ts';
 import { computeLayout } from '../src/view/chrome.ts';
 
@@ -2079,6 +2079,222 @@ function chokeWalls(gaps) {
   const at60 = run(TICK_MS);
   check(at60 === run(1000 / 144), 'a click in the mix: same result at 60 Hz and 144 Hz frames');
   check(at60 === run(1000 / 23), 'a click in the mix: same result at 23 Hz frames');
+}
+
+// --- 25. Cursor towers -----------------------------------------------------------------------
+
+/** A cursor tower on open-field with a huge-HP grunt pinned at its home tile (an easy click target). */
+function cursorRig(tier = 1, branch = null) {
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  const c = s.towers.find((t) => t.kind === 'cursor');
+  c.tier = tier;
+  c.branch = branch;
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const e = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+  e.x = 5.5;
+  e.y = 5.5;
+  e.prevX = 5.5;
+  e.prevY = 5.5;
+  e.col = 5;
+  e.row = 5;
+  e.hp = 1e12;
+  e.maxHp = 1e12;
+  e.stunUntilTick = 999999;
+  s.enemies.push(e);
+  return { s, c, e };
+}
+
+/** A bare cursor tower of the given tier/branch, for the pure stat accessors. */
+function cursorTower(tier, branch) {
+  const t = createTower(1, 'cursor', 5, 5);
+  t.tier = tier;
+  t.branch = branch;
+  return t;
+}
+
+{
+  // 25a. The radius, rate and damage-factor accessors match the spec at every tier and branch.
+  check(cursorRadius(cursorTower(1, null)) === 2.5, 'cursor tier-1 radius is 2.5');
+  check(cursorRadius(cursorTower(2, null)) === 3.5, 'cursor tier-2 radius is 3.5');
+  check(cursorRadius(cursorTower(3, null)) === 4.5, 'cursor tier-3 radius is 4.5');
+  check(Math.abs(cursorRadius(cursorTower(3, 'B')) - 4.5 * 1.35) < 1e-9, 'Wide Search radius is 4.5 x1.35');
+  check(Math.abs(cursorClickRate(cursorTower(1, null)) - 1.0) < 1e-9, 'cursor tier-1 rate is 1.0/s');
+  check(Math.abs(cursorClickRate(cursorTower(2, null)) - 1.6) < 1e-9, 'cursor tier-2 rate is 1.6/s');
+  check(Math.abs(cursorClickRate(cursorTower(3, null)) - 2.2) < 1e-9, 'cursor tier-3 rate is 2.2/s');
+  check(Math.abs(cursorClickRate(cursorTower(3, 'A')) - 2.2 * 1.8) < 1e-9, 'Overclock rate is 2.2 x1.8');
+  check(Math.abs(cursorClickRate(cursorTower(3, 'B')) - 2.2 * 0.7) < 1e-9, 'Wide Search rate is 2.2 x0.7');
+  check(cursorClickIntervalTicks(cursorTower(1, null)) === 60, 'tier-1 cursor clicks every 60 ticks');
+  check(cursorClickIntervalTicks(cursorTower(3, 'A')) === 15, 'Overclock cursor clicks every 15 ticks');
+  check(Math.abs(cursorClickDamageFactor(cursorTower(3, 'A')) - 0.6) < 1e-9, 'Overclock per-click damage is x0.6');
+  check(cursorClickDamageFactor(cursorTower(3, 'B')) === 1, 'Wide Search keeps per-click damage at x1');
+  check(upgradeCost(cursorTower(1, null)) === 150, 'cursor tier-2 upgrade costs 150');
+  check(upgradeCost(cursorTower(2, null)) === 260, 'cursor tier-3 branch costs 260');
+}
+
+{
+  // 25b. The palette and placed tooltips name the cursor and its ladder-fed click damage.
+  check(
+    paletteTooltipLines('cursor').join(' | ') === 'Cursor  $250 | a cursor that clicks for 50% of your click damage, 2.5 tiles',
+    'palette tooltip reads the cursor spec',
+  );
+  check(branchName('cursor', 'A') === 'Overclock' && branchName('cursor', 'B') === 'Wide Search',
+    'cursor branches are named Overclock and Wide Search');
+
+  const { s, c } = cursorRig(1, null);
+  const lines = cursorTooltipLines(c, s.pointer, s.specs);
+  check(lines[0] === 'Cursor T1', `placed cursor tooltip names the tower (${lines[0]})`);
+  check(lines[1].includes('Radius 2.5'), `placed cursor tooltip names the radius (${lines[1]})`);
+  check(lines[2].includes('50% of 3'), `placed cursor tooltip shows the ladder feeding it (${lines[2]})`);
+  check(tooltipText(upgradeTooltipLines(c, s.economy.salvage)[0]).includes('rate 1.0'), 'cursor upgrade tooltip previews the rate');
+  check(tooltipText(cursorBranchTooltipLines(c, 'A', s.economy.salvage)[0]).includes('rate'), 'cursor branch tooltip previews the rate');
+}
+
+{
+  // 25c. Click damage is half the player's click damage, and follows a ladder bought mid-wave.
+  const { s } = cursorRig(1, null);
+  tick(s); // the cursor sits on its target, so the first tick clicks
+  const first = s.economy.damage.pointer;
+  check(Math.abs(first - 0.5 * clickDamage(s.pointer) * pointerDamageMult(s.specs)) < 1e-9,
+    `cursor click damage is half the player's click damage (${first} = 0.5 x ${clickDamage(s.pointer)})`);
+
+  check(upgradePointer(s), 'buy the reticle mid-wave');
+  let clicks = 0;
+  for (let i = 0; i < 1000 && clicks < 2; i++) {
+    tick(s);
+    clicks = s.events.filter((ev) => ev.type === 'damage').length;
+  }
+  const second = s.economy.damage.pointer - first;
+  check(Math.abs(second - 0.5 * clickDamage(s.pointer) * pointerDamageMult(s.specs)) < 1e-9,
+    `cursor click damage follows a ladder bought mid-wave (${second} = 0.5 x ${clickDamage(s.pointer)})`);
+}
+
+{
+  // 25d. A cursor clicks on the clock at each tier and each branch.
+  const countClicks = (tier, branch, ticks) => {
+    const { s } = cursorRig(tier, branch);
+    for (let i = 0; i < ticks; i++) tick(s);
+    return s.events.filter((ev) => ev.type === 'damage').length;
+  };
+  for (const [tier, branch] of [[1, null], [2, null], [3, null], [3, 'A'], [3, 'B']]) {
+    const ticks = 600;
+    const clicks = countClicks(tier, branch, ticks);
+    const iv = cursorClickIntervalTicks(cursorTower(tier, branch));
+    const expected = ticks / iv;
+    check(clicks >= Math.floor(expected) - 1 && clicks <= Math.ceil(expected) + 1,
+      `cursor clicks on the clock at tier ${tier}${branch ? ' ' + branch : ''} (${clicks} clicks in ${ticks} ticks)`);
+  }
+}
+
+{
+  // 25e. The cursor never leaves its radius, and the Wide Search branch widens it to 4.5 x1.35.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  const c = s.towers.find((t) => t.kind === 'cursor');
+  let maxD = 0;
+  for (let i = 0; i < 2000; i++) {
+    tick(s);
+    maxD = Math.max(maxD, Math.hypot(c.cursorX - 5.5, c.cursorY - 5.5));
+  }
+  check(maxD <= 2.5 + 1e-9, `cursor never leaves its tier-1 radius (max ${maxD.toFixed(3)} of 2.5)`);
+  check(maxD > 0.5, `the cursor actually wanders (max distance ${maxD.toFixed(3)})`);
+
+  check(upgradeTower(s, 5, 5) && chooseBranch(s, 5, 5, 'B'), 'branch the cursor to Wide Search');
+  const expected = 4.5 * 1.35;
+  check(Math.abs(cursorRadius(c) - expected) < 1e-9, `Wide Search radius is ${expected.toFixed(3)}`);
+  let maxBranched = 0;
+  for (let i = 0; i < 2000; i++) {
+    tick(s);
+    maxBranched = Math.max(maxBranched, Math.hypot(c.cursorX - 5.5, c.cursorY - 5.5));
+  }
+  check(maxBranched <= expected + 1e-9, `cursor stays within its branched radius (max ${maxBranched.toFixed(3)})`);
+}
+
+{
+  // 25f. A Strong cursor takes the brute over the closer grunt.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  const c = s.towers.find((t) => t.kind === 'cursor');
+  c.targetMode = 'strong';
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const brute = stationary(1, 'grunt', 1, 5.5, 4.5);
+  brute.hp = 500;
+  brute.maxHp = 500;
+  const grunt = stationary(2, 'grunt', 1, 5.5, 5.2);
+  grunt.hp = 20;
+  grunt.maxHp = 20;
+  s.enemies.push(brute, grunt);
+  for (let i = 0; i < 60; i++) tick(s);
+  check(brute.hp < 500, `strong cursor takes the brute over the closer grunt (brute hp ${brute.hp})`);
+  check(grunt.hp === 20, `strong cursor leaves the closer grunt alone (grunt hp ${grunt.hp})`);
+}
+
+{
+  // 25g. A cursor ignores an enemy hidden under a Pop Up, and never closes the window.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const grunt = stationary(1, 'grunt', 15, 5.5, 4.5);
+  const popup = stationary(2, 'popup', 15, 5.5, 4.5);
+  s.enemies.push(grunt, popup);
+  for (let i = 0; i < 60; i++) tick(s);
+  check(grunt.hp === grunt.maxHp, 'cursor ignores an enemy hidden under a Pop Up');
+  check(!popup.dead, 'cursor does not close the Pop Up window');
+}
+
+{
+  // 25h. A cursor never crits: a thousand clicks produce no crit event.
+  const { s } = cursorRig(1, null);
+  for (let i = 0; i < 60100; i++) tick(s);
+  const dmgEvents = s.events.filter((ev) => ev.type === 'damage');
+  check(dmgEvents.length >= 1000, `cursor produced ${dmgEvents.length} clicks (>= 1000)`);
+  check(dmgEvents.every((ev) => ev.crit !== true), 'cursor never crits (no crit event across 1000 clicks)');
+}
+
+{
+  // 25i. The wander is deterministic for one seed and differs for another.
+  const wander = (seed) => {
+    const s = stateOnLevel('open-field');
+    s.rng = seed;
+    s.economy.salvage = 100000;
+    placeTower(s, 'cursor', 5, 5);
+    for (let i = 0; i < 300; i++) tick(s);
+    const c = s.towers.find((t) => t.kind === 'cursor');
+    return JSON.stringify([c.cursorX, c.cursorY, c.cursorWanderAngle, c.cursorWanderSeed]);
+  };
+  const a = wander(0x12345678);
+  check(a === wander(0x12345678), 'cursor wander is deterministic for one seed');
+  check(a !== wander(0x9abcdef0), 'cursor wander differs for another seed');
+}
+
+{
+  // 25j. Fixed-timestep equivalence holds with cursors in flight.
+  const run = (frameMs) => {
+    const s = stateOnLevel('open-field');
+    s.economy.salvage = 100000;
+    placeTower(s, 'cursor', 5, 5);
+    startWave(s);
+    for (let t = 0; t < 900 * TICK_MS - frameMs; t += frameMs) step(s, frameMs);
+    while (s.tick < 1000) tick(s);
+    return JSON.stringify([
+      s.economy,
+      s.integrity,
+      s.enemies.map((e) => [e.id, e.hp, e.dist]),
+      s.rng,
+      s.clock,
+      s.towers.map((t) => [t.kind, t.cursorX, t.cursorY, t.cursorCooldown, t.cursorTargetId, t.cursorWanderSeed, t.cursorWanderAngle, t.cursorClickFx]),
+    ]);
+  };
+  const at60 = run(TICK_MS);
+  check(at60 === run(1000 / 144), 'cursors in flight: same result at 60 Hz and 144 Hz frames');
+  check(at60 === run(1000 / 23), 'cursors in flight: same result at 23 Hz frames');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

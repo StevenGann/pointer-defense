@@ -1,6 +1,6 @@
 import { secondsToTicks, TICK_HZ } from './time.ts';
 
-export type TowerKind = 'gun' | 'cannon' | 'taser' | 'frost' | 'laser' | 'beacon' | 'wall';
+export type TowerKind = 'gun' | 'cannon' | 'taser' | 'frost' | 'laser' | 'beacon' | 'wall' | 'cursor';
 
 export type Branch = 'A' | 'B' | 'C';
 
@@ -37,7 +37,7 @@ export interface TowerStats {
   readonly targetLock: TargetMode | null;
 }
 
-export const TOWER_KINDS: readonly TowerKind[] = ['gun', 'cannon', 'taser', 'frost', 'laser', 'beacon', 'wall'];
+export const TOWER_KINDS: readonly TowerKind[] = ['gun', 'cannon', 'taser', 'frost', 'laser', 'beacon', 'wall', 'cursor'];
 
 /** Data, not code: balance lives here. */
 export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
@@ -160,7 +160,85 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     auraRange: 0,
     targetLock: null,
   },
+  cursor: {
+    name: 'Cursor',
+    blurb: 'Clicks enemies for a share of your click damage',
+    cost: 250,
+    range: 2.5,
+    damage: 0,
+    fireInterval: secondsToTicks(1.0),
+    turnRate: 0,
+    splash: 0,
+    ignoresArmour: true,
+    slowFactor: 1,
+    slowTicks: 0,
+    pierce: 0,
+    auraDamage: 0,
+    auraRange: 0,
+    targetLock: null,
+  },
 };
+
+// ---------------------------------------------------------------------------------------------
+// Cursor tower: the one tower whose damage is derived from the pointer ladder. It never fires
+// through the normal damage path — the sim moves a flying cursor and applies pointer-sourced click
+// damage itself (state.ts). These accessors give the view and tooltips the same numbers the sim
+// uses, so a displayed number always matches what happens on the board.
+
+/** Fraction of the player's current click damage a cursor click deals (before its branch). */
+export const CURSOR_CLICK_DAMAGE_FACTOR = 0.5;
+/** Cursor flight speed toward a target, in tiles per second. */
+export const CURSOR_TRAVEL_SPEED = 6;
+/** Idle wander speed, in tiles per second. */
+export const CURSOR_WANDER_SPEED = 2;
+/** Distance in tiles at which the cursor is close enough to click its target. */
+export const CURSOR_CLICK_RANGE = 0.6;
+
+/** Radius (tiles) at each tier, before the Wide Search branch multiplier. */
+const CURSOR_RADIUS_BY_TIER: Readonly<Record<Tier, number>> = { 1: 2.5, 2: 3.5, 3: 4.5, 4: 4.5, 5: 4.5 };
+/** Clicks per second at each tier, before any branch multiplier. */
+const CURSOR_RATE_BY_TIER: Readonly<Record<Tier, number>> = { 1: 1.0, 2: 1.6, 3: 2.2, 4: 2.2, 5: 2.2 };
+
+/** Branch depth: tiers 4 and 5 re-apply the branch multipliers at 1.5x and 2x strength. */
+function cursorBranchStrength(tier: Tier): number {
+  return 1 + 0.5 * (tier - 3);
+}
+
+/** The cursor's operational radius in tiles, including the Wide Search branch. */
+export function cursorRadius(t: Tower): number {
+  const base = CURSOR_RADIUS_BY_TIER[t.tier];
+  if (t.tier < 3 || t.branch !== 'B') return base;
+  return base * scaledMultiplier(1.35, cursorBranchStrength(t.tier));
+}
+
+/** Clicks per second, including the Overclock (faster) and Wide Search (slower) branches. */
+export function cursorClickRate(t: Tower): number {
+  const base = CURSOR_RATE_BY_TIER[t.tier];
+  if (t.tier < 3) return base;
+  if (t.branch === 'A') return base * scaledMultiplier(1.8, cursorBranchStrength(t.tier));
+  if (t.branch === 'B') return base * scaledMultiplier(0.7, cursorBranchStrength(t.tier));
+  return base;
+}
+
+/** Fixed ticks between cursor clicks (the clock gate). */
+export function cursorClickIntervalTicks(t: Tower): number {
+  return Math.max(1, Math.round(TICK_HZ / cursorClickRate(t)));
+}
+
+/** Multiplier on a cursor click's damage from the Overclock branch (1 = no branch). */
+export function cursorClickDamageFactor(t: Tower): number {
+  if (t.tier < 3 || t.branch !== 'A') return 1;
+  return scaledMultiplier(0.6, cursorBranchStrength(t.tier));
+}
+
+/**
+ * A cursor click's damage: half the player's current click damage, scaled by the spec multiplier
+ * and any Overclock branch. The player's click damage and GPU spec multiplier are passed in so this
+ * stays pure and free of pointer/state imports.
+ */
+export function cursorClickDamage(t: Tower, playerClickDamage: number, specMult: number): number {
+  return CURSOR_CLICK_DAMAGE_FACTOR * playerClickDamage * specMult * cursorClickDamageFactor(t);
+}
 
 /** A wall's hit points at each tier, before the tier-3 branch doubling. */
 const WALL_HP_BY_TIER: Readonly<Record<Tier, number>> = { 1: 60, 2: 180, 3: 540, 4: 540, 5: 540 };
@@ -314,6 +392,22 @@ export interface Tower {
   repairMissing: number;
   /** Length of the current repair in fixed ticks. */
   repairDurationTicks: number;
+  /** Cursor only: the flying cursor's position in world units (tiles). */
+  cursorX: number;
+  cursorY: number;
+  /** Cursor only: the enemy id the cursor is flying toward and clicking, or null while wandering. */
+  cursorTargetId: number | null;
+  /** Cursor only: ticks until the cursor may click again (the clock gate). */
+  cursorCooldown: number;
+  /** Cursor only: PRNG state for the deterministic wander path. */
+  cursorWanderSeed: number;
+  /** Cursor only: current wander heading in radians. */
+  cursorWanderAngle: number;
+  /** Cursor only: ticks remaining on the click-ring effect (8 on a click, 0 idle). */
+  cursorClickFx: number;
+  /** Cursor only: the world point the last click landed on, for the ring effect. */
+  cursorClickX: number;
+  cursorClickY: number;
 }
 
 export function createTower(id: number, kind: TowerKind, col: number, row: number): Tower {
@@ -341,6 +435,15 @@ export function createTower(id: number, kind: TowerKind, col: number, row: numbe
     repairStartHp: 0,
     repairMissing: 0,
     repairDurationTicks: 0,
+    cursorX: col + 0.5,
+    cursorY: row + 0.5,
+    cursorTargetId: null,
+    cursorCooldown: 0,
+    cursorWanderSeed: 0,
+    cursorWanderAngle: 0,
+    cursorClickFx: 0,
+    cursorClickX: col + 0.5,
+    cursorClickY: row + 0.5,
   };
 }
 
@@ -358,6 +461,15 @@ export function upgradeCost(tower: Tower): number | null {
     // Walls are a three-tier tower: tier 2 costs 12, the tier-3 branch costs 20, then it is done.
     if (tower.tier === 1) return 12;
     if (tower.tier === 2) return 20;
+    return null;
+  }
+  if (tower.kind === 'cursor') {
+    // The cursor's tier-2 upgrade and tier-3 branch are priced explicitly; tiers 4 and 5 keep the
+    // standard ladder's deepening shape, scaled up from the branch cost.
+    if (tower.tier === 1) return 150;
+    if (tower.tier === 2) return 260;
+    if (tower.tier === 3) return 471;
+    if (tower.tier === 4) return 845;
     return null;
   }
   const factor = UPGRADE_COST_FACTOR[tower.tier];
@@ -385,6 +497,7 @@ export function recomputeAuras(towers: Tower[]): void {
     const r = st.range;
     for (const t of towers) {
       if (t.id === b.id) continue;
+      if (t.kind === 'cursor') continue; // pointer-derived damage; tower auras never reach it
       const d2 = (t.col + 0.5 - (b.col + 0.5)) ** 2 + (t.row + 0.5 - (b.row + 0.5)) ** 2;
       if (d2 <= r * r) {
         t.auraDamage *= 1 + st.auraDamage;
@@ -453,6 +566,12 @@ const BRANCH_EFFECTS: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch,
     A: {},
     B: {},
     C: {},
+  },
+  // The cursor's branches (Overclock / Wide Search) are applied by the cursorRadius / cursorClickRate
+  // / cursorClickDamageFactor accessors above, not by effectiveStats, so this table stays empty too.
+  cursor: {
+    A: {},
+    B: {},
   },
 };
 

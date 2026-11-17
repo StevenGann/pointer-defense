@@ -302,6 +302,8 @@ function towerSound(kind: TowerKind): SoundName {
       return 'cannon';
     case 'wall':
       return 'cannon';
+    case 'cursor':
+      return 'gun';
   }
 }
 
@@ -434,7 +436,7 @@ function updateTooltip(): void {
     }
     const tower = h.onBoard ? towerAt(state, h.col, h.row) : undefined;
     if (tower) {
-      tooltip.update({ key: `tower:${tower.id}`, lines: towerTooltipLines(tower, state.clock) }, h.x, h.y, viewportW, viewportH);
+      tooltip.update({ key: `tower:${tower.id}`, lines: towerTooltipLines(tower, state.clock, state.pointer, state.specs) }, h.x, h.y, viewportW, viewportH);
       return;
     }
     const control = hudControlAt(layout, state, h.x, h.y);

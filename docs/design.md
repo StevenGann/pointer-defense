@@ -206,9 +206,9 @@ S.........T.........X
 
 ## 6. Towers
 
-Seven towers. Each has a role, a tier ladder, and **two exclusive branches** at tier 3.
+Eight towers. Each has a role, a tier ladder, and **two exclusive branches** at tier 3.
 
-### 6.1 The seven
+### 6.1 The eight
 
 | Tower | Cost | Range | Damage | Interval | Turn rate | Targeting | Role | Wants |
 |---|---|---|---|---|---|---|---|---|
@@ -219,18 +219,20 @@ Seven towers. Each has a role, a tier ladder, and **two exclusive branches** at 
 | **Laser** | 70 | 3.4 | 11, pierces 8 | 0.80 s | 150°/s | first (fixed) | straight lines | corridors you deliberately left open |
 | **Beacon** | 90 | 3.5 | none | — | — (still) | — | +60 % damage to towers in radius | a dense cluster worth buffing |
 | **Wall** | 8 | — | none | — | — (still) | — | blocks the route, has hit points | a long maze made cheap |
+| **Cursor** | 250 | 2.5 | ½ your click damage | 1.0 s | — (still) | player's choice | an autonomous hand that clicks for you | a pointer ladder worth feeding |
 
 Three towers are **locked** to one targeting mode and ignore the player's choice. The **Taser** always
 fires at the nearest enemy in range — a Tesla coil discharges into whatever is nearest, so its
 placement is the decision, not its priority. The **Laser** always fires at the leading edge of the
 column, which reads correctly when its Focus beam pierces along that line. The **Cannon** always
-swings at the strongest thing it can see and lives with its two-second traverse. The **Gun** stays
-fully configurable — it is the one tower that obeys the player — and Frost and Beacon have no
-targeting mode to lock. **Manual Override** (§9.5), the player's explicit mark, wins over every lock:
-while the marked enemy is in range, a locked tower fires at it, which is the only way to aim a locked
-tower at something specific.
+swings at the strongest thing it can see and lives with its two-second traverse. The **Gun** and the
+**Cursor** stay fully configurable — they obey the player — and Frost and Beacon have no targeting
+mode to lock. **Manual Override** (§9.5), the player's explicit mark, wins over every lock: while the
+marked enemy is in range, a locked tower fires at it, which is the only way to aim a locked tower at
+something specific.
 
-Four damage answers and three that are useless alone. That is how placement stays interesting without
+Four damage answers and three that are useless alone, plus the Cursor, which is a damage answer that
+borrows its strength from the pointer ladder (§6.7). That is how placement stays interesting without
 becoming opaque.
 
 Walls are the asymmetry: every other tower is invulnerable and cannot be targeted, but a wall can be
@@ -273,6 +275,7 @@ Walls break the ladder pattern: they are a three-tier tower. Tier 2 costs 12, th
 | Laser | **Focus** — pierce 8, +50 % damage | **Prism** — splits into 3 short beams at −40 % damage |
 | Beacon | **Command** — +30 % damage aura, no range bonus | **Relay** — extends pointer reach, +50 % pointer damage in radius |
 | Wall | **Bulwark** — hit points doubled again | **Mesh** — hit points doubled and it blocks flyers |
+| Cursor | **Overclock** — rate ×1.8, per-click damage ×0.6 | **Wide Search** — radius ×1.35, rate ×0.7 |
 
 Walls are the one tower with a third branch: **Toggle** (`C`). A Toggle wall is a gate — left-clicking
 it opens it (walkable, cannot be attacked, no ground block) or closes it (blocks exactly like a plain
@@ -348,6 +351,23 @@ while one is running, no repair at full health, and no refund if the tower is so
 The damaged tower's panel gains a **Repair** button above Sell, showing the price; its tooltip names
 the duration. While repairing, the wall draws with a hatched face and a small progress bar in place
 of its health bar, and the route line shows it as walkable the moment the repair begins.
+
+### 6.7 The Cursor tower
+
+The **Cursor** is the one tower whose damage is not its own. It cannot fire; instead it carries a
+second cursor — the classic white arrow — that wanders around its home tile and clicks enemies for
+you. Every click deals **half the player's current click damage**, ladder and spec multipliers
+included, and is treated as pointer damage: it ignores armour and wears shields down exactly as the
+player's own clicks do. The tower's radius (2.5 → 3.5 → 4.5 tiles) and its click clock (1.0 → 1.6 →
+2.2 clicks/s) are its only stats, and at tier 3 it branches into **Overclock** (more, weaker clicks)
+or **Wide Search** (a wider reach, clicking less often).
+
+The relationship is the point. The pointer ladder was a personal weapon; the Cursor makes it *board*
+value. A click level that adds damage to your hand now adds half that to every Cursor on the field,
+so the ladder is worth buying partly because of these towers — a clicker-minded player climbs the
+ladder and a tower-minded player's Cursors still benefit, which is what keeps the two halves feeding
+each other instead of drifting apart. Cursors never crit, never mark, and ignore held pointer, combo,
+weak points and Manual Override: the ladder feeds them through click damage and nothing else.
 
 ---
 

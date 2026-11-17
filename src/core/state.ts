@@ -20,6 +20,12 @@ import { buildAirField, buildField, isSealed, pathTiles, stepToward } from './pa
 import { createEnemy, ENEMY_STATS, isPopupEnemy, isWeakPointHit, popupCovers, radiusOf, speedPerTick, type Enemy, type EnemyKind } from './enemies.ts';
 import {
   createTower,
+  CURSOR_CLICK_RANGE,
+  CURSOR_TRAVEL_SPEED,
+  CURSOR_WANDER_SPEED,
+  cursorClickDamage,
+  cursorClickIntervalTicks,
+  cursorRadius,
   effectiveStats,
   isGateLocked,
   isGateOpen,
@@ -84,6 +90,7 @@ import {
   type Spawn,
 } from './waves.ts';
 import { tickPopups, type Popup, type PopupKind } from './popups.ts';
+import { rngNext } from './rng.ts';
 import { TICK_HZ, TICK_MS } from './time.ts';
 import {
   cloneProfile,
@@ -398,11 +405,25 @@ export function placeTower(s: RunState, kind: TowerKind, col: number, row: numbe
   if (!canPlace(s, kind, col, row)) return false;
   spend(s.economy, TOWER_STATS[kind].cost);
   s.blocked.add(row * s.grid.cols + col);
-  s.towers.push(createTower(s.nextId++, kind, col, row));
+  const tower = createTower(s.nextId++, kind, col, row);
+  if (kind === 'cursor') {
+    // The cursor's wander is a deterministic path seeded from the run's PRNG stream and the tower
+    // id: the same seed reproduces the same wander, and a different seed drifts differently.
+    const r = rngNext(s.rng);
+    s.rng = r.next;
+    tower.cursorWanderSeed = seedCursorWander(r.value, tower.id);
+    tower.cursorWanderAngle = r.value * Math.PI * 2;
+  }
+  s.towers.push(tower);
   rebuildField(s);
   recomputeAuras(s.towers);
   s.placedFirstTower = true;
   return true;
+}
+
+/** Derive a cursor's wander PRNG seed from the run's seeded stream and the tower id. */
+function seedCursorWander(value: number, id: number): number {
+  return ((Math.floor(value * 0x100000000) | 0) ^ Math.imul(id, 0x6d2b79f5)) | 0;
 }
 
 /** The highest speed Space may reach right now (1 before wave 1, 2 from wave 1, 3 from wave 50). */
@@ -899,6 +920,7 @@ export function tick(s: RunState): void {
   if (s.phase === 'wave') {
     spawnDue(s);
     moveEnemies(s);
+    tickCursors(s);
     fireTowers(s);
     applyReticle(s);
     s.enemies = s.enemies.filter((e) => !e.dead);
@@ -907,6 +929,8 @@ export function tick(s: RunState): void {
       clearDue(s);
       finishWavePhase(s);
     }
+  } else if (s.phase === 'build') {
+    tickCursors(s); // idle: the cursor drifts around its tile between waves
   }
   s.clock++;
 }
@@ -1362,6 +1386,156 @@ function aimToward(t: Tower, bearing: number, turnRate: number): boolean {
   const maxStep = ((turnRate / TICK_HZ) * Math.PI) / 180;
   t.angle = normalizeAngle(t.angle + Math.sign(diff) * Math.min(Math.abs(diff), maxStep));
   return false;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Cursor towers
+
+/** The cursor's home tile centre. */
+function cursorHome(t: Tower): { x: number; y: number } {
+  return { x: t.col + 0.5, y: t.row + 0.5 };
+}
+
+/**
+ * A cursor may target any living enemy not hidden under a Pop Up window. Unlike towers it is not
+ * blocked by the shield stat — pointer damage wears shields down, exactly like the player's clicks.
+ */
+function cursorCanTarget(s: RunState, e: Enemy): boolean {
+  return !e.dead && !shieldedByPopup(s, e);
+}
+
+/** The enemy the cursor would acquire right now, per its targeting mode, inside its radius. */
+function cursorAcquire(s: RunState, t: Tower): Enemy | undefined {
+  const home = cursorHome(t);
+  const radius = cursorRadius(t);
+  const candidates: Enemy[] = [];
+  for (const e of s.enemies) {
+    if (!cursorCanTarget(s, e)) continue;
+    const dx = e.x - home.x;
+    const dy = e.y - home.y;
+    if (dx * dx + dy * dy <= radius * radius) candidates.push(e);
+  }
+  return pickTarget(t, candidates);
+}
+
+/** Whether a proposed cursor position stays off authored wall tiles (towers do not stop it). */
+function cursorStepOk(s: RunState, x: number, y: number): boolean {
+  const col = Math.floor(x);
+  const row = Math.floor(y);
+  return inBounds(col, row) && tileAt(s.grid, col, row) === 'buildable';
+}
+
+/** A cursor click's damage: half the player's click damage, pointer-sourced (no crit, no mark). */
+function cursorDamage(s: RunState, t: Tower): number {
+  return cursorClickDamage(t, clickDamage(s.pointer), pointerDamageMult(s.specs));
+}
+
+/** A cursor click: pointer damage on the target, then the clock gate re-arms. */
+function cursorClick(s: RunState, t: Tower, target: Enemy): void {
+  damageEnemy(s, target, cursorDamage(s, t), 'pointer', true, undefined, false, false);
+  // Full interval: tickCursors decrements at the top of the next tick before checking the gate, so
+  // a full-interval value here yields exactly `cursorClickIntervalTicks` ticks between clicks.
+  t.cursorCooldown = cursorClickIntervalTicks(t);
+  t.cursorClickFx = 8;
+  t.cursorClickX = target.x;
+  t.cursorClickY = target.y;
+}
+
+/** Idle drift around the home tile: a deterministic seeded path that never leaves the radius. */
+function wanderCursor(s: RunState, t: Tower): void {
+  const home = cursorHome(t);
+  const radius = cursorRadius(t);
+  const step = CURSOR_WANDER_SPEED / TICK_HZ;
+
+  const r = rngNext(t.cursorWanderSeed);
+  t.cursorWanderSeed = r.next;
+  const turn = (r.value - 0.5) * 0.6;
+  let angle = t.cursorWanderAngle + turn;
+
+  let nx = t.cursorX + Math.cos(angle) * step;
+  let ny = t.cursorY + Math.sin(angle) * step;
+
+  const dx = nx - home.x;
+  const dy = ny - home.y;
+  const d = Math.hypot(dx, dy);
+  if (d > radius) {
+    nx = home.x + (dx / d) * radius;
+    ny = home.y + (dy / d) * radius;
+    angle = Math.atan2(-dy, -dx);
+  }
+
+  if (!cursorStepOk(s, nx, ny)) {
+    angle += Math.PI;
+    nx = t.cursorX;
+    ny = t.cursorY;
+  }
+
+  t.cursorX = nx;
+  t.cursorY = ny;
+  t.cursorWanderAngle = angle;
+}
+
+/** Clamp the cursor to its radius and off authored walls (a safety net for travel). */
+function clampCursor(s: RunState, t: Tower): void {
+  const home = cursorHome(t);
+  const radius = cursorRadius(t);
+  const dx = t.cursorX - home.x;
+  const dy = t.cursorY - home.y;
+  const d = Math.hypot(dx, dy);
+  if (d > radius) {
+    t.cursorX = home.x + (dx / d) * radius;
+    t.cursorY = home.y + (dy / d) * radius;
+  }
+  if (!cursorStepOk(s, t.cursorX, t.cursorY)) {
+    t.cursorX = home.x;
+    t.cursorY = home.y;
+  }
+}
+
+/** Advance every cursor tower one tick: wander when idle, fly to and click a target otherwise. */
+function tickCursors(s: RunState): void {
+  for (const t of s.towers) {
+    if (t.kind !== 'cursor') continue;
+    if (t.cursorCooldown > 0) t.cursorCooldown--;
+    if (t.cursorClickFx > 0) t.cursorClickFx--;
+
+    let target: Enemy | undefined;
+    if (t.cursorTargetId !== null) {
+      target = s.enemies.find((e) => e.id === t.cursorTargetId && !e.dead);
+      if (target && !cursorCanTarget(s, target)) target = undefined;
+      if (target) {
+        const home = cursorHome(t);
+        const dx = target.x - home.x;
+        const dy = target.y - home.y;
+        if (dx * dx + dy * dy > cursorRadius(t) ** 2) target = undefined;
+      }
+    }
+    if (!target) {
+      if (s.phase === 'wave') target = cursorAcquire(s, t);
+      t.cursorTargetId = target ? target.id : null;
+    }
+
+    if (target) {
+      const dx = target.x - t.cursorX;
+      const dy = target.y - t.cursorY;
+      const d = Math.hypot(dx, dy);
+      if (d <= CURSOR_CLICK_RANGE) {
+        if (t.cursorCooldown === 0) cursorClick(s, t, target);
+      } else if (d > 0) {
+        const step = CURSOR_TRAVEL_SPEED / TICK_HZ;
+        const nx = t.cursorX + (dx / d) * step;
+        const ny = t.cursorY + (dy / d) * step;
+        if (cursorStepOk(s, nx, ny)) {
+          t.cursorX = nx;
+          t.cursorY = ny;
+        }
+      }
+    } else {
+      wanderCursor(s, t);
+    }
+
+    clampCursor(s, t);
+  }
 }
 
 function fireTowers(s: RunState): void {

@@ -10,7 +10,7 @@ import {
   type RunState,
 } from '../core/state.ts';
 import { radiusOf, type Enemy, type EnemyKind } from '../core/enemies.ts';
-import { effectiveStats, isGateLocked, isRepairing, repairProgress, TOWER_STATS, type Tower, type TowerKind } from '../core/towers.ts';
+import { cursorRadius, effectiveStats, isGateLocked, isRepairing, repairProgress, TOWER_STATS, type Tower, type TowerKind } from '../core/towers.ts';
 import { tileAt, COLS, ROWS, type Grid, type Tile } from '../core/grid.ts';
 import { toggleOpenAt, toggleProgress, type LevelToggle } from '../core/levels.ts';
 import { dashRects, offsetSegment, routeOffset, type RouteSegment } from './route.ts';
@@ -51,6 +51,7 @@ export const TOWER_COLOR: Record<TowerKind, number> = {
   laser: 0xff3300,
   beacon: 0xffcc00,
   wall: 0x8a8a8a,
+  cursor: 0x9a9a9a,
 };
 
 /**
@@ -205,6 +206,11 @@ export class BoardView {
     for (const e of layers.others) {
       if (e.dead) continue;
       drawEnemy(this.enemies, e, board, cell, alpha, state.tick < e.slowUntilTick);
+    }
+
+    // The flying cursor arrows live above the enemy layer so they are always visible.
+    for (const t of state.towers) {
+      if (t.kind === 'cursor') drawFlyingCursor(this.overlay, t, board);
     }
 
     if (state.selected && hover.onBoard && canPlace(state, state.selected, hover.col, hover.row)) {
@@ -440,9 +446,13 @@ function drawTowerRange(
   cell: number,
   rangeMult: number,
 ): void {
-  const st = effectiveStats(t);
   const cx = board.x + (t.col + 0.5) * cell;
   const cy = board.y + (t.row + 0.5) * cell;
+  if (t.kind === 'cursor') {
+    dashedCircle(g, cx, cy, cursorRadius(t) * cell, PAL.navy, 1);
+    return;
+  }
+  const st = effectiveStats(t);
   dashedCircle(g, cx, cy, (st.range + t.auraRange) * rangeMult * cell, PAL.navy, 1);
   if (t.kind === 'beacon') dashedCircle(g, cx, cy, st.range * rangeMult * cell, AURA_COLOR, 1);
 }
@@ -488,6 +498,32 @@ function drawBarrel(
   g.poly(pts).fill(fill).stroke(outline);
 }
 
+/** The classic white cursor arrow, tip at the origin, body extending down-right. */
+const CURSOR_ARROW_PTS: readonly (readonly [number, number])[] = [
+  [0, 0], [0, 13], [3.5, 10], [5.5, 16], [8, 14], [6.5, 10], [11, 10],
+];
+
+/** Draw a white arrow with a black outline, `length` px from tip to tail-bottom. */
+function drawCursorArrow(g: Graphics, x: number, y: number, length: number, alpha = 1): void {
+  const s = length / 16;
+  const pts: number[] = [];
+  for (const [px, py] of CURSOR_ARROW_PTS) pts.push(x + px * s, y + py * s);
+  g.poly(pts).fill({ color: PAL.highlight, alpha }).stroke({ width: 1, color: PAL.dark, alpha });
+}
+
+/** Draw a flying cursor tower's arrow, its click ring, and the 2px dip on the click frame. */
+function drawFlyingCursor(g: Graphics, t: Tower, board: { x: number; y: number; cell: number }): void {
+  const px = board.x + t.cursorX * board.cell;
+  const py = board.y + t.cursorY * board.cell;
+  const dip = t.cursorClickFx === 8 ? 2 : 0;
+  drawCursorArrow(g, px, py + dip, 12);
+  if (t.cursorClickFx > 0) {
+    const rx = board.x + t.cursorClickX * board.cell;
+    const ry = board.y + t.cursorClickY * board.cell;
+    g.circle(rx, ry, 6).stroke({ width: 1, color: PAL.highlight });
+  }
+}
+
 function drawTowerShape(
   g: Graphics,
   kind: TowerKind,
@@ -517,6 +553,14 @@ function drawTowerShape(
     drawBarrel(g, cx, cy, angle, Math.round(cx - bw / 2), Math.round(cy - r - bl), bw, bl, fill, outline);
   } else if (kind === 'wall') {
     // Walls are drawn as buttons by drawWallShape, not here.
+  } else if (kind === 'cursor') {
+    // A small grey plinth with a cursor-shaped cap, so it reads as a tower when the cursor is away.
+    const s = Math.round(cell * 0.4);
+    const x = Math.round(cx - s / 2);
+    const y = Math.round(cy - s / 2);
+    g.rect(x, y, s, s).fill({ color: 0x9a9a9a, alpha }).stroke({ width: 1, color: PAL.dark, alpha });
+    const arrowLen = Math.max(4, Math.round(cell * 0.3));
+    drawCursorArrow(g, Math.round(cx - arrowLen / 2), Math.round(cy - arrowLen / 2), arrowLen, alpha);
   } else {
     const r = Math.round(cell * 0.38);
     g.poly([cx, cy - r, cx + r, cy, cx, cy + r, cx - r, cy]).fill(fill).stroke(outline);
