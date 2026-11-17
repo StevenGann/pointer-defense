@@ -391,8 +391,8 @@ second cursor — the classic white arrow — that wanders around its home tile 
 you. Every click deals **half the player's current click damage**, ladder and spec multipliers
 included, and is treated as pointer damage: it ignores armour and wears shields down exactly as the
 player's own clicks do. The tower's radius (2.5 → 3.5 → 4.5 tiles) and its click clock (1.0 → 1.6 →
-2.2 clicks/s) are its only stats, and at tier 3 it branches into **Overclock** (more, weaker clicks)
-or **Wide Search** (a wider reach, clicking less often).
+2.2 clicks/s) are its only stats, and at tier 3 it branches into **Overclock** (more, weaker clicks),
+**Wide Search** (a wider reach, clicking less often) or **Maintenance** (see below).
 
 The relationship is the point. The pointer ladder was a personal weapon; the Cursor makes it *board*
 value. A click level that adds damage to your hand now adds half that to every Cursor on the field,
@@ -406,6 +406,19 @@ tile — a **Shielded** or a **Boss**, whose shield is above zero — and with n
 it clicks the nearest enemy to its home tile. An enemy hidden under a Pop-up window is never a
 candidate. **Manual Override** (§9.5) still wins over this rule, exactly as it beats the Taser's lock:
 while the marked enemy is in range and targetable, the cursor clicks it instead.
+
+**Maintenance** is the third branch and the one that gives a Cursor a support role. A Maintenance
+cursor behaves exactly as any other cursor while an enemy is inside its radius — shielded first, then
+nearest. Only when the radius is clear does it look for work: any tower inside its radius below **80%**
+of maximum hit points, lowest fraction first, then nearest. It flies to that tower, clicks it, and
+starts an ordinary repair — the same `startRepair` path a player uses, with the same salvage cost and
+the same downtime, during which the tower is offline and not firing. It repairs one tower at a time and
+only while the area stays clear; if an enemy walks in, it abandons the job and fights.
+
+Three limits keep it honest. It never starts a repair the player cannot afford, so it cannot run a
+salvage debt. It ignores towers above 80%, so it does not spend money topping up a scratch. And it
+cannot revive anything: a destroyed tower is gone. The branch's cost is the damage output of the
+Overclock click it did not take, which the tooltip says plainly.
 
 ### 6.8 The Repair tower and its aura
 

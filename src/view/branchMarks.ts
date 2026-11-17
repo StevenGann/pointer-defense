@@ -130,11 +130,21 @@ const MARK_PRIMITIVES: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch
       { type: 'arc', x: 0, y: 0.2, r: 0.13, a0: Math.PI, a1: Math.PI * 2 },
     ],
   },
-  // Walls, cursors and the repair tower carry their branch identity elsewhere (the wall's button
-  // states, the cursor's flying arrow, the repair tower's plain upgrade ladder). No mark is drawn.
+  // Walls and the repair tower carry their branch identity elsewhere (the wall's button states, the
+  // repair tower's plain upgrade ladder). A cursor's Maintenance branch is the one cursor branch with
+  // a mark: an open-end wrench, so it reads as repair rather than Overclock or Wide Search.
+  cursor: {
+    C: [
+      { type: 'line', x1: -0.09, y1: -0.06, x2: -0.09, y2: 0.12 },
+      { type: 'line', x1: -0.09, y1: -0.06, x2: -0.03, y2: -0.06 },
+      { type: 'line', x1: 0.03, y1: -0.06, x2: 0.09, y2: -0.06 },
+      { type: 'line', x1: 0.09, y1: -0.06, x2: 0.09, y2: 0.12 },
+      { type: 'line', x1: -0.09, y1: 0.12, x2: 0.09, y2: 0.12 },
+      { type: 'line', x1: 0, y1: 0.12, x2: 0, y2: 0.24 },
+    ],
+  },
   wall: {},
   repair: {},
-  cursor: {},
 };
 
 /** The mark for a tower's branch, or null when the branch (or kind) has no mark. */

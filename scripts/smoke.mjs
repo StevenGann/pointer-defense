@@ -11,6 +11,7 @@
 
 import {
   createRunState,
+  cursorMaintenanceStatus,
   placeTower,
   canPlace,
   startWave,
@@ -40,7 +41,7 @@ import {
   autoWaveStatus,
   AUTO_WAVE_DELAY_TICKS,
 } from '../src/core/state.ts';
-import { TOWER_STATS, TOWER_KINDS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
+import { TOWER_STATS, TOWER_KINDS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, popupCountForWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
@@ -3149,6 +3150,219 @@ function cursorTower(tier, branch) {
   gun.hp = 40;
   check(startRepair(s, 6, 5), 'manual repair starts on the damaged gun');
   check(repairHealingCount(s.towers, towerAt(s, 5, 5), s.clock) === 0, 'a repairing tower is not healed by the aura');
+}
+
+// --- 34. Cursor Maintenance branch ------------------------------------------------------------
+
+/** A Maintenance cursor on open-field at (5,5) with a gun at (6,5) at the given HP (build phase). */
+function maintenanceRig(gunHp) {
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  const c = s.towers.find((t) => t.kind === 'cursor');
+  c.tier = 3;
+  c.branch = 'C';
+  placeTower(s, 'gun', 6, 5);
+  const gun = towerAt(s, 6, 5);
+  gun.hp = gunHp;
+  return { s, c, gun };
+}
+
+{
+  // 34a. With an enemy in radius, a Maintenance cursor fights normally and never starts a repair.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  const c = s.towers.find((t) => t.kind === 'cursor');
+  c.tier = 3;
+  c.branch = 'C';
+  placeTower(s, 'beacon', 6, 5);
+  const beacon = towerAt(s, 6, 5);
+  beacon.hp = 40; // 50%, damaged and in radius
+  s.phase = 'wave';
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const e = stationary(99, 'grunt', 1, 5.5, 5.5);
+  e.hp = 1e9;
+  e.maxHp = 1e9;
+  s.enemies.push(e);
+  for (let i = 0; i < 60; i++) tick(s);
+  check(e.hp < 1e9, 'maintenance: a cursor fights the enemy in its radius');
+  check(!isRepairing(beacon, s.clock) && beacon.hp === 40, 'maintenance: no repair starts while an enemy is in range');
+  check(cursorMaintenanceStatus(s, c) === 'Idle — enemies in range',
+    `maintenance: status reports enemies in range (${cursorMaintenanceStatus(s, c)})`);
+}
+
+{
+  // 34b. With the radius clear and a tower at 50%, a repair starts, costs the normal salvage, and
+  // takes the tower offline.
+  const { s, c, gun } = maintenanceRig(50);
+  const before = s.economy.salvage;
+  const cost = repairCost(gun);
+  let repaired = false;
+  for (let i = 0; i < 200 && !repaired; i++) {
+    tick(s);
+    repaired = isRepairing(gun, s.clock);
+  }
+  check(repaired, 'maintenance: a repair starts on a 50% tower');
+  check(isRepairing(gun, s.clock), 'maintenance: the tower is offline while it repairs');
+  check(s.economy.salvage === before - cost,
+    `maintenance: repair costs the normal salvage (${before} -> ${s.economy.salvage}, cost ${cost})`);
+  check(c.tier === 3 && c.branch === 'C', 'maintenance: the cursor is the Maintenance branch');
+}
+
+{
+  // 34c. A tower at 90% (or exactly 80%) is left alone; at 79% it is repaired.
+  const high = maintenanceRig(90);
+  for (let i = 0; i < 120; i++) tick(high.s);
+  check(!isRepairing(high.gun, high.s.clock) && high.gun.hp === 90, 'maintenance: a 90% tower is left alone');
+
+  const edge = maintenanceRig(80);
+  for (let i = 0; i < 120; i++) tick(edge.s);
+  check(!isRepairing(edge.gun, edge.s.clock) && edge.gun.hp === 80, 'maintenance: exactly 80% is left alone (below 80% only)');
+
+  const low = maintenanceRig(79);
+  let repaired = false;
+  for (let i = 0; i < 200 && !repaired; i++) {
+    tick(low.s);
+    repaired = isRepairing(low.gun, low.s.clock);
+  }
+  check(repaired, 'maintenance: a 79% tower is repaired');
+}
+
+{
+  // 34d. The lowest health fraction is chosen when two towers are damaged (equal distance, so the
+  // fraction is the only difference), and the nearest wins on an equal fraction.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  const c = s.towers.find((t) => t.kind === 'cursor');
+  c.tier = 3;
+  c.branch = 'C';
+  placeTower(s, 'gun', 6, 5);
+  placeTower(s, 'gun', 5, 6);
+  const a = towerAt(s, 6, 5);
+  const b = towerAt(s, 5, 6);
+  a.hp = 40; // 40%
+  b.hp = 20; // 20%
+  check(cursorMaintenanceStatus(s, c) === 'Repairing Gun 20%',
+    `maintenance: the lowest fraction is chosen first (${cursorMaintenanceStatus(s, c)})`);
+  let first = null;
+  for (let i = 0; i < 200 && first === null; i++) {
+    tick(s);
+    if (isRepairing(a, s.clock)) first = 'a';
+    if (isRepairing(b, s.clock)) first = 'b';
+  }
+  check(first === 'b', `maintenance: the 20% tower repairs before the 40% one (got ${first})`);
+
+  const tie = stateOnLevel('open-field');
+  tie.economy.salvage = 100000;
+  placeTower(tie, 'cursor', 5, 5);
+  const tc = tie.towers.find((t) => t.kind === 'cursor');
+  tc.tier = 3;
+  tc.branch = 'C';
+  placeTower(tie, 'gun', 6, 5);
+  placeTower(tie, 'cannon', 7, 5);
+  towerAt(tie, 6, 5).hp = 50; // 50% of 100
+  towerAt(tie, 7, 5).hp = 70; // 50% of 140
+  check(cursorMaintenanceStatus(tie, tc) === 'Repairing Gun 50%',
+    `maintenance: the nearest tower wins an equal fraction (${cursorMaintenanceStatus(tie, tc)})`);
+}
+
+{
+  // 34e. An unaffordable repair is not started and no salvage is spent.
+  const { s, gun } = maintenanceRig(50);
+  s.economy.salvage = 3; // below the 7-salvage repair cost
+  for (let i = 0; i < 120; i++) tick(s);
+  check(!isRepairing(gun, s.clock), 'maintenance: an unaffordable repair is not started');
+  check(s.economy.salvage === 3, 'maintenance: no salvage is spent on an unaffordable repair');
+  check(gun.hp === 50, 'maintenance: the tower stays damaged when the repair is unaffordable');
+}
+
+{
+  // 34f. Destroyed towers are ignored.
+  const { s, c, gun } = maintenanceRig(0);
+  for (let i = 0; i < 120; i++) tick(s);
+  check(!isRepairing(gun, s.clock) && gun.hp === 0, 'maintenance: a destroyed tower is ignored');
+  check(cursorMaintenanceStatus(s, c) === 'Idle — nothing to repair',
+    `maintenance: status reads idle when only destroyed towers remain (${cursorMaintenanceStatus(s, c)})`);
+}
+
+{
+  // 34g. A non-Maintenance cursor never repairs.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  const c = s.towers.find((t) => t.kind === 'cursor');
+  c.tier = 3;
+  c.branch = 'A'; // Overclock
+  placeTower(s, 'gun', 6, 5);
+  const gun = towerAt(s, 6, 5);
+  gun.hp = 50;
+  for (let i = 0; i < 120; i++) tick(s);
+  check(!isRepairing(gun, s.clock) && gun.hp === 50, 'maintenance: an Overclock cursor never repairs');
+  check(cursorMaintenanceStatus(s, c) === null, 'maintenance: status is null for a non-Maintenance cursor');
+}
+
+{
+  // 34h. Fixed-timestep equivalence, and the target choice is deterministic for one seed.
+  const run = (frameMs) => {
+    const { s, c, gun } = maintenanceRig(50);
+    s.rng = 0x12345678;
+    for (let t = 0; t < 900 * TICK_MS - frameMs; t += frameMs) step(s, frameMs);
+    while (s.tick < 1000) tick(s);
+    return JSON.stringify([gun.hp, gun.repairReadyAt, c.cursorRepairTowerId, c.cursorX, c.cursorY, s.tick, s.clock, s.rng]);
+  };
+  const at60 = run(TICK_MS);
+  check(at60 === run(1000 / 144), 'maintenance: same result at 60 Hz and 144 Hz frames');
+  check(at60 === run(1000 / 23), 'maintenance: same result at 23 Hz frames');
+
+  const targetChoice = () => {
+    const s = stateOnLevel('open-field');
+    s.rng = 0x12345678;
+    s.economy.salvage = 100000;
+    placeTower(s, 'cursor', 5, 5);
+    const c = s.towers.find((t) => t.kind === 'cursor');
+    c.tier = 3;
+    c.branch = 'C';
+    placeTower(s, 'gun', 6, 5);
+    placeTower(s, 'gun', 5, 6);
+    towerAt(s, 6, 5).hp = 40;
+    towerAt(s, 5, 6).hp = 20;
+    for (let i = 0; i < 60; i++) tick(s);
+    return JSON.stringify([c.cursorRepairTowerId, towerAt(s, 6, 5).repairReadyAt, towerAt(s, 5, 6).repairReadyAt]);
+  };
+  check(targetChoice() === targetChoice(), 'maintenance: target choice is deterministic for one seed');
+}
+
+{
+  // 34i. The branch name, mark, panel layout and tooltips read the Maintenance behaviour.
+  check(branchName('cursor', 'C') === 'Maintenance', 'cursor branch C is named Maintenance');
+  check(CURSOR_REPAIR_THRESHOLD === 0.8, 'maintenance threshold is 80%');
+  check(branchMarkSpec('cursor', 'C') !== null, 'Maintenance carries a wrench branch mark');
+  check(branchMarkSpec('cursor', 'A') === null && branchMarkSpec('cursor', 'B') === null,
+    'Overclock and Wide Search still carry no mark');
+
+  const rs = createRunState();
+  const placed = cursorTooltipLines(cursorTower(3, 'C'), rs.pointer, rs.specs, 'Repairing Gun 42%');
+  check(placed[0] === 'Cursor T3 — Maintenance', `maintenance tooltip names the branch (${placed[0]})`);
+  check(placed[1] === 'Repairs damaged towers when its radius is clear', 'maintenance tooltip reads the rule');
+  check(placed[2] === 'Below 80% HP · Repairing Gun 42%',
+    `maintenance tooltip shows the threshold and target (${placed[2]})`);
+  check(placed[3].includes('Overclock'), 'maintenance tooltip names the Overclock trade-off');
+
+  const branchTip = tooltipText(cursorBranchTooltipLines(cursorTower(2, null), 'C', 100000)[0]);
+  check(branchTip.includes('Maintenance') && branchTip.includes('repairs damaged towers') && branchTip.includes('80%'),
+    `maintenance branch tooltip reads the behaviour (${branchTip})`);
+  check(branchTip.includes('no Overclock damage boost'), 'maintenance branch tooltip states the lost Overclock damage');
+
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  const c = towerAt(s, 5, 5);
+  c.tier = 2;
+  selectPlacedTower(s, c);
+  const h = computeHud(computeLayout(1280, 720), s);
+  check(h.detail !== null && h.detail.branches.length === 3, 'a tier-2 cursor offers three branches');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

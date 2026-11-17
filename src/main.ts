@@ -3,6 +3,7 @@ import './style.css';
 import {
   buySpec,
   createRunState,
+  cursorMaintenanceStatus,
   enterEndless,
   restartWindows,
   selectedTower,
@@ -541,7 +542,14 @@ function updateTooltip(): void {
     const tower = h.onBoard ? towerAt(state, h.col, h.row) : undefined;
     if (tower) {
       const healed = tower.kind === 'repair' ? repairHealingCount(state.towers, tower, state.clock) : 0;
-      tooltip.update({ key: `tower:${tower.id}`, lines: towerTooltipLines(tower, state.clock, state.pointer, state.specs, healed) }, h.x, h.y, viewportW, viewportH);
+      const maintenance = tower.kind === 'cursor' ? cursorMaintenanceStatus(state, tower) : null;
+      tooltip.update(
+        { key: `tower:${tower.id}`, lines: towerTooltipLines(tower, state.clock, state.pointer, state.specs, healed, maintenance) },
+        h.x,
+        h.y,
+        viewportW,
+        viewportH,
+      );
       return;
     }
     const control = hudControlAt(layout, state, h.x, h.y);

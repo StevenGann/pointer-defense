@@ -1,4 +1,5 @@
 import {
+  CURSOR_REPAIR_THRESHOLD,
   cursorClickDamage,
   cursorClickDamageFactor,
   cursorClickRate,
@@ -74,7 +75,7 @@ export const BRANCH_NAMES: Readonly<Record<TowerKind, Readonly<Partial<Record<Br
   beacon: { A: 'Command', B: 'Relay' },
   repair: {},
   wall: { A: 'Bulwark', B: 'Mesh', C: 'Toggle' },
-  cursor: { A: 'Overclock', B: 'Wide Search' },
+  cursor: { A: 'Overclock', B: 'Wide Search', C: 'Maintenance' },
 };
 
 /** The display name of a branch, falling back to the key so an unknown branch still reads. */
@@ -175,9 +176,11 @@ export function towerTooltipLines(
   pointer?: PointerState,
   specs?: SpecLevels,
   healedCount = 0,
+  maintenanceStatus: string | null = null,
 ): string[] {
   if (tower.kind === 'cursor') {
-    const lines = pointer && specs ? cursorTooltipLines(tower, pointer, specs) : [`Cursor T${tower.tier}`];
+    const lines =
+      pointer && specs ? cursorTooltipLines(tower, pointer, specs, maintenanceStatus) : [`Cursor T${tower.tier}`];
     if (isFullyUpgraded(tower)) lines.push('Fully upgraded');
     return lines;
   }
@@ -234,9 +237,26 @@ export function towerTooltipLines(
 }
 
 /** Tooltip lines for a placed cursor tower: its rate, radius and the ladder-derived click damage. */
-export function cursorTooltipLines(tower: Tower, pointer: PointerState, specs: SpecLevels): string[] {
+export function cursorTooltipLines(
+  tower: Tower,
+  pointer: PointerState,
+  specs: SpecLevels,
+  maintenanceStatus: string | null = null,
+): string[] {
   const branch = tower.branch === null ? '' : ` — ${branchName('cursor', tower.branch)}`;
   const name = `Cursor T${tower.tier}${branch}`;
+
+  if (tower.tier >= 3 && tower.branch === 'C') {
+    const pct = Math.round(CURSOR_REPAIR_THRESHOLD * 100);
+    return [
+      name,
+      'Repairs damaged towers when its radius is clear',
+      `Below ${pct}% HP${maintenanceStatus ? ` · ${maintenanceStatus}` : ''}`,
+      'No combat boost — an Overclock clicks 1.8× faster',
+      `Sell $${formatNumber(sellValue(tower))}`,
+    ];
+  }
+
   const rate = cursorClickRate(tower);
   const radius = cursorRadius(tower);
   const player = clickDamage(pointer);
@@ -275,6 +295,16 @@ export function cursorBranchTooltipLines(tower: Tower, branch: Branch, salvage: 
   if (cost === null) return [];
   if (salvage < cost) return [cannotAffordText(salvage, cost)];
   const name = branchName('cursor', branch);
+
+  if (branch === 'C') {
+    const pct = Math.round(CURSOR_REPAIR_THRESHOLD * 100);
+    return [[
+      { text: `${name} — repairs damaged towers below ${pct}% HP when its radius is clear; ` },
+      { text: 'no Overclock damage boost' },
+      { text: `, $${formatNumber(cost)}` },
+    ]];
+  }
+
   const beforeRate = cursorClickRate(tower);
   const afterRate = cursorClickRate({ ...tower, tier: 3, branch });
   const beforeRng = cursorRadius(tower);

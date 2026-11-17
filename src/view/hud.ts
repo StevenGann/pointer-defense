@@ -3,7 +3,7 @@ import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
 import { clickDamage, comboMultiplier, critChance, nextPointerCost, overclockCeiling, pointerInfo } from '../core/pointer.ts';
-import { autoWaveStatus, canCycleLevel, currentPath, isFinalWave, pointerDamageMult, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
+import { autoWaveStatus, canCycleLevel, currentPath, cursorMaintenanceStatus, isFinalWave, pointerDamageMult, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
 import { levelById } from '../core/levels.ts';
 import {
   cursorClickDamage,
@@ -261,7 +261,7 @@ export function computeHud(l: Layout, s: RunState): HudLayout {
     const branches: BranchButton[] = [];
     if (tower.tier === 2 && hasBranches(tower.kind)) {
       const gap = 4;
-      const list: Branch[] = tower.kind === 'wall' ? ['A', 'B', 'C'] : ['A', 'B'];
+      const list: Branch[] = tower.kind === 'wall' || tower.kind === 'cursor' ? ['A', 'B', 'C'] : ['A', 'B'];
       const bw = Math.floor((innerW - gap * (list.length - 1)) / list.length);
       list.forEach((branch, i) => {
         const x = innerX + i * (bw + gap);
@@ -847,10 +847,14 @@ export class HudView {
       if (tower.kind === 'wall') {
         this.towerStats.text = tower.branch === null ? `HP ${Math.ceil(tower.hp)}` : `HP ${Math.ceil(tower.hp)}/${tower.maxHp}`;
       } else if (tower.kind === 'cursor') {
-        const rate = cursorClickRate(tower);
-        const radius = cursorRadius(tower);
-        const dmg = cursorClickDamage(tower, clickDamage(s.pointer), pointerDamageMult(s.specs));
-        this.towerStats.text = `${rate.toFixed(1)}/s  dmg ${fmtClickDamage(dmg)}  rng ${radius.toFixed(1)}`;
+        if (tower.tier >= 3 && tower.branch === 'C') {
+          this.towerStats.text = cursorMaintenanceStatus(s, tower) ?? 'Idle';
+        } else {
+          const rate = cursorClickRate(tower);
+          const radius = cursorRadius(tower);
+          const dmg = cursorClickDamage(tower, clickDamage(s.pointer), pointerDamageMult(s.specs));
+          this.towerStats.text = `${rate.toFixed(1)}/s  dmg ${fmtClickDamage(dmg)}  rng ${radius.toFixed(1)}`;
+        }
       } else if (tower.kind === 'repair') {
         const heal = repairHealRate(tower);
         const radius = repairRadius(tower);

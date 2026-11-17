@@ -210,6 +210,8 @@ export const CURSOR_TRAVEL_SPEED = 6;
 export const CURSOR_WANDER_SPEED = 2;
 /** Distance in tiles at which the cursor is close enough to click its target. */
 export const CURSOR_CLICK_RANGE = 0.6;
+/** A Maintenance cursor only repairs towers below this fraction of their maximum hit points. */
+export const CURSOR_REPAIR_THRESHOLD = 0.8;
 
 /** Radius (tiles) at each tier, before the Wide Search branch multiplier. */
 const CURSOR_RADIUS_BY_TIER: Readonly<Record<Tier, number>> = { 1: 2.5, 2: 3.5, 3: 4.5, 4: 4.5, 5: 4.5 };
@@ -485,6 +487,8 @@ export interface Tower {
   cursorY: number;
   /** Cursor only: the enemy id the cursor is flying toward and clicking, or null while wandering. */
   cursorTargetId: number | null;
+  /** Cursor only: the tower id a Maintenance cursor is flying toward to repair, or null. */
+  cursorRepairTowerId: number | null;
   /** Cursor only: ticks until the cursor may click again (the clock gate). */
   cursorCooldown: number;
   /** Cursor only: PRNG state for the deterministic wander path. */
@@ -526,6 +530,7 @@ export function createTower(id: number, kind: TowerKind, col: number, row: numbe
     cursorX: col + 0.5,
     cursorY: row + 0.5,
     cursorTargetId: null,
+    cursorRepairTowerId: null,
     cursorCooldown: 0,
     cursorWanderSeed: 0,
     cursorWanderAngle: 0,
@@ -684,6 +689,7 @@ const BRANCH_EFFECTS: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch,
   cursor: {
     A: {},
     B: {},
+    C: {},
   },
 };
 

@@ -21,6 +21,7 @@ import { createEnemy, ENEMY_STATS, isPopupEnemy, isWeakPointHit, popupCovers, ra
 import {
   createTower,
   CURSOR_CLICK_RANGE,
+  CURSOR_REPAIR_THRESHOLD,
   CURSOR_TRAVEL_SPEED,
   CURSOR_WANDER_SPEED,
   cursorClickDamage,
@@ -1601,12 +1602,119 @@ function clampCursor(s: RunState, t: Tower): void {
   }
 }
 
+/** Whether any living enemy sits inside the cursor's radius (maintenance waits for a clear area). */
+function cursorRadiusHasEnemy(s: RunState, t: Tower): boolean {
+  for (const e of s.enemies) {
+    if (e.dead) continue;
+    if (cursorInRadius(t, e)) return true;
+  }
+  return false;
+}
+
+/** Whether a Maintenance cursor may repair `o` right now: damaged below the threshold, not destroyed,
+ *  not mid-repair, and not the cursor's own plinth. */
+function cursorRepairEligible(t: Tower, o: Tower, clock: number): boolean {
+  if (o.id === t.id) return false;
+  if (o.maxHp <= 0 || o.hp <= 0) return false;
+  if (o.hp >= o.maxHp) return false;
+  if (o.hp >= CURSOR_REPAIR_THRESHOLD * o.maxHp) return false;
+  if (isRepairing(o, clock)) return false;
+  return true;
+}
+
+/** The damaged tower a Maintenance cursor would repair: lowest health fraction, then nearest. */
+function cursorRepairAcquire(s: RunState, t: Tower): Tower | undefined {
+  const home = cursorHome(t);
+  const r2 = cursorRadius(t) ** 2;
+  let best: Tower | undefined;
+  let bestFrac = Infinity;
+  let bestD2 = Infinity;
+  for (const o of s.towers) {
+    if (!cursorRepairEligible(t, o, s.clock)) continue;
+    const dx = o.col + 0.5 - home.x;
+    const dy = o.row + 0.5 - home.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 > r2) continue;
+    const frac = o.hp / o.maxHp;
+    if (frac < bestFrac || (frac === bestFrac && d2 < bestD2)) {
+      bestFrac = frac;
+      bestD2 = d2;
+      best = o;
+    }
+  }
+  return best;
+}
+
+/** A Maintenance cursor with a clear radius flies to a damaged tower and clicks to start a repair. */
+function tickMaintenanceCursor(s: RunState, t: Tower): void {
+  let target: Tower | undefined;
+  if (t.cursorRepairTowerId !== null) {
+    target = s.towers.find((o) => o.id === t.cursorRepairTowerId);
+    if (target && !cursorRepairEligible(t, target, s.clock)) target = undefined;
+    if (target) {
+      const home = cursorHome(t);
+      const dx = target.col + 0.5 - home.x;
+      const dy = target.row + 0.5 - home.y;
+      if (dx * dx + dy * dy > cursorRadius(t) ** 2) target = undefined;
+    }
+  }
+  if (!target) {
+    target = cursorRepairAcquire(s, t);
+    t.cursorRepairTowerId = target ? target.id : null;
+  }
+  if (!target) {
+    wanderCursor(s, t);
+    return;
+  }
+
+  const tx = target.col + 0.5;
+  const ty = target.row + 0.5;
+  const dx = tx - t.cursorX;
+  const dy = ty - t.cursorY;
+  const d = Math.hypot(dx, dy);
+  if (d <= CURSOR_CLICK_RANGE) {
+    if (t.cursorCooldown === 0) {
+      // Re-check eligibility at the moment of the click, so a Repair aura that healed the tower over
+      // the threshold mid-flight never gets topped up past it.
+      if (!cursorRepairEligible(t, target, s.clock)) {
+        t.cursorRepairTowerId = null;
+        return;
+      }
+      t.cursorClickFx = 8;
+      t.cursorClickX = tx;
+      t.cursorClickY = ty;
+      t.cursorCooldown = cursorClickIntervalTicks(t);
+      if (startRepair(s, target.col, target.row)) {
+        t.cursorRepairTowerId = null;
+        wanderCursor(s, t);
+      }
+      // Otherwise the player cannot afford the repair: the branch stays idle and no salvage moves.
+    }
+  } else if (d > 0) {
+    const step = CURSOR_TRAVEL_SPEED / TICK_HZ;
+    const nx = t.cursorX + (dx / d) * step;
+    const ny = t.cursorY + (dy / d) * step;
+    if (cursorStepOk(s, nx, ny)) {
+      t.cursorX = nx;
+      t.cursorY = ny;
+    }
+  }
+}
+
 /** Advance every cursor tower one tick: wander when idle, fly to and click a target otherwise. */
 function tickCursors(s: RunState): void {
   for (const t of s.towers) {
     if (t.kind !== 'cursor') continue;
     if (t.cursorCooldown > 0) t.cursorCooldown--;
     if (t.cursorClickFx > 0) t.cursorClickFx--;
+
+    // Maintenance never competes with combat: only when no enemy is inside the radius does a
+    // tier-3+ Maintenance cursor switch to repairing damaged towers.
+    if (t.tier >= 3 && t.branch === 'C' && !cursorRadiusHasEnemy(s, t)) {
+      tickMaintenanceCursor(s, t);
+      clampCursor(s, t);
+      continue;
+    }
 
     let target: Enemy | undefined;
     // Manual Override wins over the fixed rule, exactly as it beats a tower's lock: while the marked
@@ -1646,6 +1754,25 @@ function tickCursors(s: RunState): void {
 
     clampCursor(s, t);
   }
+}
+
+/**
+ * The live status line for a Maintenance cursor's panel and tooltip, or null for any other cursor.
+ * It names what the cursor is doing right now: fighting (enemies in range), chasing a repair, or
+ * idle because there is nothing damaged to fix.
+ */
+export function cursorMaintenanceStatus(s: RunState, t: Tower): string | null {
+  if (t.tier < 3 || t.branch !== 'C') return null;
+  if (cursorRadiusHasEnemy(s, t)) return 'Idle — enemies in range';
+  let target: Tower | undefined;
+  if (t.cursorRepairTowerId !== null) {
+    target = s.towers.find((o) => o.id === t.cursorRepairTowerId);
+    if (target && !cursorRepairEligible(t, target, s.clock)) target = undefined;
+  }
+  if (!target) target = cursorRepairAcquire(s, t);
+  if (!target) return 'Idle — nothing to repair';
+  const pct = Math.round((target.hp / target.maxHp) * 100);
+  return `Repairing ${TOWER_STATS[target.kind].name} ${pct}%`;
 }
 
 function fireTowers(s: RunState): void {
