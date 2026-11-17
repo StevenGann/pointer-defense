@@ -123,6 +123,26 @@ export class EffectsView {
     pushCap(this.sparks, CAP_SPARK, { x, y, born: 0 });
   }
 
+  /** A breacher turret shot: a muzzle flash at the nose and a tracer to the tower it hit. */
+  addBreacherShot(x: number, y: number, tx: number, ty: number): void {
+    pushCap(this.muzzles, CAP_MUZZLE, {
+      x,
+      y,
+      angle: Math.atan2(ty - y, tx - x),
+      kind: 'gun',
+      color: ENEMY_COLOR.breacher,
+      born: 0,
+    });
+    pushCap(this.tracers, CAP_TRACER, {
+      x0: x,
+      y0: y,
+      x1: tx,
+      y1: ty,
+      color: ENEMY_COLOR.breacher,
+      born: 0,
+    });
+  }
+
   addShieldHit(x: number, y: number): void {
     pushCap(this.shieldArcs, CAP_SHIELD, { x, y, born: 0 });
   }
