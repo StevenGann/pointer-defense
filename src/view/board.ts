@@ -1,5 +1,5 @@
 import { Container, Graphics, Text } from 'pixi.js';
-import { bevel, FONT, PAL, type Layout } from './chrome.ts';
+import { bevel, FONT, PAL, type BoardGeometry, type Layout } from './chrome.ts';
 import {
   enemyAt,
   canPlace,
@@ -53,6 +53,18 @@ export const TOWER_COLOR: Record<TowerKind, number> = {
   wall: 0x8a8a8a,
 };
 
+/**
+ * Identity of the static tile layer: the authored level, the grid size and the board geometry.
+ * The layer is redrawn only when this key changes, so a map cycle rebuilds the walls while a
+ * resize-free frame leaves them alone.
+ */
+export function staticLayerKey(
+  state: Pick<RunState, 'levelId' | 'grid'>,
+  board: BoardGeometry,
+): string {
+  return `${state.levelId}|${state.grid.cols}x${state.grid.rows}|${board.x},${board.y},${board.cell}`;
+}
+
 export const ENEMY_COLOR: Record<EnemyKind, number> = {
   grunt: PAL.navy,
   runner: PAL.purple,
@@ -92,9 +104,7 @@ export class BoardView {
   });
   private readonly popupTexts: { title: Text; message: Text }[] = [];
 
-  private staticX = -1;
-  private staticY = -1;
-  private staticCell = -1;
+  private staticKey = '';
   private pathKey = '';
 
   constructor() {
@@ -126,10 +136,9 @@ export class BoardView {
     const { board } = l;
     const cell = board.cell;
 
-    if (board.x !== this.staticX || board.y !== this.staticY || cell !== this.staticCell) {
-      this.staticX = board.x;
-      this.staticY = board.y;
-      this.staticCell = cell;
+    const layerKey = staticLayerKey(state, board);
+    if (layerKey !== this.staticKey) {
+      this.staticKey = layerKey;
       this.pathKey = '';
       this.drawStatic(state.grid, board, cell);
     }

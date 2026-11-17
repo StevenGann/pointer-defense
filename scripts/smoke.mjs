@@ -58,6 +58,8 @@ import {
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
 import { upgradeTooltipLines, tooltipText } from '../src/view/tooltipText.ts';
+import { BoardView, staticLayerKey } from '../src/view/board.ts';
+import { computeLayout } from '../src/view/chrome.ts';
 
 // All v0.10b levels share a single spawn and exit, so the older maze checks keep a local gate.
 const SPAWN = DEFAULT_LEVEL.starts[0];
@@ -270,6 +272,79 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     check(!canCycleLevel(s), 'map cycling is refused once a tower exists');
     check(!cycleLevel(s), 'cycleLevel returns false once a tower exists');
   }
+}
+
+// --- 5f. The static tile layer keys on the map, not just the geometry ------------------------
+{
+  const graphicsSignature = (g) =>
+    JSON.stringify(
+      g.context.instructions.map((i) => [
+        i.action,
+        i.data.style.color,
+        i.data.path.instructions,
+      ]),
+    );
+
+  const layout = computeLayout(1280, 800);
+  const board = layout.board;
+  const hover = { col: 0, row: 0, onBoard: false, x: 0, y: 0 };
+  const s = createRunState();
+  const firstKey = staticLayerKey(s, board);
+  for (let i = 0; i < 120; i++) tick(s);
+  check(staticLayerKey(s, board) === firstKey, 'static layer key is stable across ticks for one level');
+
+  const view = new BoardView();
+  const drawLayer = () => {
+    view.draw(s, layout, 0, hover);
+    return graphicsSignature(view.tiles);
+  };
+  const keys = [firstKey];
+  const layers = [drawLayer()];
+  for (let i = 1; i < LEVELS.length; i++) {
+    check(cycleLevel(s), `cycle to map ${i + 1} for the static layer`);
+    keys.push(staticLayerKey(s, board));
+    layers.push(drawLayer());
+  }
+  check(new Set(keys).size === LEVELS.length, `all ${LEVELS.length} maps have distinct static layer keys`);
+  check(new Set(layers).size === LEVELS.length, `all ${LEVELS.length} maps draw distinct static tile layers`);
+  check(cycleLevel(s), 'cycle back to the first map');
+  check(s.levelId === LEVELS[0].id, 'the first map is selected again');
+  check(staticLayerKey(s, board) === firstKey, 'returning to the first map reproduces its static layer key');
+  check(drawLayer() === layers[0], 'returning to the first map redraws its original tile layer');
+}
+
+{
+  const graphicsSignature = (g) =>
+    JSON.stringify(
+      g.context.instructions.map((i) => [
+        i.action,
+        i.data.style.color,
+        i.data.path.instructions,
+      ]),
+    );
+
+  const layout = computeLayout(1280, 800);
+  const board = layout.board;
+  const hover = { col: 0, row: 0, onBoard: false, x: 0, y: 0 };
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  check(placeTower(s, 'gun', 3, 6), 'tower placed before the layer-rebuild check');
+  const view = new BoardView();
+  view.draw(s, layout, 0, hover);
+  const towersBefore = graphicsSignature(view.towers);
+  const tilesBefore = graphicsSignature(view.tiles);
+  check(view.towers.context.instructions.length > 0, 'the tower layer has content before the map switch');
+
+  // A run-start map switch, forced directly because the public cycle refuses once a tower exists.
+  s.levelId = LEVELS[1].id;
+  s.grid = createGrid(LEVELS[1]);
+  s.toggles = LEVELS[1].toggles ?? [];
+  view.draw(s, layout, 0, hover);
+
+  check(graphicsSignature(view.tiles) !== tilesBefore, 'the map switch rebuilds the static tile layer');
+  check(graphicsSignature(view.towers) === towersBefore,
+    'the tile-layer rebuild leaves the placed tower layer unchanged');
+  check(view.towers.context.instructions.length > 0, 'the tower layer still has content after the switch');
 }
 
 // --- 6. Tier ladder, branches, selling -------------------------------------------------------
