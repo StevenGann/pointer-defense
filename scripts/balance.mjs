@@ -84,6 +84,10 @@ const callSweepMode = hasFlag('--call-sweep');
 // at all, and against the standard tower build. The advantage is the clicker-first integrity over the
 // standard run; the pointer ladder may pull ahead, but it must not dominate (cap +8 integrity).
 const clickerMode = hasFlag('--clicker') || hasFlag('--advantage');
+// --cursor: the cursor comparison — the standard plan plus two cursors bought from wave 25, judged
+// against the standard tower build. The advantage is the cursor build's integrity over the standard
+// run, so the cursor's own contribution is measured against the tower baseline it sits on.
+const cursorMode = hasFlag('--cursor');
 // --level <id> selects one authored map; the default runs all three and prints one line each.
 const levelFlag = flag('--level', null);
 const activeLevels = levelFlag ? [levelById(levelFlag)] : [...LEVELS];
@@ -409,8 +413,9 @@ function cannonTarget(wave) {
   return wave >= 4 ? Math.min(5, 1 + Math.floor((wave - 4) / 15)) : 0;
 }
 function cursorTarget(wave) {
-  // Cursors are a late-game buy: two of them, once the board and the click ladder are established.
-  return wave >= 40 ? 2 : 0;
+  // Cursors are a mid-game buy: two of them once the board and the click ladder are established.
+  // This target is only consulted by the --cursor scenario; the default baseline buys none.
+  return wave >= 25 ? 2 : 0;
 }
 
 /** Specialist slots still needed to reach wave 100's roster, so extra Guns never crowd them out. */
@@ -528,9 +533,9 @@ function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, 
     }
   }
 
-  // Cursor towers: a late-game buy that turns the click ladder into autonomous board damage. The
-  // standard plan carries two; they are upgraded to tier 2 by the pass above like every cheap tower.
-  // The clicker comparison turns them off so the ladder's own advantage stays the measured thing.
+  // Cursor towers: a mid-game buy that turns the click ladder into autonomous board damage. The
+  // default baseline buys none; only the --cursor scenario opts in (two, upgraded to tier 2 by the
+  // pass above like every cheap tower), so the tower build's own integrity stays the measured thing.
   if (buyCursor && nextWall >= plan.length) {
     const want = cursorTarget(wave) - s.towers.filter((t) => t.kind === 'cursor').length;
     for (let guard = 0; guard < want; guard++) {
@@ -702,7 +707,7 @@ function playWave(s, wave, leakList, popups, clicksPerSec = cps, clicking = true
 }
 
 /** Play one full run from a fresh state; returns the outcome. */
-function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = MAX_TOWERS, coverage = false, clicksPerSec = cps, clicking = true, buyPointer = false, buyCursor = true) {
+function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = MAX_TOWERS, coverage = false, clicksPerSec = cps, clicking = true, buyPointer = false, buyCursor = false) {
   resetClickRng();
   repairSpend = 0;
   const s = createStateOn(profile, levelId);
@@ -755,7 +760,7 @@ function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = 
 }
 
 /** Play a full session (reboot at --reboot-at, then run to completion) with a given support policy. */
-function runSession(useSupport, label, levelId, maxTowers = MAX_TOWERS, coverage = false, clicksPerSec = cps, clicking = true, buyPointer = false, buyCursor = true) {
+function runSession(useSupport, label, levelId, maxTowers = MAX_TOWERS, coverage = false, clicksPerSec = cps, clicking = true, buyPointer = false, buyCursor = false) {
   let profile = defaultProfile();
   let totalSpecs = 0;
   let reboots = 0;
@@ -1125,6 +1130,43 @@ if (clickerMode) {
     console.log(`WARNING: the clicker-first pointer is ${maxAdvantage - ADVANTAGE_CAP} integrity too far ahead of the tower build.`);
   }
   process.exit(clickerReached ? 0 : 1);
+}
+
+if (cursorMode) {
+  // The cursor comparison: the standard tower build against the same build plus two cursors bought
+  // from wave 25. The cursor's clicks are pointer-sourced, so both legs use the same click rate and
+  // the only difference is the two cursors — the integrity gap is the cursor's own contribution.
+  silent = true;
+  console.log('\n=== pointer cursor ===');
+  console.log('  map          mode      waves cleared   integrity   salvage   pointer dmg%');
+  let cursorReached = true;
+  let maxAdvantage = -Infinity;
+  for (const level of activeLevels) {
+    const standard = runSession(support, 'standard', level.id, MAP_MAX_TOWERS, true, cps, true, false, false);
+    const cursor = runSession(true, 'cursor', level.id, MAP_MAX_TOWERS, true, cps, true, false, true);
+    const advantage = cursor.final.integrity - standard.final.integrity;
+    maxAdvantage = Math.max(maxAdvantage, advantage);
+    for (const [mode, run] of [
+      ['standard', standard],
+      ['cursor', cursor],
+    ]) {
+      const f = run.final;
+      const total = f.state.economy.damage.tower + f.state.economy.damage.pointer;
+      const pct = total > 0 ? Math.round((f.state.economy.damage.pointer / total) * 100) : 0;
+      console.log(
+        `  ${level.id.padEnd(11)}  ${mode.padEnd(8)}  ${String(f.clearedWaves).padStart(13)}  ` +
+          `${String(f.integrity).padStart(9)}  ${String(f.earned).padStart(7)}  ${String(pct).padStart(9)}%`,
+      );
+    }
+    const cursorCount = cursor.final.state.towers.filter((t) => t.kind === 'cursor').length;
+    console.log(
+      `  ${level.id.padEnd(11)}  advantage  cursor ${cursor.final.integrity} - standard ${standard.final.integrity} = +${advantage}  (${cursorCount} cursors)`,
+    );
+    if (!cursor.final.reached) cursorReached = false;
+  }
+  silent = false;
+  console.log(`\nmax cursor advantage over standard: +${maxAdvantage} integrity`);
+  process.exit(cursorReached ? 0 : 1);
 }
 
 if (wallMode) {

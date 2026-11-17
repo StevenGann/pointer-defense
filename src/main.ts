@@ -380,7 +380,7 @@ function hudTooltipLines(action: HudAction, s: RunState): TooltipLine[] {
   const tower = selectedTower(s);
   switch (action) {
     case 'pointer':
-      return pointerTooltipLines(s.pointer, s.economy.salvage);
+      return pointerTooltipLines(s.pointer, s.economy.salvage, s.wave);
     case 'override':
       return ['Manual Override: every tower in range of the marked enemy drops its own priority and shoots it.'];
     case 'upgrade':

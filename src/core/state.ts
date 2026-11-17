@@ -75,6 +75,7 @@ import {
   nextCritRoll,
   nextOverclockCost,
   nextStageCost,
+  overclockCeiling,
   RETICLE_STICKY,
   type PointerStage,
   type PointerState,
@@ -731,7 +732,11 @@ export function upgradePointer(s: RunState): boolean {
     return true;
   }
   const overclockCost = nextOverclockCost(s.pointer);
-  if (overclockCost === null || !spend(s.economy, overclockCost)) return false;
+  if (overclockCost === null) return false;
+  if (s.pointer.clickLevel + 1 > overclockCeiling(s.wave)) return false;
+  // The ceiling is a guard, not a tax: it only ever rises with the wave counter, so a level bought
+  // earlier is never taken away when a run is restored or the wave count is odd.
+  if (!spend(s.economy, overclockCost)) return false;
   s.pointer.clickLevel += 1;
   return true;
 }

@@ -24,8 +24,11 @@ import {
 import { formatNumber } from '../core/format.ts';
 import {
   clickDamage,
+  MAX_OVERCLOCK_LEVEL,
   nextOverclockCost,
   nextStageCost,
+  overclockCeiling,
+  overclockUnlockWave,
   pointerInfo,
   type PointerState,
   type PointerStage,
@@ -371,7 +374,7 @@ export function fmtClickDamage(n: number): string {
 }
 
 /** Tooltip for the pointer Upgrade button: the next stage or overclock level's click damage and cost. */
-export function pointerTooltipLines(p: PointerState, salvage: number): TooltipLine[] {
+export function pointerTooltipLines(p: PointerState, salvage: number, wave: number): TooltipLine[] {
   const stageCost = nextStageCost(p);
   if (stageCost !== null) {
     if (salvage < stageCost) return [cannotAffordText(salvage, stageCost)];
@@ -385,11 +388,18 @@ export function pointerTooltipLines(p: PointerState, salvage: number): TooltipLi
     ]];
   }
 
+  if (p.clickLevel >= MAX_OVERCLOCK_LEVEL) return ['Max level'];
+
+  const nextLevel = p.clickLevel + 1;
+  if (nextLevel > overclockCeiling(wave)) {
+    return [`Wave ${overclockUnlockWave(nextLevel)} unlocks overclock ${nextLevel}`];
+  }
+
   const cost = nextOverclockCost(p);
   if (cost === null) return ['Max level'];
   if (salvage < cost) return [cannotAffordText(salvage, cost)];
   const before = fmtClickDamage(clickDamage(p));
-  const after = fmtClickDamage(clickDamage({ ...p, clickLevel: p.clickLevel + 1 }));
+  const after = fmtClickDamage(clickDamage({ ...p, clickLevel: nextLevel }));
   return [[
     { text: `Click damage ${before} → ` },
     good(after),

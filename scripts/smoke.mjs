@@ -49,8 +49,11 @@ import { spawnPopup, dismissPopup } from '../src/core/popups.ts';
 import {
   comboMultiplier,
   clickDamage,
+  MAX_OVERCLOCK_LEVEL,
   OVERCLOCK_COST_GROWTH,
   OVERCLOCK_DAMAGE_GROWTH,
+  overclockCeiling,
+  overclockUnlockWave,
   holdDps,
   nextOverclockCost,
   nextPointerCost,
@@ -1891,6 +1894,7 @@ function chokeWalls(gaps) {
   // actually applied once the level is bought.
   const s = createRunState();
   s.economy.salvage = 100000;
+  s.wave = 16; // the ceiling lets two overclock levels be bought by wave 16
   check(upgradePointer(s), 'pointer upgrades stage 1 -> 2');
   check(s.pointer.stage === 2, 'pointer is at stage 2');
   check(s.pointer.clickLevel === 0, 'clickLevel starts at 0');
@@ -1908,11 +1912,41 @@ function chokeWalls(gaps) {
   check(nextPointerCost(s.pointer) === nextOverclockCost(s.pointer), 'nextPointerCost is the overclock cost at stage 2');
 
   // Buying the level the tooltip previewed must raise the damage to the tooltip's "after" value.
-  const tooltipLine = pointerTooltipLines(s.pointer, s.economy.salvage)[0];
+  const tooltipLine = pointerTooltipLines(s.pointer, s.economy.salvage, s.wave)[0];
   const previewAfter = fmtClickDamage(clickDamage({ ...s.pointer, clickLevel: s.pointer.clickLevel + 1 }));
   check(tooltipText(tooltipLine).includes(previewAfter), `overclock tooltip previews the applied damage (${tooltipText(tooltipLine)})`);
   upgradePointer(s);
   check(fmtClickDamage(clickDamage(s.pointer)) === previewAfter, 'the tooltip after-value matches the damage applied after buying');
+}
+
+{
+  // 24a2. The overclock ceiling: buying is gated by floor(wave / 8) up to 12, and the tooltip names
+  // the wave that unlocks the next level. Levels already bought are never taken back.
+  check(overclockCeiling(0) === 0 && overclockCeiling(7) === 0, 'ceiling is 0 before wave 8');
+  check(overclockCeiling(8) === 1 && overclockCeiling(15) === 1, 'ceiling is 1 from wave 8');
+  check(overclockCeiling(16) === 2 && overclockCeiling(96) === 12, 'ceiling tracks floor(wave/8)');
+  check(overclockCeiling(200) === 12, 'ceiling clamps to 12');
+  check(overclockUnlockWave(2) === 16, 'the unlock wave is level x 8');
+
+  const g = createRunState();
+  g.economy.salvage = 100000;
+  check(upgradePointer(g), 'stage 1 -> 2 ignores the ceiling');
+  check(upgradePointer(g) === false, 'overclock 1 is refused before wave 8');
+  check(g.pointer.clickLevel === 0, 'a refused buy leaves clickLevel at 0');
+  check(
+    tooltipText(pointerTooltipLines(g.pointer, g.economy.salvage, g.wave)[0]) === 'Wave 8 unlocks overclock 1',
+    'the tooltip names the unlocking wave',
+  );
+  g.wave = 8;
+  check(upgradePointer(g), 'overclock 1 buys once wave 8 arrives');
+  check(g.pointer.clickLevel === 1, 'clickLevel becomes 1');
+  check(upgradePointer(g) === false, 'overclock 2 is refused before wave 16');
+  check(tooltipText(pointerTooltipLines(g.pointer, g.economy.salvage, g.wave)[0]) === 'Wave 16 unlocks overclock 2',
+    'the tooltip names the next unlocking wave');
+  g.wave = 16;
+  check(upgradePointer(g), 'overclock 2 buys once wave 16 arrives');
+  g.pointer.clickLevel = MAX_OVERCLOCK_LEVEL;
+  check(pointerTooltipLines(g.pointer, g.economy.salvage, g.wave)[0] === 'Max level', 'the ladder reads Max level at the cap');
 }
 
 {

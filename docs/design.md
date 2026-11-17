@@ -539,18 +539,21 @@ Click damage ignores armour and is the only thing that can break shields (§7).
 
 ### 9.2 The overclock ladder
 
-Above stage 2 the pointer keeps a cost curve of its own. **Overclock levels** are unbounded in
-principle but tuned to about two:
+Above stage 2 the pointer keeps a cost curve of its own. **Overclock levels** are capped at 12 and
+wave-gated so click power grows with the content instead of ahead of it:
 
 ```
-cost(level)  = round(120 × 6.0^level)    // buying level+1 from level
-damage       = 4 × 1.04^level            // the reticle's base click, compounded
+cost(level)  = round(120 × 1.95^level)   // buying level+1 from level
+damage       = 4 × 1.30^level            // the reticle's base click, compounded
 holdDps      = damage × 2.5              // so the reticle keeps pace with the click
+ceiling(wave) = clamp(floor(wave / 8), 0, 12)
 ```
 
-Level 1 costs 120, level 2 about 720, level 3 about 4,320 — and level 3 is about 4.5 damage a click
-before the combo. The curve is deliberately steep: the last levels compete with a tower for the same
-salvage and should lose to neither.
+The highest level the current wave permits is `floor(wave / 8)`, clamped to 0..12
+(`OVERCLOCK_WAVE_DIVISOR = 8` in pointer.ts): level 1 unlocks at wave 8, level 2 at wave 16, and so
+on, reaching level 12 at wave 96. Buying above the ceiling is refused, and the pointer panel shows
+the current level against the ceiling (`Overclock 3 / 5`). The ceiling only ever rises, so levels
+already bought are never taken away — it is a guard, not a tax.
 
 ### 9.3 Precision
 

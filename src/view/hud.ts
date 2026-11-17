@@ -2,7 +2,7 @@ import { Container, Graphics, Text } from 'pixi.js';
 import { bevel, FONT, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
-import { clickDamage, comboMultiplier, nextPointerCost, pointerInfo } from '../core/pointer.ts';
+import { clickDamage, comboMultiplier, nextPointerCost, overclockCeiling, pointerInfo } from '../core/pointer.ts';
 import { canCycleLevel, currentPath, isFinalWave, pointerDamageMult, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
 import { levelById } from '../core/levels.ts';
 import {
@@ -638,7 +638,9 @@ export class HudView {
     bevel(g, h.pointerPanel, true, PAL.face);
     const pointerName = pointerInfo(s.pointer).name;
     this.pointerLabel.text =
-      s.pointer.stage >= 2 ? `Pointer: ${pointerName} L${s.pointer.clickLevel}` : `Pointer: ${pointerName}`;
+      s.pointer.stage >= 2
+        ? `Overclock ${s.pointer.clickLevel} / ${overclockCeiling(s.wave)}`
+        : `Pointer: ${pointerName}`;
     this.pointerLabel.position.set(h.pointerPanel.x + 6, h.pointerPanel.y + 11);
 
     const cost = nextPointerCost(s.pointer);

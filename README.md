@@ -46,6 +46,7 @@ npm run smoke                   # headless simulation checks
 npm run balance -- --to 100     # headless balance harness
 npm run balance -- --call-sweep # early-call trade curve at 25%, 50% and 75%
 npm run balance -- --clicker    # pointer clicker (2 clicks/s + pointer levels) vs. no-click
+npm run balance -- --cursor     # standard plan + two cursors vs. the standard plan
 ```
 
 Flags after `--` are passed through to the script, because `npm` would swallow them otherwise.

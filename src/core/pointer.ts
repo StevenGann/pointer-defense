@@ -2,7 +2,7 @@ import { TICK_HZ } from './time.ts';
 import { rngNext } from './rng.ts';
 
 /**
- * The pointer as a weapon. Two stages, then an unbounded overclock ladder (docs/design.md §9).
+ * The pointer as a weapon. Two stages, then a wave-gated overclock ladder (docs/design.md §9).
  *
  * Stage 1: a bare click — fixed damage on the enemy under the cursor.
  * Stage 2: a targeting reticle — additionally, the last enemy you clicked becomes the held target
@@ -41,6 +41,21 @@ export const OVERCLOCK_COST_GROWTH = 1.95;
 export const OVERCLOCK_DAMAGE_GROWTH = 1.30;
 /** Hold damage tracks click damage: `holdDps = clickDamage * 2.5`. */
 export const HOLD_DPS_MULT = 2.5;
+
+/** One overclock level unlocks every this many waves: `floor(wave / 8)`, capped at 12. */
+export const OVERCLOCK_WAVE_DIVISOR = 8;
+/** The overclock ladder's hard top, so click power stops ahead of the content. */
+export const MAX_OVERCLOCK_LEVEL = 12;
+
+/** The highest overclock level the current wave permits: `floor(wave / 8)`, clamped to 0..12. */
+export function overclockCeiling(wave: number): number {
+  return Math.max(0, Math.min(MAX_OVERCLOCK_LEVEL, Math.floor(wave / OVERCLOCK_WAVE_DIVISOR)));
+}
+
+/** The wave at which an overclock level first becomes buyable (`level * 8`). */
+export function overclockUnlockWave(level: number): number {
+  return level * OVERCLOCK_WAVE_DIVISOR;
+}
 
 /** A click on the marked (reticle-locked) enemy deals +15 %. */
 export const MARKED_DAMAGE_MULT = 1.15;
