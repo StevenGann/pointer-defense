@@ -93,6 +93,7 @@ id is carried in the run state and survives a restart only as the default.
 | `corridor` | The Corridor | four baffles forcing four switchbacks | 48 |
 | `dumbbell` | Dumbbell | two 6-wide halls joined by a 2-tile neck | 28 |
 | `open-field` | Open Field | the ten decorative desk-object tiles | 22 |
+| `turnstile` | Turnstile | a two-wide direct lane with a shutter gate, and an upper hall past two baffles | 20 (open) / 30 (closed) |
 
 Legend: `#` wall, `.` buildable, `S` start, `X` exit.
 
@@ -115,7 +116,29 @@ S...#...#...#...#..X              S.......#..#.......X              S..........#
 The Corridor's baffles are column 4 rows 0-8, column 8 rows 3-11, column 12 rows 0-8 and column 16
 rows 3-11. Dumbbell's walls are columns 2 and 17 rows 2-9, row 2 and row 9 columns 2-6 and 13-17, and
 the neck walls at columns 8 and 11 rows 5-7. Open Field keeps the ten decorative tiles from the
-original board. All three spawn at (0,6) and exit at (19,6).
+original board. All four spawn at (0,6) and exit at (19,6).
+
+Turnstile is the first map to author shutters (§5.6). Its direct lane runs two tiles wide along rows 5
+and 6 and pinches to a single gate at the shutter; the upper hall is rows 0-3, bounded by the row-4
+wall, with baffles at column 5 (rows 0-1) and column 15 (rows 2-3). The row-7 wall seals the drawer
+below the lane so the only long way is up through the hall. `A` is the direct-lane gate (period 900,
+open 420, phase 0); `B` is the upper-hall gate (period 600, open 240, phase 300):
+
+```
+Turnstile
+.....#..............
+.....#...B..........
+...............#....
+...............#....
+.##################.
+..........#.........
+S.........A........X
+####################
+....................
+....................
+....................
+....................
+```
 
 ### 5.6 Map toggles (shutters)
 
@@ -705,7 +728,7 @@ by feel.
 
 | Question | Default |
 |---|---|
-| One map or several? | three authored maps ship; the level id is chosen before wave 1 and carries through the run |
+| One map or several? | four authored maps ship; the level id is chosen before wave 1 and carries through the run |
 | Co-op? | no. A shared board with two pointers is a different game |
 | Mobile? | no. Mazing and clicking both want a mouse |
 | Leaderboard? | no server; a local best-run table only |
@@ -755,8 +778,8 @@ pointer is precision, not bulk DPS.*
 
 ### What is not built
 
-- **Map authoring beyond the three shipped maps.** The Corridor, Dumbbell and Open Field ship; more
-  maps are content, and a new board should change the spawn geometry rather than the palette.
+- **Map authoring beyond the four shipped maps.** The Corridor, Dumbbell, Open Field and Turnstile
+  ship; more maps are content, and a new board should change the spawn geometry rather than the palette.
 - **Save mid-run.** The profile persists; a run in progress does not. Reloading restarts the wave you
   are on.
 - **Touch input.** Mouse and keyboard only.

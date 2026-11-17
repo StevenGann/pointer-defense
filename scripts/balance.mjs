@@ -31,7 +31,7 @@ import { TOWER_KINDS, TOWER_STATS, upgradeCost } from '../src/core/towers.ts';
 import { radiusOf, isPopupEnemy } from '../src/core/enemies.ts';
 import { buildField, isSealed, pathTiles } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
-import { LEVELS, levelById } from '../src/core/levels.ts';
+import { LEVELS, levelById, toggleOpenAt, toggleCombinations } from '../src/core/levels.ts';
 import { defaultProfile, SPEC_CAPS } from '../src/core/save.ts';
 import { buildSchedule } from '../src/core/waves.ts';
 import { TICK_HZ } from '../src/core/time.ts';
@@ -126,6 +126,23 @@ const WALL_PLANS = {
     ...wallOutward(10, [3, 4, 5, 6, 7, 8, 9, 10, 11]), // wall 2, gap at top
     ...wallOutward(14, [0, 1, 2, 3, 4, 5, 6, 7, 8]), // wall 3, gap at bottom
   ],
+  // Turnstile has two stacked corridors (the upper hall and the two-wide direct lane) that the
+  // shutters switch between, so the maze walls both of them. The upper hall gets five three-tall
+  // walls (each leaving a one-tile gap) to extend the authored baffles, and the direct lane gets a
+  // run of single-tile walls that serpentine its two rows.
+  turnstile: [
+    ...wallOutward(2, [1, 2, 3]), // upper hall wall 1, gap at row 0
+    ...wallOutward(8, [0, 1, 2]), // upper hall wall 2, gap at row 3
+    ...wallOutward(11, [1, 2, 3]), // upper hall wall 3, gap at row 0
+    ...wallOutward(13, [0, 1, 2]), // upper hall wall 4, gap at row 3
+    ...wallOutward(17, [1, 2, 3]), // upper hall wall 5, gap at row 0
+    ...wallOutward(2, [5]), // direct lane, top row
+    ...wallOutward(4, [6]), // direct lane, bottom row
+    ...wallOutward(6, [5]), // direct lane, top row
+    ...wallOutward(12, [5]), // direct lane, top row
+    ...wallOutward(14, [6]), // direct lane, bottom row
+    ...wallOutward(16, [5]), // direct lane, top row
+  ],
 };
 
 /** Cap on towers: the maze walls plus a full ring of route coverage, a competent-not-expert board. */
@@ -200,14 +217,24 @@ function straightRuns(path) {
   return runs;
 }
 
-/** A tile is a legal coverage placement: buildable, unblocked, not sealing, not re-routing. */
+/** A tile is a legal coverage placement: buildable, unblocked, not sealing, not re-routing. On a
+ *  toggle map the closed shutters block exactly like towers for ground pathing, so both the sealing
+ *  check (every toggle combination, like placeTower) and the re-route check (the current state, so
+ *  a mid-wave route change does not reject every adjacent tile) must account for the toggles. */
 function legalPlacement(s, path, c, r) {
   if (tileAt(s.grid, c, r) !== 'buildable') return false;
   const i = idx(c, r);
   if (s.blocked.has(i)) return false;
+  const base = new Set(s.blocked);
+  for (const closed of toggleCombinations(s.toggles)) {
+    const blocked = new Set(base);
+    blocked.add(i);
+    for (const t of closed) blocked.add(t);
+    if (isSealed(s.grid, blocked, spawnTile(s), exitTile(s))) return false;
+  }
   const blocked = new Set(s.blocked);
+  for (const t of s.toggles) if (!toggleOpenAt(t, s.clock)) blocked.add(t.row * COLS + t.col);
   blocked.add(i);
-  if (isSealed(s.grid, blocked, spawnTile(s), exitTile(s))) return false;
   return pathTiles(buildField(s.grid, blocked, exitTile(s)), spawnTile(s)).length === path.length;
 }
 

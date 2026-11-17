@@ -81,6 +81,25 @@ const OPEN_FIELD_WALLS: readonly (readonly [number, number])[] = [
   [11, 6], [12, 6],
 ];
 
+/**
+ * Turnstile: a two-wide direct lane across the middle pinches to a single shutter gate, while a long
+ * upper hall winds past two baffles. Closing the gate severs the lane and sends creeps the long way;
+ * the upper hall's own shutter is a second gate on a different period, so the two never lockstep.
+ */
+const TURNSTILE_WALLS: readonly (readonly [number, number])[] = [
+  ...horizontal(4, 1, 18), // the hall's floor, the direct lane's ceiling
+  ...horizontal(7, 0, 19), // seal the desk drawer below the lane
+  [10, 5], // gate shoulder: the two-wide lane pinches to the shutter tile
+  ...vertical(5, 0, 1), // baffle one: blocks the top of the hall, gap below
+  ...vertical(15, 2, 3), // baffle two: blocks the bottom of the hall, gap above
+];
+
+/** The two shutters: the direct gate (15 s) and the upper-hall gate (10 s), offset out of lockstep. */
+const TURNSTILE_TOGGLES: readonly LevelToggle[] = [
+  { col: 10, row: 6, periodTicks: 900, openTicks: 420, phaseTicks: 0 },
+  { col: 9, row: 1, periodTicks: 600, openTicks: 240, phaseTicks: 300 },
+];
+
 export const LEVELS: readonly Level[] = [
   {
     id: 'corridor',
@@ -102,6 +121,14 @@ export const LEVELS: readonly Level[] = [
     walls: OPEN_FIELD_WALLS,
     starts: [{ col: 0, row: 6 }],
     exits: [{ col: COLS - 1, row: 6 }],
+  },
+  {
+    id: 'turnstile',
+    name: 'Turnstile',
+    walls: TURNSTILE_WALLS,
+    starts: [{ col: 0, row: 6 }],
+    exits: [{ col: COLS - 1, row: 6 }],
+    toggles: TURNSTILE_TOGGLES,
   },
 ];
 

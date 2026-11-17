@@ -217,7 +217,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 {
   // Every level loads with a walkable start and exit and a route of the documented length.
   const ROUTE_TOLERANCE = 2;
-  const ROUTE_LENGTHS = { corridor: 48, dumbbell: 28, 'open-field': 22 };
+  const ROUTE_LENGTHS = { corridor: 48, dumbbell: 28, 'open-field': 22, turnstile: 20 };
   for (const level of LEVELS) {
     const grid = createGrid(level);
     const field = buildField(grid, new Set(), level.exits[0]);
@@ -1349,6 +1349,22 @@ function chokeWalls(gaps) {
   const at60 = run(TICK_MS);
   check(at60 === run(1000 / 144), 'toggles: same result at 60 Hz and 144 Hz frames');
   check(at60 === run(1000 / 23), 'toggles: same result at 23 Hz frames');
+}
+
+// 21g. Turnstile: the authored map demonstrates the mechanic end to end. The direct gate is open at
+// clock 0, so the route is the straight lane; once it closes the route runs the upper hall, and every
+// combination of the two gates still leaves the board walkable (validated by createRunState itself).
+{
+  const level = levelById('turnstile');
+  check(validateLevel(level) === null, 'turnstile: validateLevel accepts the map');
+
+  const s = stateOnLevel('turnstile');
+  const openLen = currentPath(s).length; // clock 0: direct gate open, upper gate closed
+  while (s.clock < 421) tick(s); // cross the direct gate's close at clock 420
+  const closedLen = currentPath(s).length;
+  check(openLen === 20, `turnstile: open route is 20 tiles (${openLen})`);
+  check(closedLen === 30, `turnstile: closed route is 30 tiles (${closedLen})`);
+  check(closedLen > openLen, `turnstile: closing the gate measurably lengthens the route (${openLen} -> ${closedLen})`);
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
