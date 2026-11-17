@@ -35,6 +35,8 @@ export interface Profile {
   soundOn: boolean;
   /** Master volume step. */
   volume: VolumeLevel;
+  /** Auto-wave: start the next wave 1.5 s after the board clears. */
+  autoWave: boolean;
 }
 
 export const SPEC_KINDS: readonly SpecKind[] = ['cpu', 'ram', 'gpu', 'disk'];
@@ -92,6 +94,7 @@ export function defaultProfile(): Profile {
     reboots: 0,
     soundOn: true,
     volume: 'med',
+    autoWave: false,
   };
 }
 
@@ -105,6 +108,7 @@ export function cloneProfile(p: Profile): Profile {
     reboots: p.reboots,
     soundOn: p.soundOn,
     volume: p.volume,
+    autoWave: p.autoWave,
   };
 }
 
@@ -172,8 +176,9 @@ function parseProfile(raw: string): Profile | null {
     typeof o.reboots === 'number' && Number.isFinite(o.reboots) ? Math.max(0, Math.floor(o.reboots)) : 0;
   const soundOn = typeof o.soundOn === 'boolean' ? o.soundOn : true;
   const volume: VolumeLevel = o.volume === 'low' || o.volume === 'high' ? o.volume : 'med';
+  const autoWave = typeof o.autoWave === 'boolean' ? o.autoWave : false;
 
-  return { version: SAVE_VERSION, specs, unspentSpecs, achievements, bestWave, reboots, soundOn, volume };
+  return { version: SAVE_VERSION, specs, unspentSpecs, achievements, bestWave, reboots, soundOn, volume, autoWave };
 }
 
 /**

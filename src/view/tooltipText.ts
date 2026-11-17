@@ -91,16 +91,17 @@ const TARGET_LOCK_LABEL: Readonly<Record<TargetMode, string>> = {
   close: 'Closest',
 };
 
-/** The target row's display value: a locked kind reads "<Mode> (fixed)", others read the stored mode. */
+/** The target row's display value: a locked kind reads "<Mode> (fixed)", the cursor reads the
+ *  compact "Shield first", and others read the stored mode. */
 export function targetModeDisplay(tower: Tower): string {
-  if (tower.kind === 'cursor') return 'Shielded, then nearest (fixed)';
+  if (tower.kind === 'cursor') return 'Shield first';
   const lock = TOWER_STATS[tower.kind].targetLock;
   return lock !== null ? `${TARGET_LOCK_LABEL[lock]} (fixed)` : TARGET_LABEL[tower.targetMode];
 }
 
 /** The one-sentence reason a locked tower cannot be re-targeted, or null for a configurable kind. */
 export function targetLockReason(kind: TowerKind): string | null {
-  if (kind === 'cursor') return 'A cursor hunts shielded enemies first, then the nearest to its home tile — it cannot be changed.';
+  if (kind === 'cursor') return 'Shielded enemies first, then the nearest; this cannot be changed. The marked enemy overrides it.';
   switch (TOWER_STATS[kind].targetLock) {
     case 'close':
       return 'A Tesla coil discharges into whatever is nearest.';

@@ -3,7 +3,7 @@ import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
 import { clickDamage, comboMultiplier, nextPointerCost, overclockCeiling, pointerInfo } from '../core/pointer.ts';
-import { canCycleLevel, currentPath, isFinalWave, pointerDamageMult, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
+import { autoWaveStatus, canCycleLevel, currentPath, isFinalWave, pointerDamageMult, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
 import { levelById } from '../core/levels.ts';
 import {
   cursorClickDamage,
@@ -42,6 +42,7 @@ export type HudAction =
   | TowerKind
   | 'pointer'
   | 'override'
+  | 'auto'
   | 'wave'
   | 'map'
   | 'upgrade'
@@ -168,6 +169,7 @@ interface HudLayout {
   pointerOverride: Rect | null;
   towers: ReadonlyArray<{ kind: TowerKind; rect: Rect }>;
   wave: Rect;
+  autoWave: Rect;
   map: MapRow | null;
   specs: SpecShopLayout | null;
 }
@@ -263,7 +265,9 @@ function computeHud(l: Layout, s: RunState): HudLayout {
   }
 
   const wave: Rect = { x, y: cy, w, h: 32 };
-  cy += 32 + 8;
+  cy += 32 + 6;
+  const autoWave: Rect = { x: x + 4, y: cy, w: w - 8, h: 22 };
+  cy += 22 + 6;
 
   let specs: SpecShopLayout | null = null;
   if (s.phase === 'build') {
@@ -303,7 +307,7 @@ function computeHud(l: Layout, s: RunState): HudLayout {
     specs = { header, rows };
   }
 
-  return { integrity, route, detail, pointerPanel, pointerUpgrade, pointerOverride, towers, wave, map, specs };
+  return { integrity, route, detail, pointerPanel, pointerUpgrade, pointerOverride, towers, wave, autoWave, map, specs };
 }
 
 /**
@@ -376,6 +380,7 @@ export function hudControlAt(l: Layout, s: RunState, px: number, py: number): Hu
 
   if (s.phase === 'build' || s.phase === 'wave') {
     if (pointInRect(h.wave, px, py)) return { action: 'wave', enabled: !isFinalWave(s) };
+    if (pointInRect(h.autoWave, px, py)) return { action: 'auto', enabled: true };
   }
 
   if (h.specs) {
@@ -499,6 +504,7 @@ export class HudView {
   private readonly repairButton = makeText('');
   private readonly sellButton = makeText('');
   private readonly targetButton = makeText('');
+  private readonly targetValue = makeText('');
   private readonly pointerLabel = makeText('');
   private notice = '';
   private noticeUntilTick = 0;
@@ -507,6 +513,7 @@ export class HudView {
   private readonly pointerOverrideButton = makeText('');
   private readonly towerButtons: Text[];
   private readonly waveButton = makeText('', true);
+  private readonly autoWaveButton = makeText('');
   private readonly mapLabel = makeText('');
   private readonly mapNext = makeText('');
   private readonly modalTitle = makeText('', true);
@@ -543,11 +550,13 @@ export class HudView {
       this.repairButton,
       this.sellButton,
       this.targetButton,
+      this.targetValue,
       this.pointerLabel,
       this.pointerButton,
       this.pointerOverrideButton,
       ...this.towerButtons,
       this.waveButton,
+      this.autoWaveButton,
       this.mapLabel,
       this.mapNext,
       this.nextWaveTitle,
@@ -565,6 +574,7 @@ export class HudView {
       this.root.addChild(t);
     }
     for (const t of this.branchButtons) t.anchor.set(0.5, 0.5);
+    this.targetValue.anchor.set(1, 0.5);
     this.mapNext.anchor.set(0.5, 0.5);
     for (const t of this.specLabels) t.style.fontSize = FONT_SIZE.small;
     for (const t of this.specButtons) {
@@ -606,7 +616,7 @@ export class HudView {
       this.statusHint.text = '';
     } else {
       this.statusPaused.text = '';
-      this.statusHint.text = this.notice || hintFor(s);
+      this.statusHint.text = this.notice || autoWaveStatus(s) || hintFor(s);
       this.statusHint.position.set(sp.left.x + 4, sp.left.y + Math.floor(sp.left.h / 2));
     }
 
@@ -687,8 +697,14 @@ export class HudView {
           : `Call Wave ${s.wave + 1}  +$${earlyCallBonus(s.waveTick, s.wave + 1)}`;
       this.waveButton.style.fill = enabled ? PAL.text : PAL.shadow;
       this.waveButton.position.set(h.wave.x + 6, h.wave.y + Math.floor(h.wave.h / 2));
+
+      drawCheckbox(g, h.autoWave, s.autoWave);
+      this.autoWaveButton.text = 'Auto';
+      this.autoWaveButton.style.fill = PAL.text;
+      this.autoWaveButton.position.set(h.autoWave.x + 20, h.autoWave.y + Math.floor(h.autoWave.h / 2));
     } else {
       this.waveButton.text = '';
+      this.autoWaveButton.text = '';
     }
 
     this.drawSpecShop(s, h);
@@ -725,6 +741,7 @@ export class HudView {
       this.sellButton.visible = true;
       this.repairButton.visible = d.repair !== null;
       this.targetButton.visible = d.target !== null;
+      this.targetValue.visible = d.target !== null;
       for (const text of this.branchButtons) text.visible = true;
 
       const branch = tower.branch === null ? '' : ` - ${branchName(tower.kind, tower.branch)}`;
@@ -752,11 +769,15 @@ export class HudView {
       if (d.target) {
         const fixed = TOWER_STATS[tower.kind].targetLock !== null || tower.kind === 'cursor';
         drawButton(g, d.target, !fixed, hoverHud === 'target' && !fixed);
-        this.targetButton.text = `Target: ${targetModeDisplay(tower)}`;
+        this.targetButton.text = 'Target';
         this.targetButton.style.fill = fixed ? PAL.shadow : PAL.text;
         this.targetButton.position.set(d.target.x + 6, d.target.y + Math.floor(d.target.h / 2));
+        this.targetValue.text = targetModeDisplay(tower);
+        this.targetValue.style.fill = fixed ? PAL.shadow : PAL.text;
+        this.targetValue.position.set(d.target.x + d.target.w - 6, d.target.y + Math.floor(d.target.h / 2));
       } else {
         this.targetButton.text = '';
+        this.targetValue.text = '';
       }
 
       const price = upgradeCost(tower);
@@ -820,6 +841,7 @@ export class HudView {
     this.repairButton.text = '';
     this.sellButton.text = '';
     this.targetButton.text = '';
+    this.targetValue.text = '';
     this.towerName.visible = false;
     this.towerStats.visible = false;
     this.towerRoute.visible = false;
@@ -827,6 +849,7 @@ export class HudView {
     this.repairButton.visible = false;
     this.sellButton.visible = false;
     this.targetButton.visible = false;
+    this.targetValue.visible = false;
     for (const text of this.branchButtons) {
       text.text = '';
       text.visible = false;

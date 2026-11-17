@@ -531,6 +531,17 @@ loss, the bonus is reduced or the decay steepened — enemies are never made har
 HP/salvage tables are left alone. The call-all scenario is only a stress test of overlap, not a
 balance number.
 
+### 8.6 Auto-wave
+
+The **Auto** checkbox under the Next Wave button turns the late game into an idler. When it is on,
+the run returns to build after a wave clears and — 1.5 s later, so the player can still spend
+salvage or start a repair — the next wave starts on its own. It only ever starts a wave that has
+already been earned, so it never pays the early-call bonus. The countdown is armed on the first
+build tick after a clear (`wave > 0`, so a fresh run at wave 0 never auto-starts), reads
+`Auto: next wave in 1.2 s` in the status bar, and holds at `Auto: waiting for repairs` while any
+tower is off the field mid-repair. A manual Next Wave resets the countdown; toggling Auto off
+cancels it. The setting is off by default and persists in the profile like sound and volume.
+
 ---
 
 ## 9. The pointer

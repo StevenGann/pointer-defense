@@ -7,6 +7,7 @@ import {
   restartWindows,
   selectedTower,
   step,
+  toggleAutoWave,
   towerAt,
   type RunState,
 } from './core/state.ts';
@@ -283,6 +284,11 @@ const mouse = new MouseController(app, {
       saveProfile(profile);
     }
   },
+  toggleAutoWave: () => {
+    toggleAutoWave(state);
+    profile.autoWave = state.autoWave;
+    saveProfile(profile);
+  },
   notice: (message) => hud.showNotice(message),
 });
 
@@ -387,6 +393,8 @@ function hudTooltipLines(action: HudAction, s: RunState): TooltipLine[] {
       return pointerTooltipLines(s.pointer, s.economy.salvage, s.wave);
     case 'override':
       return ['Manual Override: every tower in range of the marked enemy drops its own priority and shoots it.'];
+    case 'auto':
+      return ['Auto: start the next wave 1.5 s after the board clears (holds while a tower repairs).'];
     case 'upgrade':
       return tower ? upgradeTooltipLines(tower, s.economy.salvage) : [];
     case 'branchA':

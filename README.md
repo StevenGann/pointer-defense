@@ -26,6 +26,7 @@ into every future run.
 | Key | Action |
 | --- | --- |
 | Mouse | Click to place towers and shoot enemies; right-click cancels a selection |
+| Auto checkbox | Start the next wave 1.5 s after the board clears (holds while a tower repairs) |
 | `1`–`8` | Select the eight tower kinds, in palette order (also works during a wave) |
 | `Esc` | Clear the current selection and close any open menu |
 | `U` | Upgrade the selected tower |

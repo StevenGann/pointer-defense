@@ -81,6 +81,7 @@ export interface MouseContext {
   dialogAction: (id: string) => void;
   closeDialog: () => void;
   buySpec: (kind: SpecKind) => void;
+  toggleAutoWave: () => void;
   notice: (message: string) => void;
 }
 
@@ -277,6 +278,9 @@ export class MouseController {
         break;
       case 'override':
         toggleManualOverride(s);
+        break;
+      case 'auto':
+        this.ctx.toggleAutoWave();
         break;
       case 'wave':
         startWave(s);

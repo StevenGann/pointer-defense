@@ -92,7 +92,7 @@ import {
 } from './waves.ts';
 import { tickPopups, type Popup, type PopupKind } from './popups.ts';
 import { rngNext } from './rng.ts';
-import { TICK_HZ, TICK_MS } from './time.ts';
+import { secondsToTicks, TICK_HZ, TICK_MS } from './time.ts';
 import {
   cloneProfile,
   defaultProfile,
@@ -115,6 +115,9 @@ import {
 export type Phase = 'build' | 'wave' | 'halted' | 'victory';
 
 export const STARTING_INTEGRITY = 20;
+
+/** How long auto-wave waits after the board clears before starting the next wave (1.5 s). */
+export const AUTO_WAVE_DELAY_TICKS = secondsToTicks(1.5);
 
 /** Bonus per RAM spec point, and the per-point damage/pointer multipliers (docs/design.md §12). */
 export const RAM_SALVAGE_PER_POINT = 5;
@@ -245,6 +248,10 @@ export interface RunState {
   onboarding: boolean;
   /** True once the player has placed a tower this run — hides the onboarding hints. */
   placedFirstTower: boolean;
+  /** Auto-wave: start the next wave 1.5 s after the board clears (persisted in the profile). */
+  autoWave: boolean;
+  /** Simulation clock tick at which a pending auto-wave countdown fires (0 = no countdown). */
+  autoWaveAtTick: number;
 }
 
 export function createRunState(profile: Profile = defaultProfile(), level: Level = DEFAULT_LEVEL): RunState {
@@ -313,6 +320,8 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     speed: 1,
     onboarding: profile.reboots === 0 && profile.achievements.length === 0,
     placedFirstTower: false,
+    autoWave: profile.autoWave,
+    autoWaveAtTick: 0,
   };
 }
 
@@ -705,6 +714,7 @@ export function startWave(s: RunState): boolean {
   s.runs.push({ wave: s.wave, startTick: s.clock, spawns: buildSchedule(s.wave) });
   s.phase = 'wave';
   s.waveTick = 0;
+  s.autoWaveAtTick = 0; // any start — manual or automatic — cancels a pending countdown
   s.leaksByWave.set(s.wave, 0);
   s.modifiers = waveModifiers(s.wave);
   s.noBuildRow = s.modifiers.includes('no-build') ? noBuildRow(s.wave) : null;
@@ -747,6 +757,28 @@ export function upgradePointer(s: RunState): boolean {
 /** Flip the Manual Override checkbox: while on, towers fire at the marked enemy when in range. */
 export function toggleManualOverride(s: RunState): void {
   s.pointer.manualOverride = !s.pointer.manualOverride;
+}
+
+/** Flip the Auto checkbox: while on, the next wave starts 1.5 s after the board clears. */
+export function toggleAutoWave(s: RunState): void {
+  s.autoWave = !s.autoWave;
+  if (!s.autoWave) s.autoWaveAtTick = 0; // turning it off cancels any pending countdown
+}
+
+/** True while any tower is mid-repair (a wall or gun is off the field). */
+export function anyTowerRepairing(s: RunState): boolean {
+  return s.towers.some((t) => isRepairing(t, s.clock));
+}
+
+/**
+ * The auto-wave status-bar line, or null when auto is off, not in build, or no countdown is armed.
+ * During a repair the countdown holds, so the line reads "waiting for repairs" instead of a number.
+ */
+export function autoWaveStatus(s: RunState): string | null {
+  if (!s.autoWave || s.phase !== 'build' || s.autoWaveAtTick === 0) return null;
+  if (anyTowerRepairing(s)) return 'Auto: waiting for repairs';
+  const remaining = Math.max(0, s.autoWaveAtTick - s.clock) / TICK_HZ;
+  return `Auto: next wave in ${remaining.toFixed(1)} s`;
 }
 
 /** Spend one banked spec on a permanent upgrade. Capped rows and an empty bank are refused. */
@@ -941,6 +973,23 @@ export function tick(s: RunState): void {
     tickCursors(s); // idle: the cursor drifts around its tile between waves
   }
   s.clock++;
+  tickAutoWave(s);
+}
+
+/**
+ * Advance the auto-wave countdown in the build phase. The countdown is armed on the first build
+ * tick after a wave clears (wave > 0, so a fresh run at wave 0 never auto-starts), fires when the
+ * clock reaches the armed tick, and holds while any tower is mid-repair. Manual startWave and
+ * toggling auto off both clear the armed tick.
+ */
+function tickAutoWave(s: RunState): void {
+  if (!s.autoWave || s.phase !== 'build') return;
+  if (s.autoWaveAtTick === 0) {
+    if (s.wave > 0) s.autoWaveAtTick = s.clock + AUTO_WAVE_DELAY_TICKS;
+    return;
+  }
+  if (anyTowerRepairing(s)) return;
+  if (s.clock >= s.autoWaveAtTick) startWave(s);
 }
 
 /**

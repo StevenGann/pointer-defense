@@ -35,6 +35,10 @@ import {
   startRepair,
   upgradePointer,
   toggleManualOverride,
+  toggleAutoWave,
+  anyTowerRepairing,
+  autoWaveStatus,
+  AUTO_WAVE_DELAY_TICKS,
 } from '../src/core/state.ts';
 import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
@@ -2335,9 +2339,9 @@ function cursorTower(tier, branch) {
 
 {
   // 25f6. The panel reads a fixed label, and cycling the target is a no-op for a cursor.
-  check(targetModeDisplay(createTower(1, 'cursor', 0, 0)) === 'Shielded, then nearest (fixed)',
-    'cursor panel reads "Shielded, then nearest (fixed)"');
-  check(targetLockReason('cursor') === 'A cursor hunts shielded enemies first, then the nearest to its home tile — it cannot be changed.',
+  check(targetModeDisplay(createTower(1, 'cursor', 0, 0)) === 'Shield first',
+    'cursor panel reads "Shield first"');
+  check(targetLockReason('cursor') === 'Shielded enemies first, then the nearest; this cannot be changed. The marked enemy overrides it.',
     'cursor tooltip explains the fixed rule and that it cannot be changed');
 
   const s = createRunState();
@@ -2430,6 +2434,114 @@ function cursorTower(tier, branch) {
   const at60 = run(TICK_MS);
   check(at60 === run(1000 / 144), 'cursors in flight: same result at 60 Hz and 144 Hz frames');
   check(at60 === run(1000 / 23), 'cursors in flight: same result at 23 Hz frames');
+}
+
+// --- 26. Auto-wave --------------------------------------------------------------------------
+
+{
+  // 26a. Off by default: a cleared board waits in build and never auto-starts.
+  const s = stateOnLevel('open-field');
+  check(s.autoWave === false, 'auto-wave is off by default');
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 3, 6);
+  startWave(s);
+  for (let i = 0; i < 4000 && s.phase === 'wave'; i++) tick(s);
+  check(s.phase === 'build' && s.wave === 1, 'auto off: the board clears and the run waits in build');
+  for (let i = 0; i < 200; i++) tick(s);
+  check(s.phase === 'build' && s.wave === 1, 'auto off: no wave starts while the flag is off');
+}
+
+{
+  // 26b. Auto on: the next wave starts 1.5 s after the board clears, and the status bar counts down.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 3, 6);
+  toggleAutoWave(s);
+  check(s.autoWave === true, 'auto on: flag set');
+  startWave(s);
+  for (let i = 0; i < 4000 && s.phase === 'wave'; i++) tick(s);
+  check(s.phase === 'build', 'auto on: board cleared');
+  const armed = s.autoWaveAtTick;
+  const clearClock = s.clock;
+  check(armed === clearClock + AUTO_WAVE_DELAY_TICKS, 'auto on: the countdown is armed 1.5 s after the clear');
+  const status = autoWaveStatus(s);
+  check(status !== null && status.startsWith('Auto: next wave in '), `auto on: status shows the countdown (${status})`);
+  while (s.phase === 'build' && s.clock < armed) tick(s);
+  check(s.phase === 'wave' && s.wave === 2, 'auto on: wave 2 starts automatically');
+  check(s.runs[0].startTick === armed, `auto on: wave 2 starts at the armed tick (${s.runs[0].startTick} == ${armed})`);
+  check(s.runs[0].startTick - clearClock === AUTO_WAVE_DELAY_TICKS,
+    `auto on: started ${AUTO_WAVE_DELAY_TICKS} ticks (1.5 s) after the clear`);
+}
+
+{
+  // 26c. A repair in progress holds the auto-start until it finishes, then it fires.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 3, 6);
+  placeTower(s, 'wall', 5, 5);
+  const wall = towerAt(s, 5, 5);
+  wall.hp = wall.maxHp / 2;
+  toggleAutoWave(s);
+  startWave(s);
+  for (let i = 0; i < 4000 && s.phase === 'wave'; i++) tick(s);
+  check(s.phase === 'build', 'auto+repair: board cleared');
+  const armed = s.autoWaveAtTick;
+  check(startRepair(s, 5, 5), 'auto+repair: a repair starts during the countdown');
+  check(anyTowerRepairing(s), 'auto+repair: the wall is mid-repair');
+  while (s.clock < armed + 30) tick(s);
+  check(s.phase === 'build' && s.wave === 1, 'auto+repair: the start holds while a repair runs');
+  check(autoWaveStatus(s) === 'Auto: waiting for repairs', `auto+repair: status reads waiting for repairs (${autoWaveStatus(s)})`);
+  while (s.phase === 'build') tick(s);
+  check(s.phase === 'wave' && s.wave === 2, 'auto+repair: the wave fires once the repair finishes');
+}
+
+{
+  // 26d. An auto-started wave is a normal start, never an early call, so no bonus is paid.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 3, 6);
+  toggleAutoWave(s);
+  startWave(s);
+  for (let i = 0; i < 4000 && s.phase === 'wave'; i++) tick(s);
+  const salBefore = s.economy.salvage;
+  const armed = s.autoWaveAtTick;
+  while (s.phase === 'build' && s.clock < armed) tick(s);
+  check(s.phase === 'wave' && s.wave === 2, 'auto bonus: wave 2 starts automatically');
+  check(s.calledEarly === false, 'auto bonus: an auto-start is not an early call');
+  check(s.economy.salvage === salBefore, 'auto bonus: no early-call bonus is awarded');
+}
+
+{
+  // 26e. The setting round-trips through the save and seeds the run from the profile.
+  check(defaultProfile().autoWave === false, 'auto-wave: off by default in the profile');
+  const store = { value: null, getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
+  const p = defaultProfile();
+  p.autoWave = true;
+  saveProfile(p, store);
+  const loaded = loadProfile(store);
+  check(loaded.autoWave === true, 'auto-wave: setting round-trips through the save');
+  const s = createRunState(loaded);
+  check(s.autoWave === true && s.autoWaveAtTick === 0, 'auto-wave: the run seeds auto from the profile');
+}
+
+{
+  // 26f. Fixed-timestep equivalence: the same ticks produce the same start tick at 30 fps and 60 fps.
+  const run = (frameMs) => {
+    const s = stateOnLevel('open-field');
+    s.economy.salvage = 100000;
+    placeTower(s, 'gun', 3, 6);
+    toggleAutoWave(s);
+    startWave(s);
+    for (let t = 0; t < 1800 * TICK_MS - frameMs; t += frameMs) step(s, frameMs);
+    while (s.tick < 1800) tick(s);
+    const started = s.runs.find((r) => r.wave === 2);
+    return JSON.stringify([s.wave, s.phase, started ? started.startTick : null, s.clock, s.autoWaveAtTick]);
+  };
+  const at30 = run(1000 / 30);
+  const at60 = run(1000 / 60);
+  const parsed = JSON.parse(at30);
+  check(parsed[1] === 'wave' && typeof parsed[2] === 'number', 'auto-wave: wave 2 started automatically in the fixed-timestep run');
+  check(at30 === at60, 'auto-wave: same start tick at 30 fps and 60 fps');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
