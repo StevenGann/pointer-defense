@@ -441,6 +441,15 @@ function drainEvents(): void {
         effects.addHitSpark(ev.x, ev.y);
         sfx.play('cannon');
         break;
+      case 'turretShot':
+        effects.addBreacherShot(ev.x, ev.y, ev.targetX, ev.targetY);
+        effects.addHitSpark(ev.targetX, ev.targetY);
+        sfx.play('gun');
+        break;
+      case 'towerOffline':
+        effects.addHitSpark(ev.x, ev.y);
+        sfx.play('cannon');
+        break;
       case 'adSpawned':
         sfx.play('ad');
         break;

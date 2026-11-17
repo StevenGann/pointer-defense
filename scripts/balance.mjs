@@ -27,9 +27,9 @@ import {
   cycleLevel,
   closePopupEnemy,
 } from '../src/core/state.ts';
-import { TOWER_KINDS, TOWER_STATS, upgradeCost, repairCost } from '../src/core/towers.ts';
+import { TOWER_KINDS, TOWER_STATS, upgradeCost, repairCost, isRepairing } from '../src/core/towers.ts';
 import { spend } from '../src/core/economy.ts';
-import { radiusOf, isPopupEnemy } from '../src/core/enemies.ts';
+import { radiusOf, isPopupEnemy, setBreacherTurretDamage } from '../src/core/enemies.ts';
 import { buildField, isSealed, pathTiles } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
 import { LEVELS, levelById, toggleOpenAt, toggleCombinations } from '../src/core/levels.ts';
@@ -92,12 +92,19 @@ const cursorMode = hasFlag('--cursor');
 // tower once a wave is deep enough to have damaged towers to heal. It proves the harness can place
 // and pay for the new kind; the default plan never buys one, so the standard numbers stay put.
 const repairTowerMode = hasFlag('--repair-tower');
+// --turret-damage <n>: override the breacher turret's per-shot damage for a balance sweep (0 as the
+// control, then the candidate rates). Absent, the harness plays the committed constant.
+const turretDamageRaw = flag('--turret-damage', null);
+const turretDamageOverride = turretDamageRaw === null ? null : Math.max(0, parseFloat(turretDamageRaw) || 0);
 // --level <id> selects one authored map; the default runs all three and prints one line each.
 const levelFlag = flag('--level', null);
 const activeLevels = levelFlag ? [levelById(levelFlag)] : [...LEVELS];
 const singleLevel = activeLevels.length === 1;
 // Suppresses the per-wave and per-run chatter while the map loop runs; the map lines are the point.
 let silent = false;
+
+// Apply the turret-damage override once, before any run reads the committed constant.
+if (turretDamageOverride !== null) setBreacherTurretDamage(turretDamageOverride);
 
 // --- Deterministic PRNG (mulberry32), independent of the sim's own stream ----------------------
 function makeRng(seed) {
@@ -484,6 +491,49 @@ function repairWallsDuringBuild(s) {
   }
 }
 
+/** The salvage cost of the next tower the bot still wants to buy (0 once the board is full). */
+function nextTowerCost(s, counts, wave, wallIdx, maxTowers) {
+  if (s.towers.length >= maxTowers) return 0;
+  const plan = WALL_PLANS[s.levelId] ?? WALL_PLANS['open-field'];
+  if (wallIdx < plan.length) {
+    const mazeKind = wallMode ? 'wall' : 'gun';
+    return TOWER_STATS[mazeKind].cost;
+  }
+  return TOWER_STATS[decideKind(counts, wave)].cost;
+}
+
+/**
+ * Auto-repair of non-wall towers between waves: a player whose tower went offline spends idle salvage
+ * bringing it back, where the original bot left it dark and spiralled. Only the build phase qualifies
+ * (a repair takes the tower off the field, so it must never run while the tower is the lanekeeper),
+ * and only after the normal build policy has spent what it can — a repair is paid out of surplus and
+ * is skipped when it would eat into the cost of the next tower the bot still wants. The most valuable
+ * damaged tower (highest spent, build + upgrade) is fixed first. Walls are never repaired: they heal
+ * or die on their own, and the aura covers them.
+ */
+function repairTowersDuringBuild(s, counts, wave, wallIdx, maxTowers) {
+  if (s.phase !== 'build') return; // a repair takes the tower offline; never mid-wave
+  const reserve = nextTowerCost(s, counts, wave, wallIdx, maxTowers);
+  for (let guard = 0; guard < 10000; guard++) {
+    let target = null;
+    for (const t of s.towers) {
+      if (t.kind === 'wall') continue;
+      if (t.maxHp <= 0) continue;
+      if (isRepairing(t, s.clock)) continue;
+      if (t.hp <= 0 || t.hp < t.maxHp * 0.35) {
+        if (!target || t.spent > target.spent) target = t;
+      }
+    }
+    if (!target) break;
+    const cost = repairCost(target);
+    if (cost <= 0) break;
+    if (s.economy.salvage - cost < reserve) break;
+    if (!spend(s.economy, cost)) break;
+    repairSpend += cost;
+    target.hp = target.maxHp;
+  }
+}
+
 /** Build-phase policy: finish the maze, upgrade cheaply, then place coverage towers. */
 function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, maxTowers = MAX_TOWERS, coverage = false, buyPointer = false, buyCursor = true) {
   if (noBuild) {
@@ -622,6 +672,8 @@ function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, 
       if (!tile || !placeTower(s, 'gun', tile.col, tile.row)) break;
     }
   }
+
+  repairTowersDuringBuild(s, counts, wave, nextWall, maxTowers);
   return nextWall;
 }
 

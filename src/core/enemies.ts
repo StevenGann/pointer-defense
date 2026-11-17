@@ -46,6 +46,21 @@ export const ENEMY_STATS: Readonly<Record<EnemyKind, EnemyStats>> = {
 };
 
 /**
+ * The breacher's mounted turret (docs/design.md §7). It shoots the nearest player tower — the line,
+ * not the maze — so a wall-less board cannot ignore a Breacher. Walls are the nose's job (chewing),
+ * not the gun's, so they are never a turret target. Range is measured centre to centre.
+ */
+export const BREACHER_TURRET_RANGE = 2.2;
+export let BREACHER_TURRET_DAMAGE = 2;
+/** Ticks between turret shots: one per second. */
+export const BREACHER_TURRET_INTERVAL_TICKS = TICK_HZ;
+
+/** The balance harness overrides the turret's per-shot damage to sweep the survivable rate. */
+export function setBreacherTurretDamage(value: number): void {
+  BREACHER_TURRET_DAMAGE = value;
+}
+
+/**
  * The pop-up enemy is a walking shield, not a "shielded" enemy: its `shield` stat is 0. Towers are
  * blinded to any enemy whose centre lies inside the window's rectangle, and the window itself can
  * only be killed by clicking its close box (the view dispatches that click to a core reducer).
@@ -102,6 +117,8 @@ export interface Enemy {
   heading: number;
   /** Wall tower id this breacher is currently chewing through, or null. */
   attackWallId: number | null;
+  /** Breacher only: ticks until the mounted turret may fire again (0 = ready). */
+  turretCooldown: number;
   dead: boolean;
 }
 
@@ -164,6 +181,7 @@ export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Ti
     stunUntilTick: 0,
     heading,
     attackWallId: null,
+    turretCooldown: 0,
     dead: false,
   };
 }

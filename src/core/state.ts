@@ -17,7 +17,20 @@ import {
   type LevelToggle,
 } from './levels.ts';
 import { buildAirField, buildField, isSealed, pathTiles, stepToward } from './pathfield.ts';
-import { createEnemy, ENEMY_STATS, isPopupEnemy, isWeakPointHit, popupCovers, radiusOf, speedPerTick, type Enemy, type EnemyKind } from './enemies.ts';
+import {
+  BREACHER_TURRET_DAMAGE,
+  BREACHER_TURRET_INTERVAL_TICKS,
+  BREACHER_TURRET_RANGE,
+  createEnemy,
+  ENEMY_STATS,
+  isPopupEnemy,
+  isWeakPointHit,
+  popupCovers,
+  radiusOf,
+  speedPerTick,
+  type Enemy,
+  type EnemyKind,
+} from './enemies.ts';
 import {
   createTower,
   CURSOR_CLICK_RANGE,
@@ -30,6 +43,7 @@ import {
   effectiveStats,
   isGateLocked,
   isGateOpen,
+  isOffline,
   isRepairing,
   isToggleGate,
   isWall,
@@ -146,6 +160,8 @@ export type GameEvent =
   | { type: 'waveCleared'; wave: number; bonus: number }
   | { type: 'wallDamaged'; x: number; y: number; amount: number }
   | { type: 'wallDestroyed'; x: number; y: number }
+  | { type: 'turretShot'; x: number; y: number; targetX: number; targetY: number }
+  | { type: 'towerOffline'; x: number; y: number; towerId: number }
   | { type: 'adSpawned'; kind: AdKind }
   | { type: 'adDismissed'; kind: AdKind }
   | { type: 'toggleChanged'; index: number; open: boolean };
@@ -564,6 +580,7 @@ export function upgradeTower(s: RunState, col: number, row: number): boolean {
   if (noBuildActive(s)) return false;
   const t = towerAt(s, col, row);
   if (!t) return false;
+  if (isOffline(t)) return false; // an offline tower cannot be upgraded, only repaired
   if (t.tier === 2 && t.kind !== 'repair') return false; // 2 -> 3 is chooseBranch's job (repair never branches)
   const cost = upgradeCost(t);
   if (cost === null) return false;
@@ -580,6 +597,7 @@ export function chooseBranch(s: RunState, col: number, row: number, branch: Bran
   if (noBuildActive(s)) return false;
   const t = towerAt(s, col, row);
   if (!t || t.tier !== 2 || t.branch !== null) return false;
+  if (isOffline(t)) return false; // an offline tower cannot branch, only be repaired
   const cost = upgradeCost(t);
   if (cost === null) return false;
   if (!spend(s.economy, cost)) return false;
@@ -862,6 +880,7 @@ function relayPointerBonus(s: RunState, x: number, y: number): { damage: number;
   let slack = 0;
   for (const t of s.towers) {
     if (t.kind !== 'beacon' || t.branch !== 'B') continue;
+    if (isOffline(t)) continue; // an offline Relay beacon buffs nothing
     const st = effectiveStats(t);
     const r = st.range;
     if ((x - (t.col + 0.5)) ** 2 + (y - (t.row + 0.5)) ** 2 <= r * r) {
@@ -979,6 +998,7 @@ export function tick(s: RunState): void {
   if (s.phase === 'wave') {
     spawnDue(s);
     moveEnemies(s);
+    fireBreacherTurrets(s);
     tickCursors(s);
     fireTowers(s);
     applyReticle(s);
@@ -1075,6 +1095,7 @@ function tickRepairs(s: RunState): void {
 
   if (finished.length === 0) return;
   rebuildField(s);
+  recomputeAuras(s.towers); // a repaired tower may have come back online (beacon/repair aura resumes)
   for (const e of s.enemies) {
     e.targetCol = -1;
     e.targetRow = -1;
@@ -1094,14 +1115,17 @@ function tickRepairs(s: RunState): void {
  * health, or starts a manual repair (and so leaves the field) stops receiving the aura immediately.
  */
 function tickRepairAuras(s: RunState): void {
+  let revived = false;
   for (const h of s.towers) {
     if (h.kind !== 'repair' || h.hp <= 0) continue;
     if (isRepairing(h, s.clock)) continue; // a repair tower mid-repair is off the field
     const heal = repairHealRate(h) / TICK_HZ;
     for (const t of repairHealTargets(s.towers, h, s.clock)) {
+      if (isOffline(t)) revived = true; // healing an offline tower back above 0 brings it online
       t.hp = Math.min(t.maxHp, t.hp + heal);
     }
   }
+  if (revived) recomputeAuras(s.towers);
 }
 
 /** The combo counts down every tick and expires (back to x1) when it reaches zero. */
@@ -1253,6 +1277,81 @@ function destroyWall(s: RunState, wall: Tower): void {
   rebuildField(s);
   recomputeAuras(s.towers);
   s.events.push({ type: 'wallDestroyed', x: wall.col + 0.5, y: wall.row + 0.5 });
+}
+
+/**
+ * Deal damage to a non-wall tower from the breacher's turret. A tower driven to 0 HP does not leave
+ * the board: it goes offline — it stays put, stops firing and stops projecting auras, but can still
+ * be repaired. Walls never reach here (the turret does not target them) but are routed to damageWall
+ * as a safety net.
+ */
+function damageTower(s: RunState, tower: Tower, amount: number): void {
+  if (amount <= 0 || tower.maxHp <= 0) return;
+  if (isWall(tower)) {
+    damageWall(s, tower, amount);
+    return;
+  }
+  if (tower.hp <= 0) return; // already offline: nothing left to lose
+  const dealt = Math.min(tower.hp, amount);
+  tower.hp -= dealt;
+  if (tower.hp <= 1e-9) {
+    tower.hp = 0;
+    recomputeAuras(s.towers); // an offline beacon/repair stops buffing/healing immediately
+    s.events.push({ type: 'towerOffline', x: tower.col + 0.5, y: tower.row + 0.5, towerId: tower.id });
+  }
+}
+
+/**
+ * The nearest non-wall tower to a breacher, within turret range, that still has hit points to lose.
+ * Offline towers (0 HP) and towers mid-repair are skipped. Ties keep tower order, so the choice is
+ * deterministic.
+ */
+function breacherTurretTarget(s: RunState, e: Enemy): Tower | undefined {
+  const r2 = BREACHER_TURRET_RANGE * BREACHER_TURRET_RANGE;
+  let best: Tower | undefined;
+  let bestD2 = Infinity;
+  for (const t of s.towers) {
+    if (isWall(t)) continue; // walls are the nose's job, never the turret's
+    if (t.maxHp <= 0 || t.hp <= 0) continue;
+    if (isRepairing(t, s.clock)) continue; // off the field
+    const dx = t.col + 0.5 - e.x;
+    const dy = t.row + 0.5 - e.y;
+    const d2 = dx * dx + dy * dy;
+    if (d2 > r2) continue;
+    if (d2 < bestD2) {
+      bestD2 = d2;
+      best = t;
+    }
+  }
+  return best;
+}
+
+/**
+ * The breacher's mounted turret: while a breacher is walking (not chewing a wall and not stunned) it
+ * fires a 2-damage shot at the nearest tower once per second. Chewing a wall disarms it — the nose is
+ * busy — and it resumes the moment the wall is gone.
+ */
+function fireBreacherTurrets(s: RunState): void {
+  for (const e of s.enemies) {
+    if (e.dead || e.kind !== 'breacher') continue;
+    if (e.attackWallId !== null) continue; // chewing: the nose is busy
+    if (s.tick < e.stunUntilTick) continue; // stunned: not walking
+    if (e.turretCooldown > 0) {
+      e.turretCooldown--;
+      continue;
+    }
+    const target = breacherTurretTarget(s, e);
+    if (!target) continue; // no target: stay ready, do not burn the clock
+    e.turretCooldown = BREACHER_TURRET_INTERVAL_TICKS - 1;
+    s.events.push({
+      type: 'turretShot',
+      x: e.x,
+      y: e.y,
+      targetX: target.col + 0.5,
+      targetY: target.row + 0.5,
+    });
+    damageTower(s, target, BREACHER_TURRET_DAMAGE);
+  }
 }
 
 function leak(s: RunState, e: Enemy): void {
@@ -1635,7 +1734,7 @@ function cursorRadiusHasEnemy(s: RunState, t: Tower): boolean {
  *  not mid-repair, and not the cursor's own plinth. */
 function cursorRepairEligible(t: Tower, o: Tower, clock: number): boolean {
   if (o.id === t.id) return false;
-  if (o.maxHp <= 0 || o.hp <= 0) return false;
+  if (o.maxHp <= 0) return false; // an offline tower (hp 0) is a valid repair target, not destroyed
   if (o.hp >= o.maxHp) return false;
   if (o.hp >= CURSOR_REPAIR_THRESHOLD * o.maxHp) return false;
   if (isRepairing(o, clock)) return false;
@@ -1725,6 +1824,7 @@ function tickMaintenanceCursor(s: RunState, t: Tower): void {
 function tickCursors(s: RunState): void {
   for (const t of s.towers) {
     if (t.kind !== 'cursor') continue;
+    if (isOffline(t)) continue; // an offline cursor stops clicking
     if (t.cursorCooldown > 0) t.cursorCooldown--;
     if (t.cursorClickFx > 0) t.cursorClickFx--;
 
@@ -1799,6 +1899,7 @@ function fireTowers(s: RunState): void {
   const buff = s.towerDamageBuffTicks > 0 ? 1.4 : 1;
   for (const t of s.towers) {
     if ((s.towerDisabled.get(t.id) ?? 0) > 0) continue; // disabled by Blue Screen
+    if (isOffline(t)) continue; // an offline tower does not fire
     const st = effectiveStats(t);
     if (st.damage <= 0 || st.fireInterval <= 0) continue; // beacon never fires
     const range = (st.range + t.auraRange) * towerRangeMult(s);
