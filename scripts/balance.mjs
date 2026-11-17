@@ -136,22 +136,33 @@ const WALL_PLANS = {
     ...wallOutward(10, [3, 4, 5, 6, 7, 8, 9, 10, 11]), // wall 2, gap at top
     ...wallOutward(14, [0, 1, 2, 3, 4, 5, 6, 7, 8]), // wall 3, gap at bottom
   ],
-  // Turnstile has two stacked corridors (the upper hall and the two-wide direct lane) that the
-  // shutters switch between, so the maze walls both of them. The upper hall gets five three-tall
-  // walls (each leaving a one-tile gap) to extend the authored baffles, and the direct lane gets a
-  // run of single-tile walls that serpentine its two rows.
+  // Turnstile's two corridors stack between the ceiling and the drawer seal. The maze walls the
+  // direct lane shut at every column and mazes the upper hall with four three-tall walls, so the
+  // route always runs the hall and the two shutters only gate the un-mazed lane. The final wall
+  // targets the direct gate itself — a shutter, so it never goes down.
   turnstile: [
     ...wallOutward(2, [1, 2, 3]), // upper hall wall 1, gap at row 0
-    ...wallOutward(8, [0, 1, 2]), // upper hall wall 2, gap at row 3
-    ...wallOutward(11, [1, 2, 3]), // upper hall wall 3, gap at row 0
+    ...wallOutward(6, [0, 1, 2]), // upper hall wall 2, gap at row 3
+    ...wallOutward(10, [1, 2, 3]), // upper hall wall 3, gap at row 0
     ...wallOutward(13, [0, 1, 2]), // upper hall wall 4, gap at row 3
-    ...wallOutward(17, [1, 2, 3]), // upper hall wall 5, gap at row 0
-    ...wallOutward(2, [5]), // direct lane, top row
-    ...wallOutward(4, [6]), // direct lane, bottom row
-    ...wallOutward(6, [5]), // direct lane, top row
-    ...wallOutward(12, [5]), // direct lane, top row
-    ...wallOutward(14, [6]), // direct lane, bottom row
-    ...wallOutward(16, [5]), // direct lane, top row
+    ...wallOutward(1, [5]), // direct lane seal, left half
+    ...wallOutward(2, [6]),
+    ...wallOutward(3, [5]),
+    ...wallOutward(4, [6]),
+    ...wallOutward(5, [5]),
+    ...wallOutward(6, [6]),
+    ...wallOutward(7, [5]),
+    ...wallOutward(8, [6]),
+    ...wallOutward(9, [5]),
+    ...wallOutward(11, [6]), // direct lane seal, right half
+    ...wallOutward(12, [5]),
+    ...wallOutward(13, [6]),
+    ...wallOutward(14, [5]),
+    ...wallOutward(15, [6]),
+    ...wallOutward(16, [5]),
+    ...wallOutward(17, [6]),
+    ...wallOutward(18, [5]),
+    ...wallOutward(10, [6]), // the direct gate itself: never buildable
   ],
 };
 

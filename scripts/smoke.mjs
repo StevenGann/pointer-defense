@@ -1363,7 +1363,7 @@ function chokeWalls(gaps) {
   while (s.clock < 421) tick(s); // cross the direct gate's close at clock 420
   const closedLen = currentPath(s).length;
   check(openLen === 20, `turnstile: open route is 20 tiles (${openLen})`);
-  check(closedLen === 30, `turnstile: closed route is 30 tiles (${closedLen})`);
+  check(closedLen === 26, `turnstile: closed route is 26 tiles (${closedLen})`);
   check(closedLen > openLen, `turnstile: closing the gate measurably lengthens the route (${openLen} -> ${closedLen})`);
 }
 

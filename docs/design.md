@@ -93,7 +93,7 @@ id is carried in the run state and survives a restart only as the default.
 | `corridor` | The Corridor | four baffles forcing four switchbacks | 48 |
 | `dumbbell` | Dumbbell | two 6-wide halls joined by a 2-tile neck | 28 |
 | `open-field` | Open Field | the ten decorative desk-object tiles | 22 |
-| `turnstile` | Turnstile | a two-wide direct lane with a shutter gate, and an upper hall past two baffles | 20 (open) / 30 (closed) |
+| `turnstile` | Turnstile | a two-wide direct lane with a shutter gate, and an upper hall above it | 20 (open) / 26 (closed) |
 
 Legend: `#` wall, `.` buildable, `S` start, `X` exit.
 
@@ -120,16 +120,16 @@ original board. All four spawn at (0,6) and exit at (19,6).
 
 Turnstile is the first map to author shutters (§5.6). Its direct lane runs two tiles wide along rows 5
 and 6 and pinches to a single gate at the shutter; the upper hall is rows 0-3, bounded by the row-4
-wall, with baffles at column 5 (rows 0-1) and column 15 (rows 2-3). The row-7 wall seals the drawer
-below the lane so the only long way is up through the hall. `A` is the direct-lane gate (period 900,
-open 420, phase 0); `B` is the upper-hall gate (period 600, open 240, phase 300):
+wall. The row-7 wall seals the drawer below the lane so the only long way is up through the hall. `A`
+is the direct-lane gate (period 900, open 420, phase 0); `B` is the upper-hall gate (period 600, open
+240, phase 300):
 
 ```
 Turnstile
-.....#..............
-.....#...B..........
-...............#....
-...............#....
+....................
+.........B..........
+....................
+....................
 .##################.
 ..........#.........
 S.........A........X

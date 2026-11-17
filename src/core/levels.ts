@@ -82,16 +82,14 @@ const OPEN_FIELD_WALLS: readonly (readonly [number, number])[] = [
 ];
 
 /**
- * Turnstile: a two-wide direct lane across the middle pinches to a single shutter gate, while a long
- * upper hall winds past two baffles. Closing the gate severs the lane and sends creeps the long way;
- * the upper hall's own shutter is a second gate on a different period, so the two never lockstep.
+ * Turnstile: a two-wide direct lane across the middle pinches to a single shutter gate, while an
+ * upper hall runs the long way above it. Closing the gate severs the lane and sends creeps the long
+ * way; the upper hall's own shutter is a second gate on a different period, so the two never lockstep.
  */
 const TURNSTILE_WALLS: readonly (readonly [number, number])[] = [
   ...horizontal(4, 1, 18), // the hall's floor, the direct lane's ceiling
   ...horizontal(7, 0, 19), // seal the desk drawer below the lane
-  [10, 5], // gate shoulder: the two-wide lane pinches to the shutter tile
-  ...vertical(5, 0, 1), // baffle one: blocks the top of the hall, gap below
-  ...vertical(15, 2, 3), // baffle two: blocks the bottom of the hall, gap above
+  [10, 5], // gate shoulder: the lane pinches to the shutter tile
 ];
 
 /** The two shutters: the direct gate (15 s) and the upper-hall gate (10 s), offset out of lockstep. */
