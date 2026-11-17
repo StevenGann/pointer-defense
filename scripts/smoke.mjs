@@ -1892,7 +1892,7 @@ function chokeWalls(gaps) {
   check(upgradePointer(s), 'pointer upgrades stage 1 -> 2');
   check(s.pointer.stage === 2, 'pointer is at stage 2');
   check(s.pointer.clickLevel === 0, 'clickLevel starts at 0');
-  check(nextOverclockCost(s.pointer) === Math.round(120 * 3.0 ** 0), 'first overclock costs 120');
+  check(nextOverclockCost(s.pointer) === Math.round(120 * 6.0 ** 0), 'first overclock costs 120');
   check(clickDamage(s.pointer) === 4, 'stage-2 click damage is 4 at level 0');
   check(holdDps(s.pointer) === 10, 'stage-2 hold dps is 10 at level 0');
 
@@ -1900,9 +1900,9 @@ function chokeWalls(gaps) {
   check(upgradePointer(s), 'buy overclock level 1');
   check(s.pointer.clickLevel === 1, 'clickLevel becomes 1');
   check(s.economy.salvage === sal - 120, 'level 1 costs 120');
-  check(Math.abs(clickDamage(s.pointer) - 4 * 1.22) < 1e-9, 'click damage follows 4 * 1.22^1');
+  check(Math.abs(clickDamage(s.pointer) - 4 * 1.04) < 1e-9, 'click damage follows 4 * 1.04^1');
   check(Math.abs(holdDps(s.pointer) - clickDamage(s.pointer) * 2.5) < 1e-9, 'hold dps scales with click');
-  check(nextOverclockCost(s.pointer) === Math.round(120 * 3.0 ** 1), 'next overclock cost follows the formula');
+  check(nextOverclockCost(s.pointer) === Math.round(120 * 6.0 ** 1), 'next overclock cost follows the formula');
   check(nextPointerCost(s.pointer) === nextOverclockCost(s.pointer), 'nextPointerCost is the overclock cost at stage 2');
 
   // Buying the level the tooltip previewed must raise the damage to the tooltip's "after" value.
@@ -1914,11 +1914,11 @@ function chokeWalls(gaps) {
 }
 
 {
-  // 24b. A click on a marked enemy deals 1.25x an unmarked click (crits suppressed by a chosen seed).
+  // 24b. A click on a marked enemy deals 1.15x an unmarked click (crits suppressed by a chosen seed).
   const findNoCritSeed = (seed) => {
     let r = seed;
     for (let i = 0; i < 10000; i++) {
-      if (!nextCritRoll(r, true, false).crit) return r; // marked worst-case chance (14%) does not crit
+      if (!nextCritRoll(r, true, false).crit) return r; // marked worst-case chance (10%) does not crit
       r = nextCritRoll(r, true, false).next;
     }
     throw new Error('no non-crit seed found');
@@ -1937,10 +1937,12 @@ function chokeWalls(gaps) {
   };
 
   const unmarked = make();
+  unmarked.s.pointer.stage = 2; // mark is a stage-2 reticle feature, so hold both legs there
   pointerDown(unmarked.s, unmarked.e.x, unmarked.e.y + 0.15);
   const unmarkedDmg = unmarked.e.maxHp - unmarked.e.hp;
 
   const marked = make();
+  marked.s.pointer.stage = 2;
   marked.s.pointer.targetId = marked.e.id; // mark without clicking
   pointerDown(marked.s, marked.e.x, marked.e.y + 0.15);
   const markedDmg = marked.e.maxHp - marked.e.hp;
@@ -1952,9 +1954,9 @@ function chokeWalls(gaps) {
 {
   // 24c. Crits: with a forced seed, clicks crit at the base rate over a thousand samples, and a
   // crit deals 2.5x.
-  check(critChance(false, false) === 0.06, 'base crit chance is 6%');
-  check(critChance(true, false) === 0.14, 'marked crit chance is 14%');
-  check(critChance(false, true) === 0.16, 'weak-point crit chance is 16%');
+  check(critChance(false, false) === 0.04, 'base crit chance is 4%');
+  check(critChance(true, false) === 0.1, 'marked crit chance is 10%');
+  check(critChance(false, true) === 0.12, 'weak-point crit chance is 12%');
 
   const s = createRunState();
   s.phase = 'wave';
@@ -1970,7 +1972,7 @@ function chokeWalls(gaps) {
     pointerDown(s, e.x, e.y + 0.15); // non-weak
     if (before - e.hp > 3.1) crits++; // base click is 3, a crit is 7.5
   }
-  check(crits >= 30 && crits <= 100, `clicks crit at ~6% over 1000 samples (${crits} crits)`);
+  check(crits >= 20 && crits <= 70, `clicks crit at ~4% over 1000 samples (${crits} crits)`);
 
   const findSeed = (seed, wantCrit) => {
     let r = seed;

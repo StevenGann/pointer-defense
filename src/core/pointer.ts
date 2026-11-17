@@ -34,23 +34,23 @@ export const POINTER_STAGES: Readonly<Record<PointerStage, PointerStageInfo>> = 
   2: { name: 'Reticle', cost: 80, clickDamage: 4, holdDps: 10 },
 };
 
-/** Overclock cost: `round(120 * 3.0 ^ clickLevel)`. */
+/** Overclock cost: `round(120 * 6.0 ^ clickLevel)`. */
 export const OVERCLOCK_COST_BASE = 120;
-export const OVERCLOCK_COST_GROWTH = 3.0;
-/** Overclock damage: `reticleBase * 1.22 ^ clickLevel`. */
-export const OVERCLOCK_DAMAGE_GROWTH = 1.22;
+export const OVERCLOCK_COST_GROWTH = 6.0;
+/** Overclock damage: `reticleBase * 1.04 ^ clickLevel`. */
+export const OVERCLOCK_DAMAGE_GROWTH = 1.04;
 /** Hold damage tracks click damage: `holdDps = clickDamage * 2.5`. */
 export const HOLD_DPS_MULT = 2.5;
 
-/** A click on the marked (reticle-locked) enemy deals +25 %. */
-export const MARKED_DAMAGE_MULT = 1.25;
+/** A click on the marked (reticle-locked) enemy deals +15 %. */
+export const MARKED_DAMAGE_MULT = 1.15;
 
 /** Crit damage multiplier. */
 export const CRIT_MULTIPLIER = 2.5;
-/** Base crit chance; +8 % marked, +10 % on the weak point. */
-export const CRIT_BASE_CHANCE = 0.06;
-export const CRIT_MARKED_CHANCE = 0.08;
-export const CRIT_WEAK_CHANCE = 0.1;
+/** Base crit chance; +6 % marked, +8 % on the weak point. */
+export const CRIT_BASE_CHANCE = 0.04;
+export const CRIT_MARKED_CHANCE = 0.06;
+export const CRIT_WEAK_CHANCE = 0.08;
 
 export interface PointerState {
   stage: PointerStage;

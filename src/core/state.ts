@@ -808,9 +808,10 @@ export function pointerDown(s: RunState, x: number, y: number): boolean {
     s.pointer.comboTicks = 0;
     return false;
   }
-  // The reticle's locked enemy is marked; clicking an already-marked enemy pays +25 % and a better
-  // crit chance, so holding the reticle on one enemy (a boss) makes the next clicks hurt more.
-  const marked = target.id === previousTargetId;
+  // The reticle's locked enemy is marked; clicking an already-marked enemy pays +15 % and a better
+  // crit chance, so holding the reticle on one enemy (a boss) makes the next clicks hurt more. The
+  // mark is a stage-2 reticle feature: a bare stage-1 click never locks, so it never marks.
+  const marked = s.pointer.stage >= MAX_POINTER_STAGE && target.id === previousTargetId;
   const roll = nextCritRoll(s.rng, marked, weak);
   s.rng = roll.next;
   s.pointer.targetId = target.id;

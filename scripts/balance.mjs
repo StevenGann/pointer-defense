@@ -1064,7 +1064,10 @@ if (repairMode) {
 
 if (clickerMode) {
   // The clicker comparison: a player clicking at 2 clicks/s and buying pointer levels whenever
-  // affordable, against the same build with no clicking. Both legs use the canonical map board.
+  // affordable, against the same board with the pointer switched off. The clicker leg is the
+  // clicker-first policy (pointer bought before tower upgrades); the no-click leg is the standard
+  // build policy with clicking disabled, so a weak no-click row cannot be blamed on the clicker's
+  // build. Both legs use the canonical map board.
   const CLICKER_CPS = 2;
   silent = true;
   console.log('\n=== pointer clicker ===');
@@ -1072,7 +1075,7 @@ if (clickerMode) {
   let clickerReached = true;
   for (const level of activeLevels) {
     const clicker = runSession(true, 'clicker', level.id, MAP_MAX_TOWERS, true, CLICKER_CPS, true, true);
-    const noclick = runSession(true, 'no-click', level.id, MAP_MAX_TOWERS, true, CLICKER_CPS, false, false);
+    const noclick = runSession(true, 'no-click', level.id, MAP_MAX_TOWERS, true, cps, false, false);
     for (const [mode, run] of [
       ['clicker', clicker],
       ['no-click', noclick],
@@ -1119,14 +1122,29 @@ if (wallMode) {
   silent = false;
 
   console.log('\n=== maps ===');
-  console.log('  map          waves cleared   integrity   salvage   closed   leaked');
+  console.log('  map          waves cleared   integrity   salvage   closed   leaked   tower dmg%');
   for (const { level, std } of mapRows) {
     const p = std.final.popups;
+    const tower = std.final.state.economy.damage.tower;
+    const pointer = std.final.state.economy.damage.pointer;
+    const towerPct = tower + pointer > 0 ? Math.round((tower / (tower + pointer)) * 100) : 0;
     console.log(
       `  ${level.id.padEnd(11)}  ${String(std.final.clearedWaves).padStart(13)}  ` +
         `${String(std.final.integrity).padStart(9)}  ${String(std.final.earned).padStart(7)}  ` +
-        `${String(p.closed).padStart(6)}  ${String(p.leaked).padStart(6)}`,
+        `${String(p.closed).padStart(6)}  ${String(p.leaked).padStart(6)}  ${String(towerPct).padStart(10)}%`,
     );
+  }
+  // The standard run is a tower build that clicks; the towers must stay the primary damage source.
+  // If the pointer (the "ladder") alone out-carries them, call that out with the actual share.
+  const minTowerPct = Math.min(
+    ...mapRows.map(({ std }) => {
+      const tower = std.final.state.economy.damage.tower;
+      const pointer = std.final.state.economy.damage.pointer;
+      return tower + pointer > 0 ? (tower / (tower + pointer)) * 100 : 100;
+    }),
+  );
+  if (minTowerPct < 60) {
+    console.log(`\nWARNING: towers fall below 60% of standard-run damage (${minTowerPct.toFixed(1)}% on the weakest map).`);
   }
 
   // A single-map run keeps the original detailed summary, tower table and support comparison.
