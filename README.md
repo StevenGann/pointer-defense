@@ -1,5 +1,7 @@
 # Pointer Defense
 
+**Play: <https://stevengann.com/pointer-defense/>** — runs in the browser, nothing to install.
+
 A hybrid tower defense and clicking game: towers build a maze that holds the lane, and your mouse
 is the weapon that turns every kill into salvage.
 

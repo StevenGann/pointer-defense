@@ -49,6 +49,8 @@ import { spawnPopup, dismissPopup } from '../src/core/popups.ts';
 import {
   comboMultiplier,
   clickDamage,
+  OVERCLOCK_COST_GROWTH,
+  OVERCLOCK_DAMAGE_GROWTH,
   holdDps,
   nextOverclockCost,
   nextPointerCost,
@@ -1900,9 +1902,9 @@ function chokeWalls(gaps) {
   check(upgradePointer(s), 'buy overclock level 1');
   check(s.pointer.clickLevel === 1, 'clickLevel becomes 1');
   check(s.economy.salvage === sal - 120, 'level 1 costs 120');
-  check(Math.abs(clickDamage(s.pointer) - 4 * 1.04) < 1e-9, 'click damage follows 4 * 1.04^1');
+  check(Math.abs(clickDamage(s.pointer) - 4 * OVERCLOCK_DAMAGE_GROWTH) < 1e-9, 'click damage follows the damage growth constant');
   check(Math.abs(holdDps(s.pointer) - clickDamage(s.pointer) * 2.5) < 1e-9, 'hold dps scales with click');
-  check(nextOverclockCost(s.pointer) === Math.round(120 * 6.0 ** 1), 'next overclock cost follows the formula');
+  check(nextOverclockCost(s.pointer) === Math.round(120 * OVERCLOCK_COST_GROWTH ** 1), 'next overclock cost follows the formula');
   check(nextPointerCost(s.pointer) === nextOverclockCost(s.pointer), 'nextPointerCost is the overclock cost at stage 2');
 
   // Buying the level the tooltip previewed must raise the damage to the tooltip's "after" value.
