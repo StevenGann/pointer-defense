@@ -46,8 +46,6 @@ export function shakeImpulseFor(ev: GameEvent): ShakeImpulse | null {
       return null; // an ordinary tower hit sparks; it does not shake
     case 'wallDestroyed':
       return { amplitude: SHAKE_AMPLITUDE.towerOffline, freezeMs: 0 };
-    case 'towerOffline':
-      return { amplitude: SHAKE_AMPLITUDE.towerOffline, freezeMs: 0 };
     case 'adDismissed':
       return { amplitude: SHAKE_AMPLITUDE.adClose, freezeMs: 0 };
     case 'damage':

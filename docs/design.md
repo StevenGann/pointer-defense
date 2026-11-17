@@ -245,9 +245,9 @@ Every tower carries hit points, not just the Wall. The Wall is still the asymmet
 one that can be destroyed and then is gone for good: it carries 60 hit points at tier 1, 180 at tier 2
 and 540 at tier 3; the Bulwark and Mesh branches double that, while the Toggle branch keeps the base
 total and pays in control instead. A destroyed wall is removed, the route is recomputed in the same
-tick, and nothing is refunded. The other towers keep a fixed pool (see the HP table below) that the
-Breacher's turret can now deplete; when it runs out the tower goes offline rather than leaving the
-board (see §6.9).
+tick, and nothing is refunded. The other towers keep a fixed pool (see the HP table below) that
+nothing can damage yet; it exists so the Repair tower has something to heal and the breacher turret,
+queued next, has somewhere to land.
 
 #### Hit points
 
@@ -266,10 +266,6 @@ a tower at half health stays at half of the new maximum.
 | Repair | 90 |
 | Cursor | 80 |
 | Wall | 60 / 180 / 540 by tier |
-
-A non-wall tower whose pool reaches 0 goes **offline** (see §6.9); a wall at 0 is destroyed instead.
-Only the Wall changes ceiling with tier and branch — every other kind keeps its fixed pool for life,
-so an upgrade never resets current HP.
 
 **These are the harness's numbers, not the first draft's.** The first draft (Gun 4 damage at 25,
 Cannon 10 at 60, Taser 2 at 45, Laser 6 at 120, Beacon +15 %) let a scripted player win with Gun and
@@ -416,14 +412,13 @@ cursor behaves exactly as any other cursor while an enemy is inside its radius �
 nearest. Only when the radius is clear does it look for work: any tower inside its radius below **80%**
 of maximum hit points, lowest fraction first, then nearest. It flies to that tower, clicks it, and
 starts an ordinary repair — the same `startRepair` path a player uses, with the same salvage cost and
-the same downtime, during which the tower is off the field and not firing. It repairs one tower at a
-time and only while the area stays clear; if an enemy walks in, it abandons the job and fights.
+the same downtime, during which the tower is offline and not firing. It repairs one tower at a time and
+only while the area stays clear; if an enemy walks in, it abandons the job and fights.
 
 Three limits keep it honest. It never starts a repair the player cannot afford, so it cannot run a
-salvage debt. It ignores towers above 80%, so it does not spend money topping up a scratch. It never
-touches a wall that was destroyed and removed — but an offline tower is a valid target, and at 0% it
-wins the choice (see §6.9). The branch's cost is the damage output of the Overclock click it did not
-take, which the tooltip says plainly.
+salvage debt. It ignores towers above 80%, so it does not spend money topping up a scratch. And it
+cannot revive anything: a destroyed tower is gone. The branch's cost is the damage output of the
+Overclock click it did not take, which the tooltip says plainly.
 
 ### 6.8 The Repair tower and its aura
 
@@ -445,32 +440,8 @@ The aura is deliberately narrow in scope:
 - **It is not a Beacon.** The Repair tower grants no damage or range bonus, and a Beacon grants no
   healing — the two support auras do not stack into one tower.
 
-The Repair tower keeps the same HP pool and Repair button as any other tower, so it can be damaged by
-a Breacher's turret and must then be healed by another Repair tower or repaired by hand.
-
-### 6.9 Tower hit points and offline
-
-A non-wall tower reduced to **0 HP goes offline**. It does not leave the board — it stays on its tile
-and still blocks the route — but it stops doing everything a live tower does:
-
-- It **stops firing** (a Gun, Cannon, Taser, Frost or Laser goes quiet).
-- It **stops projecting auras**: a Repair tower stops healing, a Beacon stops buffing, and a Relay
-  Beacon stops extending the pointer.
-- A **Cursor** stops clicking.
-- It **cannot be upgraded or branched** — the only way back is a repair.
-
-An offline tower reads as broken-but-fixable, not gone: a desaturated body, a small red crossed
-wrench, and an empty health bar.
-
-**Repair brings it back.** An offline tower is repaired through the normal repair flow, starting from
-0 HP at the usual price formula — which at 0 HP is the full `0.5 × spent` cap — and it returns to
-full health and full service when the timer ends. The Repair tower's aura **does** heal an offline
-tower (that is the point of owning one), and a Maintenance cursor treats an offline tower as a valid
-target: at 0% health it is the lowest fraction, so it wins the choice over any merely damaged tower.
-
-**Walls are the exception.** A wall at 0 HP is destroyed as it is today, removed from the board and
-re-opening the route in the same tick — a wall that stayed would keep the maze closed. Say it plainly:
-walls are destroyed, everything else goes offline.
+The Repair tower keeps the same HP pool and Repair button as any other tower, so it can be damaged
+(once the breacher turret lands) and must then be healed by another Repair tower or repaired by hand.
 
 ---
 
@@ -485,19 +456,12 @@ walls are destroyed, everything else goes offline.
 | **Armoured** | 45 | 1.0 t/s | 0.34 | 8 | 0 | 12 | taser, laser, Overload |
 | **Saboteur** | 25 | 1.5 t/s | 0.28 | 0 | 0 | 11 | kill it before it arrives — it disables a tower for 4 s |
 | **Boss** | 900 | 0.8 t/s | 0.55 | 6 | 120 | 120 | both halves: towers strip armour, pointer breaks the shield |
-| **Breacher** | 55 | 0.6 t/s | 0.42 | 0 | 0 | 14 | chews walls and shoots a 2.5-tile turret at your towers — walls disarm it, a gun in front of the wall finishes it |
+| **Breacher** | 55 | 0.6 t/s | 0.42 | 0 | 0 | 14 | walks into walls and breaks them — a gun in front of the wall, or walls behind walls |
 | **Pop-up** | 60 | 0.7 t/s | 0.40 | 0 | 0 | 18 | click its close box — a window that shields every enemy under it from towers |
 
 Armour is **flat subtraction** on tower hits, floored at 1. Clicks ignore armour entirely. Shields
 absorb tower damage completely until broken, and only the pointer can break them. That is pillar 1
 stated as arithmetic.
-
-The Breacher carries a **mounted turret** in addition to its nose. While it is walking it fires at the
-nearest player tower — range 2.5 tiles, 4 damage, one shot per second — so a Breacher threatens the
-line itself, not just the maze. The turret stops the moment the Breacher sets its nose to a wall: the
-nose is busy, so a wall both slows and **disarms** a Breacher, and it resumes firing the moment the
-wall is gone. Walls are the nose's job, not the gun's, so the turret never targets them. A turret shot
-is a visible tracer with a muzzle flash at the Breacher's nose and a hit spark on the tower it struck.
 
 Shield damage is visible, not a silent clock: every enemy whose shield is above zero draws a cyan
 shield ring whose alpha tracks the fraction remaining (a Boss entering at 120 reads as heavily

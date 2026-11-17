@@ -274,15 +274,6 @@ export function isWall(tower: Tower): boolean {
 }
 
 /**
- * True when a non-wall tower's hit points have run out: it is offline, not gone. It stays on the
- * board and can still be repaired, but it no longer fires, projects auras or accepts upgrades.
- * Walls are the exception — a wall at 0 HP is destroyed outright, so it is never "offline".
- */
-export function isOffline(tower: Tower): boolean {
-  return !isWall(tower) && tower.maxHp > 0 && tower.hp <= 0;
-}
-
-/**
  * The hit-point pool of every non-wall tower. Walls use `wallMaxHp` (tier and branch dependent);
  * every other kind keeps this fixed pool for its whole life, so an upgrade never changes its
  * ceiling — it only has to not reset current HP.
@@ -328,14 +319,13 @@ export function repairRadius(t: Tower): number {
  */
 export function repairHealTargets(towers: readonly Tower[], healer: Tower, clock: number): Tower[] {
   if (healer.kind !== 'repair') return [];
-  if (isOffline(healer)) return []; // an offline repair tower projects no aura
   if (isRepairing(healer, clock)) return []; // a repair tower mid-repair is off the field too
   const r = repairRadius(healer);
   const r2 = r * r;
   const out: Tower[] = [];
   for (const t of towers) {
     if (t.id === healer.id) continue;
-    if (t.maxHp <= 0 || t.hp >= t.maxHp) continue; // an offline tower (hp 0) is healed, not skipped
+    if (t.maxHp <= 0 || t.hp <= 0 || t.hp >= t.maxHp) continue;
     if (isRepairing(t, clock)) continue;
     const dx = t.col + 0.5 - (healer.col + 0.5);
     const dy = t.row + 0.5 - (healer.row + 0.5);
@@ -613,7 +603,6 @@ export function recomputeAuras(towers: Tower[]): void {
     t.auraRange = 0;
   }
   for (const b of towers) {
-    if (isOffline(b)) continue; // an offline beacon projects no aura
     const st = effectiveStats(b);
     if (st.auraDamage <= 0 && st.auraRange <= 0) continue;
     const r = st.range;

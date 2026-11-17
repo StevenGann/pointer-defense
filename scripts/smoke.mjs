@@ -43,7 +43,7 @@ import {
   NO_BUILD_MESSAGE,
   AUTO_WAVE_DELAY_TICKS,
 } from '../src/core/state.ts';
-import { TOWER_STATS, TOWER_KINDS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
+import { TOWER_STATS, TOWER_KINDS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, popupCountForWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
@@ -51,7 +51,7 @@ import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
 import { LEVELS, DEFAULT_LEVEL, createGrid, levelById, toggleOpenAt, validateLevel, MAX_TOGGLES } from '../src/core/levels.ts';
-import { createEnemy, isPopupEnemy, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS } from '../src/core/enemies.ts';
+import { createEnemy, isPopupEnemy } from '../src/core/enemies.ts';
 import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS } from '../src/core/ads.ts';
 import {
   comboMultiplier,
@@ -3155,16 +3155,16 @@ function cursorTower(tier, branch) {
 }
 
 {
-  // 33e. A zero-HP (offline) tower is a heal target: the aura revives it, never leaves it dead.
+  // 33e. A destroyed tower is never revived.
   const s = createRunState();
   s.economy.salvage = 100000;
   placeTower(s, 'repair', 5, 5);
   placeTower(s, 'gun', 6, 5);
-  const offline = towerAt(s, 6, 5);
-  offline.hp = 0;
-  check(repairHealingCount(s.towers, towerAt(s, 5, 5), s.clock) === 1, 'a zero-HP tower is counted as healed');
+  const dead = towerAt(s, 6, 5);
+  dead.hp = 0;
   for (let i = 0; i < 60; i++) tick(s);
-  check(offline.hp > 0, 'the aura revives an offline tower');
+  check(dead.hp === 0, 'a destroyed tower is never revived');
+  check(repairHealingCount(s.towers, towerAt(s, 5, 5), s.clock) === 0, 'a zero-HP tower is not counted as healed');
 }
 
 {
@@ -3377,20 +3377,12 @@ function maintenanceRig(gunHp) {
 }
 
 {
-  // 34f. A destroyed wall is removed from the board, so maintenance never targets it. (An offline
-  // non-wall tower is a valid target — covered in 36f — so "destroyed" now means a wall alone.)
-  const s = stateOnLevel('open-field');
-  s.economy.salvage = 100000;
-  placeTower(s, 'cursor', 5, 5);
-  const c = s.towers.find((t) => t.kind === 'cursor');
-  c.tier = 3;
-  c.branch = 'C';
-  placeTower(s, 'wall', 6, 5);
-  const wall = towerAt(s, 6, 5);
-  s.towers = s.towers.filter((t) => t.id !== wall.id); // a wall at 0 HP is destroyed (removed)
+  // 34f. Destroyed towers are ignored.
+  const { s, c, gun } = maintenanceRig(0);
   for (let i = 0; i < 120; i++) tick(s);
+  check(!isRepairing(gun, s.clock) && gun.hp === 0, 'maintenance: a destroyed tower is ignored');
   check(cursorMaintenanceStatus(s, c) === 'Idle — nothing to repair',
-    `maintenance: a destroyed wall is ignored (${cursorMaintenanceStatus(s, c)})`);
+    `maintenance: status reads idle when only destroyed towers remain (${cursorMaintenanceStatus(s, c)})`);
 }
 
 {
@@ -3615,242 +3607,6 @@ function maintenanceRig(gunHp) {
   const armed = s.autoWaveAtTick;
   while (s.phase === 'build' && s.clock < armed) tick(s);
   check(s.phase === 'wave' && s.wave === 2, 'auto-wave advances past the no-build wave');
-}
-
-// --- 36. Breacher turret and offline towers ---------------------------------------------------
-
-// 36a. The turret's stats match the spec, and a breacher in range damages a tower once per second
-// without ever exceeding the rate.
-check(BREACHER_TURRET_RANGE === 2.5, 'breacher turret range is 2.5 tiles');
-check(BREACHER_TURRET_DAMAGE === 4, 'breacher turret damage is 4');
-check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once per second (60 ticks)');
-
-{
-  const run = (ticks) => {
-    const s = stateOnLevel('open-field');
-    s.economy.salvage = 100000;
-    placeTower(s, 'gun', 5, 5);
-    const gun = towerAt(s, 5, 5);
-    s.phase = 'wave';
-    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
-    const b = createEnemy(1, 'breacher', 12, SPAWN, EXIT);
-    b.x = 5.0;
-    b.y = 6.5;
-    b.prevX = 5.0;
-    b.prevY = 6.5;
-    b.col = 5;
-    b.row = 6;
-    b.heading = 0;
-    b.dist = 0;
-    s.enemies.push(b);
-    for (let i = 0; i < ticks; i++) tick(s);
-    return gun.hp;
-  };
-  const loss1 = 100 - run(60);
-  check(loss1 === 4, `breacher turret deals 4 damage in one second (${loss1})`);
-  const loss4 = 100 - run(240);
-  check(loss4 === 16, `breacher turret holds exactly 4/s and never exceeds the rate (${loss4} over 4 s)`);
-}
-
-// 36b. A breacher chewing a wall deals no turret damage, and resumes once the wall is gone.
-{
-  const s = stateOnLevel('open-field');
-  s.economy.salvage = 100000;
-  const first = stepToward(s.breacherField, SPAWN.col, SPAWN.row);
-  check(first !== null, 'breacher field gives a first step for the turret test');
-  placeTower(s, 'wall', first.col, first.row);
-  placeTower(s, 'gun', 0, 7); // within turret range of the chewing spot (0.5, 6.5)
-  const gun = towerAt(s, 0, 7);
-  const gunHp = gun.hp;
-  s.phase = 'wave';
-  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
-  const b = createEnemy(1, 'breacher', 12, SPAWN, EXIT);
-  s.enemies.push(b);
-
-  let wallGone = false;
-  let firedWhileChewing = false;
-  let firedAfterWall = false;
-  for (let i = 0; i < 6000 && !b.dead; i++) {
-    tick(s);
-    if (!wallGone && !towerAt(s, first.col, first.row)) wallGone = true;
-    if (!wallGone && gun.hp < gunHp) firedWhileChewing = true;
-    if (wallGone && gun.hp < gunHp) firedAfterWall = true;
-  }
-  check(wallGone, 'the wall is destroyed');
-  check(!firedWhileChewing, 'a breacher chewing a wall deals no turret damage');
-  check(firedAfterWall, 'the breacher resumes turret fire after the wall is gone');
-}
-
-// 36c. A tower at 0 HP goes offline: it stops firing, and a beacon stops buffing.
-{
-  const s = stateOnLevel('open-field');
-  s.economy.salvage = 100000;
-  placeTower(s, 'gun', 5, 5);
-  const gun = towerAt(s, 5, 5);
-  gun.hp = 0;
-  s.phase = 'wave';
-  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
-  const e = stationary(1, 'grunt', 1, 5.5, 4.5);
-  s.enemies.push(e);
-  for (let i = 0; i < 30; i++) tick(s);
-  check(isOffline(gun), 'a non-wall tower at 0 HP is offline');
-  check(e.hp === e.maxHp, 'an offline gun stops firing');
-}
-
-{
-  const s = stateOnLevel('open-field');
-  s.economy.salvage = 100000;
-  placeTower(s, 'gun', 5, 5);
-  placeTower(s, 'beacon', 6, 5);
-  const gun = towerAt(s, 5, 5);
-  const beacon = towerAt(s, 6, 5);
-  check(Math.abs(gun.auraDamage - 1.6) < 1e-9, 'the beacon buffs its neighbour');
-  beacon.hp = 0;
-  recomputeAuras(s.towers);
-  check(Math.abs(gun.auraDamage - 1.0) < 1e-9, 'an offline beacon stops buffing');
-}
-
-// 36d. An offline tower can be repaired through the normal flow and comes back online at full HP.
-{
-  const s = stateOnLevel('open-field');
-  s.economy.salvage = 100000;
-  placeTower(s, 'gun', 5, 5);
-  const gun = towerAt(s, 5, 5);
-  gun.hp = 0;
-  const price = repairCost(gun);
-  check(price === Math.ceil(0.5 * gun.spent), `repair at 0 HP costs the full half-spent cap (${price})`);
-  const salv = s.economy.salvage;
-  check(startRepair(s, 5, 5), 'an offline tower starts repairing');
-  check(s.economy.salvage === salv - price, 'the repair cost is paid up front');
-  while (isRepairing(gun, s.clock)) tick(s);
-  check(gun.hp === gun.maxHp, 'the repaired tower returns online at full HP');
-  check(!isOffline(gun), 'the tower is no longer offline');
-}
-
-// 36e. The Repair tower's aura heals an offline tower back above 0 (the point of owning one).
-{
-  const s = stateOnLevel('open-field');
-  s.economy.salvage = 100000;
-  placeTower(s, 'repair', 5, 5);
-  placeTower(s, 'gun', 6, 5);
-  const gun = towerAt(s, 6, 5);
-  gun.hp = 0;
-  check(isOffline(gun), 'the gun starts offline');
-  for (let i = 0; i < 60; i++) tick(s); // 1 s at 2 HP/s
-  check(gun.hp > 0, `the repair aura heals an offline tower back above 0 (${gun.hp})`);
-  check(!isOffline(gun), 'the gun comes back online');
-}
-
-// 36f. A Maintenance cursor treats an offline tower as a valid target and picks it over a 40% one.
-{
-  const s = stateOnLevel('open-field');
-  s.economy.salvage = 100000;
-  placeTower(s, 'cursor', 5, 5);
-  const c = s.towers.find((t) => t.kind === 'cursor');
-  c.tier = 3;
-  c.branch = 'C';
-  placeTower(s, 'gun', 6, 5);
-  placeTower(s, 'gun', 5, 6);
-  const a = towerAt(s, 6, 5);
-  const b = towerAt(s, 5, 6);
-  a.hp = 0; // offline, 0%
-  b.hp = 40; // 40%
-  check(cursorMaintenanceStatus(s, c) === 'Repairing Gun 0%',
-    `maintenance picks the offline tower over the 40% one (${cursorMaintenanceStatus(s, c)})`);
-  let repaired = null;
-  for (let i = 0; i < 200 && repaired === null; i++) {
-    tick(s);
-    if (isRepairing(a, s.clock)) repaired = 'a';
-    if (isRepairing(b, s.clock)) repaired = 'b';
-  }
-  check(repaired === 'a', `maintenance starts the repair on the offline tower (got ${repaired})`);
-}
-
-// 36g. A wall at 0 HP is still destroyed and re-opens the route (walls never go offline).
-{
-  const s = stateOnLevel('open-field');
-  const openLen = currentPath(s).length;
-  s.economy.salvage = 100000;
-  const first = stepToward(s.breacherField, SPAWN.col, SPAWN.row);
-  placeTower(s, 'wall', first.col, first.row);
-  s.phase = 'wave';
-  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
-  const b = createEnemy(1, 'breacher', 12, SPAWN, EXIT);
-  s.enemies.push(b);
-  let destroyed = false;
-  let reopened = false;
-  for (let i = 0; i < 6000 && !b.dead; i++) {
-    tick(s);
-    if (!destroyed && !towerAt(s, first.col, first.row)) {
-      destroyed = true;
-      reopened = currentPath(s).length === openLen;
-    }
-  }
-  check(destroyed, 'a wall at 0 HP is destroyed, not left offline');
-  check(reopened, 'destroying the wall leaves the route open');
-}
-
-// 36h. Fixed-timestep equivalence holds with the turret firing, and target choice is deterministic.
-{
-  const run = (frameMs) => {
-    const s = stateOnLevel('open-field');
-    s.economy.salvage = 100000;
-    placeTower(s, 'gun', 5, 5);
-    placeTower(s, 'gun', 5, 7);
-    s.phase = 'wave';
-    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
-    const b = createEnemy(1, 'breacher', 12, SPAWN, EXIT);
-    b.x = 5.5;
-    b.y = 6.5;
-    b.prevX = 5.5;
-    b.prevY = 6.5;
-    b.col = 5;
-    b.row = 6;
-    b.heading = 0;
-    b.dist = 0;
-    s.enemies.push(b);
-    for (let t = 0; t < 900 * TICK_MS - frameMs; t += frameMs) step(s, frameMs);
-    while (s.tick < 1000) tick(s);
-    return JSON.stringify([
-      s.economy,
-      s.integrity,
-      s.enemies.map((e) => [e.id, e.hp, e.dist]),
-      s.towers.map((t) => [t.kind, t.hp]),
-      s.rng,
-      s.tick,
-      s.clock,
-    ]);
-  };
-  const at60 = run(TICK_MS);
-  check(at60 === run(1000 / 144), 'breacher turret: same result at 60 Hz and 144 Hz frames');
-  check(at60 === run(1000 / 23), 'breacher turret: same result at 23 Hz frames');
-
-  const targetChoice = () => {
-    const s = stateOnLevel('open-field');
-    s.rng = 0x12345678;
-    s.economy.salvage = 100000;
-    placeTower(s, 'gun', 5, 5);
-    placeTower(s, 'gun', 5, 7);
-    s.phase = 'wave';
-    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
-    const b = createEnemy(1, 'breacher', 12, SPAWN, EXIT);
-    b.x = 5.5;
-    b.y = 6.5;
-    b.prevX = 5.5;
-    b.prevY = 6.5;
-    b.col = 5;
-    b.row = 6;
-    b.heading = 0;
-    b.dist = 0;
-    s.enemies.push(b);
-    tick(s); // one turret shot
-    return JSON.stringify([towerAt(s, 5, 5).hp, towerAt(s, 5, 7).hp]);
-  };
-  const choice = targetChoice();
-  check(choice === targetChoice(), 'turret target choice is deterministic for one seed');
-  const parsed = JSON.parse(choice);
-  check(parsed[0] === 96 && parsed[1] === 100,
-    `the turret hits the first-placed of two equidistant towers (${parsed.join(',')})`);
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

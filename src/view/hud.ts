@@ -11,7 +11,6 @@ import {
   cursorRadius,
   effectiveStats,
   hasBranches,
-  isOffline,
   isRepairing,
   repairCost,
   repairHealRate,
@@ -848,7 +847,7 @@ export class HudView {
       for (const text of this.branchButtons) text.visible = true;
 
       const branch = tower.branch === null ? '' : ` - ${branchName(tower.kind, tower.branch)}`;
-      this.towerName.text = `${TOWER_STATS[tower.kind].name}  T${tower.tier}${branch}${isOffline(tower) ? ' — OFFLINE' : ''}`;
+      this.towerName.text = `${TOWER_STATS[tower.kind].name}  T${tower.tier}${branch}`;
       this.towerName.position.set(d.name.x, d.name.y + Math.floor(d.name.h / 2));
 
       if (tower.kind === 'wall') {
