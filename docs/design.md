@@ -520,16 +520,16 @@ Click damage ignores armour and is the only thing that can break shields (§7).
 ### 9.2 The overclock ladder
 
 Above stage 2 the pointer keeps a cost curve of its own. **Overclock levels** are unbounded in
-principle but tuned to about twelve:
+principle but tuned to about six:
 
 ```
-cost(level)  = round(120 × 1.55^level)   // buying level+1 from level
-damage       = 4 × 1.35^level            // the reticle's base click, compounded
+cost(level)  = round(120 × 3.0^level)    // buying level+1 from level
+damage       = 4 × 1.22^level            // the reticle's base click, compounded
 holdDps      = damage × 2.5              // so the reticle keeps pace with the click
 ```
 
-Level 1 costs 120, level 5 about 690, level 10 about 6,200, level 12 about 9,600 — and level 12 is
-about 147 damage a click before the combo. The curve is deliberately steep: the last levels compete
+Level 1 costs 120, level 3 about 1,080, level 5 about 9,720 — and level 6 is about 13 damage a click
+before the combo (level 12 would be about 44). The curve is deliberately steep: the last levels compete
 with a tower for the same salvage and should lose to neither.
 
 ### 9.3 Precision
@@ -549,10 +549,10 @@ The combo is the clicker half's skill expression. It exists so that clicking is 
 The reticle earns its keep beyond the damage tick. The enemy the reticle is locked on is **marked**,
 drawn with a corner-bracket reticle so it is unmistakable. The mark pays two ways:
 
-- **Clicks on a marked enemy deal +50 % damage.** Focusing one enemy (a boss) makes the next click on
+- **Clicks on a marked enemy deal +25 % damage.** Focusing one enemy (a boss) makes the next click on
   it hurt more than a click on a fresh target.
-- **Crits.** A click can crit for **2.5×**. The base chance is 10 %, plus 15 % when the target is
-  marked and plus 20 % when the click lands on the weak point. A crit pops a loud `CRIT` so a lucky
+- **Crits.** A click can crit for **2.5×**. The base chance is 6 %, plus 8 % when the target is
+  marked and plus 10 % when the click lands on the weak point. A crit pops a loud `CRIT` so a lucky
   streak is visible.
 
 Clicks are rolled against the seeded run PRNG, so a crit is part of the deterministic simulation — a

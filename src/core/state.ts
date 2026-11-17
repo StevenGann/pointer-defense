@@ -808,7 +808,7 @@ export function pointerDown(s: RunState, x: number, y: number): boolean {
     s.pointer.comboTicks = 0;
     return false;
   }
-  // The reticle's locked enemy is marked; clicking an already-marked enemy pays +50 % and a better
+  // The reticle's locked enemy is marked; clicking an already-marked enemy pays +25 % and a better
   // crit chance, so holding the reticle on one enemy (a boss) makes the next clicks hurt more.
   const marked = target.id === previousTargetId;
   const roll = nextCritRoll(s.rng, marked, weak);
