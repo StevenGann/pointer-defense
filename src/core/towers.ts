@@ -33,6 +33,8 @@ export interface TowerStats {
   readonly auraDamage: number;
   /** Aura: additive range bonus (tiles) granted to towers in range. */
   readonly auraRange: number;
+  /** Fixed targeting priority this kind is locked to, overriding the player's choice (null = player's). */
+  readonly targetLock: TargetMode | null;
 }
 
 export const TOWER_KINDS: readonly TowerKind[] = ['gun', 'cannon', 'taser', 'frost', 'laser', 'beacon', 'wall'];
@@ -54,6 +56,7 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     pierce: 0,
     auraDamage: 0,
     auraRange: 0,
+    targetLock: null,
   },
   cannon: {
     name: 'Cannon',
@@ -70,6 +73,7 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     pierce: 0,
     auraDamage: 0,
     auraRange: 0,
+    targetLock: 'strong',
   },
   taser: {
     name: 'Taser',
@@ -86,6 +90,7 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     pierce: 0,
     auraDamage: 0,
     auraRange: 0,
+    targetLock: 'close',
   },
   frost: {
     name: 'Frost',
@@ -102,6 +107,7 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     pierce: 0,
     auraDamage: 0,
     auraRange: 0,
+    targetLock: null,
   },
   laser: {
     name: 'Laser',
@@ -118,6 +124,7 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     pierce: 8,
     auraDamage: 0,
     auraRange: 0,
+    targetLock: 'first',
   },
   beacon: {
     name: 'Beacon',
@@ -134,6 +141,7 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     pierce: 0,
     auraDamage: 0.6,
     auraRange: 0,
+    targetLock: null,
   },
   wall: {
     name: 'Wall',
@@ -150,6 +158,7 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     pierce: 0,
     auraDamage: 0,
     auraRange: 0,
+    targetLock: null,
   },
 };
 

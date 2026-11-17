@@ -616,10 +616,12 @@ export function toggleGate(s: RunState, col: number, row: number): boolean {
   return true;
 }
 
-/** Cycle a tower's targeting priority First -> Strong -> Close -> First. */
+/** Cycle a tower's targeting priority First -> Strong -> Close -> First. A kind locked to a fixed
+ *  mode ignores the player's stored value, so cycling is refused for it. */
 export function cycleTargetMode(s: RunState, col: number, row: number): void {
   const t = towerAt(s, col, row);
   if (!t) return;
+  if (TOWER_STATS[t.kind].targetLock !== null) return;
   t.targetMode = t.targetMode === 'first' ? 'strong' : t.targetMode === 'strong' ? 'close' : 'first';
 }
 
@@ -1087,8 +1089,11 @@ function towerCandidates(s: RunState, t: Tower, st: EffectiveStats, range: numbe
   return out;
 }
 
-/** Frost and Beacon affect everything in range, so their mode is meaningless — always First. */
-function targetModeFor(t: Tower): TargetMode {
+/** The tower's effective targeting priority: a per-kind lock wins over the player's choice. Frost
+ *  and Beacon affect everything in range, so their mode is meaningless — always First. */
+function effectiveTargetMode(t: Tower): TargetMode {
+  const lock = TOWER_STATS[t.kind].targetLock;
+  if (lock !== null) return lock;
   return t.kind === 'frost' || t.kind === 'beacon' ? 'first' : t.targetMode;
 }
 
@@ -1121,7 +1126,7 @@ function closeTarget(t: Tower, enemies: Enemy[]): Enemy | undefined {
 }
 
 function pickTarget(t: Tower, enemies: Enemy[]): Enemy | undefined {
-  switch (targetModeFor(t)) {
+  switch (effectiveTargetMode(t)) {
     case 'strong':
       return strongTarget(enemies);
     case 'close':
@@ -1138,7 +1143,7 @@ function acquireTarget(s: RunState, t: Tower, st: EffectiveStats, range: number)
 /** Up to `limit` targets, ordered by the tower's targeting mode. */
 function acquireTargets(s: RunState, t: Tower, st: EffectiveStats, range: number, limit: number): Enemy[] {
   const out = towerCandidates(s, t, st, range);
-  const mode = targetModeFor(t);
+  const mode = effectiveTargetMode(t);
   out.sort((a, b) => {
     if (mode === 'strong') return b.hp - a.hp;
     if (mode === 'close') return dist2(a, t.col + 0.5, t.row + 0.5) - dist2(b, t.col + 0.5, t.row + 0.5);

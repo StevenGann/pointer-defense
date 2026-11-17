@@ -21,6 +21,7 @@ import {
   pointerTooltipLines,
   sellTooltipLines,
   specTooltipLines,
+  targetLockReason,
   upgradeTooltipLines,
   type TooltipLine,
 } from './view/tooltipText.ts';
@@ -388,6 +389,11 @@ function hudTooltipLines(action: HudAction, s: RunState): TooltipLine[] {
     }
     case 'sell':
       return tower ? sellTooltipLines(tower) : [];
+    case 'target': {
+      if (!tower) return [];
+      const reason = targetLockReason(tower.kind);
+      return reason === null ? [] : [reason];
+    }
     case 'buyCpu':
     case 'buyRam':
     case 'buyGpu':

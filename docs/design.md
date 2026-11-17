@@ -210,15 +210,25 @@ Seven towers. Each has a role, a tier ladder, and **two exclusive branches** at 
 
 ### 6.1 The seven
 
-| Tower | Cost | Range | Damage | Interval | Turn rate | Role | Wants |
+| Tower | Cost | Range | Damage | Interval | Turn rate | Targeting | Role | Wants |
 |---|---|---|---|---|---|---|---|---|
-| **Gun** | 25 | 2.6 | 3 | 0.50 s | 720°/s | cheap single-target backbone | the longest stretch of route it can reach |
-| **Cannon** | 90 | 3.0 | 5 + splash 1.0 | 1.60 s | 90°/s | clusters and corners | where the maze doubles back |
-| **Taser** | 80 | 1.6 | 1, ignores armour | 0.12 s | instant | armour, speed, close work | the inside of a hairpin |
-| **Frost** | 70 | 2.2 | 1, slows to 30 % speed for 3.0 s | 0.60 s | instant | utility | in front of the damage |
-| **Laser** | 70 | 3.4 | 11, pierces 8 | 0.80 s | 150°/s | straight lines | corridors you deliberately left open |
-| **Beacon** | 90 | 3.5 | none | — | — (still) | +60 % damage to towers in radius | a dense cluster worth buffing |
-| **Wall** | 8 | — | none | — | — (still) | blocks the route, has hit points | a long maze made cheap |
+| **Gun** | 25 | 2.6 | 3 | 0.50 s | 720°/s | player's choice | cheap single-target backbone | the longest stretch of route it can reach |
+| **Cannon** | 90 | 3.0 | 5 + splash 1.0 | 1.60 s | 90°/s | strongest (fixed) | clusters and corners | where the maze doubles back |
+| **Taser** | 80 | 1.6 | 1, ignores armour | 0.12 s | instant | closest (fixed) | armour, speed, close work | the inside of a hairpin |
+| **Frost** | 70 | 2.2 | 1, slows to 30 % speed for 3.0 s | 0.60 s | instant | — | utility | in front of the damage |
+| **Laser** | 70 | 3.4 | 11, pierces 8 | 0.80 s | 150°/s | first (fixed) | straight lines | corridors you deliberately left open |
+| **Beacon** | 90 | 3.5 | none | — | — (still) | — | +60 % damage to towers in radius | a dense cluster worth buffing |
+| **Wall** | 8 | — | none | — | — (still) | — | blocks the route, has hit points | a long maze made cheap |
+
+Three towers are **locked** to one targeting mode and ignore the player's choice. The **Taser** always
+fires at the nearest enemy in range — a Tesla coil discharges into whatever is nearest, so its
+placement is the decision, not its priority. The **Laser** always fires at the leading edge of the
+column, which reads correctly when its Focus beam pierces along that line. The **Cannon** always
+swings at the strongest thing it can see and lives with its two-second traverse. The **Gun** stays
+fully configurable — it is the one tower that obeys the player — and Frost and Beacon have no
+targeting mode to lock. A future **Manual Override** (v0.16a), the player's explicit mark, must win
+over every lock: while the marked enemy is in range, a locked tower fires at it, which is the only
+way to aim a locked tower at something specific.
 
 Four damage answers and three that are useless alone. That is how placement stays interesting without
 becoming opaque.

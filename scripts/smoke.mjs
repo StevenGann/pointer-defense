@@ -31,6 +31,7 @@ import {
   cancelSelection,
   placementSealsUnderToggles,
   toggleAtTile,
+  cycleTargetMode,
 } from '../src/core/state.ts';
 import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, TOGGLE_LOCK_TICKS } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
@@ -57,7 +58,7 @@ import {
   WALL_FACE_DISABLED,
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
-import { towerTooltipLines, upgradeTooltipLines, tooltipText } from '../src/view/tooltipText.ts';
+import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay, targetLockReason } from '../src/view/tooltipText.ts';
 import { BoardView, staticLayerKey } from '../src/view/board.ts';
 import { computeLayout } from '../src/view/chrome.ts';
 
@@ -1583,6 +1584,122 @@ function chokeWalls(gaps) {
     openFirst === openSecond && corridorFirst === corridorSecond,
     'run isolation: a map\'s outcome is unaffected by the order maps run in',
   );
+}
+
+// --- 23. Targeting locks: Taser (close), Laser (first), Cannon (strong), Gun (player's choice) --
+{
+  // A Taser locked to 'close' ignores a stored 'strong' preference and fires at the nearest enemy.
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'taser', 5, 5);
+  const taser = towerAt(s, 5, 5);
+  taser.targetMode = 'strong';
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const near = stationary(1, 'grunt', 1, 5.5, 5.0);
+  const far = stationary(2, 'grunt', 1, 5.5, 4.0);
+  far.hp = 500;
+  s.enemies.push(near, far);
+  tick(s);
+  check(near.hp < near.maxHp, `taser with target=strong still fires at the closest enemy (near hp ${near.hp})`);
+  check(far.hp === 500, `the stronger, farther enemy is untouched (far hp ${far.hp})`);
+}
+
+{
+  // A Laser locked to 'first' fires at the furthest-along enemy, ignoring a stored 'strong' choice.
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'laser', 5, 5);
+  const laser = towerAt(s, 5, 5);
+  laser.targetMode = 'strong';
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const front = stationary(1, 'grunt', 1, 5.5, 3.0);
+  const back = stationary(2, 'grunt', 1, 6.5, 4.0);
+  front.dist = 10;
+  back.dist = 5;
+  back.hp = 500;
+  s.enemies.push(front, back);
+  tick(s);
+  check(front.hp === front.maxHp - 11, `laser locked to 'first' hits the leading enemy (front hp ${front.hp})`);
+  check(back.hp === 500, `the stronger, nearer enemy is untouched (back hp ${back.hp})`);
+}
+
+{
+  // A Cannon locked to 'strong' swings at the biggest enemy, not the furthest along.
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'cannon', 5, 5);
+  const cannon = towerAt(s, 5, 5);
+  cannon.targetMode = 'first';
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const strong = stationary(1, 'grunt', 1, 5.5, 4.0);
+  const far = stationary(2, 'grunt', 1, 7.5, 4.0);
+  strong.dist = 5;
+  far.dist = 10;
+  strong.hp = 500;
+  s.enemies.push(strong, far);
+  tick(s);
+  check(strong.hp === 500 - 5, `cannon locked to 'strong' hits the biggest enemy (strong hp ${strong.hp})`);
+  check(far.hp === far.maxHp, `the furthest-along enemy is untouched (far hp ${far.hp})`);
+}
+
+{
+  // The Gun is unaffected by locks: 'close' and 'strong' pick different enemies in the same setup.
+  const setup = () => {
+    const s = createRunState();
+    s.economy.salvage = 10000;
+    placeTower(s, 'gun', 5, 5);
+    s.phase = 'wave';
+    s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+    const near = stationary(1, 'grunt', 1, 5.5, 5.0);
+    const far = stationary(2, 'grunt', 1, 5.5, 4.0);
+    far.hp = 500;
+    s.enemies.push(near, far);
+    return s;
+  };
+  const closeRun = setup();
+  towerAt(closeRun, 5, 5).targetMode = 'close';
+  tick(closeRun);
+  check(closeRun.enemies.find((e) => e.id === 1).hp === 17,
+    `close gun hits the near enemy (near hp ${closeRun.enemies.find((e) => e.id === 1).hp})`);
+  check(closeRun.enemies.find((e) => e.id === 2).hp === 500,
+    `close gun leaves the strong enemy alone (far hp ${closeRun.enemies.find((e) => e.id === 2).hp})`);
+
+  const strongRun = setup();
+  towerAt(strongRun, 5, 5).targetMode = 'strong';
+  tick(strongRun);
+  check(strongRun.enemies.find((e) => e.id === 2).hp === 497,
+    `strong gun hits the strong enemy (far hp ${strongRun.enemies.find((e) => e.id === 2).hp})`);
+  check(strongRun.enemies.find((e) => e.id === 1).hp === 20,
+    `strong gun leaves the near enemy alone (near hp ${strongRun.enemies.find((e) => e.id === 1).hp})`);
+}
+
+{
+  // The panel reads a fixed label for locked towers and the stored mode for the configurable Gun;
+  // the target key/click is refused for locked towers and still cycles the Gun.
+  check(targetModeDisplay(createTower(1, 'taser', 0, 0)) === 'Closest (fixed)', 'taser panel reads "Closest (fixed)"');
+  check(targetModeDisplay(createTower(2, 'laser', 0, 0)) === 'First (fixed)', 'laser panel reads "First (fixed)"');
+  check(targetModeDisplay(createTower(3, 'cannon', 0, 0)) === 'Strong (fixed)', 'cannon panel reads "Strong (fixed)"');
+  const gun = createTower(4, 'gun', 0, 0);
+  check(targetModeDisplay(gun) === 'First', 'gun panel reads its stored mode');
+  check(targetLockReason('taser') === 'A Tesla coil discharges into whatever is nearest.', 'taser tooltip explains the lock');
+  check(targetLockReason('laser') !== null && targetLockReason('cannon') !== null, 'laser and cannon tooltips each explain their lock');
+  check(targetLockReason('gun') === null, 'the configurable gun has no lock reason');
+
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'taser', 5, 5);
+  placeTower(s, 'gun', 6, 5);
+  const taser = towerAt(s, 5, 5);
+  taser.targetMode = 'strong';
+  cycleTargetMode(s, 5, 5);
+  check(taser.targetMode === 'strong', 'the target key/click does not change a locked taser');
+  const g = towerAt(s, 6, 5);
+  g.targetMode = 'first';
+  cycleTargetMode(s, 6, 5);
+  check(g.targetMode === 'strong', 'the target key/click still cycles a configurable gun');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

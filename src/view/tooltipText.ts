@@ -63,6 +63,33 @@ export const TARGET_LABEL: Readonly<Record<TargetMode, string>> = {
   close: 'Close',
 };
 
+/** The fixed-label wording for a locked mode; "close" reads "Closest" to name the behaviour. */
+const TARGET_LOCK_LABEL: Readonly<Record<TargetMode, string>> = {
+  first: 'First',
+  strong: 'Strong',
+  close: 'Closest',
+};
+
+/** The target row's display value: a locked kind reads "<Mode> (fixed)", others read the stored mode. */
+export function targetModeDisplay(tower: Tower): string {
+  const lock = TOWER_STATS[tower.kind].targetLock;
+  return lock !== null ? `${TARGET_LOCK_LABEL[lock]} (fixed)` : TARGET_LABEL[tower.targetMode];
+}
+
+/** The one-sentence reason a locked tower cannot be re-targeted, or null for a configurable kind. */
+export function targetLockReason(kind: TowerKind): string | null {
+  switch (TOWER_STATS[kind].targetLock) {
+    case 'close':
+      return 'A Tesla coil discharges into whatever is nearest.';
+    case 'first':
+      return 'A laser fires down the lane at the leading edge.';
+    case 'strong':
+      return 'A cannon swings at the biggest thing it can see.';
+    default:
+      return null;
+  }
+}
+
 /** Shots per second for a fire interval, or an em-dash for towers that never fire. */
 function rateText(fireInterval: number): string {
   return fireInterval > 0 ? `${(TICK_HZ / fireInterval).toFixed(1)}/s` : '—';
@@ -137,7 +164,7 @@ export function towerTooltipLines(tower: Tower, clock: number): string[] {
     name,
     `Damage ${damage.toFixed(1)} · Range ${range.toFixed(1)}`,
     `Rate ${firing ? rate.toFixed(1) + '/s' : '—'} · DPS ${firing ? dps.toFixed(1) : '—'}`,
-    `Target: ${TARGET_LABEL[tower.targetMode]}`,
+    `Target: ${targetModeDisplay(tower)}`,
     turnText(st.turnRate),
     `Sell $${formatNumber(sellValue(tower))}`,
   ];

@@ -23,7 +23,7 @@ import {
   specEffectText,
   type SpecKind,
 } from '../core/save.ts';
-import { branchName, TARGET_LABEL } from './tooltipText.ts';
+import { branchName, targetModeDisplay } from './tooltipText.ts';
 
 /**
  * The HUD: status-bar text (hint / wave / salvage), the integrity readout, the pointer stage and
@@ -325,7 +325,9 @@ export function hudControlAt(l: Layout, s: RunState, px: number, py: number): Hu
   if (h.detail && tower) {
     const upgradePrice = upgradeCost(tower);
     const affordable = upgradePrice !== null && canAfford(s.economy, upgradePrice);
-    if (h.detail.target && pointInRect(h.detail.target, px, py)) return { action: 'target', enabled: true };
+    if (h.detail.target && pointInRect(h.detail.target, px, py)) {
+      return { action: 'target', enabled: TOWER_STATS[tower.kind].targetLock === null };
+    }
     if (h.detail.upgrade && pointInRect(h.detail.upgrade, px, py)) return { action: 'upgrade', enabled: affordable };
     for (const b of h.detail.branches) {
       if (pointInRect(b.rect, px, py)) {
@@ -694,9 +696,10 @@ export class HudView {
       this.towerRoute.position.set(d.route.x, d.route.y + Math.floor(d.route.h / 2));
 
       if (d.target) {
-        drawButton(g, d.target, true, hoverHud === 'target');
-        this.targetButton.text = `Target: ${TARGET_LABEL[tower.targetMode]}`;
-        this.targetButton.style.fill = PAL.text;
+        const fixed = TOWER_STATS[tower.kind].targetLock !== null;
+        drawButton(g, d.target, !fixed, hoverHud === 'target' && !fixed);
+        this.targetButton.text = `Target: ${targetModeDisplay(tower)}`;
+        this.targetButton.style.fill = fixed ? PAL.shadow : PAL.text;
         this.targetButton.position.set(d.target.x + 6, d.target.y + Math.floor(d.target.h / 2));
       } else {
         this.targetButton.text = '';
