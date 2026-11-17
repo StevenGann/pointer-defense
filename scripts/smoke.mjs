@@ -32,7 +32,7 @@ import {
   placementSealsUnderToggles,
   toggleAtTile,
 } from '../src/core/state.ts';
-import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isToggleGate } from '../src/core/towers.ts';
+import { TOWER_STATS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, TOGGLE_LOCK_TICKS } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, popupCountForWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
@@ -57,7 +57,7 @@ import {
   WALL_FACE_DISABLED,
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
-import { upgradeTooltipLines, tooltipText } from '../src/view/tooltipText.ts';
+import { towerTooltipLines, upgradeTooltipLines, tooltipText } from '../src/view/tooltipText.ts';
 import { BoardView, staticLayerKey } from '../src/view/board.ts';
 import { computeLayout } from '../src/view/chrome.ts';
 
@@ -1049,6 +1049,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(!gate.open, 'right-click/cancel does not flip it');
 
   check(toggleGate(s, 5, 5) && gate.open, 'toggleGate opens a closed gate');
+  s.clock += TOGGLE_LOCK_TICKS;
   check(toggleGate(s, 5, 5) && !gate.open, 'toggleGate closes an open gate');
 
   // Bulwark and Mesh never toggle.
@@ -1084,6 +1085,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(toggleGate(s, 4, 9), 'one click opens the gate');
   check(gate.open, 'the gate is now open');
   check(currentPath(s).length === base, `an open gate is walkable (route ${currentPath(s).length} == ${base})`);
+  s.clock += TOGGLE_LOCK_TICKS;
   check(toggleGate(s, 4, 9), 'close the gate');
   check(currentPath(s).length === closedLen, `a closed gate blocks again (${currentPath(s).length})`);
 }
@@ -1096,6 +1098,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   upgradeTower(s, 5, 6);
   chooseBranch(s, 5, 6, 'C');
   check(toggleGate(s, 5, 6), 'open the gate at the choke point');
+  s.clock += TOGGLE_LOCK_TICKS;
   for (let r = 0; r < ROWS; r++) {
     if (r === 6) continue;
     check(placeTower(s, 'gun', 5, r), `block column 5 at row ${r}`);
@@ -1125,6 +1128,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   e.heading = 0; // travelling east
   e.stunUntilTick = 999999;
   s.enemies.push(e);
+  s.clock += TOGGLE_LOCK_TICKS;
   check(toggleGate(s, 5, 6), 'close the gate under the enemy');
   check(e.col === 6 && e.row === 6, `enemy pushed forward to (${e.col},${e.row})`);
   check(towerAt(s, 5, 6).open === false, 'the gate is closed');
@@ -1147,6 +1151,96 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   for (let i = 0; i < 6000 && !b.dead; i++) tick(s);
   check(gate.hp === gate.maxHp, `breacher never damaged the open gate (${gate.hp}/${gate.maxHp})`);
   check(b.dist > 0, `breacher walked through the open gate (dist ${b.dist.toFixed(2)})`);
+}
+
+// --- 18g. A Toggle flip locks that gate for three seconds -----------------------------------
+{
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'wall', 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'C');
+  const gate = towerAt(s, 5, 5);
+  check(gate.toggleReadyAt === 0, 'a fresh Toggle gate is ready to flip');
+
+  check(toggleGate(s, 5, 5), 'the first flip is accepted');
+  check(gate.open, 'the first flip opens the gate');
+  check(gate.toggleReadyAt === TOGGLE_LOCK_TICKS, `a flip sets the lock (${gate.toggleReadyAt})`);
+  check(isGateLocked(gate, s.clock), 'the gate is locked immediately after the flip');
+
+  s.clock++;
+  check(!toggleGate(s, 5, 5), 'a second flip one tick later is refused');
+  check(gate.open, 'the refused flip leaves the gate state unchanged');
+
+  s.clock = gate.toggleReadyAt - 1;
+  check(!toggleGate(s, 5, 5), 'the gate is still locked one tick before the cooldown ends');
+  s.clock = gate.toggleReadyAt;
+  check(!isGateLocked(gate, s.clock), 'the lock expires exactly at its ready tick');
+  check(toggleGate(s, 5, 5), 'a flip is accepted once 180 ticks have passed');
+  check(!gate.open, 'the accepted flip closes the gate');
+}
+
+// --- 18h. The lock is per gate, shown disabled, and named by the tooltip --------------------
+{
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  for (const [c, r] of [[5, 5], [7, 5]]) {
+    placeTower(s, 'wall', c, r);
+    upgradeTower(s, c, r);
+    chooseBranch(s, c, r, 'C');
+  }
+  const first = towerAt(s, 5, 5);
+  const second = towerAt(s, 7, 5);
+  check(toggleGate(s, 5, 5) && first.open, 'the first gate flips');
+  check(isGateLocked(first, s.clock), 'the first gate is now locked');
+  check(toggleGate(s, 7, 5) && second.open, 'a second gate still flips while the first is locked');
+  check(first.toggleReadyAt === s.clock + TOGGLE_LOCK_TICKS && second.toggleReadyAt === s.clock + TOGGLE_LOCK_TICKS,
+    'each gate carries its own lock');
+
+  const lockedClosed = wallSpec({ branch: 'C', open: false, hp: 540, maxHp: 540, locked: true });
+  const lockedOpen = wallSpec({ branch: 'C', open: true, hp: 540, maxHp: 540, locked: true });
+  check(lockedClosed.face === WALL_FACE_DISABLED, 'a locked closed Toggle is drawn disabled');
+  check(lockedOpen.face === WALL_FACE_DISABLED, 'a locked open Toggle is drawn disabled');
+  check(wallSpec({ branch: 'C', open: false, hp: 540, maxHp: 540, locked: false }).face === WALL_FACE,
+    'an unlocked closed Toggle keeps its live style');
+
+  s.clock = 96; // 84 ticks left at 60 Hz = 1.4 s
+  check(towerTooltipLines(first, s.clock).map(tooltipText).includes('Gate locked — 1.4 s'),
+    'a locked gate tooltip names the remaining lock');
+}
+
+// --- 18i. Fixed-timestep equivalence still holds with a gate mid-lock -----------------------
+{
+  const run = (frameMs) => {
+    const s = stateOnLevel('open-field');
+    s.economy.salvage = 10000;
+    placeTower(s, 'wall', 5, 6);
+    upgradeTower(s, 5, 6);
+    chooseBranch(s, 5, 6, 'C');
+    for (let i = 0; i < 30; i++) tick(s);
+    toggleGate(s, 5, 6); // opens at clock 30 and locks until clock 210
+    toggleGate(s, 5, 6); // refused, mid-lock
+    startWave(s);
+    for (let t = 0; t < 100 * TICK_MS - frameMs; t += frameMs) step(s, frameMs);
+    while (s.clock < 130) tick(s);
+    const gate = towerAt(s, 5, 6);
+    return JSON.stringify([
+      s.economy,
+      s.integrity,
+      s.enemies.map((e) => [e.id, e.hp, e.dist]),
+      s.rng,
+      s.clock,
+      s.field,
+      gate.open,
+      gate.toggleReadyAt,
+      isGateLocked(gate, s.clock),
+    ]);
+  };
+  const at60 = run(TICK_MS);
+  const midLock = JSON.parse(at60);
+  check(midLock[6] === true && midLock[8] === true, 'the gate is still open and locked at the end');
+  check(at60 === run(1000 / 144), 'a gate mid-lock: same result at 60 Hz and 144 Hz frames');
+  check(at60 === run(1000 / 23), 'a gate mid-lock: same result at 23 Hz frames');
 }
 
 // --- 19. Route line: reversed segments and per-route offsets ---------------------------------

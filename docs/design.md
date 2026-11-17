@@ -266,7 +266,11 @@ Walls break the ladder pattern: they are a three-tier tower. Tier 2 costs 12, th
 
 Walls are the one tower with a third branch: **Toggle** (`C`). A Toggle wall is a gate — left-clicking
 it opens it (walkable, cannot be attacked, no ground block) or closes it (blocks exactly like a plain
-wall); closing is refused when it would seal the route.
+wall); closing is refused when it would seal the route. A successful flip locks that gate for **3
+seconds (180 ticks)** on the simulation clock; another flip while locked does nothing and the status
+bar says *"Gate locked for 1.4 s"*, with the remaining lock in seconds. The lock is per gate, so two
+gates can be flipped in turn. While a gate is locked it is drawn in the disabled wall style rather
+than its live style, and its tooltip reads *"Gate locked — 1.4 s"*.
 
 The tensions are deliberate. Mortar or Flak is "ground or air". Command or Relay is "your towers or
 you" — the one place the pointer gets a tower's help, and the reason a clicker-minded player and a

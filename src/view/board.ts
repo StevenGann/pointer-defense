@@ -10,7 +10,7 @@ import {
   type RunState,
 } from '../core/state.ts';
 import { radiusOf, type Enemy, type EnemyKind } from '../core/enemies.ts';
-import { effectiveStats, TOWER_STATS, type Tower, type TowerKind } from '../core/towers.ts';
+import { effectiveStats, isGateLocked, TOWER_STATS, type Tower, type TowerKind } from '../core/towers.ts';
 import { tileAt, COLS, ROWS, type Grid, type Tile } from '../core/grid.ts';
 import { toggleOpenAt, toggleProgress, type LevelToggle } from '../core/levels.ts';
 import { dashRects, offsetSegment, routeOffset, type RouteSegment } from './route.ts';
@@ -156,7 +156,7 @@ export class BoardView {
     }
 
     for (const t of state.towers) {
-      drawTower(this.towers, t, board, cell);
+      drawTower(this.towers, t, board, cell, state.clock);
     }
 
     const rangeMult = towerRangeMult(state);
@@ -211,7 +211,7 @@ export class BoardView {
       const cx = board.x + (hover.col + 0.5) * cell;
       const cy = board.y + (hover.row + 0.5) * cell;
       if (state.selected === 'wall') {
-        drawWallShape(this.overlay, { branch: null, open: false, hp: 1, maxHp: 1 }, cx, cy, cell, 0.5);
+        drawWallShape(this.overlay, { branch: null, open: false, hp: 1, maxHp: 1, locked: false }, cx, cy, cell, 0.5);
       } else {
         drawTowerShape(this.overlay, state.selected, cx, cy, cell, 0.5);
       }
@@ -410,11 +410,17 @@ function dashedCircle(g: Graphics, cx: number, cy: number, r: number, color: num
   }
 }
 
-function drawTower(g: Graphics, t: Tower, board: { x: number; y: number; cell: number }, cell: number): void {
+function drawTower(
+  g: Graphics,
+  t: Tower,
+  board: { x: number; y: number; cell: number },
+  cell: number,
+  clock: number,
+): void {
   const cx = board.x + (t.col + 0.5) * cell;
   const cy = board.y + (t.row + 0.5) * cell;
   if (t.kind === 'wall') {
-    drawWallShape(g, t, cx, cy, cell, 1);
+    drawWallShape(g, { ...t, locked: isGateLocked(t, clock) }, cx, cy, cell, 1);
   } else {
     drawTowerShape(g, t.kind, cx, cy, cell, 1, t.angle);
   }

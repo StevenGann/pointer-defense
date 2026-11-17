@@ -21,11 +21,13 @@ import { createEnemy, ENEMY_STATS, isPopupEnemy, isWeakPointHit, popupCovers, ra
 import {
   createTower,
   effectiveStats,
+  isGateLocked,
   isGateOpen,
   isToggleGate,
   isWall,
   recomputeAuras,
   refreshWallHp,
+  TOGGLE_LOCK_TICKS,
   TOWER_STATS,
   sellValue,
   upgradeCost,
@@ -584,6 +586,7 @@ function pushEnemyOffTile(s: RunState, e: Enemy, col: number, row: number): void
 export function toggleGate(s: RunState, col: number, row: number): boolean {
   const t = towerAt(s, col, row);
   if (!t || !isToggleGate(t)) return false;
+  if (isGateLocked(t, s.clock)) return false;
 
   if (t.open) {
     const blocked = groundBlocked(s);
@@ -595,6 +598,7 @@ export function toggleGate(s: RunState, col: number, row: number): boolean {
   }
 
   const closing = !t.open;
+  t.toggleReadyAt = s.clock + TOGGLE_LOCK_TICKS;
   rebuildField(s);
   for (const e of s.enemies) {
     if (e.attackWallId === t.id) {

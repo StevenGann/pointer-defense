@@ -1,4 +1,4 @@
-import { secondsToTicks } from './time.ts';
+import { secondsToTicks, TICK_HZ } from './time.ts';
 
 export type TowerKind = 'gun' | 'cannon' | 'taser' | 'frost' | 'laser' | 'beacon' | 'wall';
 
@@ -182,6 +182,25 @@ export function isGateOpen(tower: Tower): boolean {
   return isToggleGate(tower) && tower.open;
 }
 
+/** A successful gate flip locks that gate for three seconds (180 fixed ticks). */
+export const TOGGLE_LOCK_TICKS = secondsToTicks(3);
+
+/** True while this Toggle gate's flip cooldown has not elapsed at the given simulation clock. */
+export function isGateLocked(tower: Tower, clock: number): boolean {
+  return isToggleGate(tower) && clock < tower.toggleReadyAt;
+}
+
+/** Ticks left on a Toggle gate's lock at the given simulation clock (0 when it can flip). */
+export function gateLockRemainingTicks(tower: Tower, clock: number): number {
+  if (!isToggleGate(tower)) return 0;
+  return Math.max(0, tower.toggleReadyAt - clock);
+}
+
+/** Seconds left on a Toggle gate's lock, for the status bar and tooltip. */
+export function gateLockRemainingSeconds(tower: Tower, clock: number): number {
+  return gateLockRemainingTicks(tower, clock) / TICK_HZ;
+}
+
 /**
  * Re-derive a wall's hit-point total after a tier or branch change, preserving the damage it has
  * already taken (lost hit points carry across the upgrade rather than being healed away).
@@ -225,6 +244,8 @@ export interface Tower {
   maxHp: number;
   /** Toggle gates only: true while the gate is open (walkable, cannot be attacked). */
   open: boolean;
+  /** Toggle gates only: simulation tick before which another flip is refused. */
+  toggleReadyAt: number;
 }
 
 export function createTower(id: number, kind: TowerKind, col: number, row: number): Tower {
@@ -247,6 +268,7 @@ export function createTower(id: number, kind: TowerKind, col: number, row: numbe
     hp: kind === 'wall' ? wallMaxHp(1, null) : 0,
     maxHp: kind === 'wall' ? wallMaxHp(1, null) : 0,
     open: false,
+    toggleReadyAt: 0,
   };
 }
 

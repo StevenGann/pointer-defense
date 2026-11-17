@@ -8,7 +8,14 @@ import { dismissPopup } from '../core/popups.ts';
 import { popupCloseHit } from '../view/popupEnemy.ts';
 import { canAfford } from '../core/economy.ts';
 import { tileAt } from '../core/grid.ts';
-import { isToggleGate, TOWER_KINDS, TOWER_STATS, type TowerKind } from '../core/towers.ts';
+import {
+  gateLockRemainingSeconds,
+  isGateLocked,
+  isToggleGate,
+  TOWER_KINDS,
+  TOWER_STATS,
+  type TowerKind,
+} from '../core/towers.ts';
 import { type SpecKind } from '../core/save.ts';
 import {
   cancelSelection,
@@ -221,8 +228,12 @@ export class MouseController {
       const tower = towerAt(s, col, row);
       if (tower) {
         selectPlacedTower(s, tower);
-        if (isToggleGate(tower) && !toggleGate(s, col, row)) {
-          this.ctx.notice('That would seal the route.');
+        if (isToggleGate(tower)) {
+          if (isGateLocked(tower, s.clock)) {
+            this.ctx.notice(`Gate locked for ${gateLockRemainingSeconds(tower, s.clock).toFixed(1)} s`);
+          } else if (!toggleGate(s, col, row)) {
+            this.ctx.notice('That would seal the route.');
+          }
         }
         return;
       }

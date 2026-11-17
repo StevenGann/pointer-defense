@@ -423,7 +423,7 @@ function updateTooltip(): void {
     }
     const tower = h.onBoard ? towerAt(state, h.col, h.row) : undefined;
     if (tower) {
-      tooltip.update({ key: `tower:${tower.id}`, lines: towerTooltipLines(tower) }, h.x, h.y, viewportW, viewportH);
+      tooltip.update({ key: `tower:${tower.id}`, lines: towerTooltipLines(tower, state.clock) }, h.x, h.y, viewportW, viewportH);
       return;
     }
     const control = hudControlAt(layout, state, h.x, h.y);

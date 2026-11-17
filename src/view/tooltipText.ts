@@ -1,5 +1,7 @@
 import {
   effectiveStats,
+  gateLockRemainingSeconds,
+  isGateLocked,
   sellValue,
   TOWER_STATS,
   upgradeCost,
@@ -105,20 +107,23 @@ export function paletteTooltipLines(kind: TowerKind): string[] {
 }
 
 /** Tooltip lines for a placed tower: its live stats with aura bonuses, as the sim sees them. */
-export function towerTooltipLines(tower: Tower): string[] {
+export function towerTooltipLines(tower: Tower, clock: number): string[] {
   const branch = tower.branch === null ? '' : ` — ${branchName(tower.kind, tower.branch)}`;
   const name = `${TOWER_STATS[tower.kind].name} T${tower.tier}${branch}`;
 
   if (tower.kind === 'wall') {
     const hp = tower.branch === null ? `HP ${Math.ceil(tower.hp)}` : `HP ${Math.ceil(tower.hp)}/${tower.maxHp}`;
+    const locked = isGateLocked(tower, clock);
     const blocks =
       tower.branch === 'B'
         ? 'Blocks ground and flyers'
-        : tower.branch === 'C'
-          ? tower.open
-            ? 'Open — ground passes through'
-            : 'Closed — blocks ground'
-          : 'Blocks ground only';
+        : locked
+          ? `Gate locked — ${gateLockRemainingSeconds(tower, clock).toFixed(1)} s`
+          : tower.branch === 'C'
+            ? tower.open
+              ? 'Open — ground passes through'
+              : 'Closed — blocks ground'
+            : 'Blocks ground only';
     return [name, hp, blocks, `Sell $${formatNumber(sellValue(tower))}`];
   }
 
