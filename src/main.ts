@@ -27,7 +27,7 @@ import {
   upgradeTooltipLines,
   type TooltipLine,
 } from './view/tooltipText.ts';
-import { PopupView } from './view/popup.ts';
+import { AdView } from './view/ad.ts';
 import { FloatingNumbersView } from './view/numbers.ts';
 import { MenuView, type OpenMenu } from './view/menu.ts';
 import { DialogView, type DialogModel } from './view/dialog.ts';
@@ -107,7 +107,7 @@ const chrome = new ChromeView();
 const board = new BoardView();
 const effects = new EffectsView();
 const hud = new HudView();
-const popup = new PopupView();
+const ad = new AdView();
 const numbers = new FloatingNumbersView();
 const menuView = new MenuView();
 const dialogView = new DialogView();
@@ -115,7 +115,7 @@ const tooltip = new TooltipView();
 
 const root = new Container();
 app.stage.addChild(root);
-root.addChild(chrome.root, board.root, effects.root, numbers.root, hud.root, popup.root, menuView.root, dialogView.root, tooltip.root);
+root.addChild(chrome.root, board.root, effects.root, numbers.root, hud.root, ad.root, menuView.root, dialogView.root, tooltip.root);
 
 sfx.setEnabled(profile.soundOn);
 sfx.setVolume(profile.volume);
@@ -131,6 +131,9 @@ function syncViewport(): void {
     width: app.screen.width,
     height: app.screen.height,
     window: { x: layout.window.x, y: layout.window.y, w: layout.window.w, h: layout.window.h },
+    client: { x: layout.client.x, y: layout.client.y, w: layout.client.w, h: layout.client.h },
+    boardCol: { x: layout.boardCol.x, y: layout.boardCol.y, w: layout.boardCol.w, h: layout.boardCol.h },
+    leftPanel: { x: layout.leftPanel.x, y: layout.leftPanel.y, w: layout.leftPanel.w, h: layout.leftPanel.h },
     rightPanel: {
       x: layout.rightPanel.x,
       y: layout.rightPanel.y,
@@ -430,11 +433,11 @@ function drainEvents(): void {
         effects.addHitSpark(ev.x, ev.y);
         sfx.play('cannon');
         break;
-      case 'popupSpawned':
-        sfx.play('popup');
+      case 'adSpawned':
+        sfx.play('ad');
         break;
-      case 'popupDismissed':
-        sfx.play('popupClose');
+      case 'adDismissed':
+        sfx.play('adClose');
         break;
       case 'toggleChanged':
         hud.showNotice(`Shutter ${ev.index} ${ev.open ? 'opened' : 'closed'}`, 120);
@@ -464,7 +467,7 @@ app.ticker.add((ticker) => {
   effects.draw(state, layout);
   numbers.draw(state, layout);
   hud.draw(state, layout, mouse.hover.hud);
-  popup.draw(state);
+  ad.draw(state);
   dialogView.draw(dialog, layout);
   updateTooltip();
   cursor.position.set(mouse.hover.x, mouse.hover.y);
@@ -522,7 +525,7 @@ function updateTooltip(): void {
     h.menuItem >= 0 || // over the menu bar
     state.phase === 'halted' ||
     state.phase === 'victory' ||
-    (state.popup !== null && pointInRect(state.popup, h.x, h.y)); // over a pop-up
+    (state.ad !== null && pointInRect(state.ad, h.x, h.y)); // over an ad
 
   const viewportW = app.screen.width;
   const viewportH = app.screen.height;

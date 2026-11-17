@@ -137,7 +137,7 @@ export class BoardView {
     while (this.popupTexts.length <= i) {
       const title = new Text({
         text: '',
-        style: { fontFamily: FONT, fontSize: FONT_SIZE.small, fontWeight: 'bold', fill: PAL.titleInverse },
+        style: { fontFamily: FONT, fontSize: FONT_SIZE.body, fontWeight: 'bold', fill: PAL.titleInverse },
       });
       title.anchor.set(0, 0.5);
       const message = new Text({
@@ -922,8 +922,8 @@ function drawPopupWindow(
   bevel(g, close, true, hoverClose ? PAL.highlight : PAL.face);
   const cx = close.x + Math.floor(close.w / 2);
   const cy = close.y + Math.floor(close.h / 2);
-  g.moveTo(cx - 3, cy - 3).lineTo(cx + 3, cy + 3).stroke({ width: 1, color: PAL.text });
-  g.moveTo(cx + 3, cy - 3).lineTo(cx - 3, cy + 3).stroke({ width: 1, color: PAL.text });
+  g.moveTo(cx - 4, cy - 4).lineTo(cx + 4, cy + 4).stroke({ width: 1, color: PAL.text });
+  g.moveTo(cx + 4, cy - 4).lineTo(cx - 4, cy + 4).stroke({ width: 1, color: PAL.text });
 }
 
 function drawEnemy(

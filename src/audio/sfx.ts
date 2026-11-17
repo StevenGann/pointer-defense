@@ -15,8 +15,8 @@ export type SoundName =
   | 'frost'
   | 'kill'
   | 'leak'
-  | 'popup'
-  | 'popupClose'
+  | 'ad'
+  | 'adClose'
   | 'waveStart'
   | 'waveClear';
 
@@ -94,10 +94,10 @@ class Sfx {
         this.tone('sine', 660, 660, 0.09, 0.4);
         this.tone('sine', 880, 880, 0.14, 0.4, 0.08);
         break;
-      case 'popup':
+      case 'ad':
         this.tone('sine', 700, 1200, 0.08, 0.32);
         break;
-      case 'popupClose':
+      case 'adClose':
         this.tone('sine', 988, 988, 0.06, 0.35);
         this.tone('sine', 1319, 1319, 0.12, 0.35, 0.05);
         break;

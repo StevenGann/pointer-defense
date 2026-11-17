@@ -53,10 +53,14 @@ export const FONT_SIZE = {
   board: 10,
 } as const;
 
-const TITLE_H = 22;
+export const TITLE_H = 22;
 const MENU_H = 22;
 const STATUS_H = 22;
 const WINDOW_MARGIN = 24;
+
+/** The title-bar control boxes (min/max/close): 16x14, shared by every window at full scale. */
+export const CONTROL_BOX_W = 16;
+export const CONTROL_BOX_H = 14;
 
 export interface BoardGeometry {
   x: number;
@@ -220,8 +224,8 @@ function drawControlGlyph(g: Graphics, r: Rect, kind: 'min' | 'max' | 'close'): 
 }
 
 function drawControlButtons(g: Graphics, title: Rect): void {
-  const bw = 16;
-  const bh = 14;
+  const bw = CONTROL_BOX_W;
+  const bh = CONTROL_BOX_H;
   const y = title.y + Math.floor((title.h - bh) / 2);
   const right = title.x + title.w - 2;
   const close: Rect = { x: right - bw, y, w: bw, h: bh };

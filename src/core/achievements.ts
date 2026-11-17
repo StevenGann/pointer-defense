@@ -18,7 +18,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: 'five-tier-five', name: 'Five Tier Fives', description: 'Five tier-5 towers standing at once' },
   { id: 'beacon-field', name: 'Beacon Field', description: 'Ten beacons standing at once' },
   { id: 'boss-by-pointer', name: 'Boss by Pointer', description: 'Kill a boss with the pointer alone' },
-  { id: 'popup-collector', name: 'Popup Collector', description: 'Dismiss ten pop-ups in one run' },
+  { id: 'ad-collector', name: 'Ad Collector', description: 'Dismiss ten ads in one run' },
   { id: 'endless-150', name: 'Endless', description: 'Reach endless wave 150' },
   { id: 'reboot-50', name: 'Reboot', description: 'Reboot with 50 or more total specs' },
 ];

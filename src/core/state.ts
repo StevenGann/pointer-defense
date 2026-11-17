@@ -90,7 +90,7 @@ import {
   type ModifierId,
   type Spawn,
 } from './waves.ts';
-import { tickPopups, type Popup, type PopupKind } from './popups.ts';
+import { tickAds, type Ad, type AdKind } from './ads.ts';
 import { rngNext } from './rng.ts';
 import { secondsToTicks, TICK_HZ, TICK_MS } from './time.ts';
 import {
@@ -137,14 +137,14 @@ export type GameEvent =
   | { type: 'leak'; x: number; y: number }
   | { type: 'shot'; towerId: number; x: number; y: number; splash: number }
   | { type: 'click'; x: number; y: number; hit: boolean }
-  | { type: 'damage'; x: number; y: number; amount: number; weak: boolean; crit?: boolean; id: number; dirX?: number; dirY?: number }
+  | { type: 'damage'; x: number; y: number; amount: number; weak: boolean; crit?: boolean; marked?: boolean; id: number; dirX?: number; dirY?: number }
   | { type: 'shieldHit'; x: number; y: number; absorbed: number; left: number }
   | { type: 'waveStarted'; wave: number }
   | { type: 'waveCleared'; wave: number; bonus: number }
   | { type: 'wallDamaged'; x: number; y: number; amount: number }
   | { type: 'wallDestroyed'; x: number; y: number }
-  | { type: 'popupSpawned'; kind: PopupKind }
-  | { type: 'popupDismissed'; kind: PopupKind }
+  | { type: 'adSpawned'; kind: AdKind }
+  | { type: 'adDismissed'; kind: AdKind }
   | { type: 'toggleChanged'; index: number; open: boolean };
 
 /** One started wave's live spawn queue. Spawn ticks are relative to `startTick`. */
@@ -184,7 +184,7 @@ export interface RunState {
   selectedTowerId: number | null;
   /** Started waves still in flight, in the order they began. Several may run at once. */
   runs: WaveRun[];
-  /** Ticks since the most recent wave started (popups and the early-call bonus depend on it). */
+  /** Ticks since the most recent wave started (ads and the early-call bonus depend on it). */
   waveTick: number;
   /** Monotonic run clock, incremented once per tick and never reset. */
   clock: number;
@@ -201,10 +201,10 @@ export interface RunState {
   nextId: number;
   /** One-shot events produced since the view last drained them. */
   events: GameEvent[];
-  /** The live desktop pop-up, or null. */
-  popup: Popup | null;
-  /** Tick when the next pop-up spawn may be attempted. */
-  nextPopupAttemptTick: number;
+  /** The live desktop ad, or null. */
+  ad: Ad | null;
+  /** Tick when the next ad spawn may be attempted. */
+  nextAdAttemptTick: number;
   /** Ticks remaining on the AutoUpdate tower damage buff. */
   towerDamageBuffTicks: number;
   /** Ticks remaining on the Time Zone enemy slow. */
@@ -213,11 +213,14 @@ export interface RunState {
   towerDisabled: Map<number, number>;
   /** Seeded PRNG state (see rng.ts). */
   rng: number;
-  /** Desktop geometry for pop-up placement, updated by the view on resize. */
+  /** Desktop geometry for ad placement, updated by the view on resize. */
   viewport: {
     width: number;
     height: number;
     window: { x: number; y: number; w: number; h: number };
+    client: { x: number; y: number; w: number; h: number };
+    boardCol: { x: number; y: number; w: number; h: number };
+    leftPanel?: { x: number; y: number; w: number; h: number };
     rightPanel?: { x: number; y: number; w: number; h: number };
   };
   /** Permanent spec levels applied to this run (mirrors the profile, drives the bonuses). */
@@ -228,8 +231,8 @@ export interface RunState {
   achievements: Set<string>;
   /** Weak-point hits this run, for the sharpshooter achievement. */
   weakPointHits: number;
-  /** Pop-ups dismissed this run, for the popup-collector achievement. */
-  popupsDismissed: number;
+  /** Ads dismissed this run, for the ad-collector achievement. */
+  adsDismissed: number;
   /** Leaks counted per wave number, so an early call cannot poison or rescue another wave's record. */
   leaksByWave: Map<number, number>;
   /** True once the player has called a wave early this run. */
@@ -294,8 +297,8 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     accumulator: 0,
     nextId: 1,
     events: [],
-    popup: null,
-    nextPopupAttemptTick: 0,
+    ad: null,
+    nextAdAttemptTick: 0,
     towerDamageBuffTicks: 0,
     enemySlowTicks: 0,
     towerDisabled: new Map(),
@@ -304,13 +307,15 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
       width: 1280,
       height: 800,
       window: { x: 24, y: 24, w: 1232, h: 752 },
+      client: { x: 26, y: 70, w: 1228, h: 680 },
+      boardCol: { x: 196, y: 70, w: 888, h: 680 },
       rightPanel: { x: 1086, y: 70, w: 168, h: 680 },
     },
     specs,
     unspentSpecs: profile.unspentSpecs,
     achievements: new Set(profile.achievements),
     weakPointHits: 0,
-    popupsDismissed: 0,
+    adsDismissed: 0,
     leaksByWave: new Map(),
     calledEarly: false,
     clearedWaveNoLeaks: false,
@@ -829,7 +834,7 @@ export function checkAchievements(s: RunState): string[] {
   if (s.towers.filter((t) => t.tier === 5).length >= 5) add('five-tier-five');
   if (s.towers.filter((t) => t.kind === 'beacon').length >= 10) add('beacon-field');
   if (s.bossKilledByPointer) add('boss-by-pointer');
-  if (s.popupsDismissed >= 10) add('popup-collector');
+  if (s.adsDismissed >= 10) add('ad-collector');
   if (s.wave >= 150) add('endless-150');
 
   return unlocked;
@@ -883,7 +888,7 @@ export function pointerDown(s: RunState, x: number, y: number): boolean {
     (weak ? 2 : 1) *
     (marked ? MARKED_DAMAGE_MULT : 1) *
     (roll.crit ? CRIT_MULTIPLIER : 1);
-  damageEnemy(s, target, amount, 'pointer', true, undefined, weak, roll.crit);
+  damageEnemy(s, target, amount, 'pointer', true, undefined, weak, roll.crit, marked);
   if (weak) {
     s.weakPointHits++;
     s.pointer.combo++;
@@ -955,7 +960,7 @@ export function tick(s: RunState): void {
   updateToggles(s);
   tickRepairs(s);
   decayCombo(s);
-  tickPopups(s);
+  tickAds(s);
   checkAchievements(s);
   if (s.phase === 'wave') {
     spawnDue(s);
@@ -1702,7 +1707,25 @@ function applyReticle(s: RunState): void {
     target = enemyAt(s, p.x, p.y, CLICK_SLACK + relay.slack);
   }
   p.targetId = target ? target.id : null;
-  if (target) damageEnemy(s, target, dpt * relay.damage * comboMultiplier(p) * pointerDamageMult(s.specs), 'pointer', true);
+  if (!target) return;
+  // The held pointer can crit too, and its crit shakes by the same rule as a click's: 1 px, or 2 px
+  // on the weak point / the marked enemy. The reticle is always on its marked target, and the weak
+  // point follows the cursor.
+  const marked = true;
+  const weak = isWeakPointHit(target, p.x, p.y);
+  const roll = nextCritRoll(s.rng, marked, weak);
+  s.rng = roll.next;
+  damageEnemy(
+    s,
+    target,
+    dpt * relay.damage * comboMultiplier(p) * pointerDamageMult(s.specs) * (roll.crit ? CRIT_MULTIPLIER : 1),
+    'pointer',
+    true,
+    undefined,
+    weak,
+    roll.crit,
+    marked,
+  );
 }
 
 /**
@@ -1719,6 +1742,7 @@ function damageEnemy(
   tower?: Tower,
   weak = false,
   crit = false,
+  marked = false,
 ): void {
   if (e.dead || amount <= 0) return;
   if (source === 'tower') e.towerDamaged = true;
@@ -1753,7 +1777,7 @@ function damageEnemy(
       dirY = dy / d;
     }
   }
-  s.events.push({ type: 'damage', x: e.x, y: e.y, amount: dmg, weak: source === 'pointer' && weak, crit: crit && source === 'pointer', id: e.id, dirX, dirY });
+  s.events.push({ type: 'damage', x: e.x, y: e.y, amount: dmg, weak: source === 'pointer' && weak, crit: crit && source === 'pointer', marked: marked && source === 'pointer', id: e.id, dirX, dirY });
   if (e.hp <= 1e-9) {
     e.hp = 0;
     e.dead = true;

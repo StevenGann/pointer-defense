@@ -2,7 +2,7 @@ import { Container, Graphics, Text } from 'pixi.js';
 import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
-import { clickDamage, comboMultiplier, nextPointerCost, overclockCeiling, pointerInfo } from '../core/pointer.ts';
+import { clickDamage, comboMultiplier, critChance, nextPointerCost, overclockCeiling, pointerInfo } from '../core/pointer.ts';
 import { autoWaveStatus, canCycleLevel, currentPath, isFinalWave, pointerDamageMult, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
 import { levelById } from '../core/levels.ts';
 import {
@@ -84,6 +84,15 @@ function textWidth(text: string, size: number): number {
   const cached = textWidthCache.get(key);
   if (cached !== undefined) return cached;
 
+  // Headless (the smoke harness) has no canvas to rasterize text; estimate from the glyph count so
+  // the layout model can still be computed without a renderer.
+  if (typeof document === 'undefined') {
+    const estimate = Math.ceil(text.length * size * 0.6);
+    if (textWidthCache.size >= TEXT_WIDTH_CACHE_MAX) textWidthCache.clear();
+    textWidthCache.set(key, estimate);
+    return estimate;
+  }
+
   if (!metricsText) {
     metricsText = new Text({
       text: '',
@@ -164,9 +173,6 @@ interface HudLayout {
   integrity: Rect;
   route: Rect | null;
   detail: TowerDetailLayout | null;
-  pointerPanel: Rect;
-  pointerUpgrade: Rect;
-  pointerOverride: Rect | null;
   towers: ReadonlyArray<{ kind: TowerKind; rect: Rect }>;
   wave: Rect;
   autoWave: Rect;
@@ -174,7 +180,31 @@ interface HudLayout {
   specs: SpecShopLayout | null;
 }
 
-function computeHud(l: Layout, s: RunState): HudLayout {
+/** One framed info section in the right panel (title bar plus 13 px rows). */
+export interface InfoSection {
+  rect: Rect;
+  title: string;
+  rows: string[];
+}
+
+/** The pointer's own section: title, three info rows, the upgrade button and the Override box. */
+export interface PointerSection {
+  rect: Rect;
+  rows: { rect: Rect; text: string }[];
+  upgrade: Rect;
+  upgradeText: string;
+  upgradeEnabled: boolean;
+  override: Rect | null;
+}
+
+export interface RightPanelLayout {
+  nextWave: InfoSection;
+  kills: InfoSection;
+  pointer: PointerSection;
+  globalUpgrades: InfoSection;
+}
+
+export function computeHud(l: Layout, s: RunState): HudLayout {
   const pad = 6;
   const x = l.leftPanel.x + pad;
   const w = l.leftPanel.w - pad * 2;
@@ -249,12 +279,6 @@ function computeHud(l: Layout, s: RunState): HudLayout {
     cy = box.y + box.h + 6;
   }
 
-  const pointerPanel: Rect = { x, y: cy, w, h: 76 };
-  const pointerUpgrade: Rect = { x: x + 4, y: cy + 24, w: w - 8, h: 22 };
-  // The Manual Override checkbox is only offered once the reticle exists (stage 2).
-  const pointerOverride: Rect | null = s.pointer.stage >= 2 ? { x: x + 4, y: cy + 50, w: w - 8, h: 22 } : null;
-  cy += 76 + 8;
-
   let map: MapRow | null = null;
   if (canCycleLevel(s)) {
     const row: Rect = { x, y: cy, w, h: 22 };
@@ -307,7 +331,104 @@ function computeHud(l: Layout, s: RunState): HudLayout {
     specs = { header, rows };
   }
 
-  return { integrity, route, detail, pointerPanel, pointerUpgrade, pointerOverride, towers, wave, autoWave, map, specs };
+  return { integrity, route, detail, towers, wave, autoWave, map, specs };
+}
+
+const SECTION_TITLE_H = 18;
+const SECTION_ROW_H = 18;
+const SECTION_PAD_TOP = 6;
+const SECTION_PAD_BOTTOM = 6;
+const SECTION_GAP = 6;
+
+function infoSectionHeight(rows: number): number {
+  return SECTION_PAD_TOP + SECTION_TITLE_H + rows * SECTION_ROW_H + SECTION_PAD_BOTTOM;
+}
+
+function pct(fraction: number): number {
+  return Math.round(fraction * 100);
+}
+
+/**
+ * The right column: NEXT WAVE, KILLS, POINTER (the pointer's full home), then the reserved, empty
+ * GLOBAL UPGRADES section. Sections stack by measured height, so rows can be added to any section
+ * later without re-measuring the others.
+ */
+export function computeRightPanel(l: Layout, s: RunState): RightPanelLayout {
+  const pad = 6;
+  const x = l.rightPanel.x + pad;
+  const w = l.rightPanel.w - pad * 2;
+  let y = l.rightPanel.y + pad;
+
+  // The combo readout floats above the first section while the multiplier is above x1.
+  if (comboMultiplier(s.pointer) > 1) y += 20;
+
+  const wave = s.wave + 1;
+  const def = waveDef(wave);
+  const composition = def ? def.groups.map((grp) => `${grp.count} x ${grp.kind}`) : [];
+  const mods = waveModifiers(wave);
+  if (mods.length > 0) composition.unshift(`mod: ${mods.map((m) => MODIFIER_NAMES[m]).join(' + ')}`);
+
+  const nextWave: InfoSection = {
+    rect: { x, y, w, h: infoSectionHeight(composition.length) },
+    title: 'NEXT WAVE',
+    rows: composition,
+  };
+  y += nextWave.rect.h + SECTION_GAP;
+
+  const kills: InfoSection = {
+    rect: { x, y, w, h: infoSectionHeight(3) },
+    title: 'KILLS',
+    rows: [
+      `by towers: ${s.economy.kills.tower}`,
+      `by pointer: ${s.economy.kills.pointer}`,
+      `x${POINTER_KILL_BONUS} on pointer kills`,
+    ],
+  };
+  y += kills.rect.h + SECTION_GAP;
+
+  const pointer = computePointerSection(s, x, y, w);
+  y += pointer.rect.h + SECTION_GAP;
+
+  const globalUpgrades: InfoSection = {
+    rect: { x, y, w, h: infoSectionHeight(1) },
+    title: 'GLOBAL UPGRADES',
+    rows: ['No upgrades yet'],
+  };
+
+  return { nextWave, kills, pointer, globalUpgrades };
+}
+
+function computePointerSection(s: RunState, x: number, y: number, w: number): PointerSection {
+  const name = pointerInfo(s.pointer).name;
+  const dmg = fmtClickDamage(clickDamage(s.pointer));
+  const stage = s.pointer.stage;
+  const overclock =
+    stage >= 2 ? `Overclock ${s.pointer.clickLevel} / ${overclockCeiling(s.wave)}` : 'Overclock —';
+  const crit = `Crit ${pct(critChance(false, false))}% · mark ${pct(critChance(true, false))}% · weak ${pct(critChance(false, true))}%`;
+
+  const rows = [`${name} · click ${dmg}`, overclock, crit];
+
+  const hasOverride = stage >= 2;
+  const innerX = x + 4;
+  const innerW = w - 8;
+  const h =
+    SECTION_PAD_TOP + SECTION_TITLE_H + rows.length * SECTION_ROW_H + 24 + (hasOverride ? 22 : 0) + SECTION_PAD_BOTTOM;
+  const rect: Rect = { x, y, w, h };
+
+  const rowRects = rows.map((text, i) => ({
+    rect: { x: x + 6, y: y + SECTION_PAD_TOP + SECTION_TITLE_H + i * SECTION_ROW_H, w: w - 12, h: SECTION_ROW_H },
+    text,
+  }));
+
+  const upgradeY = y + SECTION_PAD_TOP + SECTION_TITLE_H + rows.length * SECTION_ROW_H;
+  const upgrade: Rect = { x: innerX, y: upgradeY, w: innerW, h: 24 };
+  const override: Rect | null = hasOverride ? { x: innerX, y: upgradeY + 24, w: innerW, h: 22 } : null;
+
+  const cost = nextPointerCost(s.pointer);
+  const upgradeEnabled = cost !== null && canAfford(s.economy, cost);
+  const upgradeText = cost === null ? 'Max level' : `Upgrade $${formatNumber(cost)}`;
+
+  return { rect, rows: rowRects, upgrade, upgradeText, upgradeEnabled, override };
 }
 
 /**
@@ -336,14 +457,12 @@ export interface HudControlHit {
  */
 export function hudControlAt(l: Layout, s: RunState, px: number, py: number): HudControlHit | null {
   const h = computeHud(l, s);
+  const right = computeRightPanel(l, s);
 
-  {
-    const cost = nextPointerCost(s.pointer);
-    const enabled = cost !== null && canAfford(s.economy, cost);
-    if (pointInRect(h.pointerUpgrade, px, py)) return { action: 'pointer', enabled };
+  if (pointInRect(right.pointer.upgrade, px, py)) {
+    return { action: 'pointer', enabled: right.pointer.upgradeEnabled };
   }
-
-  if (h.pointerOverride && pointInRect(h.pointerOverride, px, py)) {
+  if (right.pointer.override && pointInRect(right.pointer.override, px, py)) {
     return { action: 'override', enabled: true };
   }
 
@@ -505,7 +624,6 @@ export class HudView {
   private readonly sellButton = makeText('');
   private readonly targetButton = makeText('');
   private readonly targetValue = makeText('');
-  private readonly pointerLabel = makeText('');
   private notice = '';
   private noticeUntilTick = 0;
   private lastTick = 0;
@@ -527,6 +645,8 @@ export class HudView {
   private readonly comboText = makeText('', true);
   private readonly pointerTitle = makeText('POINTER', true);
   private readonly pointerRows: Text[] = [makeText(''), makeText(''), makeText(''), makeText('')];
+  private readonly globalTitle = makeText('GLOBAL UPGRADES', true);
+  private readonly globalRows: Text[] = [makeText('')];
   private readonly specHeader = makeText('SPECS', true);
   private readonly specLabels: Text[] = SPEC_KINDS.map(() => makeText(''));
   private readonly specButtons: Text[] = SPEC_KINDS.map(() => makeText(''));
@@ -551,7 +671,6 @@ export class HudView {
       this.sellButton,
       this.targetButton,
       this.targetValue,
-      this.pointerLabel,
       this.pointerButton,
       this.pointerOverrideButton,
       ...this.towerButtons,
@@ -565,6 +684,8 @@ export class HudView {
       ...this.killsRows,
       this.pointerTitle,
       ...this.pointerRows,
+      this.globalTitle,
+      ...this.globalRows,
       this.comboText,
       this.specHeader,
       ...this.specLabels,
@@ -591,6 +712,7 @@ export class HudView {
     this.modalButton2.anchor.set(0.5, 0.5);
     this.comboText.style.fill = PAL.title;
     this.statusPaused.style.fill = PAL.title;
+    this.globalRows[0].style.fill = PAL.shadow;
   }
 
   showNotice(message: string, ticks = NOTICE_TICKS): void {
@@ -645,36 +767,6 @@ export class HudView {
       this.route.text = '';
     }
 
-    bevel(g, h.pointerPanel, true, PAL.face);
-    const pointerName = pointerInfo(s.pointer).name;
-    this.pointerLabel.text =
-      s.pointer.stage >= 2
-        ? `Overclock ${s.pointer.clickLevel} / ${overclockCeiling(s.wave)}`
-        : `Pointer: ${pointerName}`;
-    this.pointerLabel.position.set(h.pointerPanel.x + 6, h.pointerPanel.y + 13);
-
-    const cost = nextPointerCost(s.pointer);
-    const pointerEnabled = cost !== null && canAfford(s.economy, cost);
-    this.pointerButton.text = cost === null ? 'Max level' : `Upgrade $${formatNumber(cost)}`;
-    drawButton(g, h.pointerUpgrade, pointerEnabled, hoverHud === 'pointer');
-    this.pointerButton.style.fill = pointerEnabled ? PAL.text : PAL.shadow;
-    this.pointerButton.position.set(
-      h.pointerUpgrade.x + 6,
-      h.pointerUpgrade.y + Math.floor(h.pointerUpgrade.h / 2),
-    );
-
-    if (h.pointerOverride) {
-      drawCheckbox(g, h.pointerOverride, s.pointer.manualOverride);
-      this.pointerOverrideButton.text = 'Override';
-      this.pointerOverrideButton.style.fill = PAL.text;
-      this.pointerOverrideButton.position.set(
-        h.pointerOverride.x + 20,
-        h.pointerOverride.y + Math.floor(h.pointerOverride.h / 2),
-      );
-    } else {
-      this.pointerOverrideButton.text = '';
-    }
-
     if (h.map) {
       const name = levelById(s.levelId).name;
       drawButton(g, h.map.next, true, hoverHud === 'map');
@@ -709,7 +801,7 @@ export class HudView {
 
     this.drawSpecShop(s, h);
 
-    this.drawRightPanel(s, l);
+    this.drawRightPanel(s, l, hoverHud);
 
     // End-of-run modal.
     this.modalG.clear();
@@ -907,84 +999,76 @@ export class HudView {
     }
   }
 
-  private drawRightPanel(s: RunState, l: Layout): void {
+  private drawRightPanel(s: RunState, l: Layout, hoverHud: HudAction | null): void {
     const g = this.g;
-    const pad = 6;
-    const x = l.rightPanel.x + pad;
-    const w = l.rightPanel.w - pad * 2;
-    let y = l.rightPanel.y + pad;
+    const rp = computeRightPanel(l, s);
 
     // Combo readout: visible while the multiplier is above x1, so the timer ticking down is legible.
     const mult = comboMultiplier(s.pointer);
     if (mult > 1) {
       this.comboText.text = `COMBO x${mult.toFixed(1)}`;
-      this.comboText.position.set(x + 2, y + 10);
+      this.comboText.position.set(rp.nextWave.rect.x + 2, rp.nextWave.rect.y - 10);
       this.comboText.visible = true;
-      y += 20;
     } else {
       this.comboText.text = '';
       this.comboText.visible = false;
     }
 
-    const wave = s.wave + 1;
-    const def = waveDef(wave);
-    const composition = def ? def.groups.map((grp) => `${grp.count} x ${grp.kind}`) : [];
-    const mods = waveModifiers(wave);
-    if (mods.length > 0) composition.unshift(`mod: ${mods.map((m) => MODIFIER_NAMES[m]).join(' + ')}`);
-    y = this.drawInfoBox(g, this.nextWaveTitle, this.nextWaveRows, x, y, w, composition);
+    this.drawInfoSection(g, this.nextWaveTitle, this.nextWaveRows, rp.nextWave);
+    this.drawInfoSection(g, this.killsTitle, this.killsRows, rp.kills);
 
-    const kills = [
-      `by towers: ${s.economy.kills.tower}`,
-      `by pointer: ${s.economy.kills.pointer}`,
-      `x${POINTER_KILL_BONUS} on pointer kills`,
-    ];
-    y = this.drawInfoBox(g, this.killsTitle, this.killsRows, x, y, w, kills);
-
-    const tower = selectedTower(s);
-    if (tower) {
-      this.pointerTitle.text = 'TOWER';
-      const branch = tower.branch === null ? 'none' : branchName(tower.kind, tower.branch);
-      const contents = [
-        `tier: T${tower.tier}`,
-        `branch: ${branch}`,
-        `kills: ${tower.kills}`,
-        `earned: $${formatNumber(tower.earned)}`,
-      ];
-      this.drawInfoBox(g, this.pointerTitle, this.pointerRows, x, y, w, contents);
-    } else {
-      this.pointerTitle.text = 'POINTER';
-      const cost = nextPointerCost(s.pointer);
-      const name = pointerInfo(s.pointer).name;
-      const pointer = [
-        s.pointer.stage >= 2 ? `${name} L${s.pointer.clickLevel}` : name,
-        cost === null ? 'Max level' : `Upgrade $${formatNumber(cost)}`,
-      ];
-      this.drawInfoBox(g, this.pointerTitle, this.pointerRows, x, y, w, pointer);
+    // POINTER: the pointer's home — stage, click damage, overclock, crits, the upgrade and Override.
+    bevel(g, rp.pointer.rect, false, PAL.face);
+    this.pointerTitle.text = 'POINTER';
+    this.pointerTitle.position.set(
+      rp.pointer.rect.x + 6,
+      rp.pointer.rect.y + SECTION_PAD_TOP + SECTION_TITLE_H / 2,
+    );
+    for (let i = 0; i < this.pointerRows.length; i++) {
+      const row = rp.pointer.rows[i];
+      if (row) {
+        this.pointerRows[i].text = row.text;
+        this.pointerRows[i].style.fill = PAL.text;
+        this.pointerRows[i].position.set(row.rect.x, row.rect.y + Math.floor(row.rect.h / 2));
+      } else {
+        this.pointerRows[i].text = '';
+      }
     }
+    drawButton(g, rp.pointer.upgrade, rp.pointer.upgradeEnabled, hoverHud === 'pointer');
+    this.pointerButton.text = rp.pointer.upgradeText;
+    this.pointerButton.style.fill = rp.pointer.upgradeEnabled ? PAL.text : PAL.shadow;
+    this.pointerButton.position.set(
+      rp.pointer.upgrade.x + 6,
+      rp.pointer.upgrade.y + Math.floor(rp.pointer.upgrade.h / 2),
+    );
+    if (rp.pointer.override) {
+      drawCheckbox(g, rp.pointer.override, s.pointer.manualOverride);
+      this.pointerOverrideButton.text = 'Override';
+      this.pointerOverrideButton.style.fill = PAL.text;
+      this.pointerOverrideButton.position.set(
+        rp.pointer.override.x + 20,
+        rp.pointer.override.y + Math.floor(rp.pointer.override.h / 2),
+      );
+    } else {
+      this.pointerOverrideButton.text = '';
+    }
+
+    // GLOBAL UPGRADES: a reserved, empty section. One dim row, no buttons.
+    this.drawInfoSection(g, this.globalTitle, this.globalRows, rp.globalUpgrades);
   }
 
-  private drawInfoBox(
-    g: Graphics,
-    title: Text,
-    rows: Text[],
-    x: number,
-    y: number,
-    w: number,
-    contents: string[],
-  ): number {
-    const titleH = 18;
-    const rowH = 18;
-    const padTop = 6;
-    const padBottom = 6;
-    const h = padTop + titleH + contents.length * rowH + padBottom;
-    const rect: Rect = { x, y, w, h };
+  private drawInfoSection(g: Graphics, title: Text, rows: Text[], section: InfoSection): void {
+    const rect = section.rect;
     bevel(g, rect, false, PAL.face);
-    title.position.set(x + 6, y + padTop + titleH / 2);
+    title.text = section.title;
+    title.position.set(rect.x + 6, rect.y + SECTION_PAD_TOP + SECTION_TITLE_H / 2);
     for (let i = 0; i < rows.length; i++) {
-      rows[i].text = i < contents.length ? contents[i] : '';
-      rows[i].position.set(x + 6, y + padTop + titleH + i * rowH + rowH / 2);
+      rows[i].text = i < section.rows.length ? section.rows[i] : '';
+      rows[i].position.set(
+        rect.x + 6,
+        rect.y + SECTION_PAD_TOP + SECTION_TITLE_H + i * SECTION_ROW_H + SECTION_ROW_H / 2,
+      );
     }
-    return y + h + 6;
   }
 
   private drawModal(s: RunState, l: Layout): void {

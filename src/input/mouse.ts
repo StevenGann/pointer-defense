@@ -1,10 +1,10 @@
 import type { Application } from 'pixi.js';
 import { menuItemAt, pixelToWorld, pointInRect, type Layout } from '../view/chrome.ts';
 import { hudButtonAt, modalRestartAt, victoryButtonAt, type HudAction } from '../view/hud.ts';
-import { popupCloseRect } from '../view/popup.ts';
+import { adCloseRect } from '../view/ad.ts';
 import { menuEntryAt, type OpenMenu } from '../view/menu.ts';
 import { dialogButtonAt, type DialogModel } from '../view/dialog.ts';
-import { dismissPopup } from '../core/popups.ts';
+import { dismissAd } from '../core/ads.ts';
 import { popupCloseHit } from '../view/popupEnemy.ts';
 import { canAfford } from '../core/economy.ts';
 import { tileAt } from '../core/grid.ts';
@@ -182,9 +182,9 @@ export class MouseController {
       return;
     }
 
-    // A desktop pop-up's close box, docked in the right panel column.
-    if (s.popup && pointInRect(popupCloseRect(s.popup), x, y)) {
-      dismissPopup(s, s.popup.id);
+    // A desktop ad's close box.
+    if (s.ad && pointInRect(adCloseRect(s.ad), x, y)) {
+      dismissAd(s, s.ad.id);
       return;
     }
 

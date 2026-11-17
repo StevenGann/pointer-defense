@@ -1,14 +1,16 @@
 import { POPUP_H, POPUP_W, type Enemy } from '../core/enemies.ts';
+import { CONTROL_BOX_H, CONTROL_BOX_W, TITLE_H } from './chrome.ts';
 
 /**
- * Geometry for the pop-up enemy's Win95 window, kept Pixi-free so the smoke test can check the
- * close box and the draw order without a renderer. Positions are canvas pixels; the board origin
- * and pixels-per-tile are supplied by the view and the input layer.
+ * Geometry for the pop-up enemy's Win95 window. The window keeps its tile footprint, but its title
+ * bar, close box and caption are drawn at the main window's full chrome scale (a 22 px title bar and
+ * a 16x14 close box), not a shrunken copy. Positions are canvas pixels; the board origin and
+ * pixels-per-tile are supplied by the view and the input layer.
  */
 
-export const POPUP_TITLE_H = 16; // px
-export const POPUP_CLOSE_W = 14; // px
-export const POPUP_CLOSE_H = 12; // px
+export const POPUP_TITLE_H = TITLE_H; // px, the same 22 px as the main window
+export const POPUP_CLOSE_W = CONTROL_BOX_W; // px, 16
+export const POPUP_CLOSE_H = CONTROL_BOX_H; // px, 14
 
 export interface PopupBoard {
   x: number;

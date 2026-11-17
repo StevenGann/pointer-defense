@@ -471,7 +471,7 @@ WaveRun { wave, startTick, spawns[] }
 `spawns` holds the remaining spawns for that wave, each tick measured **relative to `startTick`**. A
 monotonic run clock (`clock`) advances once per simulation tick and is never reset; a wave's spawn
 fires when `clock` reaches `startTick + spawn.tick`. `waveTick` still means "ticks since the most
-recent wave started" (pop-ups and the bonus read it) and resets on every start, early ones included.
+recent wave started" (ads and the bonus read it) and resets on every start, early ones included.
 
 `startWave` is allowed from **build** (a normal call, no bonus) or from **wave** (an early call). It
 is refused at wave 100 in a normal run. Starting increments the wave number, pushes a `WaveRun`, sets
@@ -604,8 +604,9 @@ drawn with a corner-bracket reticle so it is unmistakable. The mark pays two way
 - **Clicks on a marked enemy deal +15 % damage.** Focusing one enemy (a boss) makes the next click on
   it hurt more than a click on a fresh target.
 - **Crits.** A click can crit for **2.5×**. The base chance is 4 %, plus 6 % when the target is
-  marked and plus 8 % when the click lands on the weak point. A crit pops a loud `CRIT` so a lucky
-  streak is visible.
+  marked and plus 8 % when the click lands on the weak point. The held pointer's damage-over-time
+  crits by the same chances, since it is always on its marked target. A crit pops a loud `CRIT` so a
+  lucky streak is visible.
 
 Clicks are rolled against the seeded run PRNG, so a crit is part of the deterministic simulation — a
 given click always lands the same way on the same run.
@@ -634,12 +635,14 @@ hundred at parity with a tower build, never strictly better.
 
 The Win95 motif doing mechanical work, taken from *Cookie Clicker*'s golden cookies.
 
-During a wave a **pop-up window** docks in the right panel column, at the top, with a title bar and a
-close box. It is inset 6 px from the panel's left edge, spans the panel width less 12 px, is 54 px
-tall, and stacks downward from the top of the panel. It lives **8 seconds**. Clicking its close box
-dismisses it and pays.
+During a wave an **ad** appears at a random spot on the desktop — the board field, inside the window's
+client area with an 8 px margin, never over the title bar, the status bar or either side panel, and
+never hanging off an edge. Its chrome is the main window's own scale: a 22 px title bar, a 16×14 close
+box, a 2 px bevel and 13 px text, so it reads as part of the same application. The sim owns the
+rectangle, so input and view agree, and the spot is chosen from the seeded RNG so a replay shows the
+same ad in the same place. It lives **8 seconds**. Clicking its close box dismisses it and pays.
 
-| Pop-up | Weight | Effect |
+| Ad | Weight | Effect |
 |---|---|---|
 | *Defrag complete* | 30 | +8 % of current salvage |
 | *AutoUpdate* | 20 | towers +40 % damage for 10 s |
@@ -648,7 +651,7 @@ dismisses it and pays.
 | *Screensaver* | 10 | all enemies take 25 damage and are briefly stunned |
 | *Blue Screen* | 10 | a trap: dismissing pays nothing and disables a random tower for 3 s |
 
-- At most **one** pop-up on screen at a time.
+- At most **one** ad on screen at a time.
 - The first attempt comes **8–16 s** into the first wave; later attempts come every **25–45 s**. The
   countdown is absolute and keeps running between waves, so a wave start never resets it. An attempt
   that finds its conditions unmet retries after **8–12 s**.
@@ -666,7 +669,7 @@ dismisses it and pays.
 | kill | `value × valueScale(wave)`, ×1.5 pointer, ×2 weak point |
 | wave clear | `30 + 6 × wave` |
 | no leaks | +25 % of the wave-clear bonus |
-| pop-up | as listed in §10 |
+| ad | as listed in §10 |
 
 | Sink | Amount |
 |---|---|
@@ -704,7 +707,7 @@ of the same board, for the achievement wall.
 
 **Achievements** (ten at launch, all cheap): first blood · a route over 50 tiles · a zero-leak wave at
 40+ · 100 weak-point hits in one run · five tier-5 towers · a full board of Beacons · a boss killed by
-the pointer alone · ten pop-ups in one run · endless wave 150 · reboot with 50+ specs.
+the pointer alone · ten ads in one run · endless wave 150 · reboot with 50+ specs.
 
 ---
 
@@ -778,7 +781,7 @@ Short and mechanical, measured in ticks at 60 Hz:
 | knockback | a 1 px nudge along the shot direction, decaying over 3 ticks (cosmetic only) |
 | shield hit | cyan arc at the impact (8 ticks) plus a cyan `SHD` floater (30 ticks) |
 | death | 6 ticks: a ring that expands and fades, with 3 small pieces |
-| pop-up appear | 6 ticks, snapped, no easing |
+| ad appear | 6 ticks, snapped, no easing |
 | damage number | 30 ticks, rising 12 px, fading in the last 10, scaled by the size of the hit |
 
 No tweening curves anywhere. Windows 95 did not ease.
@@ -792,17 +795,18 @@ sim tick so a replay is identical.
 
 | Trigger | Amplitude |
 |---|---|
-| enemy death | 1 px |
-| tower takes a hit | 1 px |
-| Pop Up closed | 2 px |
 | boss death | 4 px |
 | leak (costs integrity) | 5 px + a 60 ms freeze-frame |
 | Toggle gate slams shut | 3 px |
+| ad closed | 2 px |
+| pointer crit | 1 px (2 px on a weak point or the mark) |
+| tower goes offline (hit points run out) | 3 px |
 
-Amplitude decays to nothing over about 200 ms and is hard-capped at 400 ms. The subtle 1–2 px events
-read as weight, not as "shake"; the boss, leak and gate events are rare enough that they still land.
-A **Screen shake** toggle in the View menu persists in the profile like sound and volume, and defaults
-**off** for users who prefer reduced motion (`prefers-reduced-motion: reduce`).
+Amplitude decays to nothing over about 200 ms and is hard-capped at 400 ms. A shake marks something
+the player would say out loud — a boss falling, a leak, a gate slamming, a crit landing, a tower going
+dark — never the dozens of ordinary deaths and hits that happen every wave. Those pop and spark
+instead. A **Screen shake** toggle in the View menu persists in the profile like sound and volume, and
+defaults **off** for users who prefer reduced motion (`prefers-reduced-motion: reduce`).
 
 ---
 
@@ -818,8 +822,8 @@ Generated with WebAudio oscillators and noise buffers, so the build stays asset-
 | Laser | descending sweep, 120 ms |
 | kill | two-tone blip, rising with the combo |
 | leak | the Win95 "ding", because the joke is right there |
-| pop-up | short chirp, distinct from kills |
-| pop-up close | coin |
+| ad | short chirp, distinct from kills |
+| ad close | coin |
 | wave start / clear | two-note fanfare, 400 ms |
 | hover | nothing. Silence is part of the aesthetic |
 
@@ -870,7 +874,7 @@ by feel.
 |---|---|---|
 | 0.2 | mazing, flyers, route length in the HUD | a detour wall measurably lengthens the route and cannot be sealed |
 | 0.3 | towers 4–6, branches, selling | two players build visibly different boards |
-| 0.4 | pop-ups, combo, achievements, prestige | a run can end in a reboot that makes the next one faster |
+| 0.4 | ads, combo, achievements, prestige | a run can end in a reboot that makes the next one faster |
 | 0.5 | waves 11–100, bosses, modifiers, endless | the harness clears 100 waves with zero leaks on a good build and fails a bad one |
 | 0.6 | audio, motion polish, onboarding | a first-time player starts wave 1 without being told anything |
 
@@ -883,7 +887,7 @@ by feel.
 | **Mazing makes balance fragile** | one wall can double the route | harness; visible route length; blocked tiles cap the extremes |
 | **One half dominates** | the hybrid collapses into one genre | kill attribution is the tuning dial; the harness reports tower vs pointer damage share |
 | **Clicking fatigue** | the clicker half becomes a chore by wave 50 | the combo rewards aiming; stage 4 hands the mouse back |
-| **Pop-ups are annoying** | an interrupt becomes a penalty | 8 s lifetime, one at a time, never in build phase, never on a quiet board |
+| **Ads are annoying** | an interrupt becomes a penalty | 8 s lifetime, one at a time, never in build phase, never on a quiet board |
 | **Numbers get silly** | 1.4e9 reads as noise | abbreviate above a million, never below; wave 100 lands around 10⁵–10⁶ |
 | **Prestige feels like losing** | the reboot punishes the player | specs are visible immediately and the first upgrade is affordable after one reboot |
 
@@ -916,7 +920,7 @@ tier 3.*
 **Cookie Clicker** (Orteil, 2013) — the exponential is the point, and two systems carry the long game:
 prestige, which converts a finished run into a permanent multiplier, and golden cookies, rare timed
 bonuses that reward attention without demanding it. *We take both, as Restart Windows and desktop
-pop-ups.*
+ads.*
 
 **Sanctum** (Coffee Stain, 2011) — the first FPS/TD hybrid, with deliberately weak shooting: towers do
 the damage and the player patches leaks and snipes priority targets. *We take the proportion: the
@@ -935,7 +939,7 @@ pointer is precision, not bulk DPS.*
 | M4 | Windows chrome, three-column layout | done |
 | M5 | mazing, flyers, route length | done (0.2) — probe: 22 tiles open, 28 behind a wall, seal refused |
 | M6 | six towers, branches, selling | done (0.3) — six towers, five tiers, exclusive tier-3 branches, 70 % refund |
-| M7 | pop-ups, combo, prestige | done (0.4) — weak points, ×2 combo, six pop-ups with a Blue Screen trap, specs, ten achievements, save |
+| M7 | ads, combo, prestige | done (0.4) — weak points, ×2 combo, six ads with a Blue Screen trap, specs, ten achievements, save |
 | M8 | waves 11–100, bosses, modifiers, endless | done (0.5) — generated from the wave number, bosses at 10/25/50/75/100, modifiers from 51, victory and endless |
 | M9 | audio, polish, onboarding | done (0.6) — WebAudio sfx, pause, ×2/×3 speed, first-run hints |
 | M10 | controls, targeting, player docs | done (0.7) — keys 1-6/Esc/U/X/Enter, per-tower targeting, README |

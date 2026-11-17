@@ -49,7 +49,7 @@ import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
 import { LEVELS, DEFAULT_LEVEL, createGrid, levelById, toggleOpenAt, validateLevel, MAX_TOGGLES } from '../src/core/levels.ts';
 import { createEnemy, isPopupEnemy } from '../src/core/enemies.ts';
-import { spawnPopup, dismissPopup } from '../src/core/popups.ts';
+import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS } from '../src/core/ads.ts';
 import {
   comboMultiplier,
   clickDamage,
@@ -69,7 +69,8 @@ import {
 import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion } from '../src/core/save.ts';
 import { restartWindows, checkAchievements, enterEndless, pointerDamageMult } from '../src/core/state.ts';
 import { dashRects, offsetSegment, routeOffset } from '../src/view/route.ts';
-import { enemyDrawOrder, popupCloseHit, popupCloseRect, popupWindowRect } from '../src/view/popupEnemy.ts';
+import { enemyDrawOrder, popupCloseHit, popupCloseRect, popupWindowRect, POPUP_TITLE_H, POPUP_CLOSE_W, POPUP_CLOSE_H } from '../src/view/popupEnemy.ts';
+import { adCloseRect } from '../src/view/ad.ts';
 import {
   hatchSegments,
   lerpColor,
@@ -83,7 +84,8 @@ import {
 import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, branchName } from '../src/view/tooltipText.ts';
 import { BoardView, staticLayerKey } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
-import { computeLayout, pixelToWorld } from '../src/view/chrome.ts';
+import { computeLayout, pixelToWorld, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE } from '../src/view/chrome.ts';
+import { computeHud, computeRightPanel, hudControlAt } from '../src/view/hud.ts';
 import { backingStorePixelSize } from '../src/view/screen.ts';
 import {
   CameraShake,
@@ -187,7 +189,7 @@ function check(cond, msg) {
       s.integrity,
       s.enemies.map((e) => [e.id, e.hp, e.dist]),
       s.rng,
-      s.nextPopupAttemptTick,
+      s.nextAdAttemptTick,
       s.towerDamageBuffTicks,
       s.enemySlowTicks,
       s.towerDisabled.size,
@@ -610,53 +612,53 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     `combo resets to x1 on a miss (combo=${c.s.pointer.combo})`);
 }
 
-// --- 11. Pop-ups: timing in wave 1, no build-phase spawns, one alive, freeware and bluescreen --
+// --- 11. Ads: timing in wave 1, no build-phase spawns, one alive, freeware and bluescreen --
 {
   // No towers: wave 1's grunts live long enough for the first attempt to find two on the board.
   const s = createRunState();
-  check(startWave(s), 'pop-up timing: wave 1 started with no towers');
+  check(startWave(s), 'ad timing: wave 1 started with no towers');
   const limit = secondsToTicks(20);
   let firstSeen = -1;
   for (let i = 0; i < limit; i++) {
     tick(s);
-    if (firstSeen < 0 && s.popup) firstSeen = s.tick;
+    if (firstSeen < 0 && s.ad) firstSeen = s.tick;
   }
   check(firstSeen > 0 && firstSeen <= limit,
-    `wave 1 produces a pop-up within 20 s (first seen at tick ${firstSeen})`);
+    `wave 1 produces an ad within 20 s (first seen at tick ${firstSeen})`);
 }
 
 {
   const s = createRunState();
-  check(startWave(s), 'pop-up timing: wave 1 started for the build-phase check');
+  check(startWave(s), 'ad timing: wave 1 started for the build-phase check');
   let spawnedInBuild = false;
   let previousId = null;
   for (let i = 0; i < secondsToTicks(120); i++) {
     const phase = s.phase;
     tick(s);
-    const id = s.popup?.id ?? null;
+    const id = s.ad?.id ?? null;
     if (id !== null && id !== previousId && phase === 'build') spawnedInBuild = true;
     previousId = id;
   }
   check(s.phase === 'build', 'wave 1 ended and the run waits in build');
-  check(!spawnedInBuild, 'no pop-up ever spawns during build phase');
+  check(!spawnedInBuild, 'no ad ever spawns during build phase');
 }
 
 {
   const s = createRunState();
   for (let i = 0; i < 1000; i++) tick(s);
-  check(s.popup === null, 'no pop-up ever spawns in an untouched build phase');
+  check(s.ad === null, 'no ad ever spawns in an untouched build phase');
 
-  const first = spawnPopup(s, 'defrag');
-  check(first !== null, 'a pop-up spawns on demand');
-  check(spawnPopup(s, 'freeware') === null, 'two pop-ups never coexist (a second is refused)');
-  s.popup = null;
+  const first = spawnAd(s, 'defrag');
+  check(first !== null, 'an ad spawns on demand');
+  check(spawnAd(s, 'freeware') === null, 'two ads never coexist (a second is refused)');
+  s.ad = null;
 }
 
 {
   const s = createRunState();
   const routeBefore = currentPath(s).length;
-  const popup = spawnPopup(s, 'freeware');
-  check(dismissPopup(s, popup.id), 'dismiss freeware');
+  const ad = spawnAd(s, 'freeware');
+  check(dismissAd(s, ad.id), 'dismiss freeware');
   check(s.towers.length === 1, 'freeware adds one tower');
   const gun = s.towers[0];
   check(gun.kind === 'gun', 'the free tower is a Gun');
@@ -671,9 +673,9 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   s.economy.salvage = 10000;
   placeTower(s, 'gun', 5, 5);
   const gun = towerAt(s, 5, 5);
-  const popup = spawnPopup(s, 'bluescreen');
+  const ad = spawnAd(s, 'bluescreen');
   const before = s.economy.salvage;
-  check(dismissPopup(s, popup.id), 'dismiss bluescreen');
+  check(dismissAd(s, ad.id), 'dismiss bluescreen');
   check(s.economy.salvage === before, 'bluescreen pays nothing');
   check(s.towerDisabled.get(gun.id) === secondsToTicks(3),
     `bluescreen disables a tower for 3 s (${s.towerDisabled.get(gun.id)} ticks)`);
@@ -931,7 +933,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   const wall = towerAt(s, first.col, first.row);
   const fullHp = wall.hp;
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER; // no pop-ups mid-test
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER; // no pop-ups mid-test
   const b = createEnemy(1, 'breacher', 12, SPAWN, EXIT);
   s.enemies.push(b);
 
@@ -998,7 +1000,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
       chooseBranch(s, 10, 6, 'B');
     }
     s.phase = 'wave';
-    s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
     const f = createEnemy(1, 'flyer', 12, SPAWN, EXIT);
     s.enemies.push(f);
     let minRow = 999;
@@ -1182,7 +1184,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   const gate = towerAt(s, first.col, first.row);
   check(toggleGate(s, first.col, first.row), 'open the gate on the breacher line');
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const b = createEnemy(1, 'breacher', 12, SPAWN, EXIT);
   s.enemies.push(b);
   for (let i = 0; i < 6000 && !b.dead; i++) tick(s);
@@ -1355,7 +1357,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   wall.hp = wall.maxHp / 2;
 
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const b = createEnemy(1, 'breacher', 12, SPAWN, EXIT);
   b.attackWallId = wall.id;
   b.x = wall.col + 0.5 - 0.6;
@@ -1478,7 +1480,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   s.economy.salvage = 10000;
   placeTower(s, 'gun', 5, 5);
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const grunt = stationary(1, 'grunt', 15, 5.5, 4.0);
   const popup = stationary(2, 'popup', 15, 5.5, 4.0);
   s.enemies.push(grunt, popup);
@@ -1497,7 +1499,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   s.economy.salvage = 10000;
   placeTower(s, 'cannon', 5, 6);
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const target = stationary(1, 'grunt', 15, 5.5, 3.7);
   const covered = stationary(2, 'grunt', 15, 5.5, 4.5);
   const popup = stationary(3, 'popup', 15, 5.5, 4.5);
@@ -1532,7 +1534,8 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   const board = { x: 0, y: 0, cell: 28 };
   const win = popupWindowRect(popup, board);
   const close = popupCloseRect(popup, board);
-  check(close.w === 14 && close.h === 12, `close box is 14x12 px (${close.w}x${close.h})`);
+  check(close.w === POPUP_CLOSE_W && close.h === POPUP_CLOSE_H,
+    `close box is ${POPUP_CLOSE_W}x${POPUP_CLOSE_H} px (${close.w}x${close.h})`);
 
   const body = { x: win.x + 6, y: win.y + win.h - 4 };
   check(!popupCloseHit(popup, board, body.x, body.y), 'clicking the window body is not the close box');
@@ -1623,7 +1626,7 @@ function chokeWalls(gaps) {
 {
   const s = createRunState(undefined, toggleLevel([{ col: 5, row: 6, periodTicks: 100, openTicks: 50, phaseTicks: 0 }]));
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const e = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
   e.x = 5.5;
   e.y = 6.5;
@@ -1795,7 +1798,7 @@ function chokeWalls(gaps) {
   const taser = towerAt(s, 5, 5);
   taser.targetMode = 'strong';
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const near = stationary(1, 'grunt', 1, 5.5, 5.0);
   const far = stationary(2, 'grunt', 1, 5.5, 4.0);
   far.hp = 500;
@@ -1813,7 +1816,7 @@ function chokeWalls(gaps) {
   const frost = towerAt(s, 5, 5);
   frost.targetMode = 'strong';
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const near = stationary(1, 'grunt', 1, 5.5, 5.0);
   const far = stationary(2, 'grunt', 1, 5.5, 4.0);
   far.hp = 500;
@@ -1831,7 +1834,7 @@ function chokeWalls(gaps) {
   s.economy.salvage = 10000;
   placeTower(s, 'frost', 5, 5);
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const near = stationary(1, 'grunt', 1, 5.5, 5.0);
   const marked = stationary(2, 'grunt', 1, 5.5, 4.0);
   marked.hp = 1;
@@ -1852,7 +1855,7 @@ function chokeWalls(gaps) {
   const laser = towerAt(s, 5, 5);
   laser.targetMode = 'strong';
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const front = stationary(1, 'grunt', 1, 5.5, 3.0);
   const back = stationary(2, 'grunt', 1, 6.5, 4.0);
   front.dist = 10;
@@ -1872,7 +1875,7 @@ function chokeWalls(gaps) {
   const cannon = towerAt(s, 5, 5);
   cannon.targetMode = 'first';
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const strong = stationary(1, 'grunt', 1, 5.5, 4.0);
   const far = stationary(2, 'grunt', 1, 7.5, 4.0);
   strong.dist = 5;
@@ -1891,7 +1894,7 @@ function chokeWalls(gaps) {
     s.economy.salvage = 10000;
     placeTower(s, 'gun', 5, 5);
     s.phase = 'wave';
-    s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
     const near = stationary(1, 'grunt', 1, 5.5, 5.0);
     const far = stationary(2, 'grunt', 1, 5.5, 4.0);
     far.hp = 500;
@@ -2110,7 +2113,7 @@ function chokeWalls(gaps) {
   s.economy.salvage = 10000;
   placeTower(s, 'cannon', 5, 5); // locked to 'strong'
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const marked = stationary(1, 'grunt', 1, 5.5, 4.0);
   marked.hp = 5; // one cannon shot kills it
   const strong = stationary(2, 'grunt', 1, 7.5, 4.0);
@@ -2134,7 +2137,7 @@ function chokeWalls(gaps) {
   s.economy.salvage = 10000;
   placeTower(s, 'gun', 5, 5);
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const grunt = stationary(1, 'grunt', 15, 5.5, 4.0);
   const popup = stationary(2, 'popup', 15, 5.5, 4.0);
   s.enemies.push(grunt, popup);
@@ -2167,7 +2170,7 @@ function chokeWalls(gaps) {
       s.integrity,
       s.enemies.map((e) => [e.id, e.hp, e.dist]),
       s.rng,
-      s.nextPopupAttemptTick,
+      s.nextAdAttemptTick,
     ]);
   };
   const at60 = run(TICK_MS);
@@ -2186,7 +2189,7 @@ function cursorRig(tier = 1, branch = null) {
   c.tier = tier;
   c.branch = branch;
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const e = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
   e.x = 5.5;
   e.y = 5.5;
@@ -2316,7 +2319,7 @@ function cursorTower(tier, branch) {
   const c = s.towers.find((t) => t.kind === 'cursor');
   c.targetMode = 'close'; // must be ignored: the rule is fixed
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const closer = stationary(1, 'grunt', 1, 5.5, 5.3); // unshielded, nearer the home tile
   const shielded = stationary(2, 'shielded', 1, 5.5, 4.5); // shielded, farther away
   s.enemies.push(closer, shielded);
@@ -2332,7 +2335,7 @@ function cursorTower(tier, branch) {
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const near = stationary(1, 'shielded', 1, 5.5, 4.5); // dist 1.0
   const far = stationary(2, 'shielded', 1, 5.5, 3.5); // dist 2.0
   s.enemies.push(near, far);
@@ -2348,7 +2351,7 @@ function cursorTower(tier, branch) {
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const near = stationary(1, 'grunt', 1, 5.5, 4.5); // dist 1.0
   const far = stationary(2, 'grunt', 1, 5.5, 3.5); // dist 2.0
   s.enemies.push(near, far);
@@ -2363,7 +2366,7 @@ function cursorTower(tier, branch) {
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const shielded = stationary(1, 'shielded', 15, 5.5, 4.5);
   const popup = stationary(2, 'popup', 15, 5.5, 4.5);
   s.enemies.push(shielded, popup);
@@ -2379,7 +2382,7 @@ function cursorTower(tier, branch) {
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const shielded = stationary(1, 'shielded', 1, 5.5, 4.5);
   const marked = stationary(2, 'grunt', 1, 5.5, 3.2); // in radius, marked, unshielded
   marked.hp = 100000;
@@ -2416,7 +2419,7 @@ function cursorTower(tier, branch) {
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const shielded = stationary(1, 'shielded', 1, 5.5, 5.5); // on the home tile, so the first tick clicks
   s.enemies.push(shielded);
   tick(s);
@@ -2435,7 +2438,7 @@ function cursorTower(tier, branch) {
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   s.phase = 'wave';
-  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const grunt = stationary(1, 'grunt', 15, 5.5, 4.5);
   const popup = stationary(2, 'popup', 15, 5.5, 4.5);
   s.enemies.push(grunt, popup);
@@ -2633,14 +2636,24 @@ function cursorTower(tier, branch) {
 // --- 28. Screen shake ------------------------------------------------------------------------
 {
   // 28a. Amplitude per event, and the events that shake nothing.
-  check(shakeImpulseFor({ type: 'kill', kind: 'grunt' }).amplitude === SHAKE_AMPLITUDE.enemyDeath,
-    'an enemy death shakes 1 px');
+  check(shakeImpulseFor({ type: 'kill', kind: 'grunt' }) === null,
+    'an ordinary enemy death shakes nothing');
   check(shakeImpulseFor({ type: 'kill', kind: 'boss' }).amplitude === SHAKE_AMPLITUDE.bossDeath,
     'a boss death shakes 4 px');
-  check(shakeImpulseFor({ type: 'wallDamaged' }).amplitude === SHAKE_AMPLITUDE.towerHit,
-    'a tower taking a hit shakes 1 px');
-  check(shakeImpulseFor({ type: 'popupDismissed' }).amplitude === SHAKE_AMPLITUDE.popupClose,
-    'a Pop Up closing shakes 2 px');
+  check(shakeImpulseFor({ type: 'wallDamaged' }) === null,
+    'an ordinary tower hit shakes nothing');
+  check(shakeImpulseFor({ type: 'wallDestroyed' }).amplitude === SHAKE_AMPLITUDE.towerOffline,
+    'a tower going offline shakes 3 px');
+  check(shakeImpulseFor({ type: 'adDismissed' }).amplitude === SHAKE_AMPLITUDE.adClose,
+    'an ad closing shakes 2 px');
+  check(shakeImpulseFor({ type: 'damage', weak: false, crit: true }).amplitude === SHAKE_AMPLITUDE.crit,
+    'a plain crit shakes 1 px');
+  check(shakeImpulseFor({ type: 'damage', weak: true, crit: true }).amplitude === SHAKE_AMPLITUDE.critAimed,
+    'a weak-point crit shakes 2 px');
+  check(shakeImpulseFor({ type: 'damage', weak: false, crit: true, marked: true }).amplitude === SHAKE_AMPLITUDE.critAimed,
+    'a marked crit shakes 2 px');
+  check(shakeImpulseFor({ type: 'damage', weak: false, crit: false }) === null,
+    'a non-crit damage event shakes nothing');
   check(shakeImpulseFor({ type: 'leak' }).amplitude === SHAKE_AMPLITUDE.leak,
     'a leak shakes 5 px');
   check(shakeImpulseFor({ type: 'leak' }).freezeMs === SHAKE_LEAK_FREEZE_MS,
@@ -2842,6 +2855,144 @@ function cursorTower(tier, branch) {
   check(!intersects(bottomPip, bar), 'a damaged wall pip does not collide with its health bar');
   check(pipRect(cx, cy, cell, false).x > cx && pipRect(cx, cy, cell, false).y < cy,
     'the normal pip sits in the tower tile top-right corner');
+}
+
+// --- 30. Pointer panel lives on the right; the left column has no pointer rows -----------------
+{
+  const s = createRunState();
+  s.pointer.stage = 2; // exercise the Override row too
+  const left = computeHud(computeLayout(1280, 720), s);
+  check(
+    !('pointerPanel' in left) && !('pointerUpgrade' in left) && !('pointerOverride' in left),
+    'the left column has no pointer panel fields',
+  );
+
+  const right = computeRightPanel(computeLayout(1280, 720), s);
+  check(right.pointer !== undefined, 'the right column has a POINTER section');
+  check(right.pointer.override !== null, 'the POINTER section carries the Override checkbox at stage 2');
+  check(right.pointer.rows.length === 3, 'the POINTER section lists stage, overclock and crits');
+  check(right.globalUpgrades.title === 'GLOBAL UPGRADES', 'the right column ends with GLOBAL UPGRADES');
+  check(
+    right.globalUpgrades.rows.length === 1 && right.globalUpgrades.rows[0] === 'No upgrades yet',
+    'GLOBAL UPGRADES is a reserved empty section',
+  );
+  check(
+    right.nextWave.rect.y < right.kills.rect.y &&
+      right.kills.rect.y < right.pointer.rect.y &&
+      right.pointer.rect.y < right.globalUpgrades.rect.y,
+    'right column order is NEXT WAVE, KILLS, POINTER, GLOBAL UPGRADES',
+  );
+}
+
+{
+  // Every right-panel section stays inside the 168 px panel at 1280x720 and 1600x900.
+  for (const [vw, vh] of [[1280, 720], [1600, 900]]) {
+    const l = computeLayout(vw, vh);
+    const s = createRunState();
+    s.pointer.stage = 2;
+    const right = computeRightPanel(l, s);
+    const within = (r) => r.x >= l.rightPanel.x && r.x + r.w <= l.rightPanel.x + l.rightPanel.w;
+    check(
+      [right.nextWave.rect, right.kills.rect, right.pointer.rect, right.globalUpgrades.rect].every(within),
+      `right panel sections stay inside the 168 px panel at ${vw}x${vh}`,
+    );
+  }
+}
+
+{
+  // GLOBAL UPGRADES adds no clickable controls: a point in its body is not a HUD control.
+  const l = computeLayout(1280, 720);
+  const s = createRunState();
+  const right = computeRightPanel(l, s);
+  const gx = right.globalUpgrades.rect.x + right.globalUpgrades.rect.w / 2;
+  const gy = right.globalUpgrades.rect.y + right.globalUpgrades.rect.h - 4;
+  check(hudControlAt(l, s, gx, gy) === null, 'GLOBAL UPGRADES has no clickable controls');
+}
+
+// --- 31. Ad chrome is the main window's scale, and the pop-up enemy matches it -----------------
+{
+  const s = createRunState();
+  const ad = spawnAd(s, 'defrag');
+  const close = adCloseRect(ad);
+  check(
+    close.w === CONTROL_BOX_W && close.h === CONTROL_BOX_H,
+    `ad close box equals the main window's ${CONTROL_BOX_W}x${CONTROL_BOX_H} (${close.w}x${close.h})`,
+  );
+  check(
+    close.y === ad.y + 2 + Math.floor((TITLE_H - CONTROL_BOX_H) / 2),
+    'ad close box is centred in the 22 px title bar',
+  );
+  check(TITLE_H === 22, 'the main window title bar is 22 px');
+  check(FONT_SIZE.body === 13, 'the main window body text is 13 px');
+
+  check(POPUP_TITLE_H === TITLE_H, 'pop-up enemy title bar equals the main window 22 px');
+  check(
+    POPUP_CLOSE_W === CONTROL_BOX_W && POPUP_CLOSE_H === CONTROL_BOX_H,
+    `pop-up enemy close box equals the main window's ${CONTROL_BOX_W}x${CONTROL_BOX_H}`,
+  );
+}
+
+// --- 32. Ad placement: 100 seeded spawns stay inside, avoid chrome, repeat and differ ----------
+{
+  const MARGIN = 8;
+  const l = computeLayout(1280, 720);
+  const place = (seed) => {
+    const s = createRunState();
+    s.rng = seed;
+    s.viewport.boardCol = { x: l.boardCol.x, y: l.boardCol.y, w: l.boardCol.w, h: l.boardCol.h };
+    const positions = [];
+    for (let i = 0; i < 100; i++) {
+      s.ad = null;
+      const ad = spawnAd(s, 'defrag');
+      positions.push([ad.x, ad.y]);
+    }
+    return positions;
+  };
+
+  const a = place(0x12345678);
+  const b = place(0x12345678);
+  const c = place(0x9abcdef0);
+
+  const inside = ([x, y]) =>
+    x >= l.boardCol.x + MARGIN &&
+    y >= l.boardCol.y + MARGIN &&
+    x + AD_W <= l.boardCol.x + l.boardCol.w - MARGIN &&
+    y + AD_H <= l.boardCol.y + l.boardCol.h - MARGIN;
+  check(a.every(inside), '100 ad spawns stay inside the board field with an 8 px margin');
+
+  const overlaps = ([x, y], r) =>
+    x < r.x + r.w && x + AD_W > r.x && y < r.y + r.h && y + AD_H > r.y;
+  const reserved = [l.title, l.status, l.leftPanel, l.rightPanel];
+  check(
+    a.every((p) => reserved.every((r) => !overlaps(p, r))),
+    'ad spawns never overlap the title bar, status bar or side panels',
+  );
+
+  check(JSON.stringify(a) === JSON.stringify(b), 'ad placement repeats identically for the same seed');
+  check(JSON.stringify(a) !== JSON.stringify(c), 'ad placement differs across seeds');
+}
+
+{
+  // The close box still pays the bonus and the ad still expires after 8 s.
+  const s = createRunState();
+  const before = s.economy.salvage;
+  const ad = spawnAd(s, 'defrag');
+  check(dismissAd(s, ad.id), 'the ad close box still pays');
+  check(s.economy.salvage > before, 'defrag pays a bonus');
+
+  const s2 = createRunState();
+  spawnAd(s2, 'screensaver');
+  for (let i = 0; i < AD_LIFETIME_TICKS; i++) tick(s2);
+  check(s2.ad === null, `the ad expires after ${AD_LIFETIME_TICKS / TICK_HZ} s`);
+}
+
+{
+  // A cursor click never shakes: cursors never crit, so their damage events shake nothing.
+  const { s } = cursorRig(1, null);
+  for (let i = 0; i < 200; i++) tick(s);
+  const cursorDamage = s.events.filter((ev) => ev.type === 'damage');
+  check(cursorDamage.length > 0, `cursor produced ${cursorDamage.length} clicks`);
+  check(cursorDamage.every((ev) => shakeImpulseFor(ev) === null), 'a cursor click shakes nothing');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

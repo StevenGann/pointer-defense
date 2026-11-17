@@ -16,7 +16,7 @@ pays salvage, the currency for towers, upgrades and pointer upgrades, and a kill
 land the finishing blow yourself (1.5x). Aim for an enemy's **weak spot**, the small notch on its
 leading edge, for double damage and a growing combo multiplier.
 
-Between waves, spend your salvage. Desktop pop-ups appear during waves and offer free salvage, a
+Between waves, spend your salvage. Desktop ads appear during waves and offer free salvage, a
 free tower, or a buff — but they expire if you ignore them. Clearing waves builds lifetime salvage;
 choose **Restart Windows** from the File menu to bank it as **specs**, permanent upgrades that carry
 into every future run.

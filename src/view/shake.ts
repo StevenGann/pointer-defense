@@ -7,17 +7,19 @@ import type { GameEvent } from '../core/state.ts';
  * touches the simulation: the sim's tick is only read as a seed, so a replay produces the same
  * shake and the balance harness is untouched.
  *
- * Amplitudes are in CSS pixels and decay over ~200 ms, hard-capped at 400 ms, so the small events
- * read as weight and only the rare ones (boss death, leak, a shutter slamming) earn a real move.
+ * Amplitudes are in CSS pixels and decay over ~200 ms, hard-capped at 400 ms, so only the moments a
+ * player would say out loud shake: a boss falling, a leak, a shutter slamming, an ad closing, a
+ * crit, or a tower going offline. Ordinary deaths and hits pop and spark instead — they do not shake.
  */
 
 export const SHAKE_AMPLITUDE = {
-  enemyDeath: 1,
-  towerHit: 1,
-  popupClose: 2,
   bossDeath: 4,
   leak: 5,
   toggleShut: 3,
+  adClose: 2,
+  crit: 1,
+  critAimed: 2,
+  towerOffline: 3,
 } as const;
 
 /** A leak also freezes the frame for a beat so the integrity loss lands. */
@@ -39,12 +41,17 @@ export function shakeImpulseFor(ev: GameEvent): ShakeImpulse | null {
     case 'kill':
       return ev.kind === 'boss'
         ? { amplitude: SHAKE_AMPLITUDE.bossDeath, freezeMs: 0 }
-        : { amplitude: SHAKE_AMPLITUDE.enemyDeath, freezeMs: 0 };
+        : null; // an ordinary death pops; it does not shake
     case 'wallDamaged':
+      return null; // an ordinary tower hit sparks; it does not shake
     case 'wallDestroyed':
-      return { amplitude: SHAKE_AMPLITUDE.towerHit, freezeMs: 0 };
-    case 'popupDismissed':
-      return { amplitude: SHAKE_AMPLITUDE.popupClose, freezeMs: 0 };
+      return { amplitude: SHAKE_AMPLITUDE.towerOffline, freezeMs: 0 };
+    case 'adDismissed':
+      return { amplitude: SHAKE_AMPLITUDE.adClose, freezeMs: 0 };
+    case 'damage':
+      return ev.crit
+        ? { amplitude: ev.weak || ev.marked ? SHAKE_AMPLITUDE.critAimed : SHAKE_AMPLITUDE.crit, freezeMs: 0 }
+        : null;
     case 'leak':
       return { amplitude: SHAKE_AMPLITUDE.leak, freezeMs: SHAKE_LEAK_FREEZE_MS };
     case 'toggleChanged':
