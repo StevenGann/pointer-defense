@@ -40,7 +40,7 @@ import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
 import { LEVELS, DEFAULT_LEVEL, createGrid, levelById, toggleOpenAt, validateLevel, MAX_TOGGLES } from '../src/core/levels.ts';
-import { createEnemy } from '../src/core/enemies.ts';
+import { createEnemy, isPopupEnemy } from '../src/core/enemies.ts';
 import { spawnPopup, dismissPopup } from '../src/core/popups.ts';
 import { comboMultiplier } from '../src/core/pointer.ts';
 import { loadProfile, saveProfile, defaultProfile } from '../src/core/save.ts';
@@ -1365,6 +1365,55 @@ function chokeWalls(gaps) {
   check(openLen === 20, `turnstile: open route is 20 tiles (${openLen})`);
   check(closedLen === 30, `turnstile: closed route is 30 tiles (${closedLen})`);
   check(closedLen > openLen, `turnstile: closing the gate measurably lengthens the route (${openLen} -> ${closedLen})`);
+}
+
+// --- 22. Run isolation: no module-level state leaks between runs in the same process -----------
+{
+  // A deterministic slice of a run: a small board, a few waves, a scripted click on the leading
+  // enemy. The full outcome is captured so that any hidden cross-run state (a cached field, a shared
+  // array, an id or RNG counter that outlives createRunState) would change it on the second run.
+  const simulate = (levelId) => {
+    const s = stateOnLevel(levelId);
+    s.economy.salvage = 10000;
+    for (const [c, r] of [[3, 6], [7, 5], [7, 7]]) placeTower(s, 'gun', c, r);
+    for (let wave = 1; wave <= 3; wave++) {
+      if (!startWave(s)) break;
+      for (let i = 0; i < 4000 && s.phase === 'wave'; i++) {
+        const target = s.enemies.find((e) => !e.dead && !isPopupEnemy(e));
+        if (target) {
+          pointerDown(s, target.x, target.y);
+          pointerUp(s);
+        }
+        tick(s);
+      }
+    }
+    return JSON.stringify([
+      s.levelId,
+      s.economy.salvage,
+      s.economy.earned,
+      s.integrity,
+      s.clearedWaves,
+      s.towers.map((t) => [t.kind, t.col, t.row, t.tier, t.kills, t.damageDealt]),
+      s.enemies.map((e) => [e.kind, e.wave, e.hp, e.dist]),
+      s.rng,
+      s.tick,
+      s.clock,
+    ]);
+  };
+
+  const first = simulate('open-field');
+  const second = simulate('open-field');
+  check(first === second, 'run isolation: the same map twice gives the identical outcome');
+
+  // Two maps in each order: each map's outcome must not depend on what ran before it.
+  const corridorFirst = simulate('corridor');
+  const openFirst = simulate('open-field');
+  const openSecond = simulate('open-field');
+  const corridorSecond = simulate('corridor');
+  check(
+    openFirst === openSecond && corridorFirst === corridorSecond,
+    'run isolation: a map\'s outcome is unaffected by the order maps run in',
+  );
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

@@ -87,7 +87,17 @@ function makeRng(seed) {
     return ((t ^ (t >>> 14)) >>> 0) / 0x100000000;
   };
 }
-const rng = makeRng(0x9e3779b9 ^ (Math.round(accuracy * 1000) << 8) ^ Math.round(cps * 10));
+// The click RNG is the one piece of harness state that outlives a single run. It is a module-level
+// closure, so if the map loop shares it, each map inherits whatever stream position the previous map
+// left behind and the same map's numbers drift with the batch order. Every run resets it to the same
+// seed (resetClickRng below), so a map plays identically alone, first, last, or in any order.
+function clickSeed() {
+  return 0x9e3779b9 ^ (Math.round(accuracy * 1000) << 8) ^ Math.round(cps * 10);
+}
+let rng = makeRng(clickSeed());
+function resetClickRng() {
+  rng = makeRng(clickSeed());
+}
 
 /** A fresh run on a specific authored map, reached by cycling from the default level. */
 function createStateOn(profile, levelId) {
@@ -149,7 +159,7 @@ const WALL_PLANS = {
 const MAX_TOWERS = 45;
 /** The sweep has no reboot to bank for, so it may keep spending bonus salvage on extra Guns. */
 const SWEEP_MAX_TOWERS = 60;
-/** The map-summary loop plays a stronger board so every authored map is beatable. */
+/** The map loop plays a stronger board (coverage guns, higher cap) so every authored map is beatable. */
 const MAP_MAX_TOWERS = 60;
 
 // --- Build policy -----------------------------------------------------------------------------
@@ -451,9 +461,8 @@ function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, 
   }
 
   // Coverage guns come only after the maze is fully built, so they never crowd a wall tile out, and
-  // only into slots the future specialist roster does not need. The map-summary loop asks for them
-  // outright so every authored map is beatable; the single-level support comparison leaves them out
-  // to keep the maze walls the only Guns. A short route after the maze also falls back to coverage.
+  // only into slots the future specialist roster does not need. The map loop asks for them outright
+  // so every authored map is beatable. A short route after the maze also falls back to coverage.
   if (nextWall >= plan.length && (coverage || currentPath(s).length < 30)) {
     const reserve = futureSpecialistSlots(counts);
     for (let guard = 0; guard < 400; guard++) {
@@ -625,6 +634,7 @@ function playWave(s, wave, leakList, popups) {
 
 /** Play one full run from a fresh state; returns the outcome. */
 function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = MAX_TOWERS, coverage = false) {
+  resetClickRng();
   const s = createStateOn(profile, levelId);
   const leakList = [];
   const popups = newPopupTracker();
@@ -705,6 +715,7 @@ function runSession(useSupport, label, levelId, maxTowers = MAX_TOWERS, coverage
  * Returns the same shape as playRun.
  */
 function playRunCall(profile, label, allAtOnce) {
+  resetClickRng();
   const s = createRunState(profile);
   const counts = { gun: 0, cannon: 0, taser: 0, frost: 0, laser: 0, beacon: 0 };
   let wallIdx = 0;
@@ -800,6 +811,7 @@ function waveSpan(wave) {
  * alongside the usual run result.
  */
 function playRunSweep(profile, label, timing) {
+  resetClickRng();
   const s = createRunState(profile);
   const counts = { gun: 0, cannon: 0, taser: 0, frost: 0, laser: 0, beacon: 0 };
   let wallIdx = 0;
@@ -956,11 +968,13 @@ function callSweepTable(rows) {
 const mapRows = [];
 let allReached = true;
 
-// A multi-map run plays a stronger board (coverage guns + a higher tower cap) so every authored map
-// is beatable; a single --level run keeps the original maze-only policy for the support comparison.
+// Every map is judged on the same board, alone or in a batch: coverage guns plus the higher tower
+// cap. A single --level run used to keep the maze-only policy for the support comparison, but that
+// made the same map report different numbers depending on how it was invoked. The stronger board is
+// the canonical one, so the loop always uses it.
 silent = !singleLevel;
-const loopMaxTowers = singleLevel ? MAX_TOWERS : MAP_MAX_TOWERS;
-const loopCoverage = !singleLevel;
+const loopMaxTowers = MAP_MAX_TOWERS;
+const loopCoverage = true;
 
 if (wallMode) {
   // The wall-heavy scenario: the standard build, but the maze is walls (kept upgraded) rather than
