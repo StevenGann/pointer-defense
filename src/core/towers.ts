@@ -107,7 +107,7 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     pierce: 0,
     auraDamage: 0,
     auraRange: 0,
-    targetLock: null,
+    targetLock: 'close',
   },
   laser: {
     name: 'Laser',

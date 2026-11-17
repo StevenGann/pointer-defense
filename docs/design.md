@@ -215,22 +215,24 @@ Eight towers. Each has a role, a tier ladder, and **two exclusive branches** at 
 | **Gun** | 25 | 2.6 | 3 | 0.50 s | 720°/s | player's choice | cheap single-target backbone | the longest stretch of route it can reach |
 | **Cannon** | 90 | 3.0 | 5 + splash 1.0 | 1.60 s | 90°/s | strongest (fixed) | clusters and corners | where the maze doubles back |
 | **Taser** | 80 | 1.6 | 1, ignores armour | 0.12 s | instant | closest (fixed) | armour, speed, close work | the inside of a hairpin |
-| **Frost** | 70 | 2.2 | 1, slows to 30 % speed for 3.0 s | 0.60 s | instant | — | utility | in front of the damage |
+| **Frost** | 70 | 2.2 | 1, slows to 30 % speed for 3.0 s | 0.60 s | instant | closest (fixed) | utility | in front of the damage |
 | **Laser** | 70 | 3.4 | 11, pierces 8 | 0.80 s | 150°/s | first (fixed) | straight lines | corridors you deliberately left open |
 | **Beacon** | 90 | 3.5 | none | — | — (still) | — | +60 % damage to towers in radius | a dense cluster worth buffing |
 | **Wall** | 8 | — | none | — | — (still) | — | blocks the route, has hit points | a long maze made cheap |
 | **Cursor** | 250 | 2.5 | ½ your click damage | 1.0 s | — (still) | shielded, then nearest (fixed) | an autonomous hand that clicks for you | a pointer ladder worth feeding |
 
-Three towers are **locked** to one targeting mode and ignore the player's choice. The **Taser** always
+Four towers are **locked** to one targeting mode and ignore the player's choice. The **Taser** always
 fires at the nearest enemy in range — a Tesla coil discharges into whatever is nearest, so its
-placement is the decision, not its priority. The **Laser** always fires at the leading edge of the
-column, which reads correctly when its Focus beam pierces along that line. The **Cannon** always
-swings at the strongest thing it can see and lives with its two-second traverse. The **Cursor** carries
-its own fixed rule rather than one of the three named modes: it hunts shielded enemies first, then the
-nearest enemy to its home tile (§6.7). The **Gun** stays fully configurable — it obeys the player — and
-Frost and Beacon have no targeting mode to lock. **Manual Override** (§9.5), the player's explicit
-mark, wins over every lock: while the marked enemy is in range, a locked tower fires at it, which is
-the only way to aim a locked tower at something specific.
+placement is the decision, not its priority. The **Frost** also always targets the closest enemy — it
+slows the enemy nearest the exit, and a player-chosen mode on a utility tower only ever makes it
+worse. The **Laser** always fires at the leading edge of the column, which reads correctly when its
+Focus beam pierces along that line. The **Cannon** always swings at the strongest thing it can see and
+lives with its two-second traverse. The **Cursor** carries its own fixed rule rather than one of the
+three named modes: it hunts shielded enemies first, then the nearest enemy to its home tile (§6.7).
+The **Gun** stays fully configurable — it obeys the player — and Beacon has no targeting mode to lock.
+**Manual Override** (§9.5), the player's explicit mark, wins over every lock: while the marked enemy
+is in range, a locked tower fires at it, which is the only way to aim a locked tower at something
+specific.
 
 Four damage answers and three that are useless alone, plus the Cursor, which is a damage answer that
 borrows its strength from the pointer ladder (§6.7). That is how placement stays interesting without

@@ -1282,12 +1282,12 @@ function towerCandidates(s: RunState, t: Tower, st: EffectiveStats, range: numbe
   return out;
 }
 
-/** The tower's effective targeting priority: a per-kind lock wins over the player's choice. Frost
- *  and Beacon affect everything in range, so their mode is meaningless — always First. */
+/** The tower's effective targeting priority: a per-kind lock wins over the player's choice. Beacon
+ *  affects everything in range, so its mode is meaningless — always First. */
 function effectiveTargetMode(t: Tower): TargetMode {
   const lock = TOWER_STATS[t.kind].targetLock;
   if (lock !== null) return lock;
-  return t.kind === 'frost' || t.kind === 'beacon' ? 'first' : t.targetMode;
+  return t.kind === 'beacon' ? 'first' : t.targetMode;
 }
 
 /** First: the hurtable enemy furthest along the route, the one about to leak. */

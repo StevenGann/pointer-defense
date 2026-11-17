@@ -1786,7 +1786,7 @@ function chokeWalls(gaps) {
   );
 }
 
-// --- 23. Targeting locks: Taser (close), Laser (first), Cannon (strong), Gun (player's choice) --
+// --- 23. Targeting locks: Taser & Frost (close), Laser (first), Cannon (strong), Gun (player's choice) --
 {
   // A Taser locked to 'close' ignores a stored 'strong' preference and fires at the nearest enemy.
   const s = createRunState();
@@ -1803,6 +1803,45 @@ function chokeWalls(gaps) {
   tick(s);
   check(near.hp < near.maxHp, `taser with target=strong still fires at the closest enemy (near hp ${near.hp})`);
   check(far.hp === 500, `the stronger, farther enemy is untouched (far hp ${far.hp})`);
+}
+
+{
+  // A Frost locked to 'close' slows the nearest enemy, ignoring a stored 'strong' preference.
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'frost', 5, 5);
+  const frost = towerAt(s, 5, 5);
+  frost.targetMode = 'strong';
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const near = stationary(1, 'grunt', 1, 5.5, 5.0);
+  const far = stationary(2, 'grunt', 1, 5.5, 4.0);
+  far.hp = 500;
+  s.enemies.push(near, far);
+  tick(s);
+  check(near.hp < near.maxHp, `frost with target=strong still fires at the closest enemy (near hp ${near.hp})`);
+  check(near.slowFactor === 0.3, `frost slows the closest enemy (slowFactor ${near.slowFactor})`);
+  check(far.hp === 500, `the farther enemy is untouched (far hp ${far.hp})`);
+}
+
+{
+  // Manual Override still beats Frost's lock: while the marked enemy is in range, the frost fires at
+  // it even though a closer enemy would normally be chosen.
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'frost', 5, 5);
+  s.phase = 'wave';
+  s.nextPopupAttemptTick = Number.MAX_SAFE_INTEGER;
+  const near = stationary(1, 'grunt', 1, 5.5, 5.0);
+  const marked = stationary(2, 'grunt', 1, 5.5, 4.0);
+  marked.hp = 1;
+  s.enemies.push(near, marked);
+  s.pointer.targetId = marked.id;
+  toggleManualOverride(s);
+
+  tick(s);
+  check(marked.dead, 'override: the frost fires at the marked enemy instead of the closest');
+  check(near.hp === near.maxHp, 'override: the closer enemy is untouched while the mark lives');
 }
 
 {
@@ -1880,25 +1919,32 @@ function chokeWalls(gaps) {
   // The panel reads a fixed label for locked towers and the stored mode for the configurable Gun;
   // the target key/click is refused for locked towers and still cycles the Gun.
   check(targetModeDisplay(createTower(1, 'taser', 0, 0)) === 'Closest (fixed)', 'taser panel reads "Closest (fixed)"');
-  check(targetModeDisplay(createTower(2, 'laser', 0, 0)) === 'First (fixed)', 'laser panel reads "First (fixed)"');
-  check(targetModeDisplay(createTower(3, 'cannon', 0, 0)) === 'Strong (fixed)', 'cannon panel reads "Strong (fixed)"');
-  const gun = createTower(4, 'gun', 0, 0);
+  check(targetModeDisplay(createTower(2, 'frost', 0, 0)) === 'Closest (fixed)', 'frost panel reads "Closest (fixed)"');
+  check(targetModeDisplay(createTower(3, 'laser', 0, 0)) === 'First (fixed)', 'laser panel reads "First (fixed)"');
+  check(targetModeDisplay(createTower(4, 'cannon', 0, 0)) === 'Strong (fixed)', 'cannon panel reads "Strong (fixed)"');
+  const gun = createTower(5, 'gun', 0, 0);
   check(targetModeDisplay(gun) === 'First', 'gun panel reads its stored mode');
   check(targetLockReason('taser') === 'A Tesla coil discharges into whatever is nearest.', 'taser tooltip explains the lock');
+  check(targetLockReason('frost') === 'Frost always targets the closest enemy.', 'frost tooltip explains the lock');
   check(targetLockReason('laser') !== null && targetLockReason('cannon') !== null, 'laser and cannon tooltips each explain their lock');
   check(targetLockReason('gun') === null, 'the configurable gun has no lock reason');
 
   const s = createRunState();
   s.economy.salvage = 10000;
   placeTower(s, 'taser', 5, 5);
-  placeTower(s, 'gun', 6, 5);
+  placeTower(s, 'frost', 6, 5);
+  placeTower(s, 'gun', 6, 6);
   const taser = towerAt(s, 5, 5);
   taser.targetMode = 'strong';
   cycleTargetMode(s, 5, 5);
   check(taser.targetMode === 'strong', 'the target key/click does not change a locked taser');
-  const g = towerAt(s, 6, 5);
-  g.targetMode = 'first';
+  const frost = towerAt(s, 6, 5);
+  frost.targetMode = 'strong';
   cycleTargetMode(s, 6, 5);
+  check(frost.targetMode === 'strong', 'the target key/click does not change a locked frost');
+  const g = towerAt(s, 6, 6);
+  g.targetMode = 'first';
+  cycleTargetMode(s, 6, 6);
   check(g.targetMode === 'strong', 'the target key/click still cycles a configurable gun');
 }
 

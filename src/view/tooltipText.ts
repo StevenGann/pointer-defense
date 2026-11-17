@@ -103,6 +103,7 @@ export function targetModeDisplay(tower: Tower): string {
 /** The one-sentence reason a locked tower cannot be re-targeted, or null for a configurable kind. */
 export function targetLockReason(kind: TowerKind): string | null {
   if (kind === 'cursor') return 'Shielded enemies first, then the nearest; this cannot be changed. The marked enemy overrides it.';
+  if (kind === 'frost') return 'Frost always targets the closest enemy.';
   switch (TOWER_STATS[kind].targetLock) {
     case 'close':
       return 'A Tesla coil discharges into whatever is nearest.';
