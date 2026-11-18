@@ -27,6 +27,7 @@ import { FLYER_OFF_KIND_DAMAGE,
   chooseBranch,
   sellTower,
   towerAt,
+  towerUnlocked,
   cycleLevel,
   canCycleLevel,
   closePopupEnemy,
@@ -94,7 +95,8 @@ import {
   CRIT_MULTIPLIER,
   MARKED_DAMAGE_MULT,
 } from '../src/core/pointer.ts';
-import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies, allHelpUnlocked, checkProfileAchievements } from '../src/core/save.ts';
+import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies, allHelpUnlocked, checkProfileAchievements, rpGain, specLevelCost } from '../src/core/save.ts';
+import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES } from '../src/core/tree.ts';
 import { ACHIEVEMENTS } from '../src/core/achievements.ts';
 import { restartWindows, checkAchievements, enterEndless, pointerDamageMult } from '../src/core/state.ts';
 import { cheatsEnabled, setCheatsVisibleForTests, SPAWN_KINDS } from '../src/core/cheats.ts';
@@ -1082,13 +1084,17 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 // --- 12. Profile persistence: defaults for empty, corrupt and unknown-version stores -----------
 {
   const empty = loadProfile({ getItem: () => null, setItem: () => {} });
-  check(empty.version === 1, 'empty storage returns a default profile (version 1)');
+  check(empty.version === 2, 'empty storage returns a default profile (version 2)');
   check(
     empty.specs.cpu === 0 && empty.specs.ram === 0 && empty.specs.gpu === 0 && empty.specs.disk === 0,
     'default spec levels are all zero',
   );
   check(
-    empty.unspentSpecs === 0 && empty.achievements.length === 0 && empty.bestWave === 0 && empty.reboots === 0,
+    empty.rp === 0 && empty.rpEarned === 0 && empty.tree.length === 0 && empty.lastSalvage === 0,
+    'default Restore Point fields are zero',
+  );
+  check(
+    empty.achievements.length === 0 && empty.bestWave === 0 && empty.reboots === 0,
     'default profile meta fields are zero',
   );
 
@@ -1104,12 +1110,14 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   const store = { value: null, getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
   const p = defaultProfile();
   p.specs.cpu = 7;
-  p.unspentSpecs = 3;
+  p.rp = 3;
+  p.rpEarned = 12;
+  p.tree.push('loose-change');
   p.achievements.push('first-blood');
   saveProfile(p, store);
   const loaded = loadProfile(store);
   check(
-    loaded.specs.cpu === 7 && loaded.unspentSpecs === 3 && loaded.achievements.includes('first-blood'),
+    loaded.specs.cpu === 7 && loaded.rp === 3 && loaded.rpEarned === 12 && loaded.tree.includes('loose-change') && loaded.achievements.includes('first-blood'),
     'save/load round-trips the profile',
   );
 }
@@ -1124,21 +1132,23 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(s.integrity === 20 + 2, `Disk specs add +1 integrity each (${s.integrity})`);
 }
 
-// --- 14. restartWindows banks the right number of specs and resets the run ---------------------
+// --- 14. restartWindows banks the right number of Restore Points and resets the run ------------
 {
   const s = createRunState();
-  s.economy.earned = 5000; // sqrt(5000 / 500) = sqrt(10) = 3.16 -> floor 3
+  s.economy.earned = 20000; // floor(2.2 * sqrt(20000 / 900)) = floor(10.37) = 10
   s.wave = 52;
   const before = defaultProfile();
   const { gained, profile } = restartWindows(s, before);
-  check(gained === 3, `restartWindows banks floor(sqrt(earned/500)) = ${gained}`);
-  check(profile.unspentSpecs === 3, 'banked specs land in unspentSpecs');
+  check(gained === 10, `restartWindows banks floor(2.2*sqrt(earned/900)) = ${gained}`);
+  check(profile.rp === 10, 'banked Restore Points land in rp');
+  check(profile.rpEarned === 10, 'the prestige level rises to match');
+  check(profile.lastSalvage === 20000, 'lastSalvage records the run for Restore Point');
   check(profile.reboots === 1, 'reboot count increments');
   check(profile.bestWave === 52, 'bestWave records the run wave');
 
   const s2 = createRunState(profile);
   check(s2.wave === 0 && s2.phase === 'build', 'the reboot resets the run');
-  check(s2.unspentSpecs === 3, 'the fresh run carries the banked specs');
+  check(s2.rp === 10 && s2.rpEarned === 10, 'the fresh run carries the banked RP and level');
 }
 
 // --- 15. An achievement unlocks once and only once ---------------------------------------------
@@ -1339,11 +1349,11 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 }
 
 {
-  // specs-banked (nest egg): a run seeded with banked specs.
+  // specs-banked (nest egg): a run seeded with banked Restore Points.
   const p = defaultProfile();
-  p.unspentSpecs = 3;
+  p.rp = 3;
   const s = createRunState(p);
-  check(checkAchievements(s).includes('specs-banked'), 'specs-banked fires with banked specs');
+  check(checkAchievements(s).includes('specs-banked'), 'specs-banked fires with banked RP');
   check(!checkAchievements(s).includes('specs-banked'), 'specs-banked fires once');
 }
 
@@ -1419,7 +1429,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   s.earlyCallsInARow = 3;
   s.clearedFlawlessWave = true;
   s.milestoneBossByPointer = true;
-  s.unspentSpecs = 3;
+  s.rp = 3;
   s.clearedWaves = 1;
   check(checkAchievements(s).length === 0, 'a cheated run records none of the new achievements');
 }
@@ -3124,7 +3134,7 @@ function cursorTower(tier, branch) {
     'cursor branches are named Overclock and Wide Search');
 
   const { s, c } = cursorRig(1, null);
-  const lines = cursorTooltipLines(c, s.pointer, s.specs);
+  const lines = cursorTooltipLines(c, s.pointer, pointerDamageMult(s));
   check(lines[0] === 'Cursor T1', `placed cursor tooltip names the tower (${lines[0]})`);
   check(lines[1].includes('Radius 3.0'), `placed cursor tooltip names the radius (${lines[1]})`);
   check(lines[2].includes('50% of 3'), `placed cursor tooltip shows the ladder feeding it (${lines[2]})`);
@@ -3137,7 +3147,7 @@ function cursorTower(tier, branch) {
   const { s } = cursorRig(1, null);
   tick(s); // the cursor sits on its target, so the first tick clicks
   const first = s.economy.damage.pointer;
-  check(Math.abs(first - 0.5 * clickDamage(s.pointer) * pointerDamageMult(s.specs)) < 1e-9,
+  check(Math.abs(first - 0.5 * clickDamage(s.pointer) * pointerDamageMult(s)) < 1e-9,
     `cursor click damage is half the player's click damage (${first} = 0.5 x ${clickDamage(s.pointer)})`);
 
   check(upgradePointer(s), 'buy the reticle mid-wave');
@@ -3147,7 +3157,7 @@ function cursorTower(tier, branch) {
     clicks = s.events.filter((ev) => ev.type === 'damage').length;
   }
   const second = s.economy.damage.pointer - first;
-  check(Math.abs(second - 0.5 * clickDamage(s.pointer) * pointerDamageMult(s.specs)) < 1e-9,
+  check(Math.abs(second - 0.5 * clickDamage(s.pointer) * pointerDamageMult(s)) < 1e-9,
     `cursor click damage follows a ladder bought mid-wave (${second} = 0.5 x ${clickDamage(s.pointer)})`);
 }
 
@@ -3758,8 +3768,8 @@ function cursorTower(tier, branch) {
   check(right.pointer.rows.length === 3, 'the POINTER section lists stage, overclock and crits');
   check(right.globalUpgrades.title === 'GLOBAL UPGRADES', 'the right column ends with GLOBAL UPGRADES');
   check(
-    right.globalUpgrades.rows.length === 1 && right.globalUpgrades.rows[0] === 'No upgrades yet',
-    'GLOBAL UPGRADES is a reserved empty section',
+    right.globalUpgrades.rows.length === 1 && right.globalUpgrades.rows[0] === '0 RP · level 0',
+    'GLOBAL UPGRADES reports the Restore Point balance and prestige level',
   );
   check(
     right.nextWave.rect.y < right.kills.rect.y &&
@@ -3785,13 +3795,14 @@ function cursorTower(tier, branch) {
 }
 
 {
-  // GLOBAL UPGRADES adds no clickable controls: a point in its body is not a HUD control.
+  // GLOBAL UPGRADES is the live control that opens the Restore tree dialog.
   const l = computeLayout(1280, 720);
   const s = createRunState();
   const right = computeRightPanel(l, s);
   const gx = right.globalUpgrades.rect.x + right.globalUpgrades.rect.w / 2;
   const gy = right.globalUpgrades.rect.y + right.globalUpgrades.rect.h - 4;
-  check(hudControlAt(l, s, gx, gy) === null, 'GLOBAL UPGRADES has no clickable controls');
+  const hit = hudControlAt(l, s, gx, gy);
+  check(hit !== null && hit.action === 'restore' && hit.enabled, 'GLOBAL UPGRADES is the Restore dialog control');
 }
 
 // --- 31. Ad chrome is the main window's scale, and the pop-up enemy matches it -----------------
@@ -4235,7 +4246,7 @@ function maintenanceRig(gunHp) {
     'Overclock and Wide Search carry branch marks');
 
   const rs = createRunState();
-  const placed = cursorTooltipLines(cursorTower(3, 'C'), rs.pointer, rs.specs, 'Repairing Gun 42%');
+  const placed = cursorTooltipLines(cursorTower(3, 'C'), rs.pointer, pointerDamageMult(rs), 'Repairing Gun 42%');
   check(placed[0] === 'Cursor T3 — Maintenance', `maintenance tooltip names the branch (${placed[0]})`);
   check(placed[1] === 'Repairs damaged towers when its radius is clear', 'maintenance tooltip reads the rule');
   check(placed[2] === 'Below 80% HP · Repairing Gun 42%',
@@ -6872,6 +6883,126 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     h = Math.imul(h, 0x01000193);
   }
   check((h >>> 0).toString(16) === '5b6e087d', 'waves 1..100 balance table unchanged with cheats off');
+}
+
+// --- 45. The Restore tree ----------------------------------------------------------------
+{
+  // 45a. The RP curve follows floor(2.2 * sqrt(earned / 900)).
+  check(rpGain(20000) === 10, `rpGain(20000) = ${rpGain(20000)} (expected 10)`);
+  check(rpGain(60000) === 17, `rpGain(60000) = ${rpGain(60000)} (expected 17)`);
+  check(rpGain(150000) === 28, `rpGain(150000) = ${rpGain(150000)} (expected 28)`);
+  check(rpGain(500000) === 51, `rpGain(500000) = ${rpGain(500000)} (expected 51)`);
+}
+
+{
+  // 45b. The tree has exactly 21 nodes across the five tiers.
+  check(TREE_NODES.length === 21, `exactly 21 tree nodes (${TREE_NODES.length})`);
+  check(new Set(TREE_NODES.map((n) => n.id)).size === 21, 'tree node ids are unique');
+  const byTier = [1, 2, 3, 4, 5].map((t) => TREE_NODES.filter((n) => n.tier === t).length).join(',');
+  check(byTier === '5,5,5,3,3', `tree tiers hold 5/5/5/3/3 nodes (${byTier})`);
+}
+
+{
+  // 45c. Tier gates open at the documented prestige levels.
+  check(treeTierUnlocked(0, 1) === true, 'tier 1 is open at level 0');
+  check(treeTierUnlocked(0, 2) === false, 'tier 2 is locked at level 0');
+  check(treeTierUnlocked(8, 2) === true, 'tier 2 opens at level 8');
+  check(treeTierUnlocked(19, 3) === false, 'tier 3 is locked at level 19');
+  check(treeTierUnlocked(20, 3) === true, 'tier 3 opens at level 20');
+  check(treeTierUnlocked(39, 4) === false && treeTierUnlocked(40, 4) === true, 'tier 4 opens at level 40');
+  check(treeTierUnlocked(69, 5) === false && treeTierUnlocked(70, 5) === true, 'tier 5 opens at level 70');
+}
+
+{
+  // 45d. Buying a node spends rp but leaves the prestige level untouched.
+  const p = defaultProfile();
+  p.rp = 100;
+  p.rpEarned = 20;
+  const node = treeNodeById('loose-change');
+  check(canBuy(p, node), 'loose-change is buyable at level 20');
+  check(buyNode(p, node), 'buying loose-change succeeds');
+  check(p.rp === 96, `the purchase spends rp (${p.rp})`);
+  check(p.rpEarned === 20, 'the prestige level is unchanged by a purchase');
+  check(hasNode(p, 'loose-change'), 'loose-change is owned after buying');
+  check(!canBuy(p, node), 'an owned node cannot be bought again');
+  check(effectsFor(p).startSalvageFlat === 200, 'Loose Change folds +200 into the merged effect');
+}
+
+{
+  // 45e. Safe Mode and Blue Screen are mutually exclusive; buying one hides the other.
+  const p = defaultProfile();
+  p.rp = 100;
+  p.rpEarned = 20;
+  check(buyNode(p, treeNodeById('safe-mode')), 'buy Safe Mode');
+  check(!canBuy(p, treeNodeById('blue-screen')), 'Blue Screen is refused while Safe Mode is owned');
+  check(!visibleNodes(p).some((n) => n.id === 'blue-screen'), 'Blue Screen is hidden while Safe Mode is owned');
+  const fx = effectsFor(p);
+  check(fx.integrity === 5 && Math.abs(fx.rpGainMult - 0.9) < 1e-9, 'Safe Mode grants +5 integrity and -10% RP');
+}
+
+{
+  // 45f. createRunState applies the notable nodes.
+  const fast = defaultProfile();
+  fast.tree.push('fast-boot-1');
+  check(createRunState(fast).wave === 3, 'Fast Boot I starts runs at wave 3');
+
+  const pre = defaultProfile();
+  pre.tree.push('preload');
+  const ps = createRunState(pre);
+  check(ps.towers.filter((t) => t.kind === 'gun').length === 2, 'Preload places two Gun towers');
+  check(ps.towers.every((t) => t.kind === 'gun' && t.col >= 1 && t.col <= 3), 'preloaded Guns sit near the spawn');
+
+  const ea = defaultProfile();
+  ea.tree.push('early-access');
+  const eas = createRunState(ea);
+  check(towerUnlocked(eas, 'cursor'), 'Early Access unlocks the Cursor from wave 0');
+
+  const ng = defaultProfile();
+  ng.tree.push('new-game-plus');
+  const ngs = createRunState(ng);
+  ngs.economy.salvage = 100000;
+  check(placeTower(ngs, 'gun', 5, 5), 'place a Gun with New Game+');
+  check(towerAt(ngs, 5, 5).tier === 2, 'New Game+ places towers at tier 2');
+}
+
+{
+  // 45g. A version-1 save migrates: specs kept, Restore Points and the tree zeroed.
+  const store = {
+    value: JSON.stringify({
+      version: 1,
+      specs: { cpu: 5, ram: 3, gpu: 2, disk: 1 },
+      unspentSpecs: 9,
+      achievements: ['first-blood'],
+      bestWave: 12,
+      reboots: 2,
+    }),
+    getItem() { return this.value; },
+    setItem(_k, v) { this.value = v; },
+  };
+  const migrated = loadProfile(store);
+  check(migrated.version === 2, 'a version-1 save migrates to version 2');
+  check(migrated.specs.cpu === 5 && migrated.specs.ram === 3 && migrated.specs.gpu === 2 && migrated.specs.disk === 1,
+    'migration keeps the four spec fields');
+  check(migrated.rp === 0 && migrated.rpEarned === 0 && migrated.tree.length === 0 && migrated.lastSalvage === 0,
+    'migration zeroes Restore Points, the tree and the last-salvage carry');
+  check(migrated.achievements.includes('first-blood') && migrated.bestWave === 12 && migrated.reboots === 2,
+    'migration keeps the pre-RP profile fields');
+}
+
+{
+  // 45h. An empty tree is identity: the merged effect and the run are unchanged.
+  const fx = effectsFor(defaultProfile());
+  check(
+    fx.startingWave === 0 && fx.startSalvageFlat === 0 && fx.startSalvagePct === 0 &&
+      fx.towerDamagePct === 0 && fx.pointerDamagePct === 0 && fx.integrity === 0 &&
+      fx.costMultiplier === 1 && fx.sellRefund === 0.7 && fx.repairSpeedMult === 1 &&
+      fx.autoWave === false && fx.preloadGuns === 0 && fx.unlockAllTowers === false &&
+      fx.startTier === 1 && fx.extraSpecsPerReboot === 0 && fx.rpGainMult === 1,
+    'an empty tree produces the identity effect',
+  );
+  const s = createRunState(defaultProfile());
+  check(s.wave === 0 && s.economy.salvage === 60 && s.integrity === 20 && s.towers.length === 0,
+    'a run with an empty tree is identical to today');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

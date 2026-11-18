@@ -791,9 +791,9 @@ function doClick(s) {
 /** Spend banked specs into levels: tower damage first, a little integrity, then the rest. */
 function allocateSpecs(profile) {
   const buy = (kind, max) => {
-    while (profile.unspentSpecs > 0 && profile.specs[kind] < max && profile.specs[kind] < SPEC_CAPS[kind]) {
+    while (profile.rp > 0 && profile.specs[kind] < max && profile.specs[kind] < SPEC_CAPS[kind]) {
       profile.specs[kind] += 1;
-      profile.unspentSpecs -= 1;
+      profile.rp -= 1;
     }
   };
   buy('cpu', 6);
