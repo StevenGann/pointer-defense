@@ -1001,9 +1001,33 @@ Twenty points is a ×1.4 multiplier. The walls are deliberately low: prestige is
 better*, not about removing the game. Each reboot unlocks a new desktop wallpaper — a palette variant
 of the same board, for the achievement wall.
 
-**Achievements** (ten at launch, all cheap): first blood · a route over 50 tiles · a zero-leak wave at
-40+ · 100 weak-point hits in one run · five tier-5 towers · a full board of Beacons · a boss killed by
-the pointer alone · ten ads in one run · endless wave 150 · reboot with 50+ specs.
+**Achievements** (twenty-four). Each names one thing worth doing and rewards doing it; none require
+cheats or a hundred-wave grind.
+
+- **First Blood** — kill any enemy. The first click that proves the loop: towers hold, you finish.
+- **Long Road** — a route of 50+ tiles. Mazing is the game's second weapon, and this is the moment it becomes visible.
+- **Clean Wave** — clear a wave at 40+ with zero leaks. Leaks are the run's real failure; a clean late wave means the defense finally holds by itself.
+- **Sharpshooter** — 100 weak-point hits in one run. The weak point is the pointer's skill ceiling; this is the proof you hit it.
+- **Five Tier Fives** — five tier-5 towers at once. The economy ladder has a top, and this is standing on it.
+- **Beacon Field** — ten beacons at once. Support towers are worth it; a whole field of them is a statement.
+- **Boss by Pointer** — kill a boss with the pointer alone. The hybrid's one question: is your aim a weapon?
+- **Ad Collector** — dismiss ten ads in one run. Ads are income you earn with attention.
+- **Endless** — reach endless wave 150. The hundred-wave win is not the end; this is.
+- **Reboot** — reboot with 50+ specs. Prestige is a ladder too, and this is its milestone.
+- **Deadeye** — kill 50 enemies with weak-point hits. Hitting the weak point is hard; finishing on it is a habit.
+- **Lucky Streak** — land 25 critical hits. Crits are rare by design; a streak of them is luck earned through volume.
+- **Deep Pockets** — hold 1,000 salvage at once. It teaches you to save, not spend the moment you can.
+- **Pack Rat** — reach wave 20 without selling a tower. Selling is a crutch; this is a run that stood on its builds.
+- **One-Trick Pony** — clear a wave with a single tower kind. Commitment has a shape, and it is one button.
+- **Maxed Out** — fully upgrade a branched tower. The branch tree has a summit; this is the climb.
+- **Flak Jacket** — branch an AA tower into Flak. Air defence has a second answer, and this is it.
+- **Speedrunner** — call three waves early in a row. Risk stacks; this is a run that keeps pulling the trigger.
+- **No Leaks** — clear a wave with zero leaks. The earliest, purest version of a perfect wave.
+- **Milestone Hunter** — kill a milestone boss with the pointer. Milestone bosses are the walls; this is knocking one down yourself.
+- **Second Boot** — reboot twice. Prestige is a loop, not a single farewell.
+- **Nest Egg** — start a run with banked specs. The reward for a good run is a better next run.
+- **Cartographer** — clear a wave on a custom map. Your own board is a real board.
+- **Well Read** — unlock every page in the Help viewer. The Help library is a map of the game; this is reading all of it.
 
 ---
 
