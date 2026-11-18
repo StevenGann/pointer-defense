@@ -221,7 +221,7 @@ Repair tower keeps a plain upgrade ladder for now.
 | **Beacon** | 8 | 90 | 3.5 | none | — | — (still) | — | +60 % damage to towers in radius | a dense cluster worth buffing |
 | **Repair** | 18 | 220 | 4.5 | none (heals 2 HP/s) | — | — (still) | — | heals damaged towers in radius | a cluster of towers worth keeping alive |
 | **Wall** | 1 | 8 | — | none | — | — (still) | — | blocks the route, has hit points | a long maze made cheap |
-| **Cursor** | 24 | 250 | 2.5 | ½ your click damage | 1.0 s | — (still) | shielded, then nearest (fixed) | an autonomous hand that clicks for you | a pointer ladder worth feeding |
+| **Cursor** | 24 | 200 | 3.0 | ½ your click damage | 1.5 s | — (still) | shielded, then nearest (fixed) | an autonomous hand that clicks for you | a pointer ladder worth feeding |
 
 Four towers are **locked** to one targeting mode and ignore the player's choice. The **Taser** always
 fires at the nearest enemy in range — a Tesla coil discharges into whatever is nearest, so its
@@ -394,8 +394,8 @@ The **Cursor** is the one tower whose damage is not its own. It cannot fire; ins
 second cursor — the classic white arrow — that wanders around its home tile and clicks enemies for
 you. Every click deals **half the player's current click damage**, ladder and spec multipliers
 included, and is treated as pointer damage: it ignores armour and wears shields down exactly as the
-player's own clicks do. The tower's radius (2.5 → 3.5 → 4.5 tiles) and its click clock (1.0 → 1.6 →
-2.2 clicks/s) are its only stats, and at tier 3 it branches into **Overclock** (more, weaker clicks),
+player's own clicks do. The tower's radius (3.0 → 4.0 → 4.75 tiles) and its click clock (1.5 → 2.0 →
+2.75 clicks/s) are its only stats, and at tier 3 it branches into **Overclock** (more, weaker clicks),
 **Wide Search** (a wider reach, clicking less often) or **Maintenance** (see below).
 
 The relationship is the point. The pointer ladder was a personal weapon; the Cursor makes it *board*
