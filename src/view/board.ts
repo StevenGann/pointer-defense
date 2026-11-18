@@ -17,10 +17,11 @@ import {
   isBossVariant,
   PACER_AURA_RADIUS,
   radiusOf,
+  WIRECUTTER_EMP_RADIUS,
   type Enemy,
   type EnemyKind,
 } from '../core/enemies.ts';
-import { cursorRadius, effectiveStats, isFullyUpgraded, isGateLocked, isOffline, isRepairing, repairProgress, repairRadius, TOWER_STATS, type Branch, type Tower, type TowerKind } from '../core/towers.ts';
+import { cursorRadius, effectiveStats, isEmpDisabled, isFullyUpgraded, isGateLocked, isOffline, isRepairing, repairProgress, repairRadius, TOWER_STATS, type Branch, type Tower, type TowerKind } from '../core/towers.ts';
 import { tileAt, COLS, ROWS, type Grid, type Tile } from '../core/grid.ts';
 import { toggleOpenAt, toggleProgress, type LevelToggle } from '../core/levels.ts';
 import { dashRects, offsetSegment, routeOffset, type RouteSegment } from './route.ts';
@@ -70,6 +71,7 @@ export const TOWER_COLOR: Record<TowerKind, number> = {
   taser: PAL.olive,
   frost: 0x3399cc,
   laser: 0xff3300,
+  aa: 0x5a7d9a,
   beacon: 0xffcc00,
   repair: 0x00a000,
   wall: 0x8a8a8a,
@@ -106,6 +108,10 @@ export const ENEMY_COLOR: Record<EnemyKind, number> = {
   'grunt-boss': 0x35506a,
   'runner-boss': 0x577489,
   'shielded-boss': 0x2f4b62,
+  'flyer-boss': 0x6b8598,
+  'armoured-boss': 0x406080,
+  'saboteur-boss': 0x4a637a,
+  'breacher-boss': 0x5a7183,
 };
 
 /** The single cyan for shield visuals: the shield ring, the impact arc and the `SHD` floater. */
@@ -131,10 +137,16 @@ export const ENEMY_ART_BODY: Record<EnemyKind, number> = {
   'grunt-boss': 2.0,
   'runner-boss': 3.3,
   'shielded-boss': 2.7,
+  'flyer-boss': 2.6,
+  'armoured-boss': 1.6,
+  'saboteur-boss': 2.4,
+  'breacher-boss': 2.2,
 };
 
 /** Kinds whose silhouette is oriented: they rotate with the enemy's heading. The rest are symmetric. */
-export const ENEMY_ART_ROTATES: ReadonlySet<EnemyKind> = new Set(['runner', 'flyer', 'saboteur', 'breacher', 'runner-boss']);
+export const ENEMY_ART_ROTATES: ReadonlySet<EnemyKind> = new Set([
+  'runner', 'flyer', 'saboteur', 'breacher', 'runner-boss', 'flyer-boss', 'saboteur-boss', 'breacher-boss',
+]);
 
 const AURA_COLOR = 0x6699ff;
 const SLOW_COLOR = 0x00d0ff;
@@ -395,6 +407,10 @@ export class BoardView {
     for (let i = spriteIndex; i < this.enemySprites.length; i++) {
       this.enemySprites[i].visible = false;
     }
+
+    // In-flight projectiles draw above enemies: a small square for a Flak shell, a tapered dart with
+    // a fading trail for a missile.
+    drawProjectiles(this.overlay, state, board);
 
     // The flying cursor arrows live above the enemy layer so they are always visible.
     let arrowIndex = 0;
@@ -661,6 +677,11 @@ function drawTower(
     drawTowerBody(baseSprite, turretSprite, markSprite, g, t, cx, cy, cell);
     if (isRepairing(t, clock)) {
       drawBar(g, cx, cy, cell, repairProgress(t, clock), REPAIR_COLOR);
+    } else if (isEmpDisabled(t, clock)) {
+      // EMP'd, not broken: the tower keeps its hit points (and its health bar, when damaged) and
+      // draws an amber bolt instead of the red wrench — it returns on its own, no repair needed.
+      if (t.maxHp > 0 && t.hp < t.maxHp) drawBar(g, cx, cy, cell, t.hp / t.maxHp, healthColor(t.hp / t.maxHp));
+      drawEmpTag(g, cx, cy, cell);
     } else if (isOffline(t)) {
       // Broken-but-fixable, not gone: an empty health bar, a desaturating wash, and a red tag.
       drawBar(g, cx, cy, cell, 0, healthColor(0));
@@ -951,6 +972,43 @@ function drawFlyingCursor(
   }
 }
 
+/** Draw in-flight projectiles as vector shapes: a shell is a small square, a missile a tapered dart. */
+function drawProjectiles(
+  g: Graphics,
+  state: RunState,
+  board: { x: number; y: number; cell: number },
+): void {
+  if (state.projectiles.length === 0) return;
+  const cell = board.cell;
+  for (const p of state.projectiles) {
+    const px = board.x + p.x * cell;
+    const py = board.y + p.y * cell;
+    const heading = Math.atan2(p.vy, p.vx);
+    const cos = Math.cos(heading);
+    const sin = Math.sin(heading);
+    if (p.kind === 'shell') {
+      const s = Math.max(2, Math.round(cell * 0.12));
+      g.rect(Math.round(px - s / 2), Math.round(py - s / 2), s, s).fill(0x2a2a2a).stroke({ width: 1, color: 0x0a0a0a });
+    } else {
+      const len = Math.max(4, Math.round(cell * 0.3));
+      const half = Math.max(2, Math.round(cell * 0.08));
+      const tipX = px + cos * len;
+      const tipY = py + sin * len;
+      const bx = px - cos * len * 0.4;
+      const by = py - sin * len * 0.4;
+      g.poly([
+        tipX, tipY,
+        bx + (-sin) * half, by + (cos) * half,
+        bx - (-sin) * half, by - (cos) * half,
+      ]).fill(0x2a2a2a).stroke({ width: 1, color: 0x0a0a0a });
+      // A short fading trail behind the dart.
+      const tx = px - cos * len * 0.6;
+      const ty = py - sin * len * 0.6;
+      g.moveTo(tx, ty).lineTo(px, py).stroke({ width: 1, color: 0x0a0a0a, alpha: 0.6 });
+    }
+  }
+}
+
 function drawTowerShape(
   g: Graphics,
   kind: TowerKind,
@@ -997,6 +1055,17 @@ function drawTowerShape(
     g.rect(x, y, s, s).fill({ color: 0x9a9a9a, alpha }).stroke({ width: 1, color: PAL.dark, alpha });
     const arrowLen = Math.max(4, Math.round(cell * 0.3));
     drawCursorArrow(g, Math.round(cx - arrowLen / 2), Math.round(cy - arrowLen / 2), arrowLen, alpha);
+  } else if (kind === 'aa') {
+    // Anti-air: a square plinth with two thin barrels side by side, tracking the target together.
+    const s = Math.round(cell * 0.44);
+    const bx = Math.round(cx - s / 2);
+    const by = Math.round(cy - s / 2);
+    g.rect(bx, by, s, s).fill(fill).stroke(outline);
+    const bw = Math.max(2, Math.round(cell * 0.1));
+    const bl = Math.round(cell * 0.34);
+    const gap = Math.max(1, Math.round(cell * 0.08));
+    drawBarrel(g, cx, cy, angle, Math.round(cx - gap - bw), by - bl, bw, bl, fill, outline);
+    drawBarrel(g, cx, cy, angle, Math.round(cx + gap), by - bl, bw, bl, fill, outline);
   } else {
     const r = Math.round(cell * 0.38);
     g.poly([cx, cy - r, cx + r, cy, cx, cy + r, cx - r, cy]).fill(fill).stroke(outline);
@@ -1377,7 +1446,7 @@ function drawEnemy(
   const frames = name !== null ? getArtFrames(name, bodyPx) : [];
   if (frames.length > 0) {
     const anim = name !== null ? animationOf(name) : null;
-    const moving = e.attackWallId === null && now >= e.stunUntilTick;
+    const moving = e.attackTowerId === null && now >= e.stunUntilTick;
     const frameIndex = anim !== null ? currentAnimFrame(anim, frames.length, now - e.spawnTick, e.id, moving) : 0;
     sprite.texture = frames[frameIndex];
     sprite.visible = true;
@@ -1396,6 +1465,9 @@ function drawEnemy(
   // team can replace this with a proper per-boss asset later.
   if (isBossVariant(e.kind)) drawBossCrown(fx, ex, ey, r);
 
+  // The Ram wears a visible drill nose so the tower-eating threat reads before it lands.
+  if (e.kind === 'breacher-boss') drawRamDrill(fx, ex, ey, r, e.heading);
+
   // The shield ring: a Bastion draws one ring per remaining layer; everything else draws the single
   // shield ring whose alpha tracks the fraction left.
   if (e.shieldsRemaining > 0) {
@@ -1413,6 +1485,9 @@ function drawEnemy(
 
   // The Pacer aura reads as a faint ring, drawn beneath the enemy's own markings.
   if (e.kind === 'runner-boss') drawPacerAura(fx, ex, ey, cell);
+
+  // The Wirecutter's EMP radius reads as a faint amber ring, telegraphing what it is about to knock out.
+  if (e.kind === 'saboteur-boss') drawEmpAura(fx, ex, ey, cell);
 
   // Weak-point notch: a short tick on the leading edge where a precision click pays double.
   {
@@ -1471,6 +1546,29 @@ function drawPacerAura(g: Graphics, x: number, y: number, cell: number): void {
   }
 }
 
+/** The Wirecutter's EMP radius: a faint amber ring, so its tower-knockout threat is telegraphed. */
+function drawEmpAura(g: Graphics, x: number, y: number, cell: number): void {
+  const radius = WIRECUTTER_EMP_RADIUS * cell;
+  g.circle(x, y, radius).stroke({ width: 1, color: PAL.amber, alpha: 0.3 });
+}
+
+/** The Ram's drill nose: a cone ahead of the leading edge, reading as a weapon aimed at the maze. */
+function drawRamDrill(g: Graphics, x: number, y: number, r: number, heading: number): void {
+  const cos = Math.cos(heading);
+  const sin = Math.sin(heading);
+  const tip = r * 1.9;
+  const halfW = r * 0.35;
+  const px = -sin;
+  const py = cos;
+  const bx = x + cos * r * 1.1;
+  const by = y + sin * r * 1.1;
+  g.poly([
+    x + cos * tip, y + sin * tip,
+    bx + px * halfW, by + py * halfW,
+    bx - px * halfW, by - py * halfW,
+  ]).fill({ color: PAL.dark }).stroke({ width: 1, color: PAL.highlight });
+}
+
 function healthColor(ratio: number): number {
   const red = Math.round(0xc0 * (1 - ratio));
   const green = Math.round(0xc0 * ratio);
@@ -1486,6 +1584,23 @@ function drawBar(g: Graphics, cx: number, cy: number, cell: number, ratio: numbe
   const bar = healthBarRect(cx, cy, cell);
   g.rect(bar.x, bar.y, bar.w, bar.h).fill({ color: PAL.dark });
   g.rect(bar.x + 1, bar.y + 1, Math.max(0, Math.round((bar.w - 2) * r)), 1).fill({ color });
+}
+
+/** An EMP'd tower's marking: a small amber lightning bolt in the top-left corner. */
+function drawEmpTag(g: Graphics, cx: number, cy: number, cell: number): void {
+  const half = cell / 2;
+  const x0 = Math.round(cx - half + 3);
+  const y0 = Math.round(cy - half + 3);
+  const s = Math.max(3, Math.round(cell * 0.16));
+  g.poly([
+    x0 + s * 0.55, y0,
+    x0 + s * 0.15, y0 + s * 0.55,
+    x0 + s * 0.4, y0 + s * 0.55,
+    x0 + s * 0.05, y0 + s,
+    x0 + s * 0.6, y0 + s * 0.4,
+    x0 + s * 0.35, y0 + s * 0.4,
+    x0 + s * 0.7, y0,
+  ]).fill({ color: PAL.amber });
 }
 
 /** An offline tower's marking: a desaturating wash over the body plus a small red crossed wrench. */

@@ -2,6 +2,7 @@ import { Application, Container, Graphics, Sprite } from 'pixi.js';
 import './style.css';
 import {
   buySpec,
+  cancelSelection,
   createRunState,
   cursorMaintenanceStatus,
   enemyAt,
@@ -15,9 +16,10 @@ import {
   towerAt,
   type RunState,
 } from './core/state.ts';
+import { DEFAULT_LEVEL, type Level } from './core/levels.ts';
 import { loadProfile, saveProfile, specGain, type Profile, type SpecKind } from './core/save.ts';
 import { achievementName, ACHIEVEMENTS } from './core/achievements.ts';
-import { ChromeView, computeLayout, PAL, pointInRect, type Layout } from './view/chrome.ts';
+import { ChromeView, computeLayout, PAL, pixelToWorld, pointInRect, type Layout } from './view/chrome.ts';
 import { BoardView } from './view/board.ts';
 import { HudView, hudControlAt, paletteTowerAt, type HudAction } from './view/hud.ts';
 import { paletteTooltipLines, TooltipView, towerTooltipLines } from './view/tooltip.ts';
@@ -37,7 +39,7 @@ import { AdView } from './view/ad.ts';
 import { FloatingNumbersView } from './view/numbers.ts';
 import { MenuView, type OpenMenu } from './view/menu.ts';
 import { DialogView, type DialogModel } from './view/dialog.ts';
-import { MouseController } from './input/mouse.ts';
+import { MouseController, type Screen } from './input/mouse.ts';
 import { EffectsView } from './view/effects.ts';
 import { BossBarView } from './view/bossBars.ts';
 import { sfx, type SoundName } from './audio/sfx.ts';
@@ -46,6 +48,23 @@ import { backingStorePixelSize, cssViewportSize, liveDevicePixelRatio } from './
 import { getArtTexture, onArtInvalidate, preloadArt, setArtDpr } from './view/art.ts';
 import { repairHealingCount, TOWER_STATS, type Branch, type TowerKind } from './core/towers.ts';
 import { isBossVariant } from './core/enemies.ts';
+import { encodeLevel, decodeCode } from './core/codec.ts';
+import {
+  clearEditor,
+  createEditor,
+  editorLevel,
+  editorPlayable,
+  editorToggleAt,
+  eraseEditor,
+  paintEditor,
+  redoEditor,
+  selectEditorTool,
+  setEditorToggle,
+  undoEditor,
+  type EditorModel,
+} from './core/editor.ts';
+import { LoadDialogView, menuButtonAt, MenuScreenView, loadDialogButtonAt, computeLoadDialog, type MenuButtonId } from './view/menuScreen.ts';
+import { EditorView, editorPaletteAt, editorToggleNudgeAt, editorToolbarAt, type EditorAction, type ToggleNudge } from './view/editor.ts';
 import pkg from '../package.json';
 
 const app = new Application();
@@ -127,6 +146,9 @@ const numbers = new FloatingNumbersView();
 const menuView = new MenuView();
 const dialogView = new DialogView();
 const tooltip = new TooltipView();
+const menuScreenView = new MenuScreenView();
+const loadDialogView = new LoadDialogView();
+const editorView = new EditorView();
 
 // Art loads without blocking the first frame; when it (or a DPR change) invalidates, the board drops
 // its cached procedural art and re-reads the texture lookup on the next frame.
@@ -138,7 +160,7 @@ void preloadArt().then(() => drawCursorArrow());
 
 const root = new Container();
 app.stage.addChild(root);
-root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, ad.root, menuView.root, dialogView.root, tooltip.root);
+root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, ad.root, menuView.root, dialogView.root, tooltip.root, menuScreenView.root, loadDialogView.root, editorView.root);
 
 sfx.setEnabled(profile.soundOn);
 sfx.setVolume(profile.volume);
@@ -148,6 +170,17 @@ window.addEventListener('keydown', () => sfx.ensure());
 
 let menu: OpenMenu | null = null;
 let dialog: DialogModel | null = null;
+
+// --- Screens ---------------------------------------------------------------------------------
+// The app is one of three screens: the main menu, a live run, or the map editor. `runOrigin` says
+// where a run came from, so Esc (or File > Exit) returns a Test run to the editor — drawing intact —
+// and any other run to the menu.
+let screen: Screen = profile.lastChoice === 'editor' ? 'editor' : profile.lastChoice === 'load' ? 'menu' : 'run';
+let runOrigin: 'play' | 'load' | 'editor' = 'play';
+const editor: EditorModel = createEditor();
+let loadText = '';
+let loadStatus = '';
+let loadOpen = profile.lastChoice === 'load';
 
 function syncViewport(): void {
   state.viewport = {
@@ -309,6 +342,7 @@ function menuAction(id: string): void {
       };
       break;
     case 'exit':
+      exitRun();
       break;
     case 'achievements':
       dialog = {
@@ -365,11 +399,98 @@ function closeDialog(): void {
   dialog = null;
 }
 
+// --- Screen transitions -----------------------------------------------------------------------
+
+function startRun(level: Level, origin: 'play' | 'load' | 'editor'): void {
+  state = createRunState(profile, level);
+  syncViewport();
+  runOrigin = origin;
+  screen = 'run';
+  menu = null;
+  dialog = null;
+  loadOpen = false;
+  loadInput.blur();
+}
+
+function startPlay(): void {
+  profile.lastChoice = 'play';
+  saveProfile(profile);
+  startRun(DEFAULT_LEVEL, 'play');
+}
+
+function openEditorScreen(): void {
+  profile.lastChoice = 'editor';
+  saveProfile(profile);
+  loadOpen = false;
+  loadInput.blur();
+  screen = 'editor';
+}
+
+function openLoadDialog(): void {
+  profile.lastChoice = 'load';
+  saveProfile(profile);
+  loadText = '';
+  loadStatus = '';
+  loadOpen = true;
+  screen = 'menu';
+  loadInput.value = '';
+  loadInput.focus();
+}
+
+function attemptLoad(): void {
+  const result = decodeCode(loadText.trim());
+  if (!result.ok) {
+    loadStatus = result.reason;
+    return;
+  }
+  loadInput.blur();
+  startRun(result.level, 'load');
+}
+
+function testMap(): void {
+  if (!editorPlayable(editor)) return;
+  startRun(editorLevel(editor), 'editor');
+}
+
+function copyCode(): void {
+  if (!editorPlayable(editor)) return;
+  const code = encodeLevel(editorLevel(editor));
+  try {
+    void navigator.clipboard?.writeText(code);
+  } catch {
+    // clipboard may be unavailable; the editor status still confirms the code was produced.
+  }
+  showEditorNotice('Code copied');
+}
+
+/** Esc from a run: a Test run returns to the editor (drawing intact), anything else to the menu. */
+function exitRun(): void {
+  if (runOrigin === 'editor') {
+    screen = 'editor';
+  } else {
+    screen = 'menu';
+  }
+  menu = null;
+  dialog = null;
+  cancelSelection(state);
+}
+
+let editorNotice = '';
+let editorNoticeTimer: ReturnType<typeof setTimeout> | null = null;
+function showEditorNotice(msg: string, ms = 2500): void {
+  editorNotice = msg;
+  if (editorNoticeTimer !== null) clearTimeout(editorNoticeTimer);
+  editorNoticeTimer = setTimeout(() => {
+    editorNotice = '';
+  }, ms);
+}
+
 const mouse = new MouseController(app, {
   layout: () => layout,
   state: () => state,
   menu: () => menu,
   dialog: () => dialog,
+  screen: () => screen,
   restart: () => {
     state = createRunState(profile);
     syncViewport();
@@ -383,6 +504,7 @@ const mouse = new MouseController(app, {
   menuAction,
   dialogAction,
   closeDialog,
+  exitRun,
   buySpec: (kind: SpecKind) => {
     if (buySpec(state, kind)) {
       syncProfileMeta();
@@ -397,6 +519,200 @@ const mouse = new MouseController(app, {
   notice: (message) => hud.showNotice(message),
 });
 
+// --- Menu and editor input --------------------------------------------------------------------
+
+let menuHover: MenuButtonId | null = null;
+let loadHover: 'ok' | 'cancel' | null = null;
+let editorActionHover: EditorAction | null = null;
+let painting = false;
+
+function canvasPoint(e: PointerEvent): { x: number; y: number } {
+  const rect = app.canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+
+function boardHit(x: number, y: number): { col: number; row: number; onBoard: boolean } {
+  const onBoard =
+    x >= layout.board.x && x < layout.board.x + layout.boardW && y >= layout.board.y && y < layout.board.y + layout.boardH;
+  const w = pixelToWorld(layout, x, y);
+  return { col: Math.floor(w.x), row: Math.floor(w.y), onBoard };
+}
+
+function handleEditorAction(action: EditorAction): void {
+  switch (action) {
+    case 'undo':
+      undoEditor(editor);
+      break;
+    case 'redo':
+      redoEditor(editor);
+      break;
+    case 'clear':
+      clearEditor(editor);
+      break;
+    case 'test':
+      testMap();
+      break;
+    case 'copy':
+      copyCode();
+      break;
+  }
+}
+
+function nudgeEditorToggle(nudge: ToggleNudge): void {
+  const s = editor.selectedShutter;
+  if (!s) return;
+  const t = editorToggleAt(editor, s.col, s.row);
+  if (!t) return;
+  const step = 60;
+  setEditorToggle(editor, s.col, s.row, nudge.field, t[nudge.field] + nudge.dir * step);
+}
+
+// The load-code text field: an invisible HTML input overlaid on the Pixi-drawn field, so paste and
+// keyboard editing work natively while the look stays in the canvas. Pixi draws the text.
+const loadInput = document.createElement('input');
+loadInput.type = 'text';
+loadInput.autocomplete = 'off';
+loadInput.spellcheck = false;
+loadInput.style.position = 'fixed';
+loadInput.style.border = 'none';
+loadInput.style.background = 'transparent';
+loadInput.style.color = 'transparent';
+loadInput.style.caretColor = '#000000';
+loadInput.style.outline = 'none';
+loadInput.style.padding = '0 4px';
+loadInput.style.boxSizing = 'border-box';
+loadInput.style.font = '13px Tahoma, Verdana, Geneva, sans-serif';
+loadInput.style.display = 'none';
+loadInput.style.zIndex = '10';
+document.body.appendChild(loadInput);
+loadInput.addEventListener('input', () => {
+  loadText = loadInput.value;
+  loadStatus = '';
+});
+loadInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') attemptLoad();
+  else if (e.key === 'Escape') {
+    loadOpen = false;
+    loadText = '';
+    loadStatus = '';
+    loadInput.blur();
+  }
+});
+
+app.canvas.addEventListener('pointermove', (e) => {
+  const { x, y } = canvasPoint(e);
+  if (screen === 'menu') {
+    menuHover = loadOpen ? null : menuButtonAt(layout, x, y);
+    loadHover = loadOpen ? loadDialogButtonAt(layout, x, y) : null;
+    return;
+  }
+  if (screen === 'editor') {
+    editorActionHover = editorToolbarAt(layout, editor, x, y);
+    const hit = boardHit(x, y);
+    if (painting && hit.onBoard) {
+      const refusal = paintEditor(editor, hit.col, hit.row);
+      if (refusal) showEditorNotice(refusal);
+    }
+    return;
+  }
+});
+
+app.canvas.addEventListener('pointerdown', (e) => {
+  const { x, y } = canvasPoint(e);
+  if (screen === 'menu') {
+    if (loadOpen) {
+      const btn = loadDialogButtonAt(layout, x, y);
+      if (btn === 'ok') attemptLoad();
+      else if (btn === 'cancel') {
+        loadOpen = false;
+        loadText = '';
+        loadStatus = '';
+        loadInput.blur();
+      }
+      return;
+    }
+    const btn = menuButtonAt(layout, x, y);
+    if (btn === 'play') startPlay();
+    else if (btn === 'editor') openEditorScreen();
+    else if (btn === 'load') openLoadDialog();
+    return;
+  }
+  if (screen === 'editor') {
+    if (e.button === 2) {
+      e.preventDefault();
+      const hit = boardHit(x, y);
+      if (hit.onBoard) eraseEditor(editor, hit.col, hit.row);
+      return;
+    }
+    if (e.button !== 0) return;
+    const tool = editorPaletteAt(layout, editor, x, y);
+    if (tool) {
+      selectEditorTool(editor, tool);
+      return;
+    }
+    const action = editorToolbarAt(layout, editor, x, y);
+    if (action) {
+      handleEditorAction(action);
+      return;
+    }
+    const nudge = editorToggleNudgeAt(layout, editor, x, y);
+    if (nudge) {
+      nudgeEditorToggle(nudge);
+      return;
+    }
+    const hit = boardHit(x, y);
+    if (hit.onBoard) {
+      painting = true;
+      const refusal = paintEditor(editor, hit.col, hit.row);
+      if (refusal) showEditorNotice(refusal);
+    }
+    return;
+  }
+});
+
+app.canvas.addEventListener('pointerup', (e) => {
+  if (e.button === 0) painting = false;
+});
+
+function typingTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+  if (typingTarget(e.target)) return;
+  if (screen === 'menu') {
+    if (loadOpen) {
+      if (e.key === 'Escape') {
+        loadOpen = false;
+        loadText = '';
+        loadStatus = '';
+      }
+      return;
+    }
+    if (e.key === 'Enter' || e.key === 'p' || e.key === 'P') startPlay();
+    else if (e.key === 'e' || e.key === 'E') openEditorScreen();
+    else if (e.key === 'l' || e.key === 'L') openLoadDialog();
+    return;
+  }
+  if (screen === 'editor') {
+    if (e.key === 'Escape') {
+      screen = 'menu';
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+      if (e.shiftKey) redoEditor(editor);
+      else undoEditor(editor);
+      return;
+    }
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+      redoEditor(editor);
+      return;
+    }
+    return;
+  }
+});
+
 function towerSound(kind: TowerKind): SoundName {
   switch (kind) {
     case 'gun':
@@ -409,6 +725,8 @@ function towerSound(kind: TowerKind): SoundName {
       return 'laser';
     case 'frost':
       return 'frost';
+    case 'aa':
+      return 'cannon';
     case 'beacon':
       return 'cannon';
     case 'repair':
@@ -509,29 +827,68 @@ function drainEvents(): void {
 }
 
 app.ticker.add((ticker) => {
-  const alpha = step(state, ticker.deltaMS);
-  drainEvents();
-  syncAchievements();
-  syncBestWave();
-  chrome.draw(layout, mouse.hover.menuItem);
-  menuView.draw(layout.menu, menu, mouse.hover.menuHover);
-  board.draw(
-    state,
-    layout,
-    alpha,
-    { col: mouse.hover.col, row: mouse.hover.row, onBoard: mouse.hover.onBoard, x: mouse.hover.x, y: mouse.hover.y },
-    (id, tick) => effects.knockbackOffset(id, tick),
-  );
-  effects.draw(state, layout);
-  numbers.draw(state, layout);
-  bossBars.draw(state, layout, profile.shakeOn);
-  hud.draw(state, layout, mouse.hover.hud);
-  ad.draw(state);
-  dialogView.draw(dialog, layout);
-  updateTooltip();
+  const running = screen === 'run';
+  if (running) {
+    const alpha = step(state, ticker.deltaMS);
+    drainEvents();
+    syncAchievements();
+    syncBestWave();
+    board.draw(
+      state,
+      layout,
+      alpha,
+      { col: mouse.hover.col, row: mouse.hover.row, onBoard: mouse.hover.onBoard, x: mouse.hover.x, y: mouse.hover.y },
+      (id, tick) => effects.knockbackOffset(id, tick),
+    );
+    effects.draw(state, layout);
+    numbers.draw(state, layout);
+    bossBars.draw(state, layout, profile.shakeOn);
+    hud.draw(state, layout, mouse.hover.hud);
+    ad.draw(state);
+    dialogView.draw(dialog, layout);
+    updateTooltip();
+    const shakeOffset = shake.offset(state.tick);
+    root.position.set(shakeOffset.x, shakeOffset.y);
+  } else {
+    root.position.set(0, 0);
+  }
+
+  chrome.draw(layout, running ? mouse.hover.menuItem : -1);
+  menuView.draw(layout.menu, running ? menu : null, running ? mouse.hover.menuHover : null);
+
+  // Per-screen content; run-only views are hidden on the menu and in the editor.
+  board.root.visible = running;
+  effects.root.visible = running;
+  numbers.root.visible = running;
+  bossBars.root.visible = running;
+  hud.root.visible = running;
+  ad.root.visible = running;
+  menuView.root.visible = running;
+  dialogView.root.visible = running;
+  tooltip.root.visible = running;
+  menuScreenView.root.visible = screen === 'menu';
+  loadDialogView.root.visible = screen === 'menu' && loadOpen;
+  editorView.root.visible = screen === 'editor';
+
+  if (screen === 'menu') {
+    menuScreenView.draw(layout, menuHover);
+    if (loadOpen) {
+      loadDialogView.draw(layout, loadText, loadStatus, loadHover);
+      const d = computeLoadDialog(layout);
+      loadInput.style.display = 'block';
+      loadInput.style.left = `${d.field.x}px`;
+      loadInput.style.top = `${d.field.y}px`;
+      loadInput.style.width = `${d.field.w}px`;
+      loadInput.style.height = `${d.field.h}px`;
+    } else {
+      loadInput.style.display = 'none';
+    }
+  } else if (screen === 'editor') {
+    editorView.draw(layout, editor, { tool: null, action: editorActionHover }, editorNotice);
+    loadInput.style.display = 'none';
+  }
+
   cursor.position.set(mouse.hover.x, mouse.hover.y);
-  const shakeOffset = shake.offset(state.tick);
-  root.position.set(shakeOffset.x, shakeOffset.y);
 });
 
 /** The tooltip lines for a HUD spend control, computed from the same functions the click applies. */

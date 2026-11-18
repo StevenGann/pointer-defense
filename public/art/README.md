@@ -60,6 +60,8 @@ The **Pop-up** enemy is a Windows window and stays runtime (it is chrome, not ar
 | `cannon-turret.svg` | the cannon's thick barrel (rotates, 90°/s) |
 | `laser-base.svg` | long bar plinth |
 | `laser-turret.svg` | the laser's beam barrel (rotates, 150°/s) |
+| `aa-base.svg` | steel-blue square plinth |
+| `aa-turret.svg` | the AA's twin barrels (rotates, 540°/s) |
 | `taser-base.svg` | diamond plinth |
 | `taser-turret.svg` | the taser's coil (a static turret; the tower never turns) |
 | `frost-base.svg` | hexagon plinth |

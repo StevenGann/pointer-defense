@@ -206,10 +206,10 @@ S.........T.........X
 
 ## 6. Towers
 
-Nine towers. Each has a role and a tier ladder; eight carry **two exclusive branches** at tier 3, and the
+Ten towers. Each has a role and a tier ladder; nine carry **two exclusive branches** at tier 3, and the
 Repair tower keeps a plain upgrade ladder for now.
 
-### 6.1 The nine
+### 6.1 The ten
 
 | Tower | Unlocks | Cost | Range | Damage | Interval | Turn rate | Targeting | Role | Wants |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -218,6 +218,7 @@ Repair tower keeps a plain upgrade ladder for now.
 | **Taser** | 14 | 80 | 1.6 | 1, ignores armour | 0.12 s | instant | closest (fixed) | armour, speed, close work | the inside of a hairpin |
 | **Frost** | 6 | 70 | 2.2 | 1, slows to 30 % speed for 3.0 s | 0.60 s | instant | closest (fixed) | utility | in front of the damage |
 | **Laser** | 11 | 70 | 3.4 | 11, pierces 8 | 0.80 s | 150°/s | first (fixed) | straight lines | corridors you deliberately left open |
+| **AA** | 16 | 40 | 3.4 | 2.6, flyers only, 2× vs flyers | 0.55 s | 540°/s | player's choice | dedicated anti-air | flyer-heavy waves |
 | **Beacon** | 8 | 90 | 3.5 | none | — | — (still) | — | +60 % damage to towers in radius | a dense cluster worth buffing |
 | **Repair** | 18 | 220 | 4.5 | none (heals 2 HP/s) | — | — (still) | — | heals damaged towers in radius | a cluster of towers worth keeping alive |
 | **Wall** | 1 | 8 | — | none | — | — (still) | — | blocks the route, has hit points | a long maze made cheap |
@@ -261,6 +262,7 @@ a tower at half health stays at half of the new maximum.
 | Cannon | 140 |
 | Taser | 120 |
 | Laser | 120 |
+| AA | 100 |
 | Frost | 90 |
 | Beacon | 80 |
 | Repair | 90 |
@@ -307,6 +309,7 @@ the tier-3 choice is just another Upgrade button, not a branch pair.
 | Taser | **Arc** — chains to 3 targets | **Overload** — +150 % damage to shielded enemies |
 | Frost | **Deep Freeze** — 60 % slow for 2.5 s | **Shard** — no slow; damage ×4, splash 0.6 |
 | Laser | **Focus** — pierce 8, +50 % damage | **Prism** — splits into 3 short beams at −40 % damage |
+| AA | **Flak** — shells burst on the target's predicted position, splash 1.2 tiles, full to flyers and half to ground; 4.0 damage, 0.9 s | **Missile** — 4 homing missiles per salvo, each worth a quarter of a hit |
 | Beacon | **Command** — +30 % damage aura, no range bonus | **Relay** — extends pointer reach, +50 % pointer damage in radius |
 | Wall | **Bulwark** — hit points doubled again | **Mesh** — hit points doubled and it blocks flyers |
 | Cursor | **Overclock** — rate ×1.8, per-click damage ×0.6 | **Wide Search** — radius ×1.35, rate ×0.7 |
@@ -575,6 +578,47 @@ while the Bastion stood a tower-only board could not damage anything inside the 
 contradicted idling being viable. When it returns it must be capped — a small radius plus a hard cap on
 the number of affected enemies, or a short-lived shield that decays — so it cannot neutralise a
 tower-only board again.
+
+### 7.2 Boss variants (pass 2)
+
+Pass 2 adds the next four type bosses, each keeping its base type's identity and adding exactly one
+gimmick. They are separate kinds (naming them in waves, harness and tests), count as their base type
+for tower rules (a Flak cannon reads the Carrier as a flyer; walls block the Ram and the Sergeant but
+not the Carrier), pay 6× their base kill value, and pop like a boss on death.
+
+| Kind | Name | Scale | HP | Speed | Integrity | Gimmick |
+|---|---|---|---|---|---|---|
+| `flyer-boss` | **Carrier** | 2.0 | 12× | 0.35 | 5 | **Brood**: every 4 s it releases three flyers at its position that scatter outward and then home on the exit; on death it releases six |
+| `armoured-boss` | **Dreadnought** | 1.7 | 9× | 0.40 | 4 | **Plating**: flat 6 damage reduction per hit on top of its 8 armour, and slow effects on it are halved |
+| `saboteur-boss` | **Wirecutter** | 1.5 | 5× | 0.60 | 4 | **EMP**: every non-wall tower within 2.5 tiles is knocked offline for 3 s as it passes, then returns on its own — the tower keeps its hit points, so it is not the repair flow |
+| `breacher-boss` | **Ram** | 1.8 | 8× | 0.40 | 5 | **Breaches towers**: it chews any tower in its path — 40 wall DPS, 40 tower DPS — driving a non-wall tower offline at 0 HP rather than destroying it (repairable), and mounts an 8-damage turret at 3 tiles. It prefers a wall it is touching over a tower, and a tower over walking, so a maze buys time one tile at a time |
+
+The radius is still the base type's radius × scale. Each gimmick is a first-cut number, not a tuned one:
+
+- **Brood** flies for half a second outward, then homes; the released flyers are ordinary flyers of the
+  Carrier's wave, so they leak for 1 each if the board does not catch them.
+- **Plating** is additive with armour (a tower hit loses armour + plating before the 1-damage floor),
+  and both are ignored by armour-ignoring towers. "Slow halved" is the slow *strength* halved — Frost's
+  0.3× becomes 0.65× — applied to tower slows and the Time Zone global slow alike.
+- **EMP** is a refresh, not a stack: while the Wirecutter stays in range the timer keeps pointing at
+  now + 3 s, so the tower returns 3 s after the boss moves on. It never damages, and it never touches a
+  wall (a wall has no firing/aura state to knock out). The EMP'd tower is drawn with an amber bolt, not
+  the red offline wrench.
+- The **Ram** paths over a field that treats towers as walkable, so it does not route around the
+  defence — it chews straight through it. It prefers a wall over a non-wall tower, and either over
+  walking on, so a wall maze is eaten one tile at a time; the counter is a spread board with a Repair
+  tower (or Maintenance cursor) behind the line to bring the offline towers back.
+
+The pass-2 schedule extends pass 1's: unlocks at **12 (Sergeant), 18 (Pacer), 24 (Bastion), 30
+(Carrier), 36 (Dreadnought), 42 (Wirecutter) and 48 (Ram)**, then one boss rides every eighth wave
+after 48 (56 + 8k), chosen from the unlocked set by a seeded roll that favours the newest type. Marker
+bosses at 10/25/50/75/100 are never replaced; multi-boss waves are pass 3.
+
+The **Ram is the scare**: every other boss asks the player to shoot it better; the Ram asks whether the
+line can survive being eaten. It is telegraphed in the draw (a drill nose) and named in the NEXT WAVE
+preview before it spawns. Balance is not a gate here — the first-cut numbers above drop the standard
+run below 6 integrity on every map, recorded in the commit message rather than tuned (see pass-1 for
+the tuning precedent).
 
 ---
 
@@ -1114,7 +1158,8 @@ their hp and shield), so there is no fixed form to hand over.
 | Bundler | Vite 8, `base: /pointer-defense/` |
 | Hosting | GitHub Pages, `.github/workflows/deploy.yml` on push to `main` |
 | Simulation | fixed 60 Hz accumulator; rendering interpolates; the sim never sees a frame delta |
-| Determinism | no `Math.random` in the sim: a seeded PRNG in state, seeded per run |
+| Determinism | no `Math.random` in the sim: a seeded PRNG in state, seeded per run. The AA's missile launch directions are drawn from the same seeded stream, keyed by `(tick, tower id, salvo index)`, so they never touch the run's crit stream |
+| Projectiles | the AA's Flak shells and missiles are real sim entities, not hitscan: `Projectile { id, kind, x, y, vx, vy, targetId, damage, lifetime }`, ticked with the fixed 60 Hz timestep and removed on hit or expiry |
 | Persistence | one `localStorage` key, `pointer-defense/save`, versioned, schema-checked on load |
 | Structure | `src/core` pure and testable; `src/view` draws only; `src/input` translates |
 | Tests | `npm run smoke`: core scenarios, determinism at 23/60/144 Hz, and a balance harness |
@@ -1170,6 +1215,105 @@ human would simply repair out of.
 | Leaderboard? | no server; a local best-run table only |
 | Daily challenge? | after 0.6: one seeded run per day, same board and waves for everyone |
 | Selling during a wave? | yes, 70 %, and it re-paths immediately |
+
+---
+
+## 20. Main menu, the map editor, and the `PD2.` share code
+
+The game is serverless, so the whole exchange between Sydney (authoring maps) and the shipped game
+must fit in a string a person can paste into a chat message. Three pieces, in order: a menu that makes
+the editor reachable, an editor that produces a valid `Level`, and a codec that turns that level into a
+short share code and back.
+
+### 20.1 Main menu
+
+A screen shown on load, before a run starts, in the same Windows 95 chrome as the rest of the game.
+Three raised buttons, with keyboard equivalents:
+
+| Button | Key | What it does |
+|---|---|---|
+| **Play** | `Enter` or `P` | the existing game, exactly as it is today — a fresh run, no behaviour change |
+| **Editor** | `E` | the map editor (§20.2) |
+| **Load code** | `L` | a text field: paste a `PD2.` code, validate it, play it immediately |
+
+The load-code dialog has its own status line. Errors appear there in plain words — *"that code is from
+a newer version"*, *"no route from start to exit"*, *"that code is incomplete"* — never a stack trace
+and never silently nothing. A bad code starts nothing.
+
+The profile remembers the last choice, so a returning player lands where they left off; a fresh
+profile defaults to **Play** (a run starts at once, unchanged from before this feature). `Esc` from a
+run returns to the menu; a run started by the editor's **Test** button returns to the editor instead,
+drawing intact.
+
+### 20.2 The editor
+
+The same 20 × 12 board and the same cell size as play, so what you draw is what you play. A palette on
+the left, the board on the right, a toolbar underneath, and a status line that names the first
+validation problem as you draw — before you press anything.
+
+Palette (single-click select, drag to paint, right-click erases):
+
+| Tool | Paints |
+|---|---|
+| Floor | buildable floor |
+| Wall | terrain wall (`#`), not buildable, not walkable |
+| Shutter | a toggle wall; click it again to edit `periodTicks` / `openTicks` / `phaseTicks` in small numeric steppers |
+| Start | exactly one; painting a second moves it |
+| Exit | exactly one; same rule |
+| Eraser | floor |
+
+Toolbar: **Undo** / **Redo** (at least 50 steps), **Clear**, **Test** (starts a run on the drawing,
+with a way back that keeps it), **Copy code** (writes the share code to the clipboard).
+
+Constraints are enforced while you draw, not after: exactly one start, exactly one exit, at most
+`MAX_TOGGLES` shutters, and **a route must exist from start to exit through floor and open shutter
+tiles**. The editor reuses `validateLevel` and the pathfield code — it does not carry a second answer
+to "is this map legal". If `validateLevel` cannot express a case, it is extended there so the game and
+the editor always agree.
+
+### 20.3 The `PD2.` codec
+
+A share code is `PD2.` followed by the base64url of a byte string, no padding. Every multi-byte field
+is little-endian. This table is the contract the artist and Sydney use, and it matches the code
+exactly:
+
+| Byte(s) | Field | Type |
+|---|---|---|
+| 0 | version | `uint8`, always `2` |
+| 1 | `cols` | `uint8` |
+| 2 | `rows` | `uint8` |
+| 3 … 3 + ⌈cols·rows/4⌉ − 1 | bitfield | 2 bits per tile, 4 tiles per byte, row-major, low 2 bits first; `0` floor, `1` wall, `2` shutter, `3` reserved |
+| next 2 | start `col` | `uint16` |
+| next 2 | start `row` | `uint16` |
+| next 2 | exit `col` | `uint16` |
+| next 2 | exit `row` | `uint16` |
+| next 1 | shutter count | `uint8` |
+| next 10 × count | per shutter: `col`, `row`, `periodTicks`, `openTicks`, `phaseTicks` | each `uint16` |
+| next 1 | name length (bytes) | `uint8` |
+| next length | name | UTF-8, printable characters, at most 24 bytes |
+| last 1 | checksum | `uint8`, `sum of all preceding bytes mod 251` |
+
+Design rules:
+
+- **version** — byte 0 is `2`. A `PD1.` code or a version above `2` fails with a plain message, never
+  a parse error.
+- **dimensions** — `cols`/`rows` are carried so the format is not welded to 20 × 12; the current game
+  only accepts the 20 × 12 board and rejects other sizes as a newer version.
+- **bitfield** — one tile per 2 bits, row-major, 4 tiles per byte, padded at the end. `3` is reserved
+  and rejected as a newer version.
+- **start / exit** — `col, row` pairs, exactly one each.
+- **shutter table** — a count, then per shutter `col, row, periodTicks, openTicks, phaseTicks`, each
+  `uint16`. Durations are whole ticks, matching `LevelToggle`.
+- **name** — length-prefixed UTF-8, capped at 24 bytes and sanitised to printable characters. A name
+  is a convenience, never a reason to reject a map.
+- **checksum** — one byte, the sum of all preceding bytes mod 251, so a truncated paste is rejected
+  with *"that code is incomplete"* rather than producing a corrupted map.
+
+Round-trip is exact: `decode(encode(level))` reproduces every shipped map and a generated fixture, and
+an empty 20 × 12 map codes to under 110 characters. `LEVELS` in `src/core/levels.ts` keeps its four
+maps untouched; the loader accepts a custom `Level` produced by the codec with the rest of the sim
+unchanged. A smoke test decodes a fixed, hand-written code string and asserts the exact level it
+produces, so the format has a frozen example.
 
 ---
 

@@ -77,6 +77,14 @@ export function bossGimmick(kind: EnemyKind): string | null {
       return 'anything near it keeps pace';
     case 'shielded-boss':
       return 'three layers of shielding';
+    case 'flyer-boss':
+      return 'hatches flyers as it flies';
+    case 'armoured-boss':
+      return 'plated and slow to chill';
+    case 'saboteur-boss':
+      return 'shorts out towers as it passes';
+    case 'breacher-boss':
+      return 'eats through your towers';
     default:
       return null;
   }

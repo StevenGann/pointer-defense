@@ -28,7 +28,8 @@ into every future run.
 | Mouse | Click to place towers and shoot enemies; right-click cancels a selection |
 | Auto checkbox | Start the next wave 1.5 s after the board clears (holds while a tower repairs) |
 | `1`–`9` | Select the nine tower kinds, in palette order (also works during a wave) |
-| `Esc` | Clear the current selection and close any open menu |
+| `Esc` | Clear the current selection and close any open menu; from a run it returns to the main menu |
+| `Enter` / `P`, `E`, `L` | On the main menu: Play, open the Editor, or Load code |
 | `U` | Upgrade the selected tower |
 | `X` | Sell the selected tower |
 | `Enter` | Start the next wave (in the build phase) |

@@ -93,6 +93,11 @@ const cursorMode = hasFlag('--cursor');
 // tower once a wave is deep enough to have damaged towers to heal. It proves the harness can place
 // and pay for the new kind; the default plan never buys one, so the standard numbers stay put.
 const repairTowerMode = hasFlag('--repair-tower');
+// --aa: the anti-air scenario — the standard build against the same build with coverage Guns swapped
+// for AA once the kind unlocks. Reports waves cleared, integrity and flyer leaks per leg.
+const aaScenario = hasFlag('--aa');
+// Mutable switch flipped between the two --aa legs (gun-only, then AA-swapped).
+let aaSwap = false;
 // --turret-damage <n>: override the breacher turret's per-shot damage for a balance sweep (0 as the
 // control, then the candidate rates). Absent, the harness plays the committed constant.
 const turretDamageRaw = flag('--turret-damage', null);
@@ -438,6 +443,12 @@ function repairTowerTarget(wave) {
   // --repair-tower scenario. The default plan buys none.
   return wave >= 70 ? 2 : wave >= 40 ? 1 : 0;
 }
+function aaTarget(wave) {
+  // AA is a specialist slot, not a full replacement: a handful of coverage Guns turn into AA from
+  // its unlock wave (16), capped so a ground-only wave still has the Guns to answer it. Only the
+  // --aa scenario consults this; the default plan buys none.
+  return wave >= 16 ? Math.min(4, 1 + Math.floor((wave - 16) / 20)) : 0;
+}
 
 /** Specialist slots still needed to reach wave 100's roster, so extra Guns never crowd them out. */
 function futureSpecialistSlots(counts) {
@@ -446,7 +457,8 @@ function futureSpecialistSlots(counts) {
     Math.max(0, beaconTarget(100) - counts.beacon) +
     Math.max(0, laserTarget(100) - counts.laser) +
     Math.max(0, taserTarget(100) - counts.taser) +
-    Math.max(0, cannonTarget(100) - counts.cannon)
+    Math.max(0, cannonTarget(100) - counts.cannon) +
+    (aaSwap ? Math.max(0, aaTarget(100) - counts.aa) : 0)
   );
 }
 
@@ -459,6 +471,7 @@ function decideKind(s, counts, wave) {
   if (counts.laser < laserTarget(wave) && isTowerUnlocked('laser', s.wave)) return 'laser';
   if (counts.taser < taserTarget(wave) && isTowerUnlocked('taser', s.wave)) return 'taser';
   if (counts.cannon < cannonTarget(wave) && isTowerUnlocked('cannon', s.wave)) return 'cannon';
+  if (aaSwap && counts.aa < aaTarget(wave) && isTowerUnlocked('aa', s.wave)) return 'aa';
   return 'gun';
 }
 
@@ -792,7 +805,7 @@ function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = 
   const s = createStateOn(profile, levelId);
   const leakList = [];
   const popups = newPopupTracker();
-  const counts = { gun: 0, cannon: 0, taser: 0, frost: 0, laser: 0, beacon: 0 };
+  const counts = { gun: 0, cannon: 0, taser: 0, frost: 0, laser: 0, aa: 0, beacon: 0 };
   let wallIdx = 0;
   if (!quiet && !silent) console.log(`--- ${label} ---`);
   const toWave = endless ? Number.MAX_SAFE_INTEGER : to;
@@ -879,7 +892,7 @@ function runSession(useSupport, label, levelId, maxTowers = MAX_TOWERS, coverage
 function playRunCall(profile, label, allAtOnce) {
   resetClickRng();
   const s = createRunState(profile);
-  const counts = { gun: 0, cannon: 0, taser: 0, frost: 0, laser: 0, beacon: 0 };
+  const counts = { gun: 0, cannon: 0, taser: 0, frost: 0, laser: 0, aa: 0, beacon: 0 };
   let wallIdx = 0;
   const leakList = [];
   const popups = newPopupTracker();
@@ -975,7 +988,7 @@ function waveSpan(wave) {
 function playRunSweep(profile, label, timing) {
   resetClickRng();
   const s = createRunState(profile);
-  const counts = { gun: 0, cannon: 0, taser: 0, frost: 0, laser: 0, beacon: 0 };
+  const counts = { gun: 0, cannon: 0, taser: 0, frost: 0, laser: 0, aa: 0, beacon: 0 };
   let wallIdx = 0;
   let bonusPaid = 0;
   let spanWave = -1;
@@ -1304,6 +1317,43 @@ if (endlessMode) {
   silent = false;
   process.exit(allInBand ? 0 : 1);
 }
+
+if (aaScenario) {
+  // The anti-air scenario: the standard build against the same build with coverage Guns swapped for
+  // AA from wave 16. Both legs share the maze, the specialist roster and the click rate, so the only
+  // difference is which tower fills the coverage slots — the integrity gap is the AA's own worth, and
+  // the flyer-leak column shows whether it earns its slot against the 15-25% flyer share.
+  silent = true;
+  console.log('\n=== anti-air ===');
+  console.log('  map          mode      waves cleared   integrity   flyer leaks   salvage');
+  let aaReached = true;
+  for (const level of activeLevels) {
+    aaSwap = false;
+    const gun = runSession(support, 'gun-only', level.id, MAP_MAX_TOWERS, true);
+    aaSwap = true;
+    const aa = runSession(support, 'aa-swap', level.id, MAP_MAX_TOWERS, true);
+    aaSwap = false;
+    for (const [mode, run] of [
+      ['gun-only', gun],
+      ['aa-swap', aa],
+    ]) {
+      const f = run.final;
+      const flyerLeaks = [...f.state.flyerLeaksByWave.values()].reduce((a, b) => a + b, 0);
+      console.log(
+        `  ${level.id.padEnd(11)}  ${mode.padEnd(8)}  ${String(f.clearedWaves).padStart(13)}  ` +
+          `${String(f.integrity).padStart(9)}  ${String(flyerLeaks).padStart(11)}  ${String(f.earned).padStart(7)}`,
+      );
+    }
+    const aaCount = aa.final.state.towers.filter((t) => t.kind === 'aa').length;
+    console.log(
+      `  ${level.id.padEnd(11)}  aa count   ${aaCount} AA towers swapped in`,
+    );
+    if (!aa.final.reached) aaReached = false;
+  }
+  silent = false;
+  process.exit(aaReached ? 0 : 1);
+}
+
 
 if (wallMode) {
   // The wall-heavy scenario: the standard build, but the maze is walls (kept upgraded) rather than

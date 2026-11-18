@@ -147,43 +147,61 @@ function bossGroups(wave: number): readonly SpawnGroup[] {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type bosses (pass 1: Sergeant, Pacer, Bastion)
+// Type bosses (pass 1: Sergeant, Pacer, Bastion · pass 2: Carrier, Dreadnought, Wirecutter, Ram)
+
+/** The type-boss kinds in unlock order, oldest first. Adware (pass 3) is not present yet. */
+const TYPE_BOSS_KINDS: readonly EnemyKind[] = [
+  'grunt-boss',
+  'runner-boss',
+  'shielded-boss',
+  'flyer-boss',
+  'armoured-boss',
+  'saboteur-boss',
+  'breacher-boss',
+];
 
 /** The wave a type boss first appears on (its unlock wave). */
 export function typeBossUnlockWave(kind: EnemyKind): number {
   if (kind === 'grunt-boss') return 12;
   if (kind === 'runner-boss') return 18;
   if (kind === 'shielded-boss') return 24;
+  if (kind === 'flyer-boss') return 30;
+  if (kind === 'armoured-boss') return 36;
+  if (kind === 'saboteur-boss') return 42;
+  if (kind === 'breacher-boss') return 48;
   return Number.POSITIVE_INFINITY;
 }
 
 /**
- * Whether a wave carries a single type boss. The three unlock waves (12/18/24) are the bosses'
- * first appearance; after that one boss rides every eighth wave (24 + 8k). The marker bosses at
- * 10/25/50/75/100 are never replaced — these waves simply do not coincide with a type-boss wave in
- * pass 1, though a type boss may later share a marker wave once pass 3 widens the schedule.
+ * Whether a wave carries a single type boss. Each unlock wave (12/18/24/30/36/42/48) is the boss's
+ * first appearance; after the last unlock one boss rides every eighth wave (48 + 8k). The marker
+ * bosses at 10/25/50/75/100 are never replaced — these waves simply do not coincide with a type-boss
+ * wave, though a type boss may later share a marker wave once pass 3 widens the schedule.
  */
 export function isTypeBossWave(wave: number): boolean {
   if (wave < 12 || wave > WAVE_COUNT) return false;
-  if (wave === 12 || wave === 18 || wave === 24) return true;
-  return wave > 24 && (wave - 24) % 8 === 0;
+  for (const k of TYPE_BOSS_KINDS) if (wave === typeBossUnlockWave(k)) return true;
+  return wave > 48 && (wave - 48) % 8 === 0;
 }
 
 /**
  * The type boss a wave spawns, or null. The unlock wave always spawns its own type; afterwards the
- * unlocked set is chosen by a seeded roll that favours the newest unlocked type. Never before the
- * unlock wave.
+ * unlocked set is chosen by a seeded roll whose weights favour the newest unlocked type. Never before
+ * the unlock wave.
  */
 export function typeBossKindForWave(wave: number): EnemyKind | null {
   if (!isTypeBossWave(wave)) return null;
-  if (wave === 12) return 'grunt-boss';
-  if (wave === 18) return 'runner-boss';
-  if (wave === 24) return 'shielded-boss';
-  // All three are unlocked past 24; favour the newest (Bastion) 50%, then Pacer, then Sergeant.
+  for (const k of TYPE_BOSS_KINDS) if (wave === typeBossUnlockWave(k)) return k;
+  // Everything up to the Ram is unlocked past 48; favour the newest with linearly decreasing weights.
   const r = waveRng(wave)();
-  if (r < 0.5) return 'shielded-boss';
-  if (r < 0.8) return 'runner-boss';
-  return 'grunt-boss';
+  let total = 0;
+  for (let i = 0; i < TYPE_BOSS_KINDS.length; i++) total += i + 1;
+  let roll = r * total;
+  for (let i = 0; i < TYPE_BOSS_KINDS.length; i++) {
+    roll -= i + 1;
+    if (roll < 0) return TYPE_BOSS_KINDS[i];
+  }
+  return TYPE_BOSS_KINDS[TYPE_BOSS_KINDS.length - 1];
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -269,6 +287,10 @@ const KIND_INTERVAL_S: Readonly<Record<EnemyKind, number>> = {
   'grunt-boss': 0,
   'runner-boss': 0,
   'shielded-boss': 0,
+  'flyer-boss': 0,
+  'armoured-boss': 0,
+  'saboteur-boss': 0,
+  'breacher-boss': 0,
 };
 
 /** Assemble ordered groups, staggering each group to start partway through the previous one. */

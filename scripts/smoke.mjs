@@ -44,7 +44,7 @@ import {
   NO_BUILD_MESSAGE,
   AUTO_WAVE_DELAY_TICKS,
 } from '../src/core/state.ts';
-import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
+import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, isBossWave, isTypeBossWave, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
@@ -52,7 +52,25 @@ import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
 import { LEVELS, DEFAULT_LEVEL, createGrid, levelById, toggleOpenAt, validateLevel, MAX_TOGGLES } from '../src/core/levels.ts';
-import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, isBossKind, isBossVariant, isPopupEnemy, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS } from '../src/core/enemies.ts';
+import { encodeLevel, decodeCode, encodeBytes, CODEC_PREFIX } from '../src/core/codec.ts';
+import {
+  createEditor,
+  paintEditor,
+  selectEditorTool,
+  eraseEditor,
+  undoEditor,
+  redoEditor,
+  clearEditor,
+  editorLevel,
+  editorValidation,
+  editorPlayable,
+  editorToggleAt,
+  setEditorToggle,
+  editorTileAt,
+} from '../src/core/editor.ts';
+import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, isBossKind, isBossVariant, isPopupEnemy, isFlyerKind, slowFactorFor, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS, CARRIER_BROOD_COUNT, CARRIER_BROOD_INTERVAL_TICKS, CARRIER_DEATH_BROOD_COUNT, DREADNOUGHT_PLATING, WIRECUTTER_EMP_RADIUS, WIRECUTTER_EMP_TICKS, RAM_TOWER_DPS, RAM_TURRET_DAMAGE, RAM_TURRET_RANGE } from '../src/core/enemies.ts';
+import { missileSeed } from '../src/core/projectiles.ts';
+import { rngNext } from '../src/core/rng.ts';
 import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS } from '../src/core/ads.ts';
 import {
   comboMultiplier,
@@ -433,6 +451,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 
   // A run-start map switch, forced directly because the public cycle refuses once a tower exists.
   s.levelId = LEVELS[1].id;
+  s.level = LEVELS[1];
   s.grid = createGrid(LEVELS[1]);
   s.toggles = LEVELS[1].toggles ?? [];
   view.draw(s, layout, 0, hover);
@@ -633,6 +652,185 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   s2.enemies.push(e2);
   tick(s2);
   check(e2.hp < e2.maxHp, 'an instant-turn tower fires on the first tick it has a target');
+}
+
+// --- 9c. The AA tower: flyers only, 2x damage, and the Flak / Missile branches ------------------
+{
+  // A ground unit alone in range never draws a shot.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'aa', 5, 5);
+  s.phase = 'wave';
+  const grunt = stationary(1, 'grunt', 1, 5.5, 4.0);
+  s.enemies.push(grunt);
+  for (let i = 0; i < 60; i++) tick(s);
+  check(grunt.hp === grunt.maxHp, 'AA holds fire with only a ground unit in range');
+}
+{
+  // The same nominal hit lands at 2x against a flyer (2.6 base -> 5.2).
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'aa', 5, 5);
+  const aa = towerAt(s, 5, 5);
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+  s.enemies.push(flyer);
+  for (let i = 0; i < 60 && aa.damageDealt === 0; i++) tick(s);
+  check(aa.damageDealt > 0, 'AA fires at a flyer in range');
+  check(Math.abs(aa.damageDealt - 5.2) < 1e-6, `AA deals 2x nominal damage to a flyer (${aa.damageDealt.toFixed(2)} vs 5.2)`);
+}
+{
+  // Flak splash: a flyer takes full damage, a ground unit inside the radius takes half, and a ground
+  // unit outside the radius is untouched.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'aa', 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'A');
+  const aa = towerAt(s, 5, 5);
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+  const near = stationary(2, 'grunt', 1, 6.0, 4.0);
+  const far = stationary(3, 'grunt', 1, 8.0, 4.0);
+  s.enemies.push(flyer, near, far);
+  for (let i = 0; i < 200 && aa.damageDealt === 0; i++) tick(s);
+  const st = effectiveStats(aa);
+  check(st.splash > 0, 'the Flak branch adds splash');
+  const flyerDmg = st.damage * st.flyerDamageMult;
+  const groundDmg = st.damage * 0.5;
+  check(Math.abs(flyer.maxHp - flyer.hp - flyerDmg) < 1e-6,
+    `Flak deals full damage to a flyer (${(flyer.maxHp - flyer.hp).toFixed(2)} vs ${flyerDmg.toFixed(2)})`);
+  check(Math.abs(near.maxHp - near.hp - groundDmg) < 1e-6,
+    `Flak deals half damage to a ground unit (${(near.maxHp - near.hp).toFixed(2)} vs ${groundDmg.toFixed(2)})`);
+  check(far.hp === far.maxHp, 'Flak splash does not reach beyond its radius');
+}
+{
+  // Missile: four missiles launch, all home on the designated target, and land within the salvo window.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'aa', 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'B');
+  const aa = towerAt(s, 5, 5);
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+  s.enemies.push(flyer);
+  tick(s); // fire the salvo
+  check(s.projectiles.length === 4, `a missile salvo launches 4 missiles (${s.projectiles.length})`);
+  check(s.projectiles.every((p) => p.kind === 'missile' && p.targetId === flyer.id),
+    'all four missiles home on the designated target');
+  aa.cooldown = 100000; // hold further salvos so the four land in isolation
+  const hpBefore = flyer.hp;
+  let landedBy = -1;
+  for (let i = 1; i <= 120; i++) {
+    tick(s);
+    if (s.projectiles.length === 0) {
+      landedBy = i;
+      break;
+    }
+  }
+  check(landedBy > 0 && landedBy <= 120, `the four missiles land within the salvo window (${landedBy} ticks)`);
+  const fullHit = effectiveStats(aa).damage * 2;
+  check(Math.abs(hpBefore - flyer.hp - fullHit) < 1e-6,
+    `four missiles deal one full hit (${(hpBefore - flyer.hp).toFixed(2)} vs ${fullHit.toFixed(2)})`);
+}
+{
+  // A missile never damages a ground unit, even one sitting on the flyer's flight path.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'aa', 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'B');
+  const aa = towerAt(s, 5, 5);
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+  const grunt = stationary(2, 'grunt', 1, 5.6, 4.0);
+  s.enemies.push(flyer, grunt);
+  tick(s);
+  aa.cooldown = 100000;
+  for (let i = 0; i < 120; i++) tick(s);
+  check(grunt.hp === grunt.maxHp, 'a missile never damages a ground unit');
+  check(flyer.hp < flyer.maxHp, 'the missiles still reach the flyer');
+}
+{
+  // A missile whose target dies retargets the nearest flyer within range.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'aa', 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'B');
+  const aa = towerAt(s, 5, 5);
+  s.phase = 'wave';
+  const a = stationary(1, 'flyer', 20, 5.5, 4.0);
+  const b = stationary(2, 'flyer', 20, 6.0, 4.0);
+  s.enemies.push(a, b);
+  tick(s); // salvo homes on `a`
+  check(s.projectiles.every((p) => p.targetId === a.id), 'the salvo homes on the first flyer');
+  a.dead = true; // the target dies mid-flight
+  aa.cooldown = 100000;
+  let remaining = 0;
+  for (let i = 0; i < 120 && s.projectiles.length > 0; i++) {
+    tick(s);
+    remaining = s.projectiles.length;
+  }
+  check(remaining === 0, 'the missiles retarget and land (none expire in flight)');
+  check(b.hp < b.maxHp, 'a missile whose target died retargets the nearest flyer');
+}
+{
+  // Same seed reproduces the same directions; two runs of the same wave produce identical missile paths.
+  const dirs = (tick, towerId, salvo) => {
+    let rng = missileSeed(tick, towerId, salvo);
+    const out = [];
+    for (let i = 0; i < 4; i++) {
+      const r = rngNext(rng);
+      rng = r.next;
+      out.push(r.value);
+    }
+    return out;
+  };
+  check(JSON.stringify(dirs(100, 7, 0)) === JSON.stringify(dirs(100, 7, 0)), 'the same seed reproduces the same launch directions');
+  check(JSON.stringify(dirs(100, 7, 0)) !== JSON.stringify(dirs(100, 8, 0)), 'a different tower id yields different directions');
+
+  const trace = () => {
+    const s = allUnlocked();
+    s.economy.salvage = 100000;
+    placeTower(s, 'aa', 5, 5);
+    upgradeTower(s, 5, 5);
+    chooseBranch(s, 5, 5, 'B');
+    s.phase = 'wave';
+    s.enemies.push(stationary(1, 'flyer', 20, 5.5, 4.0));
+    const path = [];
+    for (let i = 0; i < 40; i++) {
+      tick(s);
+      for (const p of s.projectiles) path.push([p.kind, p.id, +p.x.toFixed(4), +p.y.toFixed(4)]);
+    }
+    return JSON.stringify(path);
+  };
+  check(trace() === trace(), 'two runs of the same flyer wave produce identical missile paths');
+}
+{
+  // The fixed-timestep equivalence holds with projectiles in flight: the frame rate never changes the
+  // missiles' integrated positions, because their motion comes from the same fixed tick as everything
+  // else.
+  const run = (frameMs) => {
+    const s = allUnlocked();
+    s.economy.salvage = 100000;
+    placeTower(s, 'aa', 5, 5);
+    upgradeTower(s, 5, 5);
+    chooseBranch(s, 5, 5, 'B');
+    s.phase = 'wave';
+    s.enemies.push(stationary(1, 'flyer', 20, 5.5, 4.0));
+    for (let t = 0; t < 100 * TICK_MS - frameMs; t += frameMs) step(s, frameMs);
+    while (s.tick < 120) tick(s);
+    return JSON.stringify([
+      s.projectiles.map((p) => [p.kind, p.id, +p.x.toFixed(4), +p.y.toFixed(4), +p.vx.toFixed(4), +p.vy.toFixed(4)]),
+      s.enemies.map((e) => [e.id, e.hp]),
+      s.economy.damage.tower,
+    ]);
+  };
+  const at60 = run(TICK_MS);
+  check(at60 === run(1000 / 144), 'projectiles in flight: same result at 60 Hz and 144 Hz frames');
+  check(at60 === run(1000 / 23), 'projectiles in flight: same result at 23 Hz frames');
 }
 
 // --- 10. Precision clicking: weak points deal 2x, combo scales and resets ----------------------
@@ -888,7 +1086,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     h ^= table.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
-  check((h >>> 0).toString(16) === '96749030', `waves 1..100 balance table unchanged (hash ${(h >>> 0).toString(16)})`);
+  check((h >>> 0).toString(16) === '17bb1397', `waves 1..100 balance table unchanged (hash ${(h >>> 0).toString(16)})`);
 }
 
 {
@@ -1480,7 +1678,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   s.phase = 'wave';
   s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const b = createEnemy(1, 'breacher', 12, SPAWN, EXIT);
-  b.attackWallId = wall.id;
+  b.attackTowerId = wall.id;
   b.x = wall.col + 0.5 - 0.6;
   b.y = wall.row + 0.5;
   b.prevX = b.x;
@@ -1491,7 +1689,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 
   const hpBefore = wall.hp;
   check(startRepair(s, first.col, first.row), 'the repair starts under a breacher');
-  check(b.attackWallId === null, 'starting a repair releases the breacher');
+  check(b.attackTowerId === null, 'starting a repair releases the breacher');
   for (let i = 0; i < secondsToTicks(2.4); i++) tick(s);
   check(isRepairing(wall, s.clock), 'the wall is still repairing mid-window');
   check(wall.hp >= hpBefore, `a breacher cannot damage a repairing wall (${wall.hp} >= ${hpBefore})`);
@@ -3225,7 +3423,7 @@ function cursorTower(tier, branch) {
 {
   // 33a. Every kind carries a non-zero hit-point pool that matches the table, and the palette order
   // puts the repair tower between Beacon and Wall.
-  const HP_TABLE = { gun: 100, cannon: 140, taser: 120, laser: 120, frost: 90, beacon: 80, repair: 90, cursor: 80 };
+  const HP_TABLE = { gun: 100, cannon: 140, taser: 120, laser: 120, aa: 100, frost: 90, beacon: 80, repair: 90, cursor: 80 };
   for (const [kind, hp] of Object.entries(HP_TABLE)) {
     const t = createTower(1, kind, 0, 0);
     check(t.maxHp === hp && t.hp === hp, `${kind} has a ${hp} HP pool (${t.maxHp})`);
@@ -3354,12 +3552,12 @@ function cursorTower(tier, branch) {
 }
 
 {
-  // 33i. Nine palette buttons fit inside the left panel at the smallest and largest layouts.
+  // 33i. Every palette button fits inside the left panel at the smallest and largest layouts.
   for (const [vw, vh] of [[1280, 720], [1600, 900]]) {
     const l = computeLayout(vw, vh);
     const h = computeHud(l, createRunState());
     check(
-      h.towers.length === 9 && h.towers.every((t) => t.rect.y + t.rect.h <= l.leftPanel.y + l.leftPanel.h),
+      h.towers.length === TOWER_KINDS.length && h.towers.every((t) => t.rect.y + t.rect.h <= l.leftPanel.y + l.leftPanel.h),
       `${h.towers.length} palette buttons fit in the left panel at ${vw}x${vh}`,
     );
   }
@@ -3909,7 +4107,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   const beacon = towerAt(s, 6, 5);
   check(Math.abs(gun.auraDamage - 1.6) < 1e-9, 'the beacon buffs its neighbour');
   beacon.hp = 0;
-  recomputeAuras(s.towers);
+  recomputeAuras(s.towers, s.clock);
   check(Math.abs(gun.auraDamage - 1.0) < 1e-9, 'an offline beacon stops buffing');
 }
 
@@ -4128,10 +4326,10 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     check(artNameForEnemy(kind) === kind, `enemy ${kind} resolves an asset name`);
   }
   check(artNameForEnemy('popup') === null, 'the pop-up stays runtime (no asset)');
-  for (const kind of ['gun', 'cannon', 'laser', 'taser', 'frost', 'beacon', 'cursor', 'repair', 'wall']) {
+  for (const kind of ['gun', 'cannon', 'laser', 'taser', 'frost', 'aa', 'beacon', 'cursor', 'repair', 'wall']) {
     check(artNameForTowerBase(kind) === `${kind}-base`, `tower ${kind} resolves a base`);
   }
-  for (const kind of ['gun', 'cannon', 'laser', 'taser', 'frost']) {
+  for (const kind of ['gun', 'cannon', 'laser', 'taser', 'frost', 'aa']) {
     check(artNameForTowerTurret(kind) === `${kind}-turret`, `tower ${kind} resolves a turret`);
   }
   for (const kind of ['beacon', 'cursor', 'repair', 'wall']) {
@@ -4616,7 +4814,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
 
 {
   // 39g. The spawn schedule: first appearance at the unlock wave, never before, every eighth wave
-  // after that, favouring the newest type, and never replacing a marker boss.
+  // after the last unlock, favouring the newest type, and never replacing a marker boss.
   check(typeBossUnlockWave('grunt-boss') === 12, 'Sergeant unlocks at wave 12');
   check(typeBossUnlockWave('runner-boss') === 18, 'Pacer unlocks at wave 18');
   check(typeBossUnlockWave('shielded-boss') === 24, 'Bastion unlocks at wave 24');
@@ -4627,7 +4825,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(buildSchedule(12).filter((sp) => sp.kind === 'grunt-boss').length === 1, 'wave 12 schedule has one Sergeant');
   check(buildSchedule(18).filter((sp) => sp.kind === 'runner-boss').length === 1, 'wave 18 schedule has one Pacer');
   check(buildSchedule(24).filter((sp) => sp.kind === 'shielded-boss').length === 1, 'wave 24 schedule has one Bastion');
-  for (const w of [32, 40, 48, 56, 64, 72, 80, 88, 96]) {
+  for (const w of [30, 36, 42, 48, 56, 64, 72, 80, 88, 96]) {
     check(isTypeBossWave(w), `wave ${w} is a type-boss wave`);
     check(buildSchedule(w).filter((sp) => sp.kind.endsWith('-boss')).length === 1, `wave ${w} carries one type boss`);
   }
@@ -4635,8 +4833,8 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     check(buildSchedule(w).filter((sp) => sp.kind.endsWith('-boss')).length === 0,
       `a type boss never replaces the marker boss on wave ${w}`);
   }
-  check(typeBossKindForWave(32) === typeBossKindForWave(32), 'type-boss selection is deterministic');
-  check(isTypeBossWave(32) && !isTypeBossWave(31) && !isTypeBossWave(100), 'the eighth-wave cadence holds after wave 24');
+  check(typeBossKindForWave(56) === typeBossKindForWave(56), 'type-boss selection is deterministic');
+  check(isTypeBossWave(56) && !isTypeBossWave(55) && !isTypeBossWave(100), 'the eighth-wave cadence holds after wave 48');
 }
 
 // --- 37i. Effects draw sprites from the fx assets, tint only the death ring ---------------------
@@ -5037,6 +5235,438 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(!f.flash, 'with shakeOn off there is no flash');
   check(Math.abs(f.hpRatio - 90 / 120) < 1e-9, 'with shakeOn off the fill is the true value on the first frame');
   check(f.lagRatio === f.hpRatio, 'with shakeOn off there is no drain (lag equals the fill)');
+}
+
+// --- 42. Boss variants (pass 2: Carrier, Dreadnought, Wirecutter, Ram) -------------------------
+
+{
+  // 42a. Stats: HP multiple, speed, scale (radius), integrity and kill value match the design table.
+  const carrier = ENEMY_STATS['flyer-boss'];
+  const dread = ENEMY_STATS['armoured-boss'];
+  const wire = ENEMY_STATS['saboteur-boss'];
+  const ram = ENEMY_STATS['breacher-boss'];
+  check(carrier.name === 'Carrier' && carrier.hp === 96, `Carrier is 12x flyer HP (${carrier.hp})`);
+  check(carrier.speed === 0.35 && carrier.scale === 2.0 && carrier.integrity === 5,
+    `Carrier speed/scale/integrity (${carrier.speed}/${carrier.scale}/${carrier.integrity})`);
+  check(carrier.radius === 0.22 * 2.0 && carrier.value === 30, `Carrier radius/value (${carrier.radius}/${carrier.value})`);
+  check(dread.name === 'Dreadnought' && dread.hp === 405, `Dreadnought is 9x armoured HP (${dread.hp})`);
+  check(dread.speed === 0.4 && dread.scale === 1.7 && dread.integrity === 4,
+    `Dreadnought speed/scale/integrity (${dread.speed}/${dread.scale}/${dread.integrity})`);
+  check(dread.armour === 8 && dread.plating === DREADNOUGHT_PLATING, `Dreadnought armour ${dread.armour} + plating ${dread.plating}`);
+  check(Math.abs(dread.radius - 0.34 * 1.7) < 1e-9 && dread.value === 72, `Dreadnought radius/value (${dread.radius}/${dread.value})`);
+  check(wire.name === 'Wirecutter' && wire.hp === 125, `Wirecutter is 5x saboteur HP (${wire.hp})`);
+  check(wire.speed === 0.6 && wire.scale === 1.5 && wire.integrity === 4,
+    `Wirecutter speed/scale/integrity (${wire.speed}/${wire.scale}/${wire.integrity})`);
+  check(Math.abs(wire.radius - 0.28 * 1.5) < 1e-9 && wire.value === 66, `Wirecutter radius/value (${wire.radius}/${wire.value})`);
+  check(ram.name === 'Ram' && ram.hp === 440, `Ram is 8x breacher HP (${ram.hp})`);
+  check(ram.speed === 0.4 && ram.scale === 1.8 && ram.integrity === 5,
+    `Ram speed/scale/integrity (${ram.speed}/${ram.scale}/${ram.integrity})`);
+  check(ram.radius === 0.42 * 1.8 && ram.value === 84 && ram.wallDps === 40,
+    `Ram radius/value/wallDps (${ram.radius}/${ram.value}/${ram.wallDps})`);
+  check(
+    enemyKillValue('flyer-boss', 1) === 30 && enemyKillValue('armoured-boss', 1) === 72 &&
+      enemyKillValue('saboteur-boss', 1) === 66 && enemyKillValue('breacher-boss', 1) === 84,
+    'kill value at wave 1 is 6x the base type',
+  );
+}
+
+{
+  // 42b. Base-type membership: boss variants count as their base type for tower rules.
+  check(baseEnemyKind('flyer-boss') === 'flyer', 'Carrier counts as a flyer');
+  check(baseEnemyKind('armoured-boss') === 'armoured', 'Dreadnought counts as armoured');
+  check(baseEnemyKind('saboteur-boss') === 'saboteur', 'Wirecutter counts as a saboteur');
+  check(baseEnemyKind('breacher-boss') === 'breacher', 'Ram counts as a breacher');
+  check(isFlyerKind('flyer-boss') && !isFlyerKind('breacher-boss'), 'the Carrier flies; the Ram is ground');
+  check(
+    isBossVariant('flyer-boss') && isBossVariant('armoured-boss') && isBossVariant('saboteur-boss') && isBossVariant('breacher-boss'),
+    'the four pass-2 kinds are boss variants',
+  );
+}
+
+{
+  // 42c. A Flak cannon (air-only) treats the Carrier as a flyer and ignores a ground Sergeant.
+  const drop = (kind) => {
+    const s = allUnlocked();
+    s.economy.salvage = 10000;
+    placeTower(s, 'cannon', 5, 5);
+    upgradeTower(s, 5, 5);
+    chooseBranch(s, 5, 5, 'B');
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const e = stationary(1, kind, 30, 5.5, 4.5);
+    s.enemies.push(e);
+    tick(s);
+    return e.maxHp - e.hp;
+  };
+  check(drop('flyer-boss') > 0, `Flak damages a Carrier (${drop('flyer-boss')})`);
+  check(drop('grunt-boss') === 0, 'Flak ignores a ground Sergeant');
+}
+
+{
+  // 42d. The Carrier's brood: three flyers on the 4 s clock, six on death, all carrying its wave.
+  const s = createRunState();
+  s.phase = 'wave';
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const carrier = stationary(1, 'flyer-boss', 30, 10.5, 6.5);
+  s.enemies.push(carrier);
+  for (let i = 0; i <= CARRIER_BROOD_INTERVAL_TICKS; i++) tick(s);
+  const brood = s.enemies.filter((e) => e.kind === 'flyer' && !e.dead);
+  check(brood.length === CARRIER_BROOD_COUNT, `the Carrier releases ${CARRIER_BROOD_COUNT} flyers on schedule (${brood.length})`);
+  check(brood.every((e) => e.wave === 30), 'brood flyers carry the Carrier wave');
+
+  carrier.hp = 1;
+  carrier.maxHp = 1;
+  pointerDown(s, carrier.x, carrier.y);
+  pointerUp(s);
+  const onDeath = s.enemies.filter((e) => e.kind === 'flyer' && !e.dead);
+  check(carrier.dead, 'the Carrier dies');
+  check(onDeath.length === CARRIER_BROOD_COUNT + CARRIER_DEATH_BROOD_COUNT,
+    `the Carrier releases ${CARRIER_DEATH_BROOD_COUNT} more flyers on death (${onDeath.length} alive)`);
+}
+
+{
+  // 42e. Dreadnought plating and half-strength slow.
+  const drop = (kind) => {
+    const s = allUnlocked();
+    s.economy.salvage = 10000;
+    placeTower(s, 'laser', 5, 5);
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const e = stationary(1, kind, 36, 5.5, 4.5);
+    s.enemies.push(e);
+    tick(s);
+    return e.maxHp - e.hp;
+  };
+  check(drop('armoured') === 3, `a laser deals 3 to an armoured (${drop('armoured')})`);
+  check(drop('armoured-boss') === 1, `a laser deals 1 to a Dreadnought (plated; ${drop('armoured-boss')})`);
+
+  const slowOf = (kind) => {
+    const s = allUnlocked();
+    s.economy.salvage = 10000;
+    placeTower(s, 'frost', 5, 5);
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const e = stationary(1, kind, 36, 5.5, 4.5);
+    s.enemies.push(e);
+    tick(s);
+    return e.slowFactor;
+  };
+  check(slowOf('grunt') === 0.3, 'frost slows a grunt to 0.3x');
+  check(slowOf('armoured-boss') === 0.65, `frost slows a Dreadnought to 0.65x (half-strength; ${slowOf('armoured-boss')})`);
+  check(slowFactorFor('armoured-boss', 0.3) === 0.65, 'slowFactorFor halves a Dreadnought slow');
+}
+
+{
+  // 42f. The Wirecutter's EMP knocks a tower offline without touching its HP, and it returns alone.
+  const s = createRunState();
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 5, 5);
+  const gun = towerAt(s, 5, 5);
+  s.phase = 'wave';
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const w = stationary(1, 'saboteur-boss', 42, 5.5, 5.5);
+  s.enemies.push(w);
+
+  for (let i = 0; i < 3; i++) tick(s);
+  check(isEmpDisabled(gun, s.clock), 'the Wirecutter EMPs a tower within radius');
+  check(gun.hp === gun.maxHp, `the EMP keeps the tower's HP intact (${gun.hp}/${gun.maxHp})`);
+  check(isDown(gun, s.clock) && !isOffline(gun), 'an EMPd tower is down but not HP-offline');
+
+  w.dead = true;
+  for (let i = 0; i < WIRECUTTER_EMP_TICKS + 2; i++) tick(s);
+  check(!isEmpDisabled(gun, s.clock) && !isDown(gun, s.clock), 'the tower returns on its own once the EMP elapses');
+}
+
+{
+  // 42g. The Ram chews a wall at 40 DPS, and chews a non-wall tower to offline (not destroyed).
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  const first = stepToward(s.ramField, SPAWN.col, SPAWN.row);
+  placeTower(s, 'wall', first.col, first.row);
+  const wall = towerAt(s, first.col, first.row);
+  const fullHp = wall.hp;
+  s.phase = 'wave';
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const ram = createEnemy(1, 'breacher-boss', 48, SPAWN, EXIT);
+  ram.attackTowerId = wall.id;
+  ram.x = wall.col + 0.5 - 0.6;
+  ram.y = wall.row + 0.5;
+  ram.prevX = ram.x;
+  ram.prevY = ram.y;
+  ram.col = wall.col - 1;
+  ram.row = wall.row;
+  s.enemies.push(ram);
+  for (let i = 0; i < secondsToTicks(1); i++) tick(s);
+  const wallDamage = fullHp - wall.hp;
+  check(wallDamage > 0 && Math.abs(wallDamage - 40) <= 1, `the Ram chews walls at 40 DPS (${wallDamage.toFixed(1)} in 1s)`);
+  check(RAM_TOWER_DPS === 40 && RAM_TURRET_DAMAGE === 8 && RAM_TURRET_RANGE === 3,
+    `the Ram chews towers at ${RAM_TOWER_DPS} and its turret is ${RAM_TURRET_DAMAGE} at ${RAM_TURRET_RANGE}`);
+}
+
+{
+  // 42h. The Ram drives a gun offline (0 HP) but the tower stays on the board for repair.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  const first = stepToward(s.ramField, SPAWN.col, SPAWN.row);
+  placeTower(s, 'gun', first.col, first.row);
+  const gun = towerAt(s, first.col, first.row);
+  s.phase = 'wave';
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const ram = createEnemy(1, 'breacher-boss', 48, SPAWN, EXIT);
+  ram.attackTowerId = gun.id;
+  ram.x = gun.col + 0.5 - 0.6;
+  ram.y = gun.row + 0.5;
+  ram.prevX = ram.x;
+  ram.prevY = ram.y;
+  ram.col = gun.col - 1;
+  ram.row = gun.row;
+  s.enemies.push(ram);
+  for (let i = 0; i < secondsToTicks(3); i++) tick(s);
+  check(gun.hp === 0, `the Ram drove the gun offline (hp ${gun.hp})`);
+  check(towerAt(s, gun.col, gun.row) === gun, 'an offline tower is not destroyed');
+  check(isOffline(gun), 'the chewed tower is HP-offline (repairable)');
+}
+
+{
+  // 42i. The Ram's turret fires at an off-route tower within 3 tiles while it walks.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 5, 5);
+  const gun = towerAt(s, 5, 5);
+  s.phase = 'wave';
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const ram = createEnemy(1, 'breacher-boss', 48, SPAWN, EXIT);
+  ram.x = 4.5;
+  ram.y = 6.5;
+  ram.prevX = 4.5;
+  ram.prevY = 6.5;
+  ram.col = 4;
+  ram.row = 6;
+  s.enemies.push(ram);
+  for (let i = 0; i < secondsToTicks(2); i++) tick(s);
+  const dmg = gun.maxHp - gun.hp;
+  check(dmg >= RAM_TURRET_DAMAGE, `the Ram turret deals at least ${RAM_TURRET_DAMAGE} to a tower within ${RAM_TURRET_RANGE} tiles (${dmg} in 2s)`);
+}
+
+{
+  // 42j. Schedule: first appearance at the unlock wave and never before.
+  check(typeBossUnlockWave('flyer-boss') === 30, 'Carrier unlocks at wave 30');
+  check(typeBossUnlockWave('armoured-boss') === 36, 'Dreadnought unlocks at wave 36');
+  check(typeBossUnlockWave('saboteur-boss') === 42, 'Wirecutter unlocks at wave 42');
+  check(typeBossUnlockWave('breacher-boss') === 48, 'Ram unlocks at wave 48');
+  check(typeBossKindForWave(30) === 'flyer-boss', 'wave 30 spawns a Carrier');
+  check(typeBossKindForWave(36) === 'armoured-boss', 'wave 36 spawns a Dreadnought');
+  check(typeBossKindForWave(42) === 'saboteur-boss', 'wave 42 spawns a Wirecutter');
+  check(typeBossKindForWave(48) === 'breacher-boss', 'wave 48 spawns a Ram');
+  check(buildSchedule(30).filter((sp) => sp.kind === 'flyer-boss').length === 1, 'wave 30 schedule has one Carrier');
+  check(buildSchedule(36).filter((sp) => sp.kind === 'armoured-boss').length === 1, 'wave 36 schedule has one Dreadnought');
+  check(buildSchedule(42).filter((sp) => sp.kind === 'saboteur-boss').length === 1, 'wave 42 schedule has one Wirecutter');
+  check(buildSchedule(48).filter((sp) => sp.kind === 'breacher-boss').length === 1, 'wave 48 schedule has one Ram');
+  const neverEarly = (kind, unlock) => {
+    for (let w = 12; w < unlock; w++) if (typeBossKindForWave(w) === kind) return false;
+    return true;
+  };
+  check(neverEarly('flyer-boss', 30), 'no Carrier before wave 30');
+  check(neverEarly('armoured-boss', 36), 'no Dreadnought before wave 36');
+  check(neverEarly('saboteur-boss', 42), 'no Wirecutter before wave 42');
+  check(neverEarly('breacher-boss', 48), 'no Ram before wave 48');
+  check(typeBossKindForWave(64) === typeBossKindForWave(64), 'pass-2 boss selection is deterministic');
+}
+
+{
+  // 42k. Boss presence: a death pops like a boss and a leak costs the boss's own integrity.
+  const leakCost = (kind) => {
+    const s = stateOnLevel('open-field');
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const start = s.integrity;
+    const e = createEnemy(1, kind, 48, SPAWN, EXIT);
+    e.broodCooldown = Number.MAX_SAFE_INTEGER; // suppress the Carrier's brood so its own leak is isolated
+    s.enemies.push(e);
+    let t = 0;
+    while (s.enemies.length > 0 && t < 40000) {
+      tick(s);
+      t++;
+    }
+    return start - s.integrity;
+  };
+  for (const kind of ['flyer-boss', 'armoured-boss', 'saboteur-boss', 'breacher-boss']) {
+    check(shakeImpulseFor({ type: 'kill', kind }).amplitude === SHAKE_AMPLITUDE.bossDeath, `a ${kind} death shakes 4 px`);
+  }
+  check(leakCost('flyer-boss') === 5, 'a Carrier leak costs 5 integrity');
+  check(leakCost('armoured-boss') === 4, 'a Dreadnought leak costs 4 integrity');
+  check(leakCost('saboteur-boss') === 4, 'a Wirecutter leak costs 4 integrity');
+  check(leakCost('breacher-boss') === 5, 'a Ram leak costs 5 integrity');
+}
+
+{
+  // 42l. Boss bars name the new kinds and teach their gimmick on first appearance.
+  check(bossName('flyer-boss') === 'CARRIER' && bossName('breacher-boss') === 'RAM', 'the new boss names are uppercased');
+  check(bossGimmick('flyer-boss') === 'hatches flyers as it flies', 'the Carrier subtitle names the gimmick');
+  check(bossGimmick('armoured-boss') === 'plated and slow to chill', 'the Dreadnought subtitle names the gimmick');
+  check(bossGimmick('saboteur-boss') === 'shorts out towers as it passes', 'the Wirecutter subtitle names the gimmick');
+  check(bossGimmick('breacher-boss') === 'eats through your towers', 'the Ram subtitle names the gimmick');
+}
+
+// --- 41. The PD2. share code: round-trip, the frozen example, and every failure mode ----------
+{
+  // Walls are compared as sets (the bitfield is row-major, so the array order is not preserved and a
+  // duplicate coordinate — which the shipped maps carry as harmless redundancy — collapses to one);
+  // toggles keep their exact order, and name / start / exit are exact.
+  const wallKey = (walls) => [...new Set(walls.map((w) => w.join(',')))].sort().join(';');
+  const toggleKey = (toggles) => [...(toggles ?? [])].sort((a, b) => a.col - b.col || a.row - b.row)
+    .map((t) => `${t.col},${t.row},${t.periodTicks},${t.openTicks},${t.phaseTicks}`).join(';');
+  const levelEquals = (a, b) =>
+    a.name === b.name &&
+    wallKey(a.walls) === wallKey(b.walls) &&
+    a.starts[0].col === b.starts[0].col && a.starts[0].row === b.starts[0].row &&
+    a.exits[0].col === b.exits[0].col && a.exits[0].row === b.exits[0].row &&
+    toggleKey(a.toggles) === toggleKey(b.toggles);
+
+  for (const level of LEVELS) {
+    const dec = decodeCode(encodeLevel(level));
+    check(dec.ok, `${level.id}: a shipped map round-trips`);
+    check(levelEquals(dec.level, level), `${level.id}: round-trip preserves the level`);
+  }
+
+  const emptyLevel = { id: '', name: '', walls: [], starts: [{ col: 0, row: 6 }], exits: [{ col: 19, row: 6 }], toggles: [] };
+  const emptyCode = encodeLevel(emptyLevel);
+  check(emptyCode.length < 110, `an empty 20x12 map codes to ${emptyCode.length} characters (< 110)`);
+  check(emptyCode.startsWith(CODEC_PREFIX), 'every code carries the PD2. prefix');
+
+  // A generated fixture with row-major walls round-trips exactly, even the wall order.
+  const fixture = {
+    id: 'fixture', name: 'Fixture', walls: [[3, 2], [4, 2], [10, 9]],
+    starts: [{ col: 0, row: 6 }], exits: [{ col: 19, row: 6 }],
+    toggles: [{ col: 10, row: 6, periodTicks: 600, openTicks: 240, phaseTicks: 300 }],
+  };
+  const fixtureDec = decodeCode(encodeLevel(fixture));
+  check(fixtureDec.ok, 'a generated fixture round-trips');
+  check(JSON.stringify(fixtureDec.level.walls) === JSON.stringify([[3, 2], [4, 2], [10, 9]]),
+    'the fixture walls keep their row-major order');
+
+  // The frozen example: a fixed, hand-written code decodes to an exact level.
+  const FROZEN_CODE = 'PD2.AhQMFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGABMABgABCgAGAIQDpAEAAAZGcm96ZW5A';
+  const frozen = decodeCode(FROZEN_CODE);
+  check(frozen.ok, 'the frozen example decodes');
+  check(frozen.level.name === 'Frozen', 'the frozen example name is "Frozen"');
+  check(wallKey(frozen.level.walls) === '1,0;2,0', `the frozen example walls are (1,0) and (2,0) (${wallKey(frozen.level.walls)})`);
+  check(frozen.level.starts[0].col === 0 && frozen.level.starts[0].row === 6, 'the frozen example start is (0,6)');
+  check(frozen.level.exits[0].col === 19 && frozen.level.exits[0].row === 6, 'the frozen example exit is (19,6)');
+  check(toggleKey(frozen.level.toggles) === '10,6,900,420,0', 'the frozen example shutter is (10,6) 900/420/0');
+
+  // A truncated paste is rejected as incomplete, not parsed into a corrupt map.
+  const truncated = decodeCode(FROZEN_CODE.slice(0, -8));
+  check(!truncated.ok && truncated.reason === 'that code is incomplete', `a truncated code is rejected (${truncated.reason})`);
+
+  // A corrupted body byte leaves the checksum byte unchanged, so the checksum mismatches.
+  const wrongChecksum = decodeCode(FROZEN_CODE.slice(0, -5) + 'B' + FROZEN_CODE.slice(-4));
+  check(!wrongChecksum.ok && wrongChecksum.reason === 'that code is incomplete', `a wrong checksum is rejected (${wrongChecksum.reason})`);
+
+  const pd1 = decodeCode('PD1.' + FROZEN_CODE.slice(4));
+  check(!pd1.ok && pd1.reason === 'that code is from an older version', `a PD1. code is rejected (${pd1.reason})`);
+
+  const notACode = decodeCode('hello world');
+  check(!notACode.ok && notACode.reason === 'that code is not a valid share code', `a non-code string is rejected (${notACode.reason})`);
+
+  // A version byte above 2 fails with a version message, with a valid checksum.
+  const futureBytes = encodeBytes(emptyLevel);
+  futureBytes[0] = 3;
+  let futureSum = 0;
+  for (const b of futureBytes) futureSum += b;
+  futureBytes.push(futureSum % 251);
+  const futureCode = CODEC_PREFIX + Buffer.from(futureBytes).toString('base64url');
+  const future = decodeCode(futureCode);
+  check(!future.ok && future.reason === 'that code is from a newer version', `a future version is rejected (${future.reason})`);
+
+  // A name with non-ASCII characters is sanitised to printable ASCII, never a reason to reject.
+  const nonAscii = { id: '', name: 'café ☕', walls: [], starts: [{ col: 0, row: 6 }], exits: [{ col: 19, row: 6 }], toggles: [] };
+  const nonAsciiDec = decodeCode(encodeLevel(nonAscii));
+  check(nonAsciiDec.ok && nonAsciiDec.level.name === 'caf ', `a non-ASCII name is sanitised to "${nonAsciiDec.level.name}"`);
+}
+
+// --- 42. The map editor model: painting, undo/redo, the single start/exit rule, validation -----
+{
+  const m = createEditor();
+  check(editorTileAt(m, 0, 0) === 'floor', 'a fresh editor board is all floor');
+  check(editorValidation(m) === 'place a start tile', 'an empty editor reports the missing start');
+
+  selectEditorTool(m, 'wall');
+  check(paintEditor(m, 3, 4) === null && editorTileAt(m, 3, 4) === 'wall', 'the Wall tool paints a wall tile');
+  selectEditorTool(m, 'shutter');
+  check(paintEditor(m, 5, 5) === null && editorTileAt(m, 5, 5) === 'shutter', 'the Shutter tool paints a shutter tile');
+  check(editorToggleAt(m, 5, 5) !== undefined, 'a shutter tile carries its toggle');
+  selectEditorTool(m, 'floor');
+  check(paintEditor(m, 5, 5) === null && editorTileAt(m, 5, 5) === 'floor', 'the Floor tool paints buildable floor');
+  selectEditorTool(m, 'eraser');
+  paintEditor(m, 3, 4);
+  check(editorTileAt(m, 3, 4) === 'floor', 'the Eraser paints buildable floor');
+
+  // Start and exit: painting a second moves the first; the exit is independent.
+  selectEditorTool(m, 'start');
+  paintEditor(m, 0, 6);
+  check(editorValidation(m) === 'place an exit tile', 'one start and no exit reports the missing exit');
+  paintEditor(m, 5, 3);
+  check(editorLevel(m).starts[0].col === 5 && editorLevel(m).starts[0].row === 3, 'a second start moves the first');
+
+  selectEditorTool(m, 'exit');
+  paintEditor(m, 19, 6);
+  check(editorValidation(m) === null, 'a start and exit on a clear board validates');
+  paintEditor(m, 10, 0);
+  check(editorLevel(m).exits[0].col === 10 && editorLevel(m).exits[0].row === 0, 'a second exit moves the first');
+  paintEditor(m, 19, 6);
+  check(editorValidation(m) === null, 'moving the exit back restores a clear route');
+
+  // Undo / redo returns the exact prior grid.
+  const before = m.tiles.slice();
+  selectEditorTool(m, 'wall');
+  paintEditor(m, 1, 1);
+  check(m.tiles[1 * m.cols + 1] === 'wall', 'a wall is painted before undo');
+  check(undoEditor(m), 'undo succeeds');
+  check(JSON.stringify(m.tiles) === JSON.stringify(before), 'undo returns the exact prior grid');
+  check(redoEditor(m), 'redo succeeds');
+  check(m.tiles[1 * m.cols + 1] === 'wall', 'redo re-applies the wall');
+
+  // A map with no route from start to exit is reported, in plain words.
+  const sealed = createEditor();
+  selectEditorTool(sealed, 'start');
+  paintEditor(sealed, 0, 6);
+  selectEditorTool(sealed, 'exit');
+  paintEditor(sealed, 19, 6);
+  selectEditorTool(sealed, 'wall');
+  for (let r = 0; r < ROWS; r++) paintEditor(sealed, 9, r);
+  check(editorValidation(sealed) === 'no route from start to exit', `a sealed board reports "no route" (${editorValidation(sealed)})`);
+  check(!editorPlayable(sealed), 'a sealed board is not playable');
+}
+
+// --- 43. A pasted code starts a run on that map; an edited map routes and spawns normally -------
+{
+  // Decoding a share code yields a run on exactly that level.
+  const code = encodeLevel({
+    id: '', name: 'Pasted', walls: [[4, 5]],
+    starts: [{ col: 0, row: 6 }], exits: [{ col: 19, row: 6 }], toggles: [],
+  });
+  const pasted = decodeCode(code);
+  check(pasted.ok, 'the pasted code decodes');
+  const s = createRunState(undefined, pasted.level);
+  check(s.level.name === 'Pasted', 'a pasted code starts a run on that map');
+  check(currentPath(s).length > 0, 'the pasted map produces a route');
+
+  // An edited Open-Field-shaped map behaves exactly like the shipped one.
+  const m = createEditor();
+  selectEditorTool(m, 'start');
+  paintEditor(m, 0, 6);
+  selectEditorTool(m, 'exit');
+  paintEditor(m, 19, 6);
+  selectEditorTool(m, 'wall');
+  for (const [c, r] of LEVELS.find((l) => l.id === 'open-field').walls) paintEditor(m, c, r);
+  check(editorPlayable(m), 'the edited open-field map is playable');
+  const edited = createRunState(undefined, editorLevel(m));
+  const shipped = stateOnLevel('open-field');
+  check(currentPath(edited).length === currentPath(shipped).length,
+    'an edited map with the same geometry has the same route length as the shipped map');
+  check(JSON.stringify(buildSchedule(1)) === JSON.stringify(buildSchedule(1)), 'wave generation is unchanged for an edited map');
+  check(startWave(edited), 'a wave starts on the edited map');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
