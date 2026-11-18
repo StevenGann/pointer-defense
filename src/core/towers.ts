@@ -310,6 +310,32 @@ export function cursorClickDamage(t: Tower, playerClickDamage: number, specMult:
   return CURSOR_CLICK_DAMAGE_FACTOR * playerClickDamage * specMult * cursorClickDamageFactor(t);
 }
 
+// ---------------------------------------------------------------------------------------------
+// Minesweeper (Cannon branch B): the cannon stops firing and lays mines on the path instead.
+// Every number here is a hypothesis from the mechanism, not a tuned value — see docs/design.md §6.3.
+
+/** Ticks between mine drops (2.5 s). */
+export const MINE_INTERVAL_TICKS = secondsToTicks(2.5);
+/** Ticks after a mine lands before it arms (0.5 s). */
+export const MINE_ARM_TICKS = secondsToTicks(0.5);
+/** Ticks a live mine survives unspent before it expires (30 s). */
+export const MINE_EXPIRE_TICKS = secondsToTicks(30);
+/** The most mines a single minesweeper keeps live at once. */
+export const MINE_LIVE_CAP = 6;
+/** The minesweeper drops each mine on the nearest path tile within this many tiles. */
+export const MINE_PLACE_RANGE = 3;
+/** A ground enemy this close (tiles) to a mine's centre triggers it. */
+export const MINE_TRIGGER_RADIUS = 0.35;
+/** Detonation splash radius in tiles. */
+export const MINE_BLAST_RADIUS = 0.9;
+/** Damage a detonation deals to every ground enemy in the blast. */
+export const MINE_DAMAGE = 18;
+
+/** True when a Cannon's branch B has turned it into a Minesweeper (it never fires). */
+export function isMinesweeper(tower: Tower): boolean {
+  return tower.kind === 'cannon' && tower.branch === 'B';
+}
+
 /** A wall's hit points at each tier, before the tier-3 branch doubling. */
 const WALL_HP_BY_TIER: Readonly<Record<Tier, number>> = { 1: 60, 2: 180, 3: 540, 4: 540, 5: 540 };
 
@@ -536,6 +562,8 @@ export interface Tower {
   angle: number;
   /** Ticks until the tower may fire again. */
   cooldown: number;
+  /** Minesweeper only: ticks until the next mine drops (0 = due). */
+  mineCooldown: number;
   /** AA only: missile salvos fired so far, folded into the launch-direction seed. */
   salvoCount: number;
   /** Enemies this tower landed the killing blow on. */
@@ -598,6 +626,7 @@ export function createTower(id: number, kind: TowerKind, col: number, row: numbe
     auraRange: 0,
     angle: 0,
     cooldown: 0,
+    mineCooldown: 0,
     salvoCount: 0,
     kills: 0,
     earned: 0,
@@ -738,7 +767,10 @@ const BRANCH_EFFECTS: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch,
   },
   cannon: {
     A: { splashAdd: 1, damageMul: 1.5, intervalMul: 1.33 },
-    B: { targetsFlyersOnly: true, intervalMul: 0.33, flyerDamageMul: 2 },
+    // Minesweeper: the cannon stops firing and lays mines on the path instead. The whole mechanism
+    // (drop interval, arming, expiry, the 6-mine cap and the detonation) lives in state.ts; there are
+    // no numeric branch multipliers to re-apply, so the effect table stays empty.
+    B: {},
   },
   taser: {
     A: { chainCount: 3, chainDamage: 0.6 },

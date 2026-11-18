@@ -305,7 +305,7 @@ the tier-3 choice is just another Upgrade button, not a branch pair.
 | Tower | Branch A | Branch B |
 |---|---|---|
 | Gun | **Marksman** — +60 % range, +80 % damage to its current target | **Repeater** — double fire rate, −1 damage |
-| Cannon | **Mortar** — +1 splash, +50 % damage, −25 % fire rate | **Flak** — air only, triple fire rate, double damage to flyers |
+| Cannon | **Mortar** — +1 splash, +50 % damage, −25 % fire rate | **Minesweeper** — stops firing and lays mines on the path |
 | Taser | **Arc** — chains to 3 targets | **Overload** — +150 % damage to shielded enemies |
 | Frost | **Deep Freeze** — 60 % slow for 2.5 s | **Shard** — no slow; damage ×4, splash 0.6 |
 | Laser | **Focus** — pierce 8, +50 % damage | **Prism** — splits into 3 short beams at −40 % damage |
@@ -322,9 +322,36 @@ bar says *"Gate locked for 1.4 s"*, with the remaining lock in seconds. The lock
 gates can be flipped in turn. While a gate is locked it is drawn in the disabled wall style rather
 than its live style, and its tooltip reads *"Gate locked — 1.4 s"*.
 
-The tensions are deliberate. Mortar or Flak is "ground or air". Command or Relay is "your towers or
-you" — the one place the pointer gets a tower's help, and the reason a clicker-minded player and a
-tower-minded player build different boards from the same pieces.
+The tensions are deliberate. Mortar or Minesweeper is "hit now or lay a field": the Mortar answers
+whatever is in range the moment it fires, while the Minesweeper trades that certainty for a field of
+mines that only pays off where enemies actually bunch. Command or Relay is "your towers or you" — the
+one place the pointer gets a tower's help, and the reason a clicker-minded player and a tower-minded
+player build different boards from the same pieces.
+
+#### The Minesweeper's minefield
+
+A Minesweeper is the Cannon's branch **B**. It **stops firing** — it keeps its hit points, its repair
+cost and its sell value, and still counts as a tower for Breacher chewing and for the Repair tower — and
+instead lays a mine on the nearest path tile within **3 tiles** every **2.5 s**. A mine arms **0.5 s**
+after it lands and expires unspent after **30 s**. At most **6 live mines** may exist per tower; when a
+seventh would land, the oldest is removed.
+
+A mine detonates when any ground enemy walks within **0.35 tiles** of its centre: it deals **18 damage**
+to every ground enemy inside a **0.9-tile** radius, then is gone. Flyers never trigger a mine and are
+never damaged by it; friendly towers are unaffected. Mines are visible — a small hatch-ring on the path
+tile, with a faint 1 px pulse while armed — so the player can read where the field is dense without
+relying on colour.
+
+The **6-mine cap is the whole balance argument**: a minefield is a placement puzzle with a ceiling, not
+a stacking exploit. Without the cap a Minesweeper left anywhere near a choke would accumulate an
+unbounded burst over the course of a wave; with it, the field is a bounded resource the player places by
+choosing where the tower stands. The expected shape of the trade is the Frost tower's: strong on a
+corridor where enemies bunch, weak on open maps where a 0.9-tile burst catches one enemy, and useless
+against a pure flyer wave.
+
+The mine numbers are fixed, not tier-scaled: the drop interval, arming, expiry, cap, blast radius and
+damage do not change as the Cannon deepens through tiers 4 and 5. They are hypotheses from the mechanism
+first, to be tuned after the field reads on the board.
 
 ### 6.4 Selling
 
@@ -584,8 +611,9 @@ tower-only board again.
 
 Pass 2 adds the next four type bosses, each keeping its base type's identity and adding exactly one
 gimmick. They are separate kinds (naming them in waves, harness and tests), count as their base type
-for tower rules (a Flak cannon reads the Carrier as a flyer; walls block the Ram and the Sergeant but
-not the Carrier), pay 6× their base kill value, and pop like a boss on death.
+for tower rules (an AA tower reads the Carrier as a flyer, and a Minesweeper's mines pass under it;
+walls block the Ram and the Sergeant but not the Carrier), pay 6× their base kill value, and pop like a
+boss on death.
 
 | Kind | Name | Scale | HP | Speed | Integrity | Gimmick |
 |---|---|---|---|---|---|---|

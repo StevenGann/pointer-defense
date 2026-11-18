@@ -77,9 +77,14 @@ const MARK_PRIMITIVES: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch
       { type: 'poly', pts: [-0.06, -0.02, 0.04, -0.18, 0.2, -0.02, 0.1, 0.14] },
       { type: 'rect', x: 0.13, y: -0.22, w: 0.13, h: 0.05 },
     ],
-    // Flak (until Minesweeper lands): keeps the tilted tube, no hatch and no wide muzzle.
+    // Minesweeper: a mine — a spiked ball with a glint.
     B: [
-      { type: 'poly', pts: [-0.02, -0.02, 0.02, -0.18, 0.14, -0.02, 0.1, 0.14] },
+      { type: 'ring', x: 0, y: 0, r: 0.09 },
+      { type: 'line', x1: 0, y1: -0.17, x2: 0, y2: 0.17 },
+      { type: 'line', x1: -0.17, y1: 0, x2: 0.17, y2: 0 },
+      { type: 'line', x1: -0.12, y1: -0.12, x2: 0.12, y2: 0.12 },
+      { type: 'line', x1: 0.12, y1: -0.12, x2: -0.12, y2: 0.12 },
+      { type: 'rect', x: -0.03, y: -0.03, w: 0.06, h: 0.06 },
     ],
   },
   taser: {

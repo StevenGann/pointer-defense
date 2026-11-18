@@ -44,7 +44,7 @@ import {
   NO_BUILD_MESSAGE,
   AUTO_WAVE_DELAY_TICKS,
 } from '../src/core/state.ts';
-import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
+import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
@@ -105,7 +105,7 @@ import {
   WALL_FACE_DISABLED,
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
-import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName } from '../src/view/tooltipText.ts';
+import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName } from '../src/view/tooltipText.ts';
 import { BoardView, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE } from '../src/view/chrome.ts';
@@ -5500,13 +5500,11 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
 }
 
 {
-  // 42c. A Flak cannon (air-only) treats the Carrier as a flyer and ignores a ground Sergeant.
+  // 42c. An AA tower (flyers only) treats the Carrier as a flyer and ignores a ground Sergeant.
   const drop = (kind) => {
     const s = allUnlocked();
     s.economy.salvage = 10000;
-    placeTower(s, 'cannon', 5, 5);
-    upgradeTower(s, 5, 5);
-    chooseBranch(s, 5, 5, 'B');
+    placeTower(s, 'aa', 5, 5);
     s.phase = 'wave';
     s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
     const e = stationary(1, kind, 30, 5.5, 4.5);
@@ -5514,8 +5512,8 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     tick(s);
     return e.maxHp - e.hp;
   };
-  check(drop('flyer-boss') > 0, `Flak damages a Carrier (${drop('flyer-boss')})`);
-  check(drop('grunt-boss') === 0, 'Flak ignores a ground Sergeant');
+  check(drop('flyer-boss') > 0, `AA damages a Carrier (${drop('flyer-boss')})`);
+  check(drop('grunt-boss') === 0, 'AA ignores a ground Sergeant');
 }
 
 {
@@ -5883,6 +5881,204 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     'an edited map with the same geometry has the same route length as the shipped map');
   check(JSON.stringify(buildSchedule(1)) === JSON.stringify(buildSchedule(1)), 'wave generation is unchanged for an edited map');
   check(startWave(edited), 'a wave starts on the edited map');
+}
+
+// --- 44. Minesweeper (Cannon branch B) --------------------------------------------------------
+{
+  // 44a. Branching down B turns the cannon into a Minesweeper that never fires its gun.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'cannon', 5, 5);
+  const cannon = towerAt(s, 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'B');
+  check(isMinesweeper(cannon), 'cannon B is a Minesweeper');
+  check(branchName('cannon', 'B') === 'Minesweeper', 'cannon branch B is named Minesweeper');
+
+  s.phase = 'wave';
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const grunt = stationary(1, 'grunt', 1, 5.5, 5.0);
+  s.enemies.push(grunt);
+  for (let i = 0; i < 120; i++) tick(s);
+  check(grunt.hp === grunt.maxHp && cannon.damageDealt === 0,
+    'a Minesweeper never fires its gun at a ground enemy in range');
+}
+
+{
+  // 44b. The first mine lands at exactly 2.5 s of sim, not before.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'cannon', 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'B');
+  check(s.mines.length === 0, 'a fresh Minesweeper starts with no mines');
+  for (let i = 0; i < MINE_INTERVAL_TICKS - 1; i++) tick(s);
+  check(s.mines.length === 0, 'no mine before 2.5 s have passed');
+  tick(s);
+  check(s.mines.length === 1, 'the first mine lands at exactly 2.5 s');
+}
+
+{
+  // 44c. A mine arms 0.5 s after it lands and never detonates before that.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'cannon', 5, 5);
+  const tower = towerAt(s, 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'B');
+  s.phase = 'wave';
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const placed = s.clock;
+  s.mines.push({ id: 900, towerId: tower.id, x: 5.5, y: 6.5, placedTick: placed, armedAtTick: placed + MINE_ARM_TICKS, expiresTick: placed + MINE_EXPIRE_TICKS });
+  const grunt = stationary(1, 'grunt', 1, 5.5, 6.5);
+  s.enemies.push(grunt);
+
+  tick(s);
+  check(grunt.hp === grunt.maxHp, 'an unarmed mine does not detonate under an enemy');
+  check(s.mines.length === 1, 'the unarmed mine is not consumed');
+
+  while (s.clock < placed + MINE_ARM_TICKS) tick(s);
+  check(grunt.hp === grunt.maxHp, 'the mine never detonates before it arms');
+  check(s.mines.length === 1, 'the mine survives until its arming tick');
+
+  tick(s);
+  check(s.mines.length === 0, 'an armed mine detonates once a ground enemy stands on it');
+  check(grunt.hp === grunt.maxHp - MINE_DAMAGE, `the detonation deals ${MINE_DAMAGE} (grunt ${grunt.hp}/${grunt.maxHp})`);
+}
+
+{
+  // 44d. An armed mine damages every ground enemy inside 0.9 tiles and removes itself.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'cannon', 5, 5);
+  const tower = towerAt(s, 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'B');
+  s.phase = 'wave';
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const now = s.clock;
+  s.mines.push({ id: 901, towerId: tower.id, x: 5.5, y: 6.5, placedTick: now, armedAtTick: now, expiresTick: now + MINE_EXPIRE_TICKS });
+  const onMine = stationary(1, 'grunt', 1, 5.5, 6.5);
+  const near = stationary(2, 'grunt', 1, 5.9, 6.5);
+  const far = stationary(3, 'grunt', 1, 7.5, 6.5);
+  s.enemies.push(onMine, near, far);
+  tick(s);
+  check(s.mines.length === 0, 'an armed mine is removed once triggered');
+  check(onMine.hp === onMine.maxHp - MINE_DAMAGE, `the triggering enemy takes ${MINE_DAMAGE}`);
+  check(near.hp === near.maxHp - MINE_DAMAGE, 'a ground enemy inside 0.9 tiles also takes 18');
+  check(far.hp === far.maxHp, 'a ground enemy beyond 0.9 tiles is untouched');
+}
+
+{
+  // 44e. A flyer crossing a mine takes no damage and does not consume it.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'cannon', 5, 5);
+  const tower = towerAt(s, 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'B');
+  s.phase = 'wave';
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const now = s.clock;
+  s.mines.push({ id: 902, towerId: tower.id, x: 5.5, y: 6.5, placedTick: now, armedAtTick: now, expiresTick: now + MINE_EXPIRE_TICKS });
+  const flyer = stationary(1, 'flyer', 1, 5.5, 6.5);
+  s.enemies.push(flyer);
+  tick(s);
+  check(flyer.hp === flyer.maxHp, 'a flyer crossing a mine takes no damage');
+  check(s.mines.length === 1, 'a flyer does not consume the mine');
+}
+
+{
+  // 44f. The seventh mine evicts the oldest: never more than six live per tower.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'cannon', 5, 5);
+  const tower = towerAt(s, 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'B');
+  let firstPlaced = Infinity;
+  let maxSeen = 0;
+  for (let i = 0; i < 7 * MINE_INTERVAL_TICKS; i++) {
+    tick(s);
+    for (const m of s.mines) firstPlaced = Math.min(firstPlaced, m.placedTick);
+    maxSeen = Math.max(maxSeen, s.mines.length);
+  }
+  check(maxSeen === MINE_LIVE_CAP, `never more than ${MINE_LIVE_CAP} live mines (peak ${maxSeen})`);
+  check(s.mines.length === MINE_LIVE_CAP, `exactly ${MINE_LIVE_CAP} mines remain after a seventh drop`);
+  check(s.mines.every((m) => m.towerId === tower.id), 'all live mines belong to the tower');
+  check(!s.mines.some((m) => m.placedTick === firstPlaced), 'the seventh drop removed the oldest mine');
+}
+
+{
+  // 44g. Selling the tower removes its mines.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'cannon', 5, 5);
+  const tower = towerAt(s, 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'B');
+  const now = s.clock;
+  s.mines.push({ id: 910, towerId: tower.id, x: 5.5, y: 6.5, placedTick: now, armedAtTick: now, expiresTick: now + MINE_EXPIRE_TICKS });
+  check(sellTower(s, 5, 5), 'sell the Minesweeper');
+  check(s.mines.length === 0, 'selling the tower removes its mines');
+}
+
+{
+  // 44h. A destroyed tower takes its mines with it (the destroy path cleans up by tower id too).
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  const first = stepToward(s.breacherField, SPAWN.col, SPAWN.row);
+  placeTower(s, 'wall', first.col, first.row);
+  const wall = towerAt(s, first.col, first.row);
+  const now = s.clock;
+  s.mines.push({ id: 911, towerId: wall.id, x: 5.5, y: 1.5, placedTick: now, armedAtTick: now, expiresTick: now + MINE_EXPIRE_TICKS });
+  s.phase = 'wave';
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const b = createEnemy(1, 'breacher', 12, SPAWN, EXIT);
+  s.enemies.push(b);
+  for (let i = 0; i < 6000 && !b.dead && towerAt(s, first.col, first.row); i++) tick(s);
+  check(!towerAt(s, first.col, first.row), 'the wall was destroyed by the breacher');
+  check(s.mines.length === 0, 'a destroyed wall takes its mines with it');
+}
+
+{
+  // 44i. Fixed-timestep equivalence holds with mines live and an enemy walking the field.
+  const run = (frameMs) => {
+    const s = allUnlocked();
+    s.economy.salvage = 100000;
+    placeTower(s, 'cannon', 5, 5);
+    upgradeTower(s, 5, 5);
+    chooseBranch(s, 5, 5, 'B');
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    s.enemies.push(createEnemy(1, 'grunt', 6, SPAWN, EXIT));
+    for (let t = 0; t < 1000 * TICK_MS - frameMs; t += frameMs) step(s, frameMs);
+    while (s.tick < 1000) tick(s);
+    return JSON.stringify([
+      s.mines.map((m) => [m.id, m.towerId, +m.x.toFixed(4), +m.y.toFixed(4), m.placedTick, m.armedAtTick, m.expiresTick]),
+      s.enemies.map((e) => [e.id, +e.hp.toFixed(4), e.dead]),
+      s.economy,
+      s.integrity,
+      s.rng,
+      s.clock,
+    ]);
+  };
+  const at60 = run(TICK_MS);
+  check(at60 === run(1000 / 144), 'mines live: same result at 60 Hz and 144 Hz frames');
+  check(at60 === run(1000 / 23), 'mines live: same result at 23 Hz frames');
+}
+
+{
+  // 44j. The branch tooltip names the cap and the duration, both otherwise invisible.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'cannon', 5, 5);
+  const cannon = towerAt(s, 5, 5);
+  upgradeTower(s, 5, 5);
+  const tip = tooltipText(branchTooltipLines(cannon, 'B', s.economy.salvage)[0]);
+  check(tip.startsWith('Minesweeper — lays mines on the path; flyers pass over them'),
+    `branch tooltip names the behaviour (${tip})`);
+  check(tip.includes('6 max') && tip.includes('30 s'), `branch tooltip states the cap and duration (${tip})`);
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
