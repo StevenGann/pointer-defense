@@ -347,7 +347,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 {
   // Every level loads with a walkable start and exit and a route of the documented length.
   const ROUTE_TOLERANCE = 2;
-  const ROUTE_LENGTHS = { corridor: 48, dumbbell: 28, 'open-field': 22, turnstile: 20 };
+  const ROUTE_LENGTHS = { corridor: 48, dumbbell: 28, 'open-field': 22, turnstile: 20, fork: 22, ladder: 25 };
   for (const level of LEVELS) {
     const grid = createGrid(level);
     const field = buildField(grid, new Set(), level.exits[0]);
@@ -400,6 +400,100 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     check(!canCycleLevel(s), 'map cycling is refused once a tower exists');
     check(!cycleLevel(s), 'cycleLevel returns false once a tower exists');
   }
+}
+
+// --- 5g. Multi-route levels: no-routes unchanged, fork/ladder load, overlap, isolation -------
+{
+  // A deterministic slice of a wave on each no-route level, hashed so any change to the single
+  // implicit route (or to wave balance) trips this byte-identity check.
+  const simulate = (id) => {
+    const s = stateOnLevel(id);
+    s.economy.salvage = 10000;
+    placeTower(s, 'gun', 3, 6);
+    startWave(s);
+    for (let i = 0; i < 1000; i++) tick(s);
+    return JSON.stringify([
+      s.levelId,
+      s.economy.salvage,
+      s.economy.earned,
+      s.integrity,
+      s.enemies.map((e) => [e.kind, e.wave, e.hp, e.dist, e.routeIndex]),
+      s.rng,
+      s.tick,
+      s.clock,
+    ]);
+  };
+  let table = '';
+  for (const id of ['corridor', 'dumbbell', 'open-field', 'turnstile']) table += simulate(id) + '\n';
+  let h = 0x811c9dc5;
+  for (let i = 0; i < table.length; i++) {
+    h ^= table.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  check((h >>> 0).toString(16) === '83ea51ae', `no-route levels unchanged (wave hash ${(h >>> 0).toString(16)})`);
+}
+
+{
+  // Both authored routes levels load, and a level whose routes overlap is rejected by name.
+  check(validateLevel(levelById('fork')) === null, 'fork: validateLevel accepts the map');
+  check(validateLevel(levelById('ladder')) === null, 'ladder: validateLevel accepts the map');
+
+  const overlap = {
+    id: 'overlap',
+    name: 'Overlap',
+    walls: [],
+    starts: [{ col: 0, row: 6 }],
+    exits: [{ col: 19, row: 6 }],
+    routes: [
+      [{ col: 0, row: 6 }, { col: 1, row: 6 }, { col: 2, row: 6 }, { col: 19, row: 6 }],
+      [{ col: 0, row: 6 }, { col: 2, row: 6 }, { col: 3, row: 6 }, { col: 19, row: 6 }],
+    ],
+  };
+  check(validateLevel(overlap) === 'routes overlap',
+    'a level whose routes overlap (outside spawn/exit) is rejected');
+
+  const disjoint = {
+    id: 'disjoint',
+    name: 'Disjoint',
+    walls: [],
+    starts: [{ col: 0, row: 6 }],
+    exits: [{ col: 19, row: 6 }],
+    routes: [
+      [{ col: 0, row: 6 }, { col: 1, row: 5 }, { col: 19, row: 6 }],
+      [{ col: 0, row: 6 }, { col: 1, row: 7 }, { col: 19, row: 6 }],
+    ],
+  };
+  check(validateLevel(disjoint) === null, 'routes sharing only the spawn and exit are accepted');
+}
+
+{
+  // Spawned enemies alternate routes by a seeded, deterministic round-robin.
+  const assign = () => {
+    const s = stateOnLevel('fork');
+    const idx = [];
+    for (let i = 0; i < 6; i++) {
+      spawnCheatEnemy(s, 'grunt');
+      idx.push(s.enemies[s.enemies.length - 1].routeIndex);
+    }
+    return idx;
+  };
+  const seq = assign();
+  check(JSON.stringify(seq) === JSON.stringify([0, 1, 0, 1, 0, 1]),
+    `fork: enemies alternate routes 0,1,0,1 (${seq.join(',')})`);
+  check(JSON.stringify(assign()) === JSON.stringify(seq), 'fork: route distribution is deterministic across runs');
+}
+
+{
+  // A wall on one route re-routes that corridor alone; the other route's field is untouched.
+  const s = stateOnLevel('fork');
+  const beforeA = Array.from(s.routeFields[0]);
+  const beforeB = Array.from(s.routeFields[1]);
+  s.economy.salvage = 10000;
+  check(placeTower(s, 'wall', 5, 2), 'wall placed on the upper route');
+  check(JSON.stringify(Array.from(s.routeFields[1])) === JSON.stringify(beforeB),
+    'a wall on one route leaves the other route field unchanged');
+  check(JSON.stringify(Array.from(s.routeFields[0])) !== JSON.stringify(beforeA),
+    'a wall on a route changes that route field');
 }
 
 // --- 5f. The static tile layer keys on the map, not just the geometry ------------------------
