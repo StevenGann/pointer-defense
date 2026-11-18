@@ -805,6 +805,25 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     `a Gun deals ${FLYER_OFF_KIND_DAMAGE}x to a flyer (${gun.damageDealt.toFixed(2)} vs ${want.toFixed(2)})`);
   check(5.2 / gun.damageDealt > 6, 'the AA hits a flyer at least six times harder than a Gun');
 }
+
+{
+  // Air belongs to the Gun and the AA. Every other tower in the palette must refuse to acquire a
+  // flyer at all — Taser and Frost cannot target one, and neither can the Laser, the Cannon or a
+  // Cursor. A flyer parked inside their range must come out untouched.
+  for (const kind of ['laser', 'taser', 'frost', 'cannon', 'cursor']) {
+    const s = allUnlocked();
+    s.economy.salvage = 100000;
+    placeTower(s, kind, 5, 5);
+    const t = towerAt(s, 5, 5);
+    s.phase = 'wave';
+    const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+    const before = flyer.hp;
+    s.enemies.push(flyer);
+    for (let i = 0; i < 240; i++) tick(s);
+    check(t.damageDealt === 0, `a ${kind} cannot target a flyer (dealt ${t.damageDealt})`);
+    check(flyer.hp === before, `the flyer is untouched by a ${kind} (${flyer.hp} of ${before})`);
+  }
+}
 {
   // Every tower in the palette must be clickable. This is the AA bug in general form: a kind drawn in
   // the palette with no dispatch case is a button that does nothing.

@@ -1878,10 +1878,19 @@ function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: n
 }
 
 /** All hurtable enemies in range this tower may target. */
+/**
+ * The only towers that can put a shot into the air. A Gun can, at a steep damage penalty, and the AA
+ * tower exists for it; everything else cannot acquire a flyer at all — Taser and Frost cannot, and
+ * neither can the Laser, the Cannon or a Cursor. This is what makes a flyer wave a real threat until
+ * AA is scattered across the map, rather than a wave that a gun line absorbs.
+ */
+const AIR_TARGETABLE: ReadonlySet<TowerKind> = new Set<TowerKind>(['gun', 'aa']);
+
 function towerCandidates(s: RunState, t: Tower, st: EffectiveStats, range: number): Enemy[] {
   const out: Enemy[] = [];
   for (const e of s.enemies) {
     if (!towerCanHurt(s, e)) continue;
+    if (baseEnemyKind(e.kind) === 'flyer' && !AIR_TARGETABLE.has(t.kind)) continue;
     if (st.targetsFlyersOnly && baseEnemyKind(e.kind) !== 'flyer') continue;
     if (!inRange(t, e, range)) continue;
     out.push(e);
@@ -1953,12 +1962,12 @@ function acquireTargets(s: RunState, t: Tower, st: EffectiveStats, range: number
 }
 
 /**
- * How much of a non-AA tower's damage reaches a flyer. Air belongs to the AA tower: everything else only
- * chips at it, so a gun line that wins every ground wave still needs anti-air or it leaks. Chosen as a
- * hypothesis — sharp enough that the AA earns its slot, not so sharp that a flyer wave is unanswerable
- * without one.
+ * How much of a Gun's damage reaches a flyer. Only the Gun and the AA can target air at all (see
+ * AIR_TARGETABLE), and the Gun's share is deliberately small: it can finish a straggler, but a wave of
+ * flyers is the AA tower's job. Chosen as a hypothesis — sharp enough that a gun line leaks badly
+ * without AA, not so sharp that a stray flyer is unanswerable.
  */
-export const FLYER_OFF_KIND_DAMAGE = 0.25;
+export const FLYER_OFF_KIND_DAMAGE = 0.1;
 
 function perEnemyDamage(st: EffectiveStats, e: Enemy, dmg: number, towerKind: TowerKind): number {
   let d = dmg;
@@ -2078,7 +2087,8 @@ function cursorHome(t: Tower): { x: number; y: number } {
  * blocked by the shield stat — pointer damage wears shields down, exactly like the player's clicks.
  */
 function cursorCanTarget(s: RunState, e: Enemy): boolean {
-  return !e.dead && !shieldedByPopup(s, e);
+  // A cursor is a hand on the board, not anti-air: it cannot click a flyer (see AIR_TARGETABLE).
+  return !e.dead && !shieldedByPopup(s, e) && baseEnemyKind(e.kind) !== 'flyer';
 }
 
 /** Whether an enemy is inside the cursor's radius, measured to its home tile (not its arrow). */

@@ -749,6 +749,9 @@ function drawTower(
     }
   } else {
     drawTowerBody(baseSprite, turretSprite, markSprite, g, t, cx, cy, cell, clock);
+    // A pooled wrench sprite keeps `visible` from the last tower that used it, so it must be reset
+    // every frame: without this the red X stays on a tower after it has been repaired.
+    wrenchSprite.visible = false;
     if (isRepairing(t, clock)) {
       drawBar(g, cx, cy, cell, repairProgress(t, clock), REPAIR_COLOR);
     } else if (isEmpDisabled(t, clock)) {

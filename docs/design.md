@@ -249,10 +249,13 @@ Repair tower keeps a plain upgrade ladder for now.
 | **Laser** | 11 | 70 | 3.4 | 11, pierces 8 | 0.80 s | 150°/s | first (fixed) | straight lines | corridors you deliberately left open |
 | **AA** | 5 | 40 | 3.4 | 2.6, flyers only, 2× vs flyers | 0.55 s | 540°/s | player's choice | dedicated anti-air | flyer-heavy waves |
 
-Every **other** tower deals 0.25× its damage to a flyer (`FLYER_OFF_KIND_DAMAGE`). Air is the AA
-tower's job: a gun line that clears every ground wave still leaks flyers without one, because a Gun's
-3 damage lands as 0.75. The floor on armour damage is `min(1, dmg)`, not a flat 1, so that reduction is
-not rounded back up to a full point.
+Only two towers can acquire a flyer at all: the **Gun** and the **AA**. Taser and Frost cannot target
+one, and neither can the Laser, the Cannon or a Cursor — their shots simply never leave the ground.
+A Gun's hit lands at **0.1×** its damage against a flyer (`FLYER_OFF_KIND_DAMAGE`), so its 3 damage
+becomes 0.3: enough to finish a straggler that reaches the exit, nowhere near enough to answer a wave.
+Air is the AA tower's job, and until AA is scattered across the map a flyer wave is a real threat
+rather than something a gun line absorbs. The floor on armour damage is `min(1, dmg)`, not a flat 1,
+so that reduction is not rounded back up to a full point.
 | **Beacon** | 8 | 90 | 3.5 | none | — | — (still) | — | +60 % damage to towers in radius | a dense cluster worth buffing |
 | **Repair** | 18 | 220 | 4.5 | none (heals 2 HP/s) | — | — (still) | — | heals damaged towers in radius | a cluster of towers worth keeping alive |
 | **Wall** | 1 | 8 | — | none | — | — (still) | — | blocks the route, has hit points | a long maze made cheap |
