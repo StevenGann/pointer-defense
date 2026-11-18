@@ -4,5 +4,3 @@ release/
 .vite/
 *.local
 .DS_Store
-public/art/achievements/*
-!public/art/achievements/_placeholder.svg
