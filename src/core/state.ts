@@ -146,6 +146,7 @@ import {
   type Projectile,
 } from './projectiles.ts';
 import { rngNext } from './rng.ts';
+import { cheatsEnabled } from './cheats.ts';
 import { secondsToTicks, TICK_HZ, TICK_MS } from './time.ts';
 import {
   cloneProfile,
@@ -334,6 +335,10 @@ export interface RunState {
   autoWave: boolean;
   /** Simulation clock tick at which a pending auto-wave countdown fires (0 = no countdown). */
   autoWaveAtTick: number;
+  /** Cheats: God Mode on — integrity never falls and salvage is kept at a large ceiling. */
+  godMode: boolean;
+  /** Cheats: true the moment any cheat is used this run; the run then records nothing. */
+  cheatsUsed: boolean;
 }
 
 export function createRunState(profile: Profile = defaultProfile(), level: Level = DEFAULT_LEVEL): RunState {
@@ -410,6 +415,8 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     placedFirstTower: false,
     autoWave: profile.autoWave,
     autoWaveAtTick: 0,
+    godMode: false,
+    cheatsUsed: false,
   };
 }
 
@@ -921,8 +928,8 @@ export function restartWindows(s: RunState, profile: Profile): RestartResult {
   const next = cloneProfile(profile);
   next.unspentSpecs += gained;
   next.reboots += 1;
-  next.bestWave = Math.max(next.bestWave, s.wave);
-  if (!next.achievements.includes('reboot-50') && totalSpecs(next) >= 50) {
+  if (!s.cheatsUsed) next.bestWave = Math.max(next.bestWave, s.wave);
+  if (!s.cheatsUsed && !next.achievements.includes('reboot-50') && totalSpecs(next) >= 50) {
     next.achievements.push('reboot-50');
   }
   return { gained, profile: next };
@@ -934,6 +941,7 @@ export function restartWindows(s: RunState, profile: Profile): RestartResult {
  * step, never in the view.
  */
 export function checkAchievements(s: RunState): string[] {
+  if (s.cheatsUsed) return [];
   const unlocked: string[] = [];
   const add = (id: string): void => {
     if (!s.achievements.has(id)) {
@@ -1044,6 +1052,46 @@ export function closePopupEnemy(s: RunState, id: number): boolean {
 }
 
 // ---------------------------------------------------------------------------------------------
+// Cheats (the gate lives in cheats.ts; these reducers are inert unless it is open)
+
+/** The salvage ceiling God Mode maintains, so a god-mode purchase never runs out of money. */
+export const GOD_SALVAGE_CEILING = 1_000_000;
+
+/** God Mode: integrity is never reduced and salvage is topped up to the ceiling before it is spent. */
+export function toggleGodMode(s: RunState): void {
+  if (!cheatsEnabled()) return;
+  s.godMode = !s.godMode;
+  if (s.godMode) {
+    s.cheatsUsed = true;
+    s.economy.salvage = Math.max(s.economy.salvage, GOD_SALVAGE_CEILING);
+  }
+}
+
+/** The wave whose scaling a cheat-spawned enemy uses: the live wave, or the next one in build. */
+function cheatSpawnWave(s: RunState): number {
+  return s.phase === 'wave' ? s.wave : Math.max(1, s.wave + 1);
+}
+
+/** Spawn one enemy of `kind` at the spawn tile, using the current wave's scaling. */
+export function spawnCheatEnemy(s: RunState, kind: EnemyKind): boolean {
+  if (!cheatsEnabled()) return false;
+  const enemy = createEnemy(s.nextId++, kind, cheatSpawnWave(s), spawnTile(s), exitTile(s));
+  enemy.spawnTick = s.tick;
+  s.enemies.push(enemy);
+  s.cheatsUsed = true;
+  return true;
+}
+
+/** Kill every living enemy without salvage, achievement progress or a wave advance. */
+export function killAllEnemies(s: RunState): void {
+  if (!cheatsEnabled()) return;
+  s.enemies = [];
+  s.pointer.targetId = null;
+  s.pointer.held = false;
+  s.cheatsUsed = true;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Simulation
 
 /** Never simulate more than this many ticks per step() call, so a backgrounded tab does not
@@ -1073,6 +1121,7 @@ export function step(s: RunState, dtMs: number): number {
 /** One fixed 1/60 s simulation tick. */
 export function tick(s: RunState): void {
   s.tick++;
+  if (s.godMode) s.economy.salvage = Math.max(s.economy.salvage, GOD_SALVAGE_CEILING);
   updateToggles(s);
   tickRepairs(s);
   tickRepairAuras(s);
@@ -1592,7 +1641,7 @@ function leak(s: RunState, e: Enemy): void {
   e.dead = true;
   s.leaksByWave.set(e.wave, (s.leaksByWave.get(e.wave) ?? 0) + 1);
   if (baseEnemyKind(e.kind) === 'flyer') s.flyerLeaksByWave.set(e.wave, (s.flyerLeaksByWave.get(e.wave) ?? 0) + 1);
-  s.integrity = Math.max(0, s.integrity - ENEMY_STATS[e.kind].integrity);
+  if (!s.godMode) s.integrity = Math.max(0, s.integrity - ENEMY_STATS[e.kind].integrity);
   s.events.push({ type: 'leak', x: e.x, y: e.y });
   if (s.pointer.targetId === e.id) s.pointer.targetId = null;
   if (s.integrity === 0) {

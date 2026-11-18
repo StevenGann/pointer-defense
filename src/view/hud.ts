@@ -655,6 +655,7 @@ export class HudView {
   private readonly statusSalvage = makeText('');
   private readonly statusSpeed = makeText('');
   private readonly statusPaused = makeText('', true);
+  private readonly cheatMarker = makeText('');
   private readonly integrity = makeText('');
   private readonly route = makeText('');
   private readonly towerName = makeText('', true);
@@ -702,6 +703,7 @@ export class HudView {
       this.statusSalvage,
       this.statusSpeed,
       this.statusPaused,
+      this.cheatMarker,
       this.integrity,
       this.route,
       this.towerName,
@@ -754,6 +756,7 @@ export class HudView {
     this.modalButton2.anchor.set(0.5, 0.5);
     this.comboText.style.fill = PAL.title;
     this.statusPaused.style.fill = PAL.title;
+    this.cheatMarker.style.fill = PAL.maroon;
     this.globalRows[0].style.fill = PAL.shadow;
   }
 
@@ -806,6 +809,16 @@ export class HudView {
     const sp = l.statusPanes;
     this.lastTick = s.tick;
     if (this.notice !== '' && s.tick >= this.noticeUntilTick) this.notice = '';
+
+    // A small sunken CHEATS chip sits on the right of the hint pane while a cheat is active.
+    if (s.cheatsUsed) {
+      const cr: Rect = { x: sp.left.x + sp.left.w - 64 - 4, y: sp.left.y + 2, w: 64, h: sp.left.h - 4 };
+      bevel(g, cr, false, PAL.face);
+      this.cheatMarker.text = 'CHEATS';
+      this.cheatMarker.position.set(cr.x + 6, cr.y + Math.floor(cr.h / 2));
+    } else {
+      this.cheatMarker.text = '';
+    }
 
     // A paused run shows a sunken PAUSED box and keeps the speed readout; otherwise the hint shows.
     if (s.paused) {

@@ -1,5 +1,5 @@
 import type { Application } from 'pixi.js';
-import { menuItemAt, pixelToWorld, pointInRect, type Layout } from '../view/chrome.ts';
+import { menuItemAt, menuNameAt, pixelToWorld, pointInRect, type Layout, type MenuName } from '../view/chrome.ts';
 import { hudButtonAt, hudControlAt, modalRestartAt, victoryButtonAt, type HudAction } from '../view/hud.ts';
 import { adCloseRect } from '../view/ad.ts';
 import { menuEntryAt, type OpenMenu } from '../view/menu.ts';
@@ -48,8 +48,11 @@ import {
   towerAt,
   upgradePointer,
   upgradeTower,
+  killAllEnemies,
+  toggleGodMode,
   type RunState,
 } from '../core/state.ts';
+import { cheatsEnabled } from '../core/cheats.ts';
 
 /**
  * Hit testing and gestures against the run state, the menus and the modal dialogs. Tracks the
@@ -87,7 +90,7 @@ export interface MouseContext {
   restartWindows: () => void;
   startEndless: () => void;
   newRun: () => void;
-  openMenu: (name: 'file' | 'view' | 'help' | null) => void;
+  openMenu: (name: MenuName | null) => void;
   menuAction: (id: string) => void;
   dialogAction: (id: string) => void;
   closeDialog: () => void;
@@ -223,17 +226,9 @@ export class MouseController {
     }
 
     // Menu words open their dropdowns.
-    const mi = menuItemAt(l.menu, x, y);
-    if (mi === 0) {
-      this.ctx.openMenu('file');
-      return;
-    }
-    if (mi === 1) {
-      this.ctx.openMenu('view');
-      return;
-    }
-    if (mi === 2) {
-      this.ctx.openMenu('help');
+    const name = menuNameAt(l.menu, x, y);
+    if (name) {
+      this.ctx.openMenu(name);
       return;
     }
 
@@ -404,6 +399,21 @@ export class MouseController {
 
     const s = this.ctx.state();
     if (this.ctx.menu() || this.ctx.dialog()) return;
+
+    // Cheat shortcuts: Ctrl+Shift+G toggles God Mode, Ctrl+Shift+K kills all. They read the same
+    // gate as the menu, so with cheats hidden they are inert.
+    if (cheatsEnabled() && (e.ctrlKey || e.metaKey) && e.shiftKey) {
+      if (e.key === 'g' || e.key === 'G') {
+        e.preventDefault();
+        toggleGodMode(s);
+        return;
+      }
+      if (e.key === 'k' || e.key === 'K') {
+        e.preventDefault();
+        killAllEnemies(s);
+        return;
+      }
+    }
 
     if (e.key === 'p' || e.key === 'P') {
       togglePause(s);
