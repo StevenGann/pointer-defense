@@ -22,16 +22,18 @@ import { TICK_HZ } from '../core/time.ts';
 
 // --- Layout ----------------------------------------------------------------------------------
 
-const BAR_MAX_W = 320;
-const BAR_H_MARGIN = 48; // total horizontal clearance: width <= boardW - 48, so it never touches an edge
-const NAME_ROW_H = 16; // 13 px name text plus room for its 1 px shadow
-const SHIELD_H = 6;
-const HEALTH_H = 10;
-const GAP = 2;
-const TOP_MARGIN = 6; // just under the field's top edge
-const STACK_GAP = 6;
+// The panel lives in the window's title strip and grows down into the menu strip, never reaching
+// the field: nothing it draws sits over a tile.
+const PANEL_MAX_W = 460;
+const PANEL_PAD = 2; // face border and bevel; the dark interior starts inside it
+const ROW_H = 20; // name line, then the shield and health bars
+const ROW_GAP = 0; // two rows must fill the 44 px of title plus menu strip exactly
+const SHIELD_H = 4;
+const HEALTH_H = 5;
 const MAX_BARS = 3;
-const SLOT_H = NAME_ROW_H + GAP + SHIELD_H + GAP + HEALTH_H;
+const PANEL_FACE = PAL.face;
+const PANEL_WELL = 0x101010;
+const GIMMICK_COLOR = 0x9aa0a6;
 
 // --- Timing (fixed 60 Hz ticks, matching the rest of the chrome) ------------------------------
 
@@ -112,9 +114,9 @@ export function bossShield(e: Enemy): BossShield {
   return { segments: 0, filled: 0, ratio: 0 };
 }
 
-/** The bar width: never wider than 320 and never within 24 px of a board edge. */
+/** The panel width: never wider than 460, and always inside the board column's edges. */
 export function bossBarWidth(boardW: number): number {
-  return Math.max(1, Math.min(BAR_MAX_W, boardW - BAR_H_MARGIN));
+  return Math.max(1, Math.min(PANEL_MAX_W, boardW - 16));
 }
 
 export interface BossBarRect {
@@ -127,20 +129,33 @@ export interface BossBarRect {
   healthY: number;
 }
 
-/** The bounding rect for the `index`-th stacked bar, centred over the board field. */
-export function bossBarRect(l: Layout, index: number): BossBarRect {
+/**
+ * The panel that holds the boss bars: centred on the field, pinned to the top of the window, and
+ * clamped so its bottom edge stops above `client.y` — the field's first row of pixels. It grows
+ * from the title strip into the menu strip, which is empty to the right of the menus.
+ */
+export function bossPanelRect(l: Layout, rows: number): { x: number; y: number; w: number; h: number } {
   const w = bossBarWidth(l.boardW);
   const x = Math.round(l.board.x + l.boardW / 2 - w / 2);
-  const y = l.board.y + TOP_MARGIN + index * (SLOT_H + STACK_GAP);
-  return {
-    x,
-    y,
-    w,
-    h: SLOT_H,
-    nameY: y,
-    shieldY: y + NAME_ROW_H + GAP,
-    healthY: y + NAME_ROW_H + GAP + SHIELD_H + GAP,
-  };
+  const y = l.title.y;
+  const fits = Math.floor((l.client.y - y - PANEL_PAD * 2 + ROW_GAP) / (ROW_H + ROW_GAP));
+  const n = Math.max(1, Math.min(rows, fits, MAX_BARS));
+  return { x, y, w, h: PANEL_PAD * 2 + n * ROW_H + (n - 1) * ROW_GAP };
+}
+
+/** The geometry of the `index`-th bar row inside a panel rect. */
+export function bossRowRect(p: { x: number; y: number; w: number }, index: number): BossBarRect {
+  const inset = PANEL_PAD + 4;
+  const x = p.x + inset;
+  const y = p.y + PANEL_PAD + index * (ROW_H + ROW_GAP);
+  const w = p.w - inset * 2;
+  // 11 px name line, a 4 px shield bar, a 5 px health bar: 20 px per boss.
+  return { x, y, w, h: ROW_H, nameY: y, shieldY: y + 11, healthY: y + 15 };
+}
+
+/** The row for the `index`-th boss when up to `MAX_BARS` are showing. */
+export function bossBarRect(l: Layout, index: number): BossBarRect {
+  return bossRowRect(bossPanelRect(l, MAX_BARS), index);
 }
 
 /** The pixel width of a fill at `ratio` inside a bar of `innerW` usable pixels. */
@@ -317,10 +332,10 @@ export function bossBarFrame(track: BossBarTrack, tick: number, shakeOn: boolean
 
 const NAME_STYLE = {
   fontFamily: FONT,
-  fontSize: FONT_SIZE.body,
+  fontSize: FONT_SIZE.small,
   fontWeight: 'bold' as const,
   fill: PAL.highlight,
-  letterSpacing: 2,
+  letterSpacing: 1,
 };
 
 const TAG_STYLE = {
@@ -333,7 +348,7 @@ const TAG_STYLE = {
 const SUBTITLE_STYLE = {
   fontFamily: FONT,
   fontSize: FONT_SIZE.small,
-  fill: PAL.text,
+  fill: GIMMICK_COLOR,
 };
 
 export class BossBarView {
@@ -353,13 +368,13 @@ export class BossBarView {
     this.root.addChild(this.g);
     for (let i = 0; i < MAX_BARS; i++) {
       const shadow = new Text({ text: '', style: { ...NAME_STYLE, fill: PAL.dark } });
-      shadow.anchor.set(0.5, 0);
+      shadow.anchor.set(0, 0);
       const name = new Text({ text: '', style: NAME_STYLE });
-      name.anchor.set(0.5, 0);
+      name.anchor.set(0, 0);
       const tag = new Text({ text: '', style: TAG_STYLE });
       tag.anchor.set(0, 0);
       const subtitle = new Text({ text: '', style: SUBTITLE_STYLE });
-      subtitle.anchor.set(0.5, 0);
+      subtitle.anchor.set(1, 0);
       this.nameShadows.push(shadow);
       this.nameTexts.push(name);
       this.tagTexts.push(tag);
@@ -382,7 +397,19 @@ export class BossBarView {
     g.clear();
 
     const bars = visibleBossBars(this.tracks, state.tick);
-    const width = bossBarWidth(layout.boardW);
+    if (bars.length === 0) {
+      for (let i = 0; i < MAX_BARS; i++) {
+        this.nameTexts[i].text = '';
+        this.nameShadows[i].text = '';
+        this.tagTexts[i].text = '';
+        this.subtitleTexts[i].text = '';
+      }
+      return;
+    }
+
+    const panel = bossPanelRect(layout, bars.length);
+    const rowsFit = Math.max(1, Math.floor((panel.h - PANEL_PAD * 2 + ROW_GAP) / (ROW_H + ROW_GAP)));
+    this.drawPanel(g, panel);
 
     for (let i = 0; i < MAX_BARS; i++) {
       const track = bars[i];
@@ -390,14 +417,14 @@ export class BossBarView {
       const shadow = this.nameShadows[i];
       const tag = this.tagTexts[i];
       const subtitle = this.subtitleTexts[i];
-      if (!track) {
+      if (!track || i >= rowsFit) {
         name.text = '';
         shadow.text = '';
         tag.text = '';
         subtitle.text = '';
         continue;
       }
-      const r = bossBarRect(layout, i);
+      const r = bossRowRect(panel, i);
       const frame = bossBarFrame(track, state.tick, shakeOn);
       if (frame.alpha <= 0) {
         name.text = '';
@@ -406,21 +433,37 @@ export class BossBarView {
         subtitle.text = '';
         continue;
       }
-      this.drawBar(g, r, width, frame);
-      const cx = r.x + width / 2;
+      this.drawBar(g, r, r.w, frame);
       shadow.text = frame.name;
-      shadow.position.set(cx + 1, r.nameY + 1);
+      shadow.position.set(r.x + 1, r.nameY + 1);
       name.text = frame.name;
-      name.position.set(cx, r.nameY);
+      name.position.set(r.x, r.nameY);
+      shadow.alpha = frame.alpha;
+      name.alpha = frame.alpha;
       if (frame.showNew) {
         tag.text = 'NEW';
-        tag.position.set(cx + Math.ceil(name.width / 2) + 6, r.nameY + 2);
+        tag.position.set(r.x + Math.ceil(name.width) + 6, r.nameY);
+        tag.alpha = frame.alpha;
       } else {
         tag.text = '';
       }
       subtitle.text = frame.showNew && frame.gimmick !== null ? frame.gimmick : '';
-      subtitle.position.set(cx, r.healthY + HEALTH_H + 2);
+      subtitle.position.set(r.x + r.w, r.nameY);
+      subtitle.alpha = frame.alpha;
     }
+  }
+
+  /** The panel: a raised face border around a sunken dark well, like the rest of the chrome. */
+  private drawPanel(g: Graphics, p: { x: number; y: number; w: number; h: number }): void {
+    g.rect(p.x, p.y, p.w, p.h).fill({ color: PANEL_FACE });
+    g.rect(p.x, p.y, p.w, 1).fill({ color: PAL.highlight });
+    g.rect(p.x, p.y, 1, p.h).fill({ color: PAL.highlight });
+    g.rect(p.x, p.y + p.h - 1, p.w, 1).fill({ color: PAL.dark });
+    g.rect(p.x + p.w - 1, p.y, 1, p.h).fill({ color: PAL.dark });
+    const well = { x: p.x + 2, y: p.y + 2, w: p.w - 4, h: p.h - 4 };
+    g.rect(well.x, well.y, well.w, well.h).fill({ color: PANEL_WELL });
+    g.rect(well.x, well.y, well.w, 1).fill({ color: PAL.shadow });
+    g.rect(well.x, well.y, 1, well.h).fill({ color: PAL.shadow });
   }
 
   private drawBar(g: Graphics, r: BossBarRect, width: number, f: BossBarFrame): void {

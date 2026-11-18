@@ -1287,11 +1287,20 @@ track with a deep-red fill and a pale "damage lag" segment that drains to the tr
 **segmented per layer** — three segments, one per remaining layer, with stripped segments left as a dim
 outline so the player can see what is left.
 
-The bars sit **horizontally centred over the board field, just under its top edge** — below the window
-title bar and below the wave banner when one is showing — and never over a side panel. A bar is at most
-`min(320, fieldWidth − 48)` wide, so it never touches the board edges. Up to **three** bars stack,
-ordered by spawn time; a fourth boss drops the oldest rather than shrinking the rest. A bar appears
-over 150 ms and fades out 600 ms after its boss dies or leaves.
+The bars sit in a **panel pinned to the top of the window**, centred over the field: it starts at the
+window title strip and grows down into the menu strip, and it is clamped so its last row stops above
+`client.y` — the field's first row of pixels. Nothing it draws can sit on a tile, which is the point:
+the old placement floated the bars over the top rows of the board. The panel is a raised grey face
+around a sunken near-black well, matching the chrome, and its text is white on that well so it stays
+legible whatever the field behind it is doing. It is at most `min(460, fieldWidth − 16)` wide, so it
+never touches the board edges.
+
+Rows are laid out name-then-bars: an 11 px name line, then the shield bar (4 px) and the health bar
+(5 px), 20 px per boss. Up to **three** bosses are tracked, ordered by spawn time; a fourth drops the
+oldest rather than shrinking the rest. How many rows actually appear depends on the chrome height —
+at 1280×720 the title and menu strips hold two rows — and a boss that does not fit is tracked but not
+drawn. A row appears over 150 ms and fades out 600 ms after its boss dies or leaves. The first-appearance
+subtitle is drawn right-aligned on the name line, in grey, so it costs no extra height.
 
 The **first time a boss type appears in a profile** the bar is the teaching moment: the frame flashes
 once, the name carries a `NEW` tag for 2.5 s, and a one-line subtitle names the gimmick in plain words —

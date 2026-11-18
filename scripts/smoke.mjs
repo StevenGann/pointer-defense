@@ -127,6 +127,8 @@ import {
   barFillPx,
   bossBarFrame,
   bossBarRect,
+  bossPanelRect,
+  bossRowRect,
   bossGimmick,
   bossName,
   bossShield,
@@ -5951,17 +5953,29 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
 }
 
 {
-  // 40f. The bar never intersects a side panel or the field's top edge at two common resolutions.
-  for (const [vw, vh] of [[1280, 720], [1600, 900]]) {
+  // 40f. The panel lives in the title strip and never covers a tile at any common resolution.
+  for (const [vw, vh] of [[1280, 720], [1600, 900], [1024, 640], [1920, 1080]]) {
     const l = computeLayout(vw, vh);
-    const r = bossBarRect(l, 0);
     const intersects = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-    check(!intersects(r, l.leftPanel), `${vw}x${vh}: the bar never intersects the left panel`);
-    check(!intersects(r, l.rightPanel), `${vw}x${vh}: the bar never intersects the right panel`);
-    check(r.y >= l.board.y, `${vw}x${vh}: the bar sits below the field's top edge (and any wave banner)`);
-    check(r.w <= l.boardW - 48, `${vw}x${vh}: the bar width clears the board edges (${r.w})`);
-    const cx = l.board.x + l.boardW / 2;
-    check(Math.abs(r.x + r.w / 2 - cx) <= 1, `${vw}x${vh}: the bar is centred over the board field`);
+    for (const rows of [1, 2, 3]) {
+      const p = bossPanelRect(l, rows);
+      check(!intersects(p, l.board), `${vw}x${vh}: a ${rows}-boss panel never covers the field`);
+      check(!intersects(p, l.rightPanel), `${vw}x${vh}: a ${rows}-boss panel never covers the right panel`);
+      check(!intersects(p, l.leftPanel), `${vw}x${vh}: a ${rows}-boss panel never covers the left panel`);
+      check(p.y >= l.title.y, `${vw}x${vh}: the panel starts inside the title strip`);
+      check(p.y + p.h <= l.client.y, `${vw}x${vh}: the panel stops above the field's first row`);
+      check(p.w <= l.boardW - 16, `${vw}x${vh}: the panel width clears the board edges (${p.w})`);
+      const cx = l.board.x + l.boardW / 2;
+      check(Math.abs(p.x + p.w / 2 - cx) <= 1, `${vw}x${vh}: the panel is centred over the field`);
+    }
+    // Every row it can draw sits inside the panel and inside the field-free zone.
+    const full = bossPanelRect(l, 3);
+    const rowCount = Math.floor((full.h - 8 + 1) / 21);
+    for (let i = 0; i < rowCount; i++) {
+      const r = bossRowRect(full, i);
+      check(r.y >= full.y && r.y + r.h <= full.y + full.h, `${vw}x${vh}: row ${i} fits the panel`);
+      check(r.healthY + 5 <= l.client.y, `${vw}x${vh}: row ${i} health bar stays off the field`);
+    }
   }
 }
 
