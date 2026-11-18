@@ -9,6 +9,7 @@ import {
   currentPath,
   selectedTower,
   towerRangeMult,
+  type Mine,
   type RunState,
 } from '../core/state.ts';
 import {
@@ -163,6 +164,7 @@ export class BoardView {
   readonly root = new Container();
   private readonly tiles = new Graphics();
   private readonly path = new Graphics();
+  private readonly mines = new Graphics();
   private readonly shutterSprites = new Container();
   private readonly shutterSpritePool: Sprite[] = [];
   private readonly toggles = new Graphics();
@@ -198,7 +200,7 @@ export class BoardView {
     this.ghostTurret.visible = false;
     this.ghost.addChild(this.ghostBase, this.ghostTurret);
     this.popups.addChild(this.popupGfx);
-    this.root.addChild(this.tileSprites, this.tiles, this.path, this.shutterSprites, this.toggles, this.towerSprites, this.towers, this.wrenches, this.popups, this.enemies, this.enemyBodies, this.enemyFx, this.cursorArrows, this.ghost, this.overlay);
+    this.root.addChild(this.tileSprites, this.tiles, this.path, this.mines, this.shutterSprites, this.toggles, this.towerSprites, this.towers, this.wrenches, this.popups, this.enemies, this.enemyBodies, this.enemyFx, this.cursorArrows, this.ghost, this.overlay);
   }
 
   /** The pooled body sprite for the `index`-th living enemy, grown on demand. */
@@ -329,6 +331,9 @@ export class BoardView {
     }
 
     this.drawRoute([currentPath(state)], board, cell);
+
+    this.mines.clear();
+    for (const m of state.mines) drawMine(this.mines, m, board, cell, state.clock);
 
     this.towers.clear();
     this.enemyBodies.clear();
@@ -538,6 +543,34 @@ function drawTile(g: Graphics, kind: 'buildable' | 'blocked', px: number, py: nu
   } else {
     g.rect(px, py, cell, cell).fill(0xa0a0a0);
     edgeRect(g, px, py, cell, 0x707070);
+  }
+}
+
+/**
+ * A Minesweeper's mine: a small hatch-ring on its path tile. It is shape-only (a ring plus four
+ * short spokes) so it reads in the grey palette, and while armed a faint 1 px ring breathes outward
+ * so the player can tell a live field from one that has not armed yet.
+ */
+function drawMine(
+  g: Graphics,
+  mine: Mine,
+  board: { x: number; y: number; cell: number },
+  cell: number,
+  clock: number,
+): void {
+  const cx = board.x + mine.x * cell;
+  const cy = board.y + mine.y * cell;
+  const armed = clock >= mine.armedAtTick;
+  const alpha = armed ? 1 : 0.5;
+  const r = cell * 0.16;
+  g.circle(cx, cy, r).stroke({ width: 1, color: PAL.dark, alpha });
+  const s = r * 0.62;
+  g.moveTo(cx - s, cy).lineTo(cx + s, cy);
+  g.moveTo(cx, cy - s).lineTo(cx, cy + s);
+  g.stroke({ width: 1, color: PAL.dark, alpha });
+  if (armed) {
+    const pr = r * (1.35 + 0.15 * Math.sin(clock * 0.35));
+    g.circle(cx, cy, pr).stroke({ width: 1, color: PAL.dark, alpha: 0.35 });
   }
 }
 

@@ -815,6 +815,10 @@ function drainEvents(): void {
       case 'toggleChanged':
         hud.showNotice(`Shutter ${ev.index} ${ev.open ? 'opened' : 'closed'}`, 120);
         break;
+      case 'mineDetonated':
+        effects.addHitSpark(ev.x, ev.y);
+        sfx.play('cannon');
+        break;
       case 'towerUnlocked':
         hud.showNotice(ev.kinds.map((k) => `${TOWER_STATS[k].name} unlocked`).join(', '));
         break;

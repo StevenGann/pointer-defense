@@ -116,7 +116,7 @@ so the mark lands exactly where the procedural spec put it.
 | `gun-marksman.svg` | a long barrel with a sight notch |
 | `gun-repeater.svg` | two short barrels side by side |
 | `cannon-mortar.svg` | a short fat tube tilted up with a wide muzzle |
-| `cannon-minesweeper.svg` | the minesweeper's tilted tube |
+| `cannon-minesweeper.svg` | a mine: a spiked ball with a glint |
 | `laser-focus.svg` | a lens ring around the muzzle |
 | `laser-prism.svg` | a small triangle in front of the muzzle |
 | `taser-arc.svg` | two prongs with a spark between them |

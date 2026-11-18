@@ -8,8 +8,13 @@ import {
   gateLockRemainingSeconds,
   isFullyUpgraded,
   isGateLocked,
+  isMinesweeper,
   isRepairing,
   isTowerUnlocked,
+  MINE_BLAST_RADIUS,
+  MINE_DAMAGE,
+  MINE_EXPIRE_TICKS,
+  MINE_LIVE_CAP,
   repairCost,
   repairDurationTicks,
   repairHealRate,
@@ -71,7 +76,7 @@ export function tooltipText(line: TooltipLine): string {
 
 export const BRANCH_NAMES: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch, string>>>>> = {
   gun: { A: 'Marksman', B: 'Repeater' },
-  cannon: { A: 'Mortar', B: 'Flak' },
+  cannon: { A: 'Mortar', B: 'Minesweeper' },
   taser: { A: 'Arc', B: 'Overload' },
   frost: { A: 'Deep Freeze', B: 'Shard' },
   laser: { A: 'Focus', B: 'Prism' },
@@ -255,6 +260,18 @@ export function towerTooltipLines(
     return lines;
   }
 
+  if (isMinesweeper(tower)) {
+    const secs = (MINE_EXPIRE_TICKS / TICK_HZ).toFixed(0);
+    const lines = [
+      name,
+      'Lays mines on the path; flyers pass over them',
+      `${MINE_DAMAGE} dmg, ${MINE_BLAST_RADIUS.toFixed(1)}-tile blast, ${MINE_LIVE_CAP} max, ${secs} s`,
+      `Sell $${formatNumber(sellValue(tower))}`,
+    ];
+    if (isFullyUpgraded(tower)) lines.push('Fully upgraded');
+    return lines;
+  }
+
   const st = effectiveStats(tower);
   const damage = st.damage * tower.auraDamage;
   const range = st.range + tower.auraRange;
@@ -418,6 +435,13 @@ export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[
     ]];
   }
 
+  if (isMinesweeper(tower)) {
+    return [[
+      { text: `Minesweeper T${tower.tier} → T${next} — mines unchanged, ` },
+      { text: `$${formatNumber(cost)}` },
+    ]];
+  }
+
   const name = TOWER_STATS[tower.kind].name;
   const before = effectiveStats(tower);
   const after = effectiveStats({ ...tower, tier: next });
@@ -432,7 +456,6 @@ export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[
 
 /** Behaviour words for branches that change what the tower does rather than just how hard it hits. */
 const BRANCH_BEHAVIOUR: Readonly<Partial<Record<TowerKind, Readonly<Partial<Record<Branch, string>>>>>> = {
-  cannon: { B: 'air only' },
   aa: { A: 'shells burst, half damage to ground', B: '4 homing missiles per salvo' },
   taser: { A: 'chains to 3' },
   frost: { B: 'no slow' },
@@ -452,6 +475,15 @@ export function branchTooltipLines(tower: Tower, branch: Branch, salvage: number
   if (salvage < cost) return [cannotAffordText(salvage, cost)];
 
   const name = branchName(tower.kind, branch);
+
+  if (tower.kind === 'cannon' && branch === 'B') {
+    const secs = (MINE_EXPIRE_TICKS / TICK_HZ).toFixed(0);
+    return [[
+      { text: `${name} — lays mines on the path; flyers pass over them · ` },
+      { text: `${MINE_DAMAGE} dmg, ${MINE_BLAST_RADIUS.toFixed(1)}-tile blast, ${MINE_LIVE_CAP} max, ${secs} s` },
+      { text: `, $${formatNumber(cost)}` },
+    ]];
+  }
 
   if (tower.kind === 'wall') {
     const before = wallMaxHp(tower.tier, tower.branch);

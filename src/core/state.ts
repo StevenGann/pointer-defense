@@ -57,11 +57,20 @@ import {
   isGateLocked,
   isGateOpen,
   isDown,
+  isMinesweeper,
   isOffline,
   isRepairing,
   isToggleGate,
   isTowerUnlocked,
   isWall,
+  MINE_ARM_TICKS,
+  MINE_BLAST_RADIUS,
+  MINE_DAMAGE,
+  MINE_EXPIRE_TICKS,
+  MINE_INTERVAL_TICKS,
+  MINE_LIVE_CAP,
+  MINE_PLACE_RANGE,
+  MINE_TRIGGER_RADIUS,
   recomputeAuras,
   refreshTowerHp,
   repairCost,
@@ -194,13 +203,26 @@ export type GameEvent =
   | { type: 'adSpawned'; kind: AdKind }
   | { type: 'adDismissed'; kind: AdKind }
   | { type: 'toggleChanged'; index: number; open: boolean }
-  | { type: 'towerUnlocked'; kinds: TowerKind[] };
+  | { type: 'towerUnlocked'; kinds: TowerKind[] }
+  | { type: 'mineDetonated'; x: number; y: number };
 
 /** One started wave's live spawn queue. Spawn ticks are relative to `startTick`. */
 export interface WaveRun {
   wave: number;
   startTick: number;
   spawns: Spawn[];
+}
+
+/** A Minesweeper's live mine, sitting on a path tile. */
+export interface Mine {
+  readonly id: number;
+  readonly towerId: number;
+  /** Tile-centre world position. */
+  readonly x: number;
+  readonly y: number;
+  readonly placedTick: number;
+  readonly armedAtTick: number;
+  readonly expiresTick: number;
 }
 
 export interface RunState {
@@ -233,6 +255,8 @@ export interface RunState {
   enemies: Enemy[];
   /** In-flight projectiles (AA shells and missiles), ticked with the fixed timestep. */
   projectiles: Projectile[];
+  /** Live mines laid by Minesweepers, sitting on path tiles. */
+  mines: Mine[];
   /** Tower kind armed for placement, or null. UI selection, but kept here so the sim validates it. */
   selected: TowerKind | null;
   /** Placed tower selected for inspection, or null. Mutually exclusive with `selected`. */
@@ -343,6 +367,7 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     towers: [],
     enemies: [],
     projectiles: [],
+    mines: [],
     selected: null,
     selectedTowerId: null,
     runs: [],
@@ -658,6 +683,8 @@ export function chooseBranch(s: RunState, col: number, row: number, branch: Bran
   t.branch = branch;
   t.tier = 3;
   t.spent += cost;
+  // A Minesweeper arms its drop clock the moment it is built, so the first mine lands 2.5 s later.
+  if (isMinesweeper(t)) t.mineCooldown = MINE_INTERVAL_TICKS;
   // A Toggle gate installs closed: the branch must never silently open the route the player built.
   t.open = false;
   refreshTowerHp(t);
@@ -673,6 +700,7 @@ export function sellTower(s: RunState, col: number, row: number): boolean {
   const refund = sellValue(t);
   s.towers = s.towers.filter((x) => x.id !== t.id);
   s.blocked.delete(row * s.grid.cols + col);
+  s.mines = s.mines.filter((m) => m.towerId !== t.id);
   s.economy.salvage += refund;
   if (s.selectedTowerId === t.id) s.selectedTowerId = null;
   rebuildField(s);
@@ -1060,6 +1088,7 @@ export function tick(s: RunState): void {
     fireBreacherTurrets(s);
     tickCursors(s);
     tickProjectiles(s); // move in-flight shells/missiles, resolve hits and expiries
+    tickMines(s); // drop, arm and detonate Minesweeper mines
     fireTowers(s);
     applyReticle(s);
     s.enemies = s.enemies.filter((e) => !e.dead);
@@ -1071,6 +1100,7 @@ export function tick(s: RunState): void {
   } else if (s.phase === 'build') {
     tickCursors(s); // idle: the cursor drifts around its tile between waves
     tickProjectiles(s); // let a lingering missile expire after a wave clears
+    tickMines(s); // drop and expire mines between waves (nothing walks into them yet)
   }
   s.clock++;
   tickAutoWave(s);
@@ -1467,6 +1497,7 @@ function damageWall(s: RunState, wall: Tower, amount: number): void {
 function destroyWall(s: RunState, wall: Tower): void {
   s.towers = s.towers.filter((t) => t.id !== wall.id);
   s.blocked.delete(wall.row * s.grid.cols + wall.col);
+  s.mines = s.mines.filter((m) => m.towerId !== wall.id);
   if (s.selectedTowerId === wall.id) s.selectedTowerId = null;
   for (const e of s.enemies) {
     if (e.attackTowerId === wall.id) {
@@ -2117,6 +2148,7 @@ function fireTowers(s: RunState): void {
   for (const t of s.towers) {
     if ((s.towerDisabled.get(t.id) ?? 0) > 0) continue; // disabled by Blue Screen
     if (isDown(t, s.clock)) continue; // an offline (or EMP'd) tower does not fire
+    if (isMinesweeper(t)) continue; // a Minesweeper lays mines instead of firing
     const st = effectiveStats(t);
     if (st.damage <= 0 || st.fireInterval <= 0) continue; // beacon never fires
     const range = (st.range + t.auraRange) * towerRangeMult(s);
@@ -2191,6 +2223,109 @@ function fireTowers(s: RunState): void {
     else if (st.splash > 0) fireSplash(s, t, st, target, dmg);
     else hitEnemy(s, t, st, target, dmg);
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Minesweeper mines
+
+/** The path tile a Minesweeper drops its next mine on: the nearest within its drop range. */
+function nearestPathTile(s: RunState, tower: Tower): Tile | null {
+  const path = currentPath(s);
+  const tx = tower.col + 0.5;
+  const ty = tower.row + 0.5;
+  const range2 = MINE_PLACE_RANGE * MINE_PLACE_RANGE;
+  let best: Tile | null = null;
+  let bestD2 = Infinity;
+  for (const tile of path) {
+    const dx = tile.col + 0.5 - tx;
+    const dy = tile.row + 0.5 - ty;
+    const d2 = dx * dx + dy * dy;
+    if (d2 > range2) continue;
+    // Ties keep the lowest row then column, so the choice is deterministic.
+    if (
+      best === null ||
+      d2 < bestD2 ||
+      (d2 === bestD2 && (tile.row < best.row || (tile.row === best.row && tile.col < best.col)))
+    ) {
+      best = tile;
+      bestD2 = d2;
+    }
+  }
+  return best;
+}
+
+/** Drop one mine at the tower's nearest path tile, evicting its oldest mine at the 6-mine cap. */
+function layMine(s: RunState, tower: Tower): void {
+  const tile = nearestPathTile(s, tower);
+  if (tile === null) return;
+  const owned = s.mines.filter((m) => m.towerId === tower.id);
+  if (owned.length >= MINE_LIVE_CAP) {
+    let oldest = owned[0];
+    for (const m of owned) if (m.placedTick < oldest.placedTick) oldest = m;
+    s.mines = s.mines.filter((m) => m.id !== oldest.id);
+  }
+  const now = s.clock;
+  s.mines.push({
+    id: s.nextId++,
+    towerId: tower.id,
+    x: tile.col + 0.5,
+    y: tile.row + 0.5,
+    placedTick: now,
+    armedAtTick: now + MINE_ARM_TICKS,
+    expiresTick: now + MINE_EXPIRE_TICKS,
+  });
+}
+
+/** Detonate every armed mine a ground enemy has walked onto, damaging ground enemies in the blast. */
+function detonateMines(s: RunState): void {
+  if (s.mines.length === 0) return;
+  const remaining: Mine[] = [];
+  const trigger2 = MINE_TRIGGER_RADIUS * MINE_TRIGGER_RADIUS;
+  const blast2 = MINE_BLAST_RADIUS * MINE_BLAST_RADIUS;
+  for (const m of s.mines) {
+    if (s.clock < m.armedAtTick) {
+      remaining.push(m);
+      continue;
+    }
+    let triggered = false;
+    for (const e of s.enemies) {
+      if (e.dead || isFlyerKind(e.kind) || isPopupEnemy(e)) continue;
+      if ((e.x - m.x) ** 2 + (e.y - m.y) ** 2 <= trigger2) {
+        triggered = true;
+        break;
+      }
+    }
+    if (!triggered) {
+      remaining.push(m);
+      continue;
+    }
+    const tower = s.towers.find((t) => t.id === m.towerId);
+    for (const e of s.enemies) {
+      if (isFlyerKind(e.kind) || !towerCanHurt(s, e)) continue;
+      if ((e.x - m.x) ** 2 + (e.y - m.y) ** 2 <= blast2) {
+        damageEnemy(s, e, MINE_DAMAGE, 'tower', false, tower);
+      }
+    }
+    s.events.push({ type: 'mineDetonated', x: m.x, y: m.y });
+  }
+  s.mines = remaining;
+}
+
+/** Advance mines one tick: expire, drop new ones on each Minesweeper's clock, then detonate. */
+function tickMines(s: RunState): void {
+  s.mines = s.mines.filter((m) => s.clock < m.expiresTick);
+  for (const t of s.towers) {
+    if (!isMinesweeper(t)) continue;
+    if ((s.towerDisabled.get(t.id) ?? 0) > 0) continue; // disabled by Blue Screen
+    if (isDown(t, s.clock)) continue; // an offline (or EMP'd) Minesweeper lays nothing
+    if (isRepairing(t, s.clock)) continue; // a Minesweeper mid-repair is off the field
+    t.mineCooldown--;
+    if (t.mineCooldown <= 0) {
+      layMine(s, t);
+      t.mineCooldown = MINE_INTERVAL_TICKS;
+    }
+  }
+  detonateMines(s);
 }
 
 // ---------------------------------------------------------------------------------------------
