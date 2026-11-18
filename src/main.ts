@@ -17,7 +17,7 @@ import {
   type RunState,
 } from './core/state.ts';
 import { DEFAULT_LEVEL, type Level } from './core/levels.ts';
-import { loadProfile, saveProfile, specGain, type Profile, type SpecKind } from './core/save.ts';
+import { addSeenEnemies, loadProfile, saveProfile, specGain, type Profile, type SpecKind } from './core/save.ts';
 import { achievementName, ACHIEVEMENTS } from './core/achievements.ts';
 import { ChromeView, computeLayout, PAL, pixelToWorld, pointInRect, type Layout } from './view/chrome.ts';
 import { BoardView } from './view/board.ts';
@@ -39,6 +39,7 @@ import { AdView } from './view/ad.ts';
 import { FloatingNumbersView } from './view/numbers.ts';
 import { MenuView, type OpenMenu } from './view/menu.ts';
 import { DialogView, type DialogModel } from './view/dialog.ts';
+import { HelpSession, HelpView, computeHelpLayout, helpHitAt, helpRows } from './view/help.ts';
 import { MouseController, type Screen } from './input/mouse.ts';
 import { EffectsView } from './view/effects.ts';
 import { BossBarView } from './view/bossBars.ts';
@@ -149,6 +150,8 @@ const tooltip = new TooltipView();
 const menuScreenView = new MenuScreenView();
 const loadDialogView = new LoadDialogView();
 const editorView = new EditorView();
+const helpSession = new HelpSession();
+const helpView = new HelpView();
 
 // Art loads without blocking the first frame; when it (or a DPR change) invalidates, the board drops
 // its cached procedural art and re-reads the texture lookup on the next frame.
@@ -160,7 +163,7 @@ void preloadArt().then(() => drawCursorArrow());
 
 const root = new Container();
 app.stage.addChild(root);
-root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, ad.root, menuView.root, dialogView.root, tooltip.root, menuScreenView.root, loadDialogView.root, editorView.root);
+root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, helpView.root, ad.root, menuView.root, dialogView.root, tooltip.root, menuScreenView.root, loadDialogView.root, editorView.root);
 
 sfx.setEnabled(profile.soundOn);
 sfx.setVolume(profile.volume);
@@ -296,6 +299,8 @@ function buildMenu(name: 'file' | 'view' | 'help'): OpenMenu {
     return {
       name,
       entries: [
+        { id: 'show-help', label: 'Show Help' },
+        { id: 'separator', label: '', separator: true },
         { id: 'sound', label: profile.soundOn ? 'Sound: On' : 'Sound: Off' },
         { id: 'volumeLow', label: 'Volume: Low', checked: profile.volume === 'low' },
         { id: 'volumeMed', label: 'Volume: Medium', checked: profile.volume === 'med' },
@@ -360,6 +365,9 @@ function menuAction(id: string): void {
         rows: [{ text: `${pkg.name} v${pkg.version}` }, { text: pkg.description }],
         buttons: [{ id: 'close', label: 'Close' }],
       };
+      break;
+    case 'show-help':
+      helpSession.show(layout);
       break;
     case 'sound':
       profile.soundOn = !profile.soundOn;
@@ -517,6 +525,38 @@ const mouse = new MouseController(app, {
     saveProfile(profile);
   },
   notice: (message) => hud.showNotice(message),
+  helpOpen: () => helpSession.open,
+  helpPointerDown: (x: number, y: number, button: number): boolean => {
+    const hl = computeHelpLayout(helpSession.x, helpSession.y);
+    const rows = helpRows(profile, helpSession.expanded);
+    const hit = helpHitAt(hl, rows, x, y);
+    if (hit === null) return false;
+    if (button === 0) {
+      switch (hit.type) {
+        case 'close':
+          helpSession.hide();
+          break;
+        case 'title':
+          helpSession.startDrag(x, y);
+          break;
+        case 'toolbar':
+          if (hit.action === 'back') helpSession.back();
+          else if (hit.action === 'forward') helpSession.forward();
+          else helpSession.contents();
+          break;
+        case 'tree':
+          if (hit.row >= 0) helpSession.clickTree(rows[hit.row]);
+          break;
+        case 'page':
+        case 'window':
+          break;
+      }
+    }
+    return true;
+  },
+  helpPointerMove: (x: number, y: number) => helpSession.dragTo(layout, x, y),
+  helpPointerUp: () => helpSession.endDrag(),
+  closeHelp: () => helpSession.hide(),
 });
 
 // --- Menu and editor input --------------------------------------------------------------------
@@ -818,6 +858,9 @@ function drainEvents(): void {
       case 'towerUnlocked':
         hud.showNotice(ev.kinds.map((k) => `${TOWER_STATS[k].name} unlocked`).join(', '));
         break;
+      case 'enemySpawned':
+        if (addSeenEnemies(profile, [ev.kind])) saveProfile(profile);
+        break;
       case 'click':
         break;
     }
@@ -845,6 +888,7 @@ app.ticker.add((ticker) => {
     bossBars.draw(state, layout, profile.shakeOn);
     hud.draw(state, layout, mouse.hover.hud);
     ad.draw(state);
+    helpView.draw(helpSession, profile, mouse.hover.x, mouse.hover.y);
     dialogView.draw(dialog, layout);
     updateTooltip();
     const shakeOffset = shake.offset(state.tick);
@@ -862,6 +906,7 @@ app.ticker.add((ticker) => {
   numbers.root.visible = running;
   bossBars.root.visible = running;
   hud.root.visible = running;
+  helpView.root.visible = running && helpSession.open;
   ad.root.visible = running;
   menuView.root.visible = running;
   dialogView.root.visible = running;
@@ -890,6 +935,13 @@ app.ticker.add((ticker) => {
 
   cursor.position.set(mouse.hover.x, mouse.hover.y);
 });
+
+/** True when the pointer is over the help window, which sits above the board and HUD. */
+function overHelpWindow(x: number, y: number): boolean {
+  if (!helpSession.open) return false;
+  const hl = computeHelpLayout(helpSession.x, helpSession.y);
+  return pointInRect(hl.window, x, y);
+}
 
 /** The tooltip lines for a HUD spend control, computed from the same functions the click applies. */
 function hudTooltipLines(action: HudAction, s: RunState): TooltipLine[] {
@@ -948,7 +1000,8 @@ function updateTooltip(): void {
     h.menuItem >= 0 || // over the menu bar
     state.phase === 'halted' ||
     state.phase === 'victory' ||
-    (state.ad !== null && pointInRect(state.ad, h.x, h.y)); // over an ad
+    (state.ad !== null && pointInRect(state.ad, h.x, h.y)) || // over an ad
+    overHelpWindow(h.x, h.y); // over the help viewer
 
   const viewportW = app.screen.width;
   const viewportH = app.screen.height;
@@ -1006,4 +1059,5 @@ function updateTooltip(): void {
 app.renderer.on('resize', () => {
   layout = computeLayout(app.screen.width, app.screen.height);
   syncViewport();
+  helpSession.reclamp(layout);
 });

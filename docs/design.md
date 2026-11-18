@@ -1331,6 +1331,76 @@ produces, so the format has a frozen example.
 
 ---
 
+## 21. The Help viewer
+
+The menu bar's **Help** menu gains a **Show Help** item. It opens a fixed Windows 95 window styled like
+the CHM help viewer — a draggable title bar, a close box, a contents tree on the left, a page on the
+right, a toolbar strip and a status line. It is a *viewer*, not a pause: the game clock keeps ticking,
+the run keeps going behind it, and it never stops a wave.
+
+### 21.1 Window behaviour
+
+- **One instance.** Choosing Show Help again focuses the open window; it never opens a second.
+- **Draggable by the title bar**, clamped so it can never be dragged fully off the client area. It
+  opens centred the first time and keeps its position for the session. It is a fixed window — no
+  resize, honest about being a viewer.
+- **A working close box** in the title bar, and Escape closes it while it has focus. Escape unwinds in
+  order: a modal dialog or an open dropdown first, then the help viewer, then the run itself.
+- **Layering.** It sits above the board and the HUD, below the modal dialogs (Restart Windows, New Run)
+  and below an open desktop ad. Clicks inside the window never reach the board, the HUD or the palette;
+  clicks outside it do, so the game keeps running behind it.
+
+### 21.2 Shape
+
+- Win95 chrome: a 22 px title bar with the game's own border, a raised toolbar strip under it, a sunken
+  tree panel on the left and a sunken page panel on the right, and an 18 px status line at the bottom.
+- Toolbar: **Contents** (returns the tree to its collapsed top), **Back** and **Forward** over visited
+  pages. Only a control that works is drawn — Back and Forward grey out when there is nothing to visit.
+- Tree rows are 18 px, 11 px text, with the standard expand/collapse brackets for chapters. The selected
+  row uses the Win95 selection (dark blue fill, white text).
+- Page text is 11 px, wraps to the panel width, with a heading and short paragraphs. No scrolling: a
+  page that would overflow is shortened instead.
+
+### 21.3 Content and gating
+
+Content is authored as data in `src/content/help.ts` — `{ id, title, category, gate, body }` where
+`body` is an array of short paragraphs or bullets. The five chapters are **Getting started** and
+**Mechanics** (always available), **Enemies** (one page per ordinary kind), **Bosses** (one page per
+variant plus one general page) and **Towers** (one page per kind, stating its cost, range, damage, fire
+interval, branches and what it is for).
+
+Pages state **how the thing works and how to answer it**, never what is coming later. The numbers are
+read from the balance tables in `towers.ts` / `enemies.ts`, not retyped, so a rebalance updates the
+Help text for free.
+
+The gates:
+
+- **Tower pages** unlock when the player has ever unlocked the tower — `Profile.bestWave` against
+  `towerUnlockWave(kind)` — so a tower seen in an earlier run stays readable after a restart.
+- **Enemy pages** unlock when that enemy has been encountered — spawned on the field in any run, at
+  least once. `Profile.seenEnemies` persists it the same way `seenBossKinds` does (capped, validated on
+  load, bosses included).
+- **Boss pages** unlock on first encounter with that variant. `seenBossKinds` is the single source of
+  truth, reused by the boss bar's NEW tag, so the help gate and the boss bar cannot disagree. The one
+  general "Bosses" page waits for the first boss encounter.
+- **Locked rows are greyed out, labelled `Undiscovered`, and unselectable.** They never reveal the name
+  — a greyed "Carrier" would be a spoiler with the serial numbers filed off. The chapter stays visible
+  so the player can see there is more to learn; clicking a locked row does nothing and the status line
+  says why (`Encounter this enemy to learn about it`).
+- **Mechanics and Getting started are never locked.**
+
+`Profile` gains `seenEnemies` only; nothing else is bumped. An older save without the field loads
+cleanly and simply starts with everything locked that is not currently on screen.
+
+### 21.4 Help, not spoilers — policy
+
+The point of this window is to explain a mechanic the player has **already met**, not to preview what
+is coming. Every gate exists to protect that: enemy and boss pages wait for an encounter, tower pages
+wait for an unlock, locked rows hide the name, and the always-available pages never name an enemy,
+boss or tower the player has not seen. This is the standing rule for any future Help page.
+
+---
+
 ## Appendix A — What four games got right
 
 **Desktop Tower Defense** (Paul Preece, March 2007) — the path is not fixed; creeps take the shortest

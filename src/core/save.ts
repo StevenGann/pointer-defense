@@ -7,7 +7,7 @@
  * in-memory copy so a broken store never stops the game from running.
  */
 
-import { isBossVariant, type EnemyKind } from './enemies.ts';
+import { isBossVariant, isEnemyKind, type EnemyKind } from './enemies.ts';
 
 export const SAVE_KEY = 'pointer-defense/save';
 
@@ -46,6 +46,8 @@ export interface Profile {
   shakeOn: boolean;
   /** Boss kinds already announced (first appearance), so a type's teaching moment fires once. */
   seenBossKinds: EnemyKind[];
+  /** Enemy kinds (bosses included) already encountered on the field, for the Help viewer gates. */
+  seenEnemies: EnemyKind[];
   /** The main-menu button the player last used; the boot lands here, Play for a fresh profile. */
   lastChoice: MenuChoice;
 }
@@ -108,6 +110,7 @@ export function defaultProfile(): Profile {
     autoWave: false,
     shakeOn: !prefersReducedMotion(),
     seenBossKinds: [],
+    seenEnemies: [],
     lastChoice: 'play',
   };
 }
@@ -136,6 +139,7 @@ export function cloneProfile(p: Profile): Profile {
     autoWave: p.autoWave,
     shakeOn: p.shakeOn,
     seenBossKinds: [...p.seenBossKinds],
+    seenEnemies: [...p.seenEnemies],
     lastChoice: p.lastChoice,
   };
 }
@@ -148,6 +152,18 @@ export function specGain(totalSalvageEarned: number): number {
 /** Total specs owned: everything spent into levels plus the unspent bank. */
 export function totalSpecs(p: Profile): number {
   return p.specs.cpu + p.specs.ram + p.specs.gpu + p.specs.disk + p.unspentSpecs;
+}
+
+/** Record enemy kinds the player has encountered, returning true when anything new was added. */
+export function addSeenEnemies(profile: Profile, kinds: readonly EnemyKind[]): boolean {
+  let changed = false;
+  for (const k of kinds) {
+    if (!profile.seenEnemies.includes(k)) {
+      profile.seenEnemies.push(k);
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 export interface StorageLike {
@@ -210,9 +226,14 @@ function parseProfile(raw: string): Profile | null {
   const seenBossKinds = Array.isArray(o.seenBossKinds)
     ? [...new Set(o.seenBossKinds.filter((k): k is EnemyKind => typeof k === 'string' && isBossVariant(k as EnemyKind)))]
     : [];
+  // Same cap-and-validate shape for encountered enemies (bosses included); an older save without the
+  // field simply loads an empty list, so every Help page that is not on screen starts locked.
+  const seenEnemies = Array.isArray(o.seenEnemies)
+    ? [...new Set(o.seenEnemies.filter((k): k is EnemyKind => typeof k === 'string' && isEnemyKind(k as EnemyKind)))]
+    : [];
   const lastChoice: MenuChoice = o.lastChoice === 'editor' || o.lastChoice === 'load' ? o.lastChoice : 'play';
 
-  return { version: SAVE_VERSION, specs, unspentSpecs, achievements, bestWave, reboots, soundOn, volume, autoWave, shakeOn, seenBossKinds, lastChoice };
+  return { version: SAVE_VERSION, specs, unspentSpecs, achievements, bestWave, reboots, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice };
 }
 
 /**

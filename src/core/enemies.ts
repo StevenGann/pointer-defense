@@ -5,6 +5,24 @@ export type EnemyKind =
   | 'grunt' | 'runner' | 'shielded' | 'flyer' | 'armoured' | 'saboteur' | 'breacher' | 'popup'
   | 'grunt-boss' | 'runner-boss' | 'shielded-boss' | 'flyer-boss' | 'armoured-boss' | 'saboteur-boss' | 'breacher-boss';
 
+/** The eight ordinary enemy kinds (boss variants excluded), in introduction order. */
+export const ENEMY_KINDS: readonly EnemyKind[] = [
+  'grunt', 'runner', 'shielded', 'flyer', 'armoured', 'saboteur', 'breacher', 'popup',
+];
+
+/** The seven boss variant kinds, in first-appearance order (docs/design.md §7.1 and §7.2). */
+export const BOSS_KINDS: readonly EnemyKind[] = [
+  'grunt-boss', 'runner-boss', 'shielded-boss', 'flyer-boss', 'armoured-boss', 'saboteur-boss', 'breacher-boss',
+];
+
+/** Every enemy kind, bosses included. */
+export const ALL_ENEMY_KINDS: readonly EnemyKind[] = [...ENEMY_KINDS, ...BOSS_KINDS];
+
+/** Whether an arbitrary value is an enemy kind, for validating persisted seen lists on load. */
+export function isEnemyKind(v: unknown): v is EnemyKind {
+  return typeof v === 'string' && (ALL_ENEMY_KINDS as readonly string[]).includes(v);
+}
+
 export interface EnemyStats {
   readonly name: string;
   /** Hit points at wave 1; scaled by waveHpScale. */

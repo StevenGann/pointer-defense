@@ -68,7 +68,7 @@ import {
   setEditorToggle,
   editorTileAt,
 } from '../src/core/editor.ts';
-import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, isBossKind, isBossVariant, isPopupEnemy, isFlyerKind, slowFactorFor, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS, CARRIER_BROOD_COUNT, CARRIER_BROOD_INTERVAL_TICKS, CARRIER_DEATH_BROOD_COUNT, DREADNOUGHT_PLATING, WIRECUTTER_EMP_RADIUS, WIRECUTTER_EMP_TICKS, RAM_TOWER_DPS, RAM_TURRET_DAMAGE, RAM_TURRET_RANGE } from '../src/core/enemies.ts';
+import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, ENEMY_KINDS, BOSS_KINDS, isBossKind, isBossVariant, isPopupEnemy, isFlyerKind, slowFactorFor, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS, CARRIER_BROOD_COUNT, CARRIER_BROOD_INTERVAL_TICKS, CARRIER_DEATH_BROOD_COUNT, DREADNOUGHT_PLATING, WIRECUTTER_EMP_RADIUS, WIRECUTTER_EMP_TICKS, RAM_TOWER_DPS, RAM_TURRET_DAMAGE, RAM_TURRET_RANGE } from '../src/core/enemies.ts';
 import { missileSeed } from '../src/core/projectiles.ts';
 import { rngNext } from '../src/core/rng.ts';
 import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS } from '../src/core/ads.ts';
@@ -90,7 +90,7 @@ import {
   CRIT_MULTIPLIER,
   MARKED_DAMAGE_MULT,
 } from '../src/core/pointer.ts';
-import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion } from '../src/core/save.ts';
+import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies } from '../src/core/save.ts';
 import { restartWindows, checkAchievements, enterEndless, pointerDamageMult } from '../src/core/state.ts';
 import { dashRects, offsetSegment, routeOffset } from '../src/view/route.ts';
 import { enemyDrawOrder, popupCloseHit, popupCloseRect, popupWindowRect, POPUP_TITLE_H, POPUP_CLOSE_W, POPUP_CLOSE_H } from '../src/view/popupEnemy.ts';
@@ -122,6 +122,8 @@ import {
   visibleBossBars,
 } from '../src/view/bossBars.ts';
 import { backingStorePixelSize } from '../src/view/screen.ts';
+import { HELP_PAGES, pageUnlocked, lockedReason, pageById } from '../src/content/help.ts';
+import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, HelpSession, HELP_W, HELP_H } from '../src/view/help.ts';
 import {
   ART_MANIFEST,
   ART_VIEWBOX,
@@ -5914,6 +5916,186 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     'an edited map with the same geometry has the same route length as the shipped map');
   check(JSON.stringify(buildSchedule(1)) === JSON.stringify(buildSchedule(1)), 'wave generation is unchanged for an edited map');
   check(startWave(edited), 'a wave starts on the edited map');
+}
+
+// --- 44. The Help viewer ----------------------------------------------------------------------
+
+{
+  // 44a. Every enemy kind, every boss variant and every tower kind has exactly one page, and the
+  // Bosses chapter also carries its one general page.
+  for (const kind of ENEMY_KINDS) {
+    const pages = HELP_PAGES.filter((p) => p.category === 'enemies' && p.gate.kind === 'enemy' && p.gate.enemy === kind);
+    check(pages.length === 1, `enemy ${kind} has exactly one Help page`);
+  }
+  for (const kind of BOSS_KINDS) {
+    const pages = HELP_PAGES.filter((p) => p.category === 'bosses' && p.gate.kind === 'boss' && p.gate.enemy === kind);
+    check(pages.length === 1, `boss ${kind} has exactly one Help page`);
+  }
+  for (const kind of TOWER_KINDS) {
+    const pages = HELP_PAGES.filter((p) => p.category === 'towers' && p.gate.kind === 'tower' && p.gate.tower === kind);
+    check(pages.length === 1, `tower ${kind} has exactly one Help page`);
+  }
+  check(HELP_PAGES.filter((p) => p.category === 'bosses' && p.gate.kind === 'any-boss').length === 1,
+    'the Bosses chapter has exactly one general page');
+}
+
+{
+  // 44b. Gates: tower pages key off bestWave, enemy pages off seenEnemies, boss pages off seenBossKinds,
+  // and the general boss page waits for the first boss encounter.
+  const p = defaultProfile();
+  const cannon = pageById('tower-cannon');
+  check(cannon !== undefined && !pageUnlocked(cannon, p), 'the Cannon page is locked before wave 4');
+  p.bestWave = 4;
+  check(pageUnlocked(cannon, p), 'the Cannon page unlocks once bestWave reaches its unlock wave');
+
+  const flyer = pageById('enemy-flyer');
+  check(flyer !== undefined && !pageUnlocked(flyer, p), 'the Flyer page is locked before the flyer is seen');
+  p.seenEnemies.push('flyer');
+  check(pageUnlocked(flyer, p), 'the Flyer page unlocks once the flyer is encountered');
+
+  const sergeant = pageById('boss-grunt-boss');
+  check(sergeant !== undefined && !pageUnlocked(sergeant, p), 'the Sergeant page is locked before the boss is seen');
+  p.seenBossKinds.push('grunt-boss');
+  check(pageUnlocked(sergeant, p), 'the Sergeant page unlocks once the boss is encountered');
+
+  check(pageUnlocked(pageById('getting-started'), p), 'Getting started is never locked');
+  check(pageUnlocked(pageById('mechanics-pointer'), p), 'Mechanics pages are never locked');
+
+  const general = pageById('bosses-in-general');
+  check(!pageUnlocked(general, defaultProfile()), 'the general boss page is locked before any boss is seen');
+  check(pageUnlocked(general, p), 'the general boss page unlocks after the first boss');
+}
+
+{
+  // 44c. An older save without the seenEnemies field loads cleanly and starts everything locked.
+  const store = { value: null, getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
+  store.value = JSON.stringify({ version: 1, specs: { cpu: 0, ram: 0, gpu: 0, disk: 0 } });
+  const loaded = loadProfile(store);
+  check(Array.isArray(loaded.seenEnemies) && loaded.seenEnemies.length === 0,
+    'an older save without seenEnemies loads with an empty list');
+}
+
+{
+  // 44d. The sim emits an enemySpawned event when a wave spawns, and the recorded encounter survives
+  // a save round trip and unlocks the page.
+  const s = stateOnLevel('open-field');
+  s.events = [];
+  startWave(s);
+  for (let i = 0; i < 10 && !s.events.some((e) => e.type === 'enemySpawned'); i++) tick(s);
+  check(s.events.some((e) => e.type === 'enemySpawned' && e.kind === 'grunt'),
+    'spawning a grunt emits an enemySpawned event');
+
+  const store = { value: null, getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
+  const p = defaultProfile();
+  addSeenEnemies(p, ['flyer']);
+  saveProfile(p, store);
+  const reloaded = loadProfile(store);
+  check(reloaded.seenEnemies.includes('flyer'), 'an encountered kind survives a save round trip');
+  check(pageUnlocked(pageById('enemy-flyer'), reloaded), 'the Flyer page is unlocked after the round trip');
+  check(addSeenEnemies(p, ['flyer']) === false, 'recording an already-seen kind changes nothing');
+}
+
+{
+  // 44e. A locked enemy row is greyed, labelled Undiscovered, and never reveals the enemy's name.
+  const p = defaultProfile();
+  const rows = helpRows(p, 2); // the Enemies chapter expanded
+  const flyerRow = rows.find((r) => r.kind === 'page' && r.page.id === 'enemy-flyer');
+  check(flyerRow !== undefined && flyerRow.locked, 'the Flyer row is locked before the flyer is seen');
+  const label = treeRowLabel(flyerRow);
+  check(label === 'Undiscovered', `a locked row reads "Undiscovered" (got "${label}")`);
+  check(!label.toLowerCase().includes('flyer'), 'a locked row does not reveal the enemy name');
+
+  p.seenEnemies.push('flyer');
+  const unlockedRow = helpRows(p, 2).find((r) => r.kind === 'page' && r.page.id === 'enemy-flyer');
+  check(treeRowLabel(unlockedRow) === 'Flyer', 'an unlocked row reads the enemy name');
+}
+
+{
+  // 44f. Every page fits its panel at 1280x720 and 1600x900.
+  for (const [vw, vh] of [[1280, 720], [1600, 900]]) {
+    const l = computeLayout(vw, vh);
+    const pos = defaultHelpPosition(l);
+    const hl = computeHelpLayout(pos.x, pos.y);
+    check(hl.window.w <= l.client.w && hl.window.h <= l.client.h, `the help window fits the client area at ${vw}x${vh}`);
+    for (const page of HELP_PAGES) {
+      const h = pageBodyHeight(page, hl.pageText.w);
+      check(h <= hl.pageText.h, `${page.id} fits its panel at ${vw}x${vh} (${h} <= ${hl.pageText.h})`);
+    }
+  }
+}
+
+{
+  // 44g. Hit-testing resolves the close box, title bar, toolbar and tree, and ignores outside points.
+  const l = computeLayout(1280, 720);
+  const pos = defaultHelpPosition(l);
+  const hl = computeHelpLayout(pos.x, pos.y);
+  const rows = helpRows(defaultProfile(), 2);
+  check(helpHitAt(hl, rows, hl.close.x + hl.close.w / 2, hl.close.y + hl.close.h / 2)?.type === 'close',
+    'the close box is hit-testable');
+  check(helpHitAt(hl, rows, hl.title.x + 12, hl.title.y + 10)?.type === 'title', 'the title bar is hit-testable');
+  check(helpHitAt(hl, rows, hl.contents.x + hl.contents.w / 2, hl.contents.y + hl.contents.h / 2)?.type === 'toolbar',
+    'the Contents button is hit-testable');
+  check(helpHitAt(hl, rows, hl.window.x + hl.window.w + 20, hl.window.y + 10) === null,
+    'a point outside the window is not a hit');
+  check(helpHitAt(hl, rows, hl.pagePanel.x + hl.pagePanel.w / 2, hl.pagePanel.y + hl.pagePanel.h / 2)?.type === 'page',
+    'a click in the page panel is swallowed by the window');
+}
+
+{
+  // 44h. The session: single instance, centred first open, kept position, clamped drag, close.
+  const l = computeLayout(1280, 720);
+  const session = new HelpSession();
+  check(!session.open, 'the help window starts closed');
+  session.show(l);
+  check(session.open, 'Show Help opens the window');
+  const centred = defaultHelpPosition(l);
+  check(session.x === centred.x && session.y === centred.y, 'it opens centred the first time');
+  session.show(l);
+  check(session.open && session.x === centred.x && session.y === centred.y,
+    'a second Show Help choice does not open a second window');
+
+  session.startDrag(l.client.x + 10, l.client.y + 10);
+  session.dragTo(l, l.client.x + 40, l.client.y + 40);
+  session.endDrag();
+  check(session.x !== centred.x || session.y !== centred.y, 'dragging the title bar moves the window');
+
+  const clamped = clampHelpPosition(l, -100000, -100000);
+  check(clamped.x === l.client.x - HELP_W + 32 && clamped.y === l.client.y - HELP_H + 32,
+    'clampHelpPosition keeps a minimum strip of the window visible');
+  session.startDrag(l.client.x + 10, l.client.y + 10);
+  session.dragTo(l, -100000, -100000);
+  check(session.x === clamped.x && session.y === clamped.y, 'dragging is clamped so the window cannot be dragged fully off');
+  session.endDrag();
+
+  const moved = { x: session.x, y: session.y };
+  session.hide();
+  check(!session.open, 'the close box (and Escape) close the window');
+  session.show(l);
+  check(session.open && session.x === moved.x && session.y === moved.y, 'reopening keeps the session position');
+}
+
+{
+  // 44i. A locked row is unselectable: clicking it does nothing but explain why; Contents collapses.
+  const l = computeLayout(1280, 720);
+  const session = new HelpSession();
+  session.show(l);
+  const before = session.pageId;
+
+  const p = defaultProfile();
+  const lockedRow = helpRows(p, 2).find((r) => r.kind === 'page' && r.page.id === 'enemy-flyer');
+  session.clickTree(lockedRow);
+  check(session.pageId === before, 'clicking a locked row does not change the page');
+  check(session.status === 'Encounter this enemy to learn about it',
+    `clicking a locked row says why (${session.status})`);
+
+  p.seenEnemies.push('flyer');
+  const unlockedRow = helpRows(p, 2).find((r) => r.kind === 'page' && r.page.id === 'enemy-flyer');
+  session.clickTree(unlockedRow);
+  check(session.pageId === 'enemy-flyer', 'clicking an unlocked row opens the page');
+  check(session.canBack(), 'opening a page enables Back');
+
+  session.contents();
+  check(session.expanded === null, 'Contents collapses the tree back to the top');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

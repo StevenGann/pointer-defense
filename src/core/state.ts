@@ -194,7 +194,8 @@ export type GameEvent =
   | { type: 'adSpawned'; kind: AdKind }
   | { type: 'adDismissed'; kind: AdKind }
   | { type: 'toggleChanged'; index: number; open: boolean }
-  | { type: 'towerUnlocked'; kinds: TowerKind[] };
+  | { type: 'towerUnlocked'; kinds: TowerKind[] }
+  | { type: 'enemySpawned'; kind: EnemyKind };
 
 /** One started wave's live spawn queue. Spawn ticks are relative to `startTick`. */
 export interface WaveRun {
@@ -1252,6 +1253,7 @@ function spawnDue(s: RunState): void {
       const enemy = createEnemy(s.nextId++, sp.kind, run.wave, spawnTile(s), exitTile(s));
       enemy.spawnTick = s.tick;
       s.enemies.push(enemy);
+      s.events.push({ type: 'enemySpawned', kind: sp.kind });
     }
   }
 }
@@ -1296,6 +1298,7 @@ function releaseBrood(s: RunState, carrier: Enemy, count: number): void {
     e.scatterTicks = CARRIER_BROOD_SCATTER_TICKS;
     e.spawnTick = s.tick;
     s.enemies.push(e);
+    s.events.push({ type: 'enemySpawned', kind: 'flyer' });
   }
 }
 
