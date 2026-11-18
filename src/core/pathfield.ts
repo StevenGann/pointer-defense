@@ -70,6 +70,23 @@ export function buildAirField(cols: number, rows: number, blocked: ReadonlySet<n
 }
 
 /**
+ * A route's field: only the corridor's own tiles are walkable, so a tower placed on one route never
+ * changes another route's distances. Buildable tiles outside the corridor read as -1, exactly like a
+ * sealed board, which is what keeps two adjacent corridors isolated from each other.
+ */
+export function buildRouteField(
+  grid: Grid,
+  blocked: ReadonlySet<number>,
+  exit: Tile,
+  route: readonly Tile[],
+): Int32Array {
+  const walkable = new Set<number>();
+  for (const t of route) walkable.add(t.row * grid.cols + t.col);
+  const { cols, rows, tiles } = grid;
+  return bfs(cols, rows, (idx) => walkable.has(idx) && tiles[idx] === 'buildable' && !blocked.has(idx), exit);
+}
+
+/**
  * The neighbouring walkable tile with the lowest distance to the exit, or null if there is none.
  * Ties keep the first direction in the fixed order, so the choice is deterministic.
  */
