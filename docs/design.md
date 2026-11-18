@@ -562,9 +562,10 @@ shows a distinct death pop; a boss variant that leaks costs its own integrity.
 | `runner-boss` | **Pacer** | 1.5 | 4× | 0.85 | 3 | **Aura of pace**: a 3-tile speed floor that makes every enemy inside move at the Pacer's speed or its own, whichever is faster |
 | `shielded-boss` | **Bastion** | 1.6 | 5× | 0.45 | 4 | **Three shield layers** (each worth the base 15-point shield), stripped one per pointer/cursor hit |
 
-The radius is the base type's radius × scale, so hit-testing and the drawn silhouette agree. Bosses are
-drawn with the **base enemy SVG at the stated scale** plus a runtime crown/notch motif, so the art
-pipeline needs no new files yet; the Pacer aura draws as a faint ring.
+The radius is the base type's radius × scale, so hit-testing and the drawn silhouette agree. Each boss
+is drawn from **its own SVG** — an upgraded version of its base type, crowned, with 4× the base type's
+animation frames — at the stated scale, falling back to the base type's art plus a runtime crown notch
+if its file is missing; the Pacer aura draws as a faint ring.
 
 Type bosses unlock at **wave 12 (Sergeant), 18 (Pacer) and 24 (Bastion)** — each boss's first
 appearance is its unlock wave, never before it — and then one boss rides every eighth wave after that

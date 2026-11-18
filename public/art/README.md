@@ -46,19 +46,33 @@ what an artist owns; what is not is what the code owns.**
 | `saboteur.svg` | diamond with a small fuse spark at the rear corner |
 | `breacher.svg` | rounded square with a jaw-notch cut into the leading edge and three teeth |
 
-**Every boss variant has its own files.** `grunt-boss.svg`, `runner-boss.svg`, `shielded-boss.svg`,
-`flyer-boss.svg`, `armoured-boss.svg`, `saboteur-boss.svg` and `breacher-boss.svg`, each with the same
-frame sequence and `.json` as its base type.
+**Every boss variant has its own files**, each an upgraded version of its base type that keeps the base
+silhouette and adds what the boss does:
 
-They currently hold **copies of their base type's frames, as placeholders**. They are editable now:
-give each one a silhouette that says what it does — a Sergeant with a heavier chassis, a Carrier with
-a visible brood sac, a Ram with a drill that reads at a glance. Nothing in the engine needs to change;
-the game picks up whatever is in the file. Until a boss file is edited it renders exactly like its base
-type at boss scale, with the runtime crown notch still drawn on top — except `grunt-boss`, whose file is
-the crown-rim design itself, so it already carries its own.
+| File | Boss | Represents |
+|---|---|---|
+| `grunt-boss.svg` | Sergeant | the Grunt's dome in a riveted armour collar, a scowling brow, gold sergeant's stripes, a crown |
+| `runner-boss.svg` | Pacer | a longer dart with two pairs of fins, an afterburner, gold pace chevrons, a coronet |
+| `shielded-boss.svg` | Bastion | three projector layers (outer frame, turning inner frame, energy ring) round a crowned, scowling core |
+| `flyer-boss.svg` | Carrier | broad serrated wings, a translucent brood sac with three young inside, a horned head, a coronet |
+| `armoured-boss.svg` | Dreadnought | three tiers of plating, clamping corner brackets, eight rivets, a V-scowl slit, a crown |
+| `saboteur-boss.svg` | Wirecutter | cutter blades on the leading corner, an EMP coil crowned with gold points, the fuse at the rear |
+| `breacher-boss.svg` | Ram | a compact hull on wide treads, a spinning drill in place of the jaw, a crowned twin-barrel turret |
 
-A boss file that is deleted or renamed falls back to its base type's art, so a half-finished edit never
-leaves an invisible enemy.
+All seven share the boss accents: **ember eyes** (the marker Boss's orange iris) and **gold crowns**. A
+fixed boss wears the marker Boss's front-view crown; a boss that turns with its heading wears a
+**coronet**, a crown seen from above, so it still reads as a crown at any angle.
+
+Each boss has **4× the frames of its base type** (32 for the Sergeant, Pacer and Bastion; 24 for the
+rest) and several motions on different rhythms. The Sergeant, for example, waddles twice a loop while its
+collar grinds round, it blinks once and its crown jewel glints once. The Ram plays `when: "always"`: its
+drill keeps spinning while it chews through a tower.
+
+The engine draws a runtime crown notch, and a cone for the Ram's drill, **only when a boss is falling back
+to its base type's art**. A boss file that is deleted or renamed falls back that way, so a half-finished
+edit never leaves an invisible enemy. The Ram is drawn at a larger scale than the Breacher
+(`ENEMY_ART_BODY` in `src/view/board.ts`) because its drill takes the front of the box; its hull is the
+Breacher's size against its radius.
 
 The **Pop-up** enemy is a Windows window and stays runtime (it is chrome, not art). There is no
 `popup.svg`.

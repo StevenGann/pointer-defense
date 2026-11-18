@@ -90,9 +90,9 @@
     },
     {
       "name": "enemies/armoured-boss",
-      "frames": 6,
+      "frames": 24,
       "anim": {
-        "fps": 8,
+        "fps": 12,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
@@ -114,14 +114,14 @@
     },
     {
       "name": "enemies/breacher-boss",
-      "frames": 6,
+      "frames": 24,
       "anim": {
-        "fps": 30,
+        "fps": 12,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": true,
-        "when": "moving"
+        "when": "always"
       }
     },
     {
@@ -138,10 +138,10 @@
     },
     {
       "name": "enemies/flyer-boss",
-      "frames": 6,
+      "frames": 24,
       "anim": {
-        "fps": 30,
-        "loop": "pingpong",
+        "fps": 20,
+        "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": true,
@@ -162,9 +162,9 @@
     },
     {
       "name": "enemies/grunt-boss",
-      "frames": 9,
+      "frames": 32,
       "anim": {
-        "fps": 15,
+        "fps": 16,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
@@ -186,9 +186,9 @@
     },
     {
       "name": "enemies/runner-boss",
-      "frames": 8,
+      "frames": 32,
       "anim": {
-        "fps": 24,
+        "fps": 20,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
@@ -210,9 +210,9 @@
     },
     {
       "name": "enemies/saboteur-boss",
-      "frames": 6,
+      "frames": 24,
       "anim": {
-        "fps": 30,
+        "fps": 20,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
@@ -234,9 +234,9 @@
     },
     {
       "name": "enemies/shielded-boss",
-      "frames": 8,
+      "frames": 32,
       "anim": {
-        "fps": 10,
+        "fps": 15,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,

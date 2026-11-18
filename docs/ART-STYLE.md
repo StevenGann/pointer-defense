@@ -80,8 +80,9 @@ Accent colours in use on enemies:
 
 - **Eyes:** pale ice blue, `#e6f4ff` to `#bfe6ff`, with a black pupil.
 - **Saboteur:** amber, `#806000` to `#ffcf5a`, for the fuse, the charge and the eyes.
-- **Boss:** an orange eye (`#ff8a1e`) and a gold crown. The Boss is the only enemy with warm colour
-  on its body, so it stands out.
+- **Boss:** an orange eye (`#ff8a1e`) and a gold crown. Bosses are the only enemies with warm colour
+  on their bodies, so they stand out. The marker Boss and every boss variant share this: ember eyes and
+  a gold crown (a coronet, seen from above, on the bosses that turn with their heading).
 
 ### Colours the engine owns
 
@@ -172,6 +173,10 @@ the pip lands there.
   look out of the screen at the player. A face that points sideways will look wrong on every turn.
 - **The Boss is drawn large.** `boss.svg` appears at about twice the size of the other enemies, so
   its detail gets a close look.
+- **A boss variant is its base type, upgraded.** Keep the base silhouette so the kind still reads, then
+  add weight (collars, plating, extra fins), menace (a scowling brow, ember eyes) and one feature that
+  says what the boss does (the Carrier's brood sac, the Ram's drill). Its crown is part of the file;
+  the engine only draws a stand-in when the file is missing.
 
 ### Towers
 

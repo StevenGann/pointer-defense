@@ -1,0 +1,81 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Pacer (runner-boss), frame 18 of 32. Generated: every moving part is a function of the frame. -->
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff0a0"/>
+      <stop offset="1" stop-color="#c08a00"/>
+    </linearGradient>
+    <radialGradient id="goldr" cx="0.35" cy="0.35" r="0.8">
+      <stop offset="0" stop-color="#fff6c0"/>
+      <stop offset="0.6" stop-color="#e0b030"/>
+      <stop offset="1" stop-color="#8a6000"/>
+    </radialGradient>
+    <radialGradient id="ember" cx="0.4" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#ffe9a8"/>
+      <stop offset="0.5" stop-color="#ff8a1e"/>
+      <stop offset="1" stop-color="#8a2000"/>
+    </radialGradient>
+    <linearGradient id="body" x1="0" y1="8.8" x2="0" y2="23.2" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9dbccd"/>
+      <stop offset="0.5" stop-color="#577489"/>
+      <stop offset="1" stop-color="#2b4052"/>
+    </linearGradient>
+    <linearGradient id="fin" x1="0" y1="5" x2="0" y2="27" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6f8da2"/>
+      <stop offset="0.5" stop-color="#2b4052"/>
+      <stop offset="1" stop-color="#1b2c3b"/>
+    </linearGradient>
+  </defs>
+  <!-- Speed streaks stream backward off the fin tips. Faces +x. -->
+  <g stroke="#16242f" stroke-width="1.8" stroke-linecap="round" opacity="0.3" stroke-dasharray="1.6 1.2" stroke-dashoffset="-1.4">
+    <line x1="3.4" y1="6.6" x2="0.8" y2="6.6"/>
+    <line x1="5" y1="10.4" x2="0.8" y2="10.4"/>
+    <line x1="5" y1="21.6" x2="0.8" y2="21.6"/>
+    <line x1="3.4" y1="25.4" x2="0.8" y2="25.4"/>
+  </g>
+  <g stroke="#f2f7fa" stroke-width="1" stroke-linecap="round" stroke-dasharray="1.6 1.2" stroke-dashoffset="-1.4">
+    <line x1="3.4" y1="6.6" x2="0.8" y2="6.6"/>
+    <line x1="5" y1="10.4" x2="0.8" y2="10.4"/>
+    <line x1="5" y1="21.6" x2="0.8" y2="21.6"/>
+    <line x1="3.4" y1="25.4" x2="0.8" y2="25.4"/>
+  </g>
+  <!-- The afterburner: a flame from the tail notch, its length flickering every frame. -->
+  <polygon points="9.8,14.3 3.8,16 9.8,17.7" fill="#ff8a1e" opacity="0.9"/>
+  <polygon points="9.8,15.1 6.2,16 9.8,16.9" fill="#fff3c4"/>
+  <!-- The outer fins, under the body; they kick against the inner fins. -->
+  <g fill="url(#fin)" stroke="#000000" stroke-width="0.9" stroke-linejoin="round">
+    <polygon points="14.5,10.6 3,5.4 9.6,11.4"/>
+    <polygon points="14.5,21.4 5,24.2 9.6,20.6"/>
+  </g>
+  <!-- The dart, with its inner fins kicking in turn. -->
+  <path d="M30.4 16 L10.2 8.8 L7.8 11.8 L8.8 16 L5.4 22.4 L10.2 23.2 Z" fill="url(#body)" stroke="#000000" stroke-width="1" stroke-linejoin="round"/>
+  <polygon points="29,16 9.2,16 6,21.6 10.1,22.6" fill="#16242f" opacity="0.28"/>
+  <line x1="9.4" y1="16" x2="19" y2="16" stroke="#16242f" stroke-width="1" opacity="0.55" stroke-linecap="round"/>
+  <line x1="10.6" y1="10.2" x2="23.4" y2="14.9" stroke="#d6e6ef" stroke-width="0.9" opacity="0.7" stroke-linecap="round"/>
+  <!-- Gold pace chevrons; a light races forward along them twice a loop. -->
+  <polyline points="8.8,13.8 10.4,16 8.8,18.2" fill="none" stroke="#000000" stroke-width="2.2"/>
+  <polyline points="8.8,13.8 10.4,16 8.8,18.2" fill="none" stroke="#e4c56b" stroke-width="1.3"/>
+  <polyline points="10.8,13.8 12.4,16 10.8,18.2" fill="none" stroke="#000000" stroke-width="2.03"/>
+  <polyline points="10.8,13.8 12.4,16 10.8,18.2" fill="none" stroke="#cc9c28" stroke-width="1.13"/>
+  <polyline points="12.8,13.8 14.4,16 12.8,18.2" fill="none" stroke="#000000" stroke-width="2"/>
+  <polyline points="12.8,13.8 14.4,16 12.8,18.2" fill="none" stroke="#c8961e" stroke-width="1.1"/>
+  <!-- The coronet turns slowly. -->
+  <g fill="url(#goldr)" stroke="#000000" stroke-width="0.4" stroke-linejoin="round">
+    <polygon points="17.7,14.84 19.35,13.72 18.5,15.52"/>
+    <polygon points="18.6,15.93 20.17,17.15 18.2,16.9"/>
+    <polygon points="17.84,17.12 17.16,18.99 16.79,17.03"/>
+    <polygon points="16.47,16.76 14.48,16.7 16.23,15.74"/>
+    <polygon points="16.39,15.36 15.83,13.44 17.28,14.81"/>
+  </g>
+  <circle cx="17.4" cy="16" r="1.4" fill="url(#goldr)" stroke="#000000" stroke-width="0.7"/>
+  <circle cx="17.4" cy="16" r="0.59" fill="#c02000" stroke="#000000" stroke-width="0.3"/>
+  <!-- One ember eye, narrowed between two brow plates. -->
+  <circle cx="22.6" cy="16" r="2.2" fill="#0b141c"/>
+  <circle cx="22.7" cy="16" r="1.6" fill="url(#ember)"/>
+  <ellipse cx="22.9" cy="16" rx="0.4" ry="1.25" fill="#000000"/>
+  <circle cx="22.3" cy="15.3" r="0.35" fill="#ffffff"/>
+  <g fill="#2b4052" stroke="#000000" stroke-width="0.5" stroke-linejoin="round">
+    <polygon points="20,13.5 25.2,15.3 25,13.9"/>
+    <polygon points="20,18.5 25.2,16.7 25,18.1"/>
+  </g>
+</svg>
