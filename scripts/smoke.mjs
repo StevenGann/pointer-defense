@@ -47,12 +47,12 @@ import {
 import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
-import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, popupCountForWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
+import { buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, isBossWave, MODIFIER_POOL, popupCountForWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
 import { LEVELS, DEFAULT_LEVEL, createGrid, levelById, toggleOpenAt, validateLevel, MAX_TOGGLES } from '../src/core/levels.ts';
-import { createEnemy, isPopupEnemy, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS } from '../src/core/enemies.ts';
+import { createEnemy, isPopupEnemy, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS } from '../src/core/enemies.ts';
 import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS } from '../src/core/ads.ts';
 import {
   comboMultiplier,
@@ -845,6 +845,66 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(s.endless && s.phase === 'build', 'endless returns to build phase');
   check(startWave(s), 'endless starts wave 101');
   check(s.wave === 101, 'endless continues at 101');
+}
+
+// --- 16b. Endless curve: 1-100 unchanged, HP bands, count/interval, modifier stacking ---------
+{
+  // Waves 1..100 must be byte-identical: hash the full balance table (HP scale, value scale,
+  // enemy count and kill value per wave) and compare against the committed pre-curve hash.
+  let table = '';
+  for (let w = 1; w <= 100; w++) {
+    table += `${waveHpScale(w)}|${waveValueScale(w)}|${waveEnemyCount(w)}|${waveKillValue(w)}\n`;
+  }
+  let h = 0x811c9dc5;
+  for (let i = 0; i < table.length; i++) {
+    h ^= table.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  check((h >>> 0).toString(16) === 'db85906d', `waves 1..100 balance table unchanged (hash ${(h >>> 0).toString(16)})`);
+}
+
+{
+  // HP escalates in compounding bands with no step or dip at the band edges.
+  const hp = waveHpScale;
+  const close = (a, b) => Math.abs(a - b) < 1e-9;
+  check(hp(100) < hp(101), `hp rises across 100->101 (${hp(100).toFixed(3)} -> ${hp(101).toFixed(3)})`);
+  check(hp(125) < hp(126), `hp rises across 125->126 (${hp(125).toFixed(3)} -> ${hp(126).toFixed(3)})`);
+  check(hp(150) < hp(151), `hp rises across 150->151 (${hp(150).toFixed(3)} -> ${hp(151).toFixed(3)})`);
+  check(hp(175) < hp(176), `hp rises across 175->176 (${hp(175).toFixed(3)} -> ${hp(176).toFixed(3)})`);
+  check(close(hp(101) / hp(100), 1.02), '101-125 rate is 1.020');
+  check(close(hp(126) / hp(125), 1.035), '126-150 rate is 1.035');
+  check(close(hp(151) / hp(150), 1.05), '151-175 rate is 1.050');
+  check(close(hp(176) / hp(175), 1.065), '176+ base rate is 1.065');
+  check(close(hp(201) / hp(200), 1.07), 'rate climbs to 1.070 at wave 201');
+  check(close(hp(500) / hp(499), 1.12), 'rate caps at 1.12');
+}
+
+{
+  // The enemy-count baseline grows again and the spawn interval tightens toward its floor.
+  check(endlessCountBase(100) === 66, 'count baseline stays 66 through wave 100');
+  check(endlessCountBase(101) === 72, 'count baseline rises to 72 at wave 101');
+  check(endlessCountBase(126) === 78, 'count baseline rises to 78 at wave 126');
+  check(endlessCountBase(251) === 108, 'count baseline reaches 108 at wave 251');
+  check(endlessCountBase(276) === 110, 'count baseline caps at 110');
+  check(endlessCountBase(500) === 110, 'count baseline holds the 110 cap');
+
+  check(endlessIntervalScale(100) === 1, 'interval scale is 1 through wave 100');
+  check(endlessIntervalScale(101) === 0.96, 'interval tightens to 0.96 at wave 101');
+  check(endlessIntervalScale(126) === 0.92, 'interval tightens to 0.92 at wave 126');
+  check(endlessIntervalScale(326) === 0.6, 'interval scale floors at 0.60');
+  check(endlessIntervalScale(500) === 0.6, 'interval scale holds the 0.60 floor');
+}
+
+{
+  // Modifiers stack harder deep in endless: two at 149, three at 150, three at 199, four at 200.
+  const distinct = (mods) => new Set(mods).size === mods.length;
+  check(waveModifiers(149).length === 2, 'wave 149 stacks two modifiers');
+  check(waveModifiers(150).length === 3, 'wave 150 stacks three modifiers');
+  check(distinct(waveModifiers(150)), 'wave 150 modifiers are distinct');
+  check(waveModifiers(199).length === 3, 'wave 199 still stacks three modifiers');
+  check(waveModifiers(200).length === 4, 'wave 200 stacks four modifiers');
+  check(distinct(waveModifiers(200)), 'wave 200 modifiers are distinct');
+  check(waveModifiers(120).length === 2, 'wave 120 still stacks two modifiers');
 }
 
 // --- 17. Early-call waves: bonus, schedules, per-wave leaks and victory -----------------------

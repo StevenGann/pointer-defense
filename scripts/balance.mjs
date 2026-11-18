@@ -26,6 +26,7 @@ import {
   exitTile,
   cycleLevel,
   closePopupEnemy,
+  enterEndless,
 } from '../src/core/state.ts';
 import { TOWER_KINDS, TOWER_STATS, upgradeCost, repairCost, isRepairing, isTowerUnlocked } from '../src/core/towers.ts';
 import { spend } from '../src/core/economy.ts';
@@ -96,6 +97,9 @@ const repairTowerMode = hasFlag('--repair-tower');
 // control, then the candidate rates). Absent, the harness plays the committed constant.
 const turretDamageRaw = flag('--turret-damage', null);
 const turretDamageOverride = turretDamageRaw === null ? null : Math.max(0, parseFloat(turretDamageRaw) || 0);
+// --endless: keep going past wave 100 (through the Endless transition) until the run dies, and
+// report the wave it reached. Used to measure where the standard build falls under the endless curve.
+const endlessMode = hasFlag('--endless');
 // --level <id> selects one authored map; the default runs all three and prints one line each.
 const levelFlag = flag('--level', null);
 const activeLevels = levelFlag ? [levelById(levelFlag)] : [...LEVELS];
@@ -749,7 +753,7 @@ function allocateSpecs(profile) {
 
 // --- Wave / session loop ----------------------------------------------------------------------
 
-function playWave(s, wave, leakList, popups, clicksPerSec = cps, clicking = true) {
+function playWave(s, wave, leakList, popups, clicksPerSec = cps, clicking = true, toWave = to) {
   if (!startWave(s)) return { status: 'ended' };
   const clickInterval = Math.max(1, Math.round(TICK_HZ / clicksPerSec));
   const dmgStart = { tower: s.economy.damage.tower, pointer: s.economy.damage.pointer };
@@ -777,12 +781,12 @@ function playWave(s, wave, leakList, popups, clicksPerSec = cps, clicking = true
     );
   }
   if (s.phase === 'halted') return { status: 'died' };
-  if (s.phase === 'victory' || wave >= to) return { status: 'reached' };
+  if (s.phase === 'victory' || wave >= toWave) return { status: 'reached' };
   return { status: 'cleared' };
 }
 
 /** Play one full run from a fresh state; returns the outcome. */
-function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = MAX_TOWERS, coverage = false, clicksPerSec = cps, clicking = true, buyPointer = false, buyCursor = false) {
+function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = MAX_TOWERS, coverage = false, clicksPerSec = cps, clicking = true, buyPointer = false, buyCursor = false, endless = false) {
   resetClickRng();
   repairSpend = 0;
   const s = createStateOn(profile, levelId);
@@ -791,9 +795,10 @@ function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = 
   const counts = { gun: 0, cannon: 0, taser: 0, frost: 0, laser: 0, beacon: 0 };
   let wallIdx = 0;
   if (!quiet && !silent) console.log(`--- ${label} ---`);
+  const toWave = endless ? Number.MAX_SAFE_INTEGER : to;
   for (let wave = 1; ; wave++) {
     wallIdx = buildPhase(s, wave, wallIdx, counts, useSupport, false, maxTowers, coverage, buyPointer, buyCursor);
-    const result = playWave(s, wave, leakList, popups, clicksPerSec, clicking);
+    const result = playWave(s, wave, leakList, popups, clicksPerSec, clicking, toWave);
     if (result.status === 'died') {
       return {
         reached: false,
@@ -807,6 +812,11 @@ function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = 
       };
     }
     if (result.status === 'reached') {
+      // Endless keeps going: victory at wave 100 just flips the run into endless mode.
+      if (endless && s.phase === 'victory') {
+        enterEndless(s);
+        continue;
+      }
       return {
         reached: true,
         wave,
@@ -835,7 +845,7 @@ function playRun(profile, rebootAtWave, label, useSupport, levelId, maxTowers = 
 }
 
 /** Play a full session (reboot at --reboot-at, then run to completion) with a given support policy. */
-function runSession(useSupport, label, levelId, maxTowers = MAX_TOWERS, coverage = false, clicksPerSec = cps, clicking = true, buyPointer = false, buyCursor = false) {
+function runSession(useSupport, label, levelId, maxTowers = MAX_TOWERS, coverage = false, clicksPerSec = cps, clicking = true, buyPointer = false, buyCursor = false, endless = false) {
   let profile = defaultProfile();
   let totalSpecs = 0;
   let reboots = 0;
@@ -843,7 +853,7 @@ function runSession(useSupport, label, levelId, maxTowers = MAX_TOWERS, coverage
   let final = null;
 
   for (let run = 1; ; run++) {
-    const result = playRun(profile, run === 1 ? rebootAt : 0, `${label} run ${run}`, useSupport, levelId, maxTowers, coverage, clicksPerSec, clicking, buyPointer, buyCursor);
+    const result = playRun(profile, run === 1 ? rebootAt : 0, `${label} run ${run}`, useSupport, levelId, maxTowers, coverage, clicksPerSec, clicking, buyPointer, buyCursor, endless);
     reboots = run - 1;
     totalRepairSpend += repairSpend;
     if (result.reached || !result.reboot) {
@@ -1266,6 +1276,33 @@ if (repairTowerMode) {
   }
   silent = false;
   process.exit(repairReached ? 0 : 1);
+}
+
+if (endlessMode) {
+  // The endless measurement: the standard build, played past wave 100 (through the Endless
+  // transition) until integrity hits zero, so each map reports the wave it dies at under the
+  // endless curve. A map that dies inside the 110-220 band is a pass; one that coasts past 250
+  // means the curve is still too flat.
+  silent = true;
+  console.log('\n=== endless ===');
+  console.log('  map          died at wave   cleared   salvage   specs   reboots   tower dmg%');
+  let allInBand = true;
+  for (const level of activeLevels) {
+    const run = runSession(support, `endless run [${level.id}]`, level.id, MAP_MAX_TOWERS, true, cps, true, false, false, true);
+    const f = run.final;
+    const wave = f.wave;
+    const tower = f.state.economy.damage.tower;
+    const pointer = f.state.economy.damage.pointer;
+    const towerPct = tower + pointer > 0 ? Math.round((tower / (tower + pointer)) * 100) : 0;
+    console.log(
+      `  ${level.id.padEnd(11)}  ${String(wave).padStart(12)}  ${String(f.clearedWaves).padStart(7)}  ` +
+        `${String(f.earned).padStart(7)}  ${String(run.totalSpecs).padStart(5)}  ${String(run.reboots).padStart(7)}  ` +
+        `${String(towerPct).padStart(9)}%`,
+    );
+    if (wave < 110 || wave > 220) allInBand = false;
+  }
+  silent = false;
+  process.exit(allInBand ? 0 : 1);
 }
 
 if (wallMode) {
