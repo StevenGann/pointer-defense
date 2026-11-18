@@ -229,6 +229,8 @@ export interface Enemy {
   scatterTicks: number;
   /** Carrier only: ticks until the next brood release (0 = release this tick). */
   broodCooldown: number;
+  /** Index into the level's routes (0 on a single implicit route); picked at spawn. */
+  routeIndex: number;
   dead: boolean;
 }
 
@@ -313,6 +315,7 @@ export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Ti
     turretCooldown: 0,
     scatterTicks: 0,
     broodCooldown: kind === 'flyer-boss' ? CARRIER_BROOD_INTERVAL_TICKS : 0,
+    routeIndex: 0,
     dead: false,
   };
 }
