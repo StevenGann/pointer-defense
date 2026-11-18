@@ -262,10 +262,12 @@ function parseProfile(raw: string): Profile | null {
     ? Math.max(0, Math.floor(o.unspentSpecs)) : 0;
   const rp =
     typeof o.rp === 'number' && Number.isFinite(o.rp) ? Math.max(0, Math.floor(o.rp)) : banked;
+  // A migrated save's banked points were earned, so they count toward the prestige level as well as
+  // the balance — otherwise a returning player would own a balance but sit at level 0.
   const rpEarned =
     typeof o.rpEarned === 'number' && Number.isFinite(o.rpEarned)
       ? Math.max(0, Math.floor(o.rpEarned))
-      : 0;
+      : rp;
   const lastSalvage =
     typeof o.lastSalvage === 'number' && Number.isFinite(o.lastSalvage)
       ? Math.max(0, Math.floor(o.lastSalvage))
