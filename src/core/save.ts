@@ -9,11 +9,15 @@
 
 import { BOSS_KINDS, ENEMY_KINDS, isBossVariant, isEnemyKind, type EnemyKind } from './enemies.ts';
 import { TOWER_KINDS, towerUnlockWave } from './towers.ts';
+import { isTreeNodeId } from './tree.ts';
 
 export const SAVE_KEY = 'pointer-defense/save';
 
 /** Bump this when the schema changes in a way an older build could not read. */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
+
+/** The last schema version that is still readable and migrates up to the current one. */
+const MIGRATABLE_VERSION = 1;
 
 export type SpecKind = 'cpu' | 'ram' | 'gpu' | 'disk';
 
@@ -33,7 +37,14 @@ export interface SpecLevels {
 export interface Profile {
   version: number;
   specs: SpecLevels;
-  unspentSpecs: number;
+  /** Unspent Restore Points — the currency spent on tree nodes and spec levels. */
+  rp: number;
+  /** Lifetime Restore Points earned — the prestige level, which never falls. */
+  rpEarned: number;
+  /** Ids of the Restore-tree nodes bought so far (permanent across reboots). */
+  tree: string[];
+  /** The salvage the last rebooted run earned, for Restore Point's 10% carry. */
+  lastSalvage: number;
   achievements: string[];
   bestWave: number;
   reboots: number;
@@ -102,7 +113,10 @@ export function defaultProfile(): Profile {
   return {
     version: SAVE_VERSION,
     specs: { cpu: 0, ram: 0, gpu: 0, disk: 0 },
-    unspentSpecs: 0,
+    rp: 0,
+    rpEarned: 0,
+    tree: [],
+    lastSalvage: 0,
     achievements: [],
     bestWave: 0,
     reboots: 0,
@@ -131,7 +145,10 @@ export function cloneProfile(p: Profile): Profile {
   return {
     version: p.version,
     specs: { cpu: p.specs.cpu, ram: p.specs.ram, gpu: p.specs.gpu, disk: p.specs.disk },
-    unspentSpecs: p.unspentSpecs,
+    rp: p.rp,
+    rpEarned: p.rpEarned,
+    tree: [...p.tree],
+    lastSalvage: p.lastSalvage,
     achievements: [...p.achievements],
     bestWave: p.bestWave,
     reboots: p.reboots,
@@ -145,14 +162,14 @@ export function cloneProfile(p: Profile): Profile {
   };
 }
 
-/** The specs a reboot banks from a run's lifetime salvage, per docs/design.md §12. */
-export function specGain(totalSalvageEarned: number): number {
-  return Math.floor(Math.sqrt(totalSalvageEarned / 500));
+/** The Restore Points a reboot banks from a run's lifetime salvage, per docs/design.md §12.1. */
+export function rpGain(totalSalvageEarned: number): number {
+  return Math.floor(2.2 * Math.sqrt(totalSalvageEarned / 900));
 }
 
-/** Total specs owned: everything spent into levels plus the unspent bank. */
-export function totalSpecs(p: Profile): number {
-  return p.specs.cpu + p.specs.ram + p.specs.gpu + p.specs.disk + p.unspentSpecs;
+/** The RP cost of raising a spec from `level` to `level + 1`, per docs/design.md §12.2. */
+export function specLevelCost(level: number): number {
+  return Math.ceil(2 * Math.pow(1.28, level));
 }
 
 /**
@@ -230,7 +247,7 @@ function parseProfile(raw: string): Profile | null {
   }
   if (typeof data !== 'object' || data === null) return null;
   const o = data as Record<string, unknown>;
-  if (o.version !== SAVE_VERSION) return null;
+  if (o.version !== SAVE_VERSION && o.version !== MIGRATABLE_VERSION) return null;
 
   const specsRaw = (typeof o.specs === 'object' && o.specs !== null ? o.specs : {}) as Record<string, unknown>;
   const specs: SpecLevels = {
@@ -239,10 +256,20 @@ function parseProfile(raw: string): Profile | null {
     gpu: sanitizeSpecLevel(specsRaw.gpu, SPEC_CAPS.gpu),
     disk: sanitizeSpecLevel(specsRaw.disk, SPEC_CAPS.disk),
   };
-  const unspentSpecs =
-    typeof o.unspentSpecs === 'number' && Number.isFinite(o.unspentSpecs)
-      ? Math.max(0, Math.floor(o.unspentSpecs))
+  // Restore Points and the tree shipped after the spec-bank era; an older save migrates to zero.
+  const rp =
+    typeof o.rp === 'number' && Number.isFinite(o.rp) ? Math.max(0, Math.floor(o.rp)) : 0;
+  const rpEarned =
+    typeof o.rpEarned === 'number' && Number.isFinite(o.rpEarned)
+      ? Math.max(0, Math.floor(o.rpEarned))
       : 0;
+  const lastSalvage =
+    typeof o.lastSalvage === 'number' && Number.isFinite(o.lastSalvage)
+      ? Math.max(0, Math.floor(o.lastSalvage))
+      : 0;
+  const tree = Array.isArray(o.tree)
+    ? [...new Set(o.tree.filter((id): id is string => typeof id === 'string' && isTreeNodeId(id)))]
+    : [];
   const achievements = Array.isArray(o.achievements)
     ? o.achievements.filter((a): a is string => typeof a === 'string')
     : [];
@@ -265,7 +292,7 @@ function parseProfile(raw: string): Profile | null {
     : [];
   const lastChoice: MenuChoice = o.lastChoice === 'editor' || o.lastChoice === 'load' ? o.lastChoice : 'play';
 
-  return { version: SAVE_VERSION, specs, unspentSpecs, achievements, bestWave, reboots, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice };
+  return { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, bestWave, reboots, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice };
 }
 
 /**

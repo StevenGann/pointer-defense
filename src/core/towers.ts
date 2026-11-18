@@ -508,11 +508,12 @@ export function repairCost(tower: Tower): number {
   return Math.ceil(0.5 * tower.spent * (missing / tower.maxHp));
 }
 
-/** How many fixed ticks a full repair of the current damage takes (scales with damage restored). */
-export function repairDurationTicks(tower: Tower): number {
+/** How many fixed ticks a full repair of the current damage takes (scales with damage restored and
+ *  the Cooling Loop speed multiplier). */
+export function repairDurationTicks(tower: Tower, repairSpeedMult = 1): number {
   if (tower.maxHp <= 0) return 0;
   const fraction = Math.max(0, Math.min(1, repairHpToRestore(tower) / tower.maxHp));
-  return secondsToTicks(REPAIR_SECONDS * fraction);
+  return secondsToTicks((REPAIR_SECONDS * fraction) / repairSpeedMult);
 }
 
 /** True while this tower's repair job is still running at the given simulation clock. */
@@ -697,10 +698,11 @@ export function upgradeCost(tower: Tower): number | null {
   return factor === null ? null : Math.round(TOWER_STATS[tower.kind].cost * factor);
 }
 
-/** Salvage returned when a tower is sold: 70% of everything spent, rounded down. Walls pay nothing. */
-export function sellValue(tower: Tower): number {
+/** Salvage returned when a tower is sold: `refund` of everything spent, rounded down. Walls pay
+ *  nothing. The refund defaults to 70 % and the Hot Swap node raises it to 90 %. */
+export function sellValue(tower: Tower, refund = 0.7): number {
   if (tower.kind === 'wall') return 0;
-  return Math.floor(tower.spent * 0.7);
+  return Math.floor(tower.spent * refund);
 }
 
 /**
