@@ -147,6 +147,9 @@ export class BoardView {
   private readonly enemyBodies = new Graphics();
   private readonly enemyFx = new Graphics();
   private readonly enemySprites: Sprite[] = [];
+  private readonly ghost = new Container();
+  private readonly ghostBase = new Sprite();
+  private readonly ghostTurret = new Sprite();
   private readonly overlay = new Graphics();
   private readonly note = new Text({
     text: 'Build a maze. Towers block the route.',
@@ -159,8 +162,13 @@ export class BoardView {
 
   constructor() {
     this.note.anchor.set(0, 0.5);
+    this.ghostBase.anchor.set(0.5, 0.5);
+    this.ghostTurret.anchor.set(0.5, 0.5);
+    this.ghostBase.visible = false;
+    this.ghostTurret.visible = false;
+    this.ghost.addChild(this.ghostBase, this.ghostTurret);
     this.popups.addChild(this.popupGfx);
-    this.root.addChild(this.tileSprites, this.tiles, this.path, this.toggles, this.towerSprites, this.towers, this.popups, this.enemies, this.enemyBodies, this.enemyFx, this.overlay, this.note);
+    this.root.addChild(this.tileSprites, this.tiles, this.path, this.toggles, this.towerSprites, this.towers, this.popups, this.enemies, this.enemyBodies, this.enemyFx, this.ghost, this.overlay, this.note);
   }
 
   /** The pooled body sprite for the `index`-th living enemy, grown on demand. */
@@ -335,12 +343,11 @@ export class BoardView {
     if (state.selected && hover.onBoard && canPlace(state, state.selected, hover.col, hover.row)) {
       const cx = board.x + (hover.col + 0.5) * cell;
       const cy = board.y + (hover.row + 0.5) * cell;
-      if (state.selected === 'wall') {
-        drawWallShape(this.overlay, { branch: null, open: false, hp: 1, maxHp: 1, locked: false }, cx, cy, cell, 0.5);
-      } else {
-        drawTowerShape(this.overlay, state.selected, cx, cy, cell, 0.5);
-      }
+      drawGhost(this.ghostBase, this.ghostTurret, this.overlay, state.selected, cx, cy, cell);
       dashedCircle(this.overlay, cx, cy, TOWER_STATS[state.selected].range * cell, PAL.navy, 1);
+    } else {
+      this.ghostBase.visible = false;
+      this.ghostTurret.visible = false;
     }
 
     if (state.pointer.stage >= 2 && state.phase === 'wave') {
@@ -664,6 +671,76 @@ function drawWallTower(
   } else {
     baseSprite.visible = false;
     drawWallShape(g, wall, cx, cy, cell, 1);
+  }
+}
+
+/**
+ * Draw the placement ghost at 50% alpha: the same SVG base and turret sprites a fresh tower of
+ * `kind` would use, facing north (angle 0) with no branch. A missing texture falls back to the
+ * procedural shape so a half-finished art pass degrades like the rest of the pipeline.
+ */
+function drawGhost(
+  baseSprite: Sprite,
+  turretSprite: Sprite,
+  g: Graphics,
+  kind: TowerKind,
+  cx: number,
+  cy: number,
+  cell: number,
+): void {
+  if (kind === 'wall') {
+    const wall = { branch: null, open: false, hp: 1, maxHp: 1, locked: false };
+    const spec = wallSpec(wall);
+    const size = wallFootprintSize(cell);
+    const faceTex = getArtTexture('wall-base', size);
+    if (faceTex !== null) {
+      baseSprite.texture = faceTex;
+      baseSprite.visible = true;
+      baseSprite.position.set(cx, cy);
+      baseSprite.width = size;
+      baseSprite.height = size;
+      baseSprite.tint = spec.face;
+      baseSprite.rotation = 0;
+      baseSprite.alpha = 0.5;
+      drawWallFaceDetails(g, spec, cx, cy, cell, 0.5);
+    } else {
+      baseSprite.visible = false;
+      drawWallShape(g, wall, cx, cy, cell, 0.5);
+    }
+    turretSprite.visible = false;
+    return;
+  }
+
+  const baseTex = getArtTexture(artNameForTowerBase(kind), cell);
+  if (baseTex === null) {
+    baseSprite.visible = false;
+    turretSprite.visible = false;
+    drawTowerShape(g, kind, cx, cy, cell, 0.5, 0, null);
+    return;
+  }
+
+  baseSprite.texture = baseTex;
+  baseSprite.visible = true;
+  baseSprite.position.set(cx, cy);
+  baseSprite.width = cell;
+  baseSprite.height = cell;
+  baseSprite.tint = 0xffffff;
+  baseSprite.rotation = 0;
+  baseSprite.alpha = 0.5;
+
+  const turretName = artNameForTowerTurret(kind);
+  const turretTex = turretName !== null ? getArtTexture(turretName, cell) : null;
+  if (turretTex !== null) {
+    turretSprite.texture = turretTex;
+    turretSprite.visible = true;
+    turretSprite.position.set(cx, cy);
+    turretSprite.width = cell;
+    turretSprite.height = cell;
+    turretSprite.tint = 0xffffff;
+    turretSprite.rotation = 0;
+    turretSprite.alpha = 0.5;
+  } else {
+    turretSprite.visible = false;
   }
 }
 

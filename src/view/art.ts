@@ -119,6 +119,9 @@ export function artSpriteSize(bodyPx: number): number {
 
 const svgImages = new Map<string, HTMLImageElement>();
 const textureCache = new Map<string, Texture>();
+// Test-only overrides: a name -> texture the smoke test injects to exercise the sprite path without
+// a DOM. Empty in production, where the loader and rasteriser above are the only way in.
+const injectedTextures = new Map<string, Texture>();
 
 let currentDpr = liveDevicePixelRatio();
 
@@ -151,6 +154,9 @@ export function hasArt(name: string): boolean {
  * fall back to their procedural drawing on null.
  */
 export function getArtTexture(name: string, logicalPx: number): Texture | null {
+  const injected = injectedTextures.get(name);
+  if (injected !== undefined) return injected;
+
   const image = svgImages.get(name);
   if (image === undefined) return null;
   if (typeof document === 'undefined') return null;
@@ -174,10 +180,16 @@ export function getArtTexture(name: string, logicalPx: number): Texture | null {
   return texture;
 }
 
+/** Test-only: force `getArtTexture(name)` to resolve to `texture` without the SVG loader. */
+export function injectArtTexture(name: string, texture: Texture): void {
+  injectedTextures.set(name, texture);
+}
+
 /** Clear the loader state (used by tests to re-run a preload). */
 export function resetArt(): void {
   svgImages.clear();
   textureCache.clear();
+  injectedTextures.clear();
 }
 
 function svgDataUrl(svg: string): string {

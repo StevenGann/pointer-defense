@@ -110,7 +110,9 @@ import {
   setArtDpr,
   artDpr,
   resetArt,
+  injectArtTexture,
 } from '../src/view/art.ts';
+import { Texture } from 'pixi.js';
 import { readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
@@ -3981,6 +3983,107 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(getArtTexture('grunt', 28) === null, 'getArtTexture falls back to null headlessly');
   check(manifestEntry('grunt') !== undefined, 'manifestEntry resolves a known name');
   check(manifestEntry('no-such-asset') === undefined, 'manifestEntry rejects an unknown name');
+  resetArt();
+}
+
+// --- 37g. The placement ghost uses the same SVG art as a placed tower --------------------------
+{
+  resetArt();
+  const gunBase = new Texture({ width: 4, height: 4 });
+  const gunTurret = new Texture({ width: 8, height: 8 });
+  const beaconBase = new Texture({ width: 6, height: 6 });
+  const wallBase = new Texture({ width: 6, height: 6 });
+  injectArtTexture('gun-base', gunBase);
+  injectArtTexture('gun-turret', gunTurret);
+  injectArtTexture('beacon-base', beaconBase);
+  injectArtTexture('wall-base', wallBase);
+
+  const layout = computeLayout(1280, 800);
+  const board = layout.board;
+  const cell = board.cell;
+  const cx = board.x + (4 + 0.5) * cell;
+  const cy = board.y + (6 + 0.5) * cell;
+  const hover = { col: 4, row: 6, onBoard: true, x: 0, y: 0 };
+
+  // A turret kind previews its base and turret sprites, and the base is the same texture the placed
+  // tower uses (identity, not "something drawn").
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  check(placeTower(s, 'gun', 3, 6), 'ghost: place a gun to anchor texture identity');
+  selectTower(s, 'gun');
+  const view = new BoardView();
+  view.draw(s, layout, 0, hover);
+  check(view.towerBaseSprites[0].visible, 'ghost: the placed gun draws its base sprite');
+  check(view.ghostBase.visible, 'ghost: the preview base sprite is visible at the hovered tile');
+  check(view.ghostBase.texture === view.towerBaseSprites[0].texture,
+    'ghost: the preview uses the placed tower\'s base texture');
+  check(view.ghostBase.texture === gunBase, 'ghost: the preview base is the gun-base texture');
+  check(view.ghostBase.alpha === 0.5, 'ghost: the preview base is at 50% alpha');
+  check(view.ghostBase.position.x === cx && view.ghostBase.position.y === cy,
+    'ghost: the preview base sits at the hovered tile');
+  check(view.ghostTurret.visible, 'ghost: a turret kind previews its turret');
+  check(view.ghostTurret.texture === gunTurret, 'ghost: the turret preview uses the gun-turret texture');
+  check(view.ghostTurret.alpha === 0.5, 'ghost: the turret preview is at 50% alpha');
+  check(view.ghostTurret.rotation === 0, 'ghost: a fresh turret faces north');
+
+  // The ghost sprites are pooled: the same two sprites serve every frame, no per-frame allocation.
+  const baseRef = view.ghostBase;
+  const turretRef = view.ghostTurret;
+  for (let i = 0; i < 10; i++) view.draw(s, layout, 0, hover);
+  check(view.ghostBase === baseRef && view.ghostTurret === turretRef,
+    'ghost: pooled sprites persist across frames');
+  check(view.ghost.children.length === 2, 'ghost: exactly two pooled sprites (base + turret)');
+
+  // Moving off the board hides the ghost on the next frame.
+  view.draw(s, layout, 0, { col: 4, row: 6, onBoard: false, x: 0, y: 0 });
+  check(!view.ghostBase.visible && !view.ghostTurret.visible, 'ghost: leaving the board hides the ghost');
+
+  // The ghost returns on re-entry, and cancelling the selection hides it.
+  view.draw(s, layout, 0, hover);
+  check(view.ghostBase.visible && view.ghostTurret.visible, 'ghost: the ghost returns when hovering back');
+  cancelSelection(s);
+  view.draw(s, layout, 0, hover);
+  check(!view.ghostBase.visible && !view.ghostTurret.visible, 'ghost: cancelling the selection hides the ghost');
+
+  // A turret-less kind previews base only.
+  const s2 = stateOnLevel('open-field');
+  s2.wave = 24;
+  s2.economy.salvage = 10000;
+  const view2 = new BoardView();
+  selectTower(s2, 'beacon');
+  view2.draw(s2, layout, 0, hover);
+  check(view2.ghostBase.visible, 'ghost: a turret-less kind previews its base');
+  check(view2.ghostBase.texture === beaconBase, 'ghost: the beacon base is the injected texture');
+  check(!view2.ghostTurret.visible, 'ghost: a turret-less kind previews no turret');
+
+  // The wall preview uses the wall base art at the default (closed, un-upgraded) appearance.
+  const s3 = stateOnLevel('open-field');
+  s3.economy.salvage = 10000;
+  const view3 = new BoardView();
+  selectTower(s3, 'wall');
+  view3.draw(s3, layout, 0, hover);
+  check(view3.ghostBase.visible, 'ghost: the wall preview uses the wall base art');
+  check(view3.ghostBase.texture === wallBase, 'ghost: the wall base is the injected texture');
+  check(view3.ghostBase.alpha === 0.5, 'ghost: the wall preview is at 50% alpha');
+  check(!view3.ghostTurret.visible, 'ghost: the wall preview has no turret');
+
+  resetArt();
+}
+
+// --- 37h. The ghost falls back to the procedural shape when the art texture is absent ----------
+{
+  resetArt();
+  const layout = computeLayout(1280, 800);
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  selectTower(s, 'gun');
+  const view = new BoardView();
+  const hover = { col: 4, row: 6, onBoard: true, x: 0, y: 0 };
+  view.draw(s, layout, 0, hover);
+  check(!view.ghostBase.visible && !view.ghostTurret.visible,
+    'ghost fallback: no sprites are shown without art');
+  check(view.overlay.context.instructions.length > 0,
+    'ghost fallback: the procedural ghost drew into the overlay');
   resetArt();
 }
 
