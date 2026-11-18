@@ -59,7 +59,9 @@ export const TOWER_UNLOCK_WAVE: Readonly<Record<TowerKind, number>> = {
   taser: 14,
   frost: 6,
   laser: 11,
-  aa: 16,
+  // Flyers arrive on wave 6 and every other tower now chips them at 0.25x, so the answer has to be
+  // available before the threat, not ten waves after it.
+  aa: 5,
   beacon: 8,
   repair: 18,
   wall: 0,

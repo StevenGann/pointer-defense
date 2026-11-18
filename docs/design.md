@@ -218,7 +218,7 @@ Repair tower keeps a plain upgrade ladder for now.
 | **Taser** | 14 | 80 | 1.6 | 1, ignores armour | 0.12 s | instant | closest (fixed) | armour, speed, close work | the inside of a hairpin |
 | **Frost** | 6 | 70 | 2.2 | 1, slows to 30 % speed for 3.0 s | 0.60 s | instant | closest (fixed) | utility | in front of the damage |
 | **Laser** | 11 | 70 | 3.4 | 11, pierces 8 | 0.80 s | 150°/s | first (fixed) | straight lines | corridors you deliberately left open |
-| **AA** | 16 | 40 | 3.4 | 2.6, flyers only, 2× vs flyers | 0.55 s | 540°/s | player's choice | dedicated anti-air | flyer-heavy waves |
+| **AA** | 5 | 40 | 3.4 | 2.6, flyers only, 2× vs flyers | 0.55 s | 540°/s | player's choice | dedicated anti-air | flyer-heavy waves |
 
 Every **other** tower deals 0.25× its damage to a flyer (`FLYER_OFF_KIND_DAMAGE`). Air is the AA
 tower's job: a gun line that clears every ground wave still leaks flyers without one, because a Gun's
