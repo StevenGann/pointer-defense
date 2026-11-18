@@ -7,7 +7,8 @@
  * in-memory copy so a broken store never stops the game from running.
  */
 
-import { isBossVariant, isEnemyKind, type EnemyKind } from './enemies.ts';
+import { BOSS_KINDS, ENEMY_KINDS, isBossVariant, isEnemyKind, type EnemyKind } from './enemies.ts';
+import { TOWER_KINDS, towerUnlockWave } from './towers.ts';
 
 export const SAVE_KEY = 'pointer-defense/save';
 
@@ -152,6 +153,37 @@ export function specGain(totalSalvageEarned: number): number {
 /** Total specs owned: everything spent into levels plus the unspent bank. */
 export function totalSpecs(p: Profile): number {
   return p.specs.cpu + p.specs.ram + p.specs.gpu + p.specs.disk + p.unspentSpecs;
+}
+
+/**
+ * Whether every page in the Help viewer is readable. A page unlocks from a mix of what has been
+ * encountered (enemies, bosses) and how far a run has reached (bestWave), so the whole library is
+ * open once every enemy kind, every boss kind and every tower kind has been met.
+ */
+export function allHelpUnlocked(p: Profile): boolean {
+  return (
+    ENEMY_KINDS.every((k) => p.seenEnemies.includes(k)) &&
+    BOSS_KINDS.every((k) => p.seenBossKinds.includes(k)) &&
+    TOWER_KINDS.every((k) => p.bestWave >= towerUnlockWave(k))
+  );
+}
+
+/**
+ * Evaluate the profile-only achievements (the ones that depend on what has been met across runs,
+ * not on the live run state) and record them in the profile, returning the ids just unlocked. The
+ * live-run achievements are handled by `checkAchievements` in state.ts; this covers the rest.
+ */
+export function checkProfileAchievements(p: Profile): string[] {
+  const unlocked: string[] = [];
+  const add = (id: string): void => {
+    if (!p.achievements.includes(id)) {
+      p.achievements.push(id);
+      unlocked.push(id);
+    }
+  };
+  if (p.reboots >= 2) add('two-reboots');
+  if (allHelpUnlocked(p)) add('all-help');
+  return unlocked;
 }
 
 /** Record enemy kinds the player has encountered, returning true when anything new was added. */

@@ -85,7 +85,7 @@ export class DialogView {
     this.title = makeText('', PAL.titleInverse, true);
     this.title.anchor.set(0, 0.5);
     this.root.addChild(this.title);
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < 32; i++) {
       const t = makeText('', PAL.text);
       t.anchor.set(0, 0.5);
       this.rows.push(t);

@@ -54,6 +54,7 @@ import {
   cursorClickIntervalTicks,
   cursorRadius,
   effectiveStats,
+  isFullyUpgraded,
   isGateLocked,
   isGateOpen,
   isDown,
@@ -324,6 +325,20 @@ export interface RunState {
   clearedWaveNoLeaks: boolean;
   /** True once a boss has died to the pointer without any tower having touched it. */
   bossKilledByPointer: boolean;
+  /** Kills landed on an enemy's weak point this run, for the deadeye achievement. */
+  weakPointKills: number;
+  /** Critical hits landed by the pointer this run, for the lucky-streak achievement. */
+  critHits: number;
+  /** The most salvage held at once this run, for the deep-pockets achievement. */
+  salvagePeak: number;
+  /** True once the player has sold a tower this run, gating the pack-rat achievement. */
+  soldTower: boolean;
+  /** Consecutive waves called early this run, for the speedrunner achievement. */
+  earlyCallsInARow: number;
+  /** True once any wave has been cleared with zero leaks this run. */
+  clearedFlawlessWave: boolean;
+  /** True once a milestone-wave boss has died to a pointer hit. */
+  milestoneBossByPointer: boolean;
   /** Cumulative wall hit points removed by breachers this run (for the balance harness). */
   wallDamageTaken: number;
   /** Simulation paused by P: the view keeps rendering, the sim clock stands still. */
@@ -411,6 +426,13 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     calledEarly: false,
     clearedWaveNoLeaks: false,
     bossKilledByPointer: false,
+    weakPointKills: 0,
+    critHits: 0,
+    salvagePeak: STARTING_SALVAGE + specs.ram * RAM_SALVAGE_PER_POINT,
+    soldTower: false,
+    earlyCallsInARow: 0,
+    clearedFlawlessWave: false,
+    milestoneBossByPointer: false,
     wallDamageTaken: 0,
     paused: false,
     speed: 1,
@@ -712,6 +734,7 @@ export function sellTower(s: RunState, col: number, row: number): boolean {
   s.blocked.delete(row * s.grid.cols + col);
   s.mines = s.mines.filter((m) => m.towerId !== t.id);
   s.economy.salvage += refund;
+  s.soldTower = true;
   if (s.selectedTowerId === t.id) s.selectedTowerId = null;
   rebuildField(s);
   recomputeAuras(s.towers, s.clock);
@@ -852,7 +875,10 @@ export function startWave(s: RunState): boolean {
   if (unlocked.length > 0) s.events.push({ type: 'towerUnlocked', kinds: unlocked });
   if (early) {
     s.calledEarly = true;
+    s.earlyCallsInARow++;
     earn(s.economy, earlyCallBonus(elapsed, s.wave));
+  } else {
+    s.earlyCallsInARow = 0;
   }
   return true;
 }
@@ -962,6 +988,18 @@ export function checkAchievements(s: RunState): string[] {
   if (s.bossKilledByPointer) add('boss-by-pointer');
   if (s.adsDismissed >= 10) add('ad-collector');
   if (s.wave >= 150) add('endless-150');
+  if (s.weakPointKills >= 50) add('weak-point-kills');
+  if (s.critHits >= 25) add('crit-hits');
+  if (s.salvagePeak >= 1000) add('salvage-peak');
+  if (s.wave >= 20 && !s.soldTower) add('no-sell');
+  if (s.clearedWaves > 0 && s.towers.length > 0 && new Set(s.towers.map((t) => t.kind)).size === 1) add('one-kind');
+  if (s.towers.some((t) => t.branch !== null && isFullyUpgraded(t))) add('maxed-branch');
+  if (s.towers.some((t) => t.kind === 'aa' && t.branch === 'A')) add('aa-flak');
+  if (s.earlyCallsInARow >= 3) add('early-call-streak');
+  if (s.clearedFlawlessWave) add('flawless-wave');
+  if (s.milestoneBossByPointer) add('milestone-boss-pointer');
+  if (s.unspentSpecs > 0) add('specs-banked');
+  if (s.clearedWaves > 0 && !LEVELS.some((l) => l.id === s.levelId)) add('custom-map-cleared');
 
   return unlocked;
 }
@@ -1125,6 +1163,7 @@ export function step(s: RunState, dtMs: number): number {
 export function tick(s: RunState): void {
   s.tick++;
   if (s.godMode) s.economy.salvage = Math.max(s.economy.salvage, GOD_SALVAGE_CEILING);
+  if (s.economy.salvage > s.salvagePeak) s.salvagePeak = s.economy.salvage;
   updateToggles(s);
   tickRepairs(s);
   tickRepairAuras(s);
@@ -2625,6 +2664,7 @@ function damageEnemy(
   if (dmg <= 0) return;
   e.hp -= dmg;
   s.economy.damage[source] += dmg;
+  if (source === 'pointer' && crit) s.critHits++;
   if (source === 'tower' && tower) tower.damageDealt += dmg;
   // The view nudges the hit enemy along the shot direction for a cosmetic knockback. Carrying the
   // unit direction here (rather than re-deriving it from a matching shot) keeps splash/beam/chain
@@ -2645,7 +2685,9 @@ function damageEnemy(
   if (e.hp <= 1e-9) {
     e.hp = 0;
     e.dead = true;
+    if (source === 'pointer' && weak) s.weakPointKills++;
     if (e.isBoss && source === 'pointer' && !e.towerDamaged) s.bossKilledByPointer = true;
+    if (e.isBoss && source === 'pointer' && milestoneBossKind(e.wave) === e.kind) s.milestoneBossByPointer = true;
     // A Carrier releases twice its brood on death, the one boss that fights on after it falls.
     if (e.kind === 'flyer-boss') releaseBrood(s, e, CARRIER_DEATH_BROOD_COUNT);
     const value = e.value * (s.modifiers.includes('rush') ? 1.1 : 1);
@@ -2671,6 +2713,7 @@ function clearDue(s: RunState): void {
     const bonus = waveClearBonus(run.wave);
     earn(s.economy, bonus);
     s.events.push({ type: 'waveCleared', wave: run.wave, bonus });
+    if ((s.leaksByWave.get(run.wave) ?? 0) === 0) s.clearedFlawlessWave = true;
     if (run.wave >= 40 && (s.leaksByWave.get(run.wave) ?? 0) === 0) s.clearedWaveNoLeaks = true;
     cleared.add(run);
   }

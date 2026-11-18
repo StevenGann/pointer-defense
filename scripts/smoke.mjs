@@ -94,7 +94,8 @@ import {
   CRIT_MULTIPLIER,
   MARKED_DAMAGE_MULT,
 } from '../src/core/pointer.ts';
-import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies } from '../src/core/save.ts';
+import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies, allHelpUnlocked, checkProfileAchievements } from '../src/core/save.ts';
+import { ACHIEVEMENTS } from '../src/core/achievements.ts';
 import { restartWindows, checkAchievements, enterEndless, pointerDamageMult } from '../src/core/state.ts';
 import { cheatsEnabled, setCheatsVisibleForTests, SPAWN_KINDS } from '../src/core/cheats.ts';
 import { dashRects, offsetSegment, routeOffset } from '../src/view/route.ts';
@@ -1060,6 +1061,270 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(first.includes('first-blood'), 'first kill unlocks first-blood');
   const again = checkAchievements(s);
   check(!again.includes('first-blood'), 'first-blood does not fire twice');
+}
+
+// --- 15b. The achievement table: 24 definitions, unique ids, names and descriptions ------------
+{
+  check(ACHIEVEMENTS.length === 24, `exactly 24 achievements (${ACHIEVEMENTS.length})`);
+  const ids = ACHIEVEMENTS.map((a) => a.id);
+  check(new Set(ids).size === ACHIEVEMENTS.length, 'achievement ids are unique');
+  check(
+    ACHIEVEMENTS.every((a) => a.name.trim().length > 0 && a.description.trim().length > 0),
+    'every achievement has a name and a description',
+  );
+}
+
+// --- 15c. Each new run-state achievement fires once and only once -----------------------------
+{
+  // weak-point kills (deadeye): a counter threshold plus a real weak-point kill increments it.
+  const s = createRunState();
+  s.weakPointKills = 50;
+  check(checkAchievements(s).includes('weak-point-kills'), 'weak-point-kills fires at 50');
+  check(!checkAchievements(s).includes('weak-point-kills'), 'weak-point-kills fires once');
+  const real = createRunState();
+  real.phase = 'wave';
+  const w = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+  w.x = 10.5; w.y = 5.5; w.prevX = 10.5; w.prevY = 5.5; w.heading = 0;
+  w.hp = 2; w.maxHp = 2;
+  real.enemies.push(w);
+  pointerDown(real, w.x + 0.15, w.y);
+  check(real.weakPointKills === 1, 'a weak-point kill increments weakPointKills');
+}
+
+{
+  // crit hits (lucky streak): a threshold plus a forced-crit click increments the counter.
+  const s = createRunState();
+  s.critHits = 25;
+  check(checkAchievements(s).includes('crit-hits'), 'crit-hits fires at 25');
+  check(!checkAchievements(s).includes('crit-hits'), 'crit-hits fires once');
+  const findCrit = (seed) => {
+    let r = seed;
+    for (let i = 0; i < 10000; i++) {
+      const roll = nextCritRoll(r, false, false);
+      if (roll.crit) return r;
+      r = roll.next;
+    }
+    throw new Error('no crit seed found');
+  };
+  const real = createRunState();
+  real.phase = 'wave';
+  const e = stationary(1, 'grunt', 1, 10.5, 5.5);
+  e.hp = 100000; e.maxHp = 100000;
+  real.enemies.push(e);
+  real.rng = findCrit(0xabcdef01);
+  pointerDown(real, e.x, e.y + 0.15);
+  check(real.critHits === 1, 'a crit increments critHits');
+}
+
+{
+  // salvage peak (deep pockets): tracked by tick, fires once.
+  const s = createRunState();
+  s.economy.salvage = 1500;
+  tick(s);
+  check(s.salvagePeak === 1500, 'tick captures the salvage peak');
+  check(s.achievements.has('salvage-peak'), 'salvage-peak fires at the peak');
+  check(!checkAchievements(s).includes('salvage-peak'), 'salvage-peak fires once');
+}
+
+{
+  // no-sell (pack rat): wave 20 without selling; selling sets the flag and blocks it.
+  const s = createRunState();
+  s.wave = 20;
+  check(checkAchievements(s).includes('no-sell'), 'no-sell fires at wave 20 with no sale');
+  check(!checkAchievements(s).includes('no-sell'), 'no-sell fires once');
+  const sold = createRunState();
+  sold.wave = 20;
+  sold.soldTower = true;
+  check(!checkAchievements(sold).includes('no-sell'), 'selling blocks no-sell');
+  const selling = createRunState();
+  selling.economy.salvage = 10000;
+  placeTower(selling, 'gun', 5, 5);
+  sellTower(selling, 5, 5);
+  check(selling.soldTower === true, 'sellTower sets the sold flag');
+}
+
+{
+  // one-kind (one-trick pony): a wave cleared with exactly one tower kind on the board.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 5, 5);
+  s.clearedWaves = 1;
+  check(checkAchievements(s).includes('one-kind'), 'one-kind fires on a single tower kind');
+  check(!checkAchievements(s).includes('one-kind'), 'one-kind fires once');
+  const two = allUnlocked();
+  two.economy.salvage = 10000;
+  placeTower(two, 'gun', 5, 5);
+  placeTower(two, 'cannon', 6, 5);
+  two.clearedWaves = 1;
+  check(!checkAchievements(two).includes('one-kind'), 'two tower kinds block one-kind');
+}
+
+{
+  // maxed-branch (maxed out): a branched tower with nothing left to buy.
+  const s = createRunState();
+  const t = createTower(1, 'gun', 5, 5);
+  t.tier = 5;
+  t.branch = 'A';
+  s.towers.push(t);
+  check(checkAchievements(s).includes('maxed-branch'), 'maxed-branch fires on a tier-5 branched tower');
+  check(!checkAchievements(s).includes('maxed-branch'), 'maxed-branch fires once');
+  const unbranched = createRunState();
+  const u = createTower(1, 'gun', 5, 5);
+  u.tier = 5;
+  u.branch = null;
+  unbranched.towers.push(u);
+  check(!checkAchievements(unbranched).includes('maxed-branch'), 'an unbranched tier-5 does not count');
+}
+
+{
+  // aa-flak (flak jacket): an AA tower branched into Flak.
+  const s = createRunState();
+  const t = createTower(1, 'aa', 5, 5);
+  t.tier = 3;
+  t.branch = 'A';
+  s.towers.push(t);
+  check(checkAchievements(s).includes('aa-flak'), 'aa-flak fires on an AA Flak branch');
+  check(!checkAchievements(s).includes('aa-flak'), 'aa-flak fires once');
+  const missile = createRunState();
+  const m = createTower(1, 'aa', 5, 5);
+  m.tier = 3;
+  m.branch = 'B';
+  missile.towers.push(m);
+  check(!checkAchievements(missile).includes('aa-flak'), 'the AA missile branch does not count');
+}
+
+{
+  // early-call-streak (speedrunner): three early calls in a row, tracked by startWave.
+  const s = createRunState();
+  s.earlyCallsInARow = 3;
+  check(checkAchievements(s).includes('early-call-streak'), 'early-call-streak fires at three in a row');
+  check(!checkAchievements(s).includes('early-call-streak'), 'early-call-streak fires once');
+  const streak = createRunState();
+  startWave(streak); // wave 1 from build: not early
+  check(streak.earlyCallsInARow === 0, 'a normal start resets the streak');
+  startWave(streak); // wave 2 early
+  startWave(streak); // wave 3 early
+  startWave(streak); // wave 4 early
+  check(streak.earlyCallsInARow === 3, 'three early calls reach the streak');
+}
+
+{
+  // flawless-wave (no leaks): a zero-leak clear sets the flag and fires once.
+  const s = createRunState();
+  s.phase = 'wave';
+  s.wave = 1;
+  s.runs = [{ wave: 1, startTick: s.clock, spawns: [] }];
+  s.leaksByWave.set(1, 0);
+  s.enemies = [];
+  tick(s);
+  check(s.clearedFlawlessWave === true, 'a zero-leak clear sets the flawless flag');
+  check(checkAchievements(s).includes('flawless-wave'), 'flawless-wave fires after a zero-leak clear');
+  check(!checkAchievements(s).includes('flawless-wave'), 'flawless-wave fires once');
+}
+
+{
+  // milestone-boss-pointer (milestone hunter): the pointer lands the final blow on a milestone boss.
+  const s = createRunState();
+  s.milestoneBossByPointer = true;
+  check(checkAchievements(s).includes('milestone-boss-pointer'), 'milestone-boss-pointer fires');
+  check(!checkAchievements(s).includes('milestone-boss-pointer'), 'milestone-boss-pointer fires once');
+  const real = createRunState();
+  real.phase = 'wave';
+  const boss = createEnemy(1, 'grunt-boss', 10, SPAWN, EXIT);
+  boss.hp = 2; boss.maxHp = 2;
+  real.enemies.push(boss);
+  let guard = 0;
+  while (!boss.dead && guard++ < 20) {
+    pointerDown(real, boss.x, boss.y);
+    pointerUp(real);
+  }
+  check(real.milestoneBossByPointer === true, 'a milestone boss killed by the pointer sets the flag');
+}
+
+{
+  // specs-banked (nest egg): a run seeded with banked specs.
+  const p = defaultProfile();
+  p.unspentSpecs = 3;
+  const s = createRunState(p);
+  check(checkAchievements(s).includes('specs-banked'), 'specs-banked fires with banked specs');
+  check(!checkAchievements(s).includes('specs-banked'), 'specs-banked fires once');
+}
+
+{
+  // custom-map-cleared (cartographer): a wave cleared on a level outside the shipped set.
+  const custom = { id: 'custom-test', name: 'Custom', walls: [], starts: [{ col: 0, row: 6 }], exits: [{ col: 19, row: 6 }], toggles: [] };
+  const s = createRunState(undefined, custom);
+  s.clearedWaves = 1;
+  check(checkAchievements(s).includes('custom-map-cleared'), 'custom-map-cleared fires on a custom map');
+  check(!checkAchievements(s).includes('custom-map-cleared'), 'custom-map-cleared fires once');
+  const shipped = createRunState();
+  shipped.clearedWaves = 1;
+  check(!checkAchievements(shipped).includes('custom-map-cleared'), 'a shipped map does not count');
+}
+
+// --- 15d. Profile-only achievements: two reboots and the full Help library --------------------
+{
+  const p = defaultProfile();
+  p.reboots = 2;
+  const newly = checkProfileAchievements(p);
+  check(newly.includes('two-reboots'), 'two-reboots fires at two reboots');
+  check(checkProfileAchievements(p).length === 0, 'two-reboots fires once');
+}
+
+{
+  const complete = defaultProfile();
+  complete.bestWave = 24;
+  for (const k of ENEMY_KINDS) complete.seenEnemies.push(k);
+  for (const k of BOSS_KINDS) complete.seenBossKinds.push(k);
+  check(allHelpUnlocked(complete), 'all-help is satisfied when everything is met');
+  check(
+    allHelpUnlocked(complete) === HELP_PAGES.every((page) => pageUnlocked(page, complete)),
+    'all-help matches the real page gates',
+  );
+  const newly = checkProfileAchievements(complete);
+  check(newly.includes('all-help'), 'all-help fires via the profile check');
+  check(!checkProfileAchievements(complete).includes('all-help'), 'all-help fires once');
+
+  const missing = defaultProfile();
+  missing.bestWave = 24;
+  for (const k of ENEMY_KINDS) missing.seenEnemies.push(k);
+  for (const k of BOSS_KINDS.slice(0, -1)) missing.seenBossKinds.push(k);
+  check(!allHelpUnlocked(missing), 'all-help is not satisfied while a boss page is locked');
+}
+
+// --- 15e. An achievement does not fire twice across a save round trip --------------------------
+{
+  const store = { value: null, getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
+  const p = defaultProfile();
+  p.achievements.push('first-blood');
+  saveProfile(p, store);
+  const loaded = loadProfile(store);
+  const s = createRunState(loaded);
+  check(s.achievements.has('first-blood'), 'a round-tripped achievement seeds the run');
+  s.phase = 'wave';
+  const e = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+  s.enemies.push(e);
+  while (!e.dead) {
+    pointerDown(s, e.x, e.y);
+    pointerUp(s);
+  }
+  check(!checkAchievements(s).includes('first-blood'), 'a round-tripped achievement does not fire again');
+}
+
+// --- 15f. A cheated run records none of the new achievements ----------------------------------
+{
+  const s = createRunState();
+  s.cheatsUsed = true;
+  s.weakPointKills = 50;
+  s.critHits = 25;
+  s.salvagePeak = 1000;
+  s.wave = 20;
+  s.earlyCallsInARow = 3;
+  s.clearedFlawlessWave = true;
+  s.milestoneBossByPointer = true;
+  s.unspentSpecs = 3;
+  s.clearedWaves = 1;
+  check(checkAchievements(s).length === 0, 'a cheated run records none of the new achievements');
 }
 
 // --- 16. The hundred: generator, bosses, modifiers, victory, endless ---------------------------

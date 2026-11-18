@@ -21,7 +21,7 @@ import {
 } from './core/state.ts';
 import { SPAWN_KINDS, spawnKindLabel } from './core/cheats.ts';
 import { DEFAULT_LEVEL, type Level } from './core/levels.ts';
-import { addSeenEnemies, loadProfile, saveProfile, specGain, type Profile, type SpecKind } from './core/save.ts';
+import { addSeenEnemies, checkProfileAchievements, loadProfile, saveProfile, specGain, type Profile, type SpecKind } from './core/save.ts';
 import { achievementName, ACHIEVEMENTS } from './core/achievements.ts';
 import { ChromeView, computeLayout, PAL, pixelToWorld, pointInRect, type Layout, type MenuName } from './view/chrome.ts';
 import { BoardView } from './view/board.ts';
@@ -249,6 +249,17 @@ function toastAchievement(id: string): void {
   hud.showNotice(`Achievement: ${achievementName(id)}`, 180);
 }
 
+/** Record any profile-only achievement (reboot count, help completion) and toast it. */
+function syncProfileAchievements(): void {
+  const newly = checkProfileAchievements(profile);
+  if (newly.length === 0) return;
+  for (const id of newly) {
+    state.achievements.add(id);
+    toastAchievement(id);
+  }
+  saveProfile(profile);
+}
+
 /** Push any achievement unlocked in the sim this frame into the profile and toast it. */
 function syncAchievements(): void {
   let changed = false;
@@ -274,12 +285,14 @@ function doRestartWindows(): void {
   const { profile: next } = restartWindows(state, profile);
   const newly = next.achievements.filter((id) => !profile.achievements.includes(id));
   profile = next;
+  const profileNewly = checkProfileAchievements(profile);
   saveProfile(profile);
   state = createRunState(profile);
   syncViewport();
   dialog = null;
   menu = null;
   for (const id of newly) toastAchievement(id);
+  for (const id of profileNewly) toastAchievement(id);
 }
 
 function doNewRun(): void {
@@ -367,16 +380,21 @@ function menuAction(id: string): void {
     case 'exit':
       exitRun();
       break;
-    case 'achievements':
+    case 'achievements': {
+      const unlockedCount = ACHIEVEMENTS.filter((a) => profile.achievements.includes(a.id)).length;
       dialog = {
         title: 'Achievements',
-        rows: ACHIEVEMENTS.map((a) => ({
-          text: a.name,
-          greyed: !state.achievements.has(a.id),
-        })),
+        rows: [
+          { text: `${unlockedCount} / ${ACHIEVEMENTS.length}` },
+          ...ACHIEVEMENTS.map((a) => ({
+            text: a.name,
+            greyed: !profile.achievements.includes(a.id),
+          })),
+        ],
         buttons: [{ id: 'close', label: 'Close' }],
       };
       break;
+    }
     case 'about':
       dialog = {
         title: 'About',
@@ -910,6 +928,7 @@ app.ticker.add((ticker) => {
     if (!state.cheatsUsed) {
       syncAchievements();
       syncBestWave();
+      syncProfileAchievements();
     }
     if (state.cheatsUsed && cheatNotified !== state) {
       cheatNotified = state;
