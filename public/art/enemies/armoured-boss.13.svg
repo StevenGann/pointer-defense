@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Dreadnought (armoured-boss), frame 13 of 24. Generated: every moving part is a function of the frame. -->
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff0a0"/>
+      <stop offset="1" stop-color="#c08a00"/>
+    </linearGradient>
+    <radialGradient id="goldr" cx="0.35" cy="0.35" r="0.8">
+      <stop offset="0" stop-color="#fff6c0"/>
+      <stop offset="0.6" stop-color="#e0b030"/>
+      <stop offset="1" stop-color="#8a6000"/>
+    </radialGradient>
+    <radialGradient id="ember" cx="0.4" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#ffe9a8"/>
+      <stop offset="0.5" stop-color="#ff8a1e"/>
+      <stop offset="1" stop-color="#8a2000"/>
+    </radialGradient>
+    <linearGradient id="plate" x1="3" y1="3" x2="29" y2="29" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7c9cba"/>
+      <stop offset="0.5" stop-color="#406080"/>
+      <stop offset="1" stop-color="#22364a"/>
+    </linearGradient>
+    <linearGradient id="bracket" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5b7690"/>
+      <stop offset="1" stop-color="#1b2c3b"/>
+    </linearGradient>
+    <radialGradient id="rivet" cx="0.35" cy="0.35" r="0.75">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#8a8f94"/>
+    </radialGradient>
+  </defs>
+  <!-- Tier one: the outer plate. -->
+  <rect x="3" y="3" width="26" height="26" fill="url(#plate)" stroke="#000000" stroke-width="2.2"/>
+  <g fill="url(#rivet)" stroke="#000000" stroke-width="0.5">
+    <circle cx="10.5" cy="4.7" r="1.1"/>
+    <circle cx="21.5" cy="4.7" r="1.1"/>
+    <circle cx="10.5" cy="27.3" r="1.1"/>
+    <circle cx="21.5" cy="27.3" r="1.1"/>
+    <circle cx="4.7" cy="10.5" r="1.1"/>
+    <circle cx="4.7" cy="21.5" r="1.1"/>
+    <circle cx="27.3" cy="10.5" r="1.1"/>
+    <circle cx="27.3" cy="21.5" r="1.1"/>
+  </g>
+  <!-- Tier two: a raised middle plate. -->
+  <rect x="6.4" y="6.4" width="19.2" height="19.2" fill="#3a5876"/>
+  <path d="M6.4 25.6 V6.4 H25.6" fill="none" stroke="#8fb0cb" stroke-width="1"/>
+  <path d="M25.6 6.4 V25.6 H6.4" fill="none" stroke="#142231" stroke-width="1"/>
+  <!-- Tier three: the inner plate. Each stomp presses it in like a Windows 95 button: the bevel
+       flips and everything on it drops down-right. -->
+  <rect x="9.4" y="9.4" width="13.2" height="13.2" fill="#406080"/>
+  <path d="M9.4 22.6 V9.4 H22.6" fill="none" stroke="#9db9d1" stroke-width="1"/>
+  <path d="M22.6 9.4 V22.6 H9.4" fill="none" stroke="#162636" stroke-width="1"/>
+  <g transform="translate(0 0)">
+    <!-- The V-scowl view slit, with two slanted ember eyes that squint on the stomp. -->
+    <polygon points="11,13 16,14.8 21,13 21,17.8 11,17.8" fill="#070d12" stroke="#000000" stroke-width="0.6" stroke-linejoin="round"/>
+    <g fill="#ff8a1e">
+    <polygon points="12.38,15.2 15.18,15.45 15.18,16.6 12.38,16.2"/>
+    <polygon points="19.98,15.2 17.18,15.45 17.18,16.6 19.98,16.2"/>
+    </g>
+    <g fill="#162636">
+      <rect x="12.6" y="19.2" width="6.8" height="0.7"/>
+      <rect x="12.6" y="20.6" width="6.8" height="0.7"/>
+    </g>
+  </g>
+  <!-- Corner brackets, clamping in on each stomp. -->
+  <g fill="url(#bracket)" stroke="#000000" stroke-width="0.7" stroke-linejoin="round">
+    <polygon points="2.2,2.2 9,2.2 9,5 5,5 5,9 2.2,9"/>
+    <circle cx="3.7" cy="3.7" r="0.85" fill="url(#rivet)" stroke-width="0.4"/>
+    <polygon points="29.8,2.2 23,2.2 23,5 27,5 27,9 29.8,9"/>
+    <circle cx="28.3" cy="3.7" r="0.85" fill="url(#rivet)" stroke-width="0.4"/>
+    <polygon points="2.2,29.8 9,29.8 9,27 5,27 5,23 2.2,23"/>
+    <circle cx="3.7" cy="28.3" r="0.85" fill="url(#rivet)" stroke-width="0.4"/>
+    <polygon points="29.8,29.8 23,29.8 23,27 27,27 27,23 29.8,23"/>
+    <circle cx="28.3" cy="28.3" r="0.85" fill="url(#rivet)" stroke-width="0.4"/>
+  </g>
+  <path d="M11.8 5.4 V1.63 L14.15 3.42 L16 0.8 L17.85 3.42 L20.2 1.63 V5.4 Z" fill="url(#gold)" stroke="#000000" stroke-width="0.8" stroke-linejoin="round"/>
+  <line x1="12.3" y1="4.4" x2="19.7" y2="4.4" stroke="#a07000" stroke-width="0.6"/>
+  <circle cx="16" cy="3.5" r="0.7" fill="#c02000" stroke="#000000" stroke-width="0.3"/>
+</svg>

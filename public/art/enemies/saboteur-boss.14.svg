@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Wirecutter (saboteur-boss), frame 14 of 24. Generated: every moving part is a function of the frame. -->
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff0a0"/>
+      <stop offset="1" stop-color="#c08a00"/>
+    </linearGradient>
+    <radialGradient id="goldr" cx="0.35" cy="0.35" r="0.8">
+      <stop offset="0" stop-color="#fff6c0"/>
+      <stop offset="0.6" stop-color="#e0b030"/>
+      <stop offset="1" stop-color="#8a6000"/>
+    </radialGradient>
+    <radialGradient id="ember" cx="0.4" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#ffe9a8"/>
+      <stop offset="0.5" stop-color="#ff8a1e"/>
+      <stop offset="1" stop-color="#8a2000"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="3.4" cy="16" r="3.2" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffd24a" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#ff9a00" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#eef4f7"/>
+      <stop offset="1" stop-color="#7f94a3"/>
+    </linearGradient>
+  </defs>
+  <!-- The faceted diamond. Faces +x. -->
+  <polygon points="3,16 16,3 16,16" fill="#7590a6"/>
+  <polygon points="16,3 29,16 16,16" fill="#5c768c"/>
+  <polygon points="3,16 16,29 16,16" fill="#3b5064"/>
+  <polygon points="16,29 29,16 16,16" fill="#2a3c4d"/>
+  <polygon points="16,7 25,16 16,25 7,16" fill="none" stroke="#c4d6e2" stroke-width="0.8" opacity="0.35"/>
+  <polygon points="16,3 29,16 16,29 3,16" fill="none" stroke="#000000" stroke-width="1.2" stroke-linejoin="round"/>
+  <!-- An EMP pulse rings out from the coil once a loop. -->
+  <circle cx="13.4" cy="16" r="9.25" fill="none" stroke="#ffcf5a" stroke-width="0.87" opacity="0.29"/>
+  <!-- The EMP coil: copper windings round a hot core, crowned with gold points that turn. -->
+  <g fill="url(#goldr)" stroke="#000000" stroke-width="0.4" stroke-linejoin="round">
+    <polygon points="15.28,12.47 17.01,11.99 16.72,13.76"/>
+    <polygon points="17.34,16.69 18.33,18.2 16.55,18.46"/>
+    <polygon points="13.96,19.96 12.84,21.37 12.03,19.76"/>
+    <polygon points="9.8,17.75 8.12,17.12 9.4,15.86"/>
+    <polygon points="10.62,13.12 10.7,11.32 12.3,12.15"/>
+  </g>
+  <circle cx="13.4" cy="16" r="3.2" fill="none" stroke="#000000" stroke-width="2.4"/>
+  <circle cx="13.4" cy="16" r="3.2" fill="none" stroke="#c27a3a" stroke-width="1.4"/>
+  <g stroke="#5a3210" stroke-width="0.5">
+    <line x1="15.9" y1="16" x2="17.3" y2="16"/>
+    <line x1="15.42" y1="17.47" x2="16.56" y2="18.29"/>
+    <line x1="14.17" y1="18.38" x2="14.61" y2="19.71"/>
+    <line x1="12.63" y1="18.38" x2="12.19" y2="19.71"/>
+    <line x1="11.38" y1="17.47" x2="10.24" y2="18.29"/>
+    <line x1="10.9" y1="16" x2="9.5" y2="16"/>
+    <line x1="11.38" y1="14.53" x2="10.24" y2="13.71"/>
+    <line x1="12.63" y1="13.62" x2="12.19" y2="12.29"/>
+    <line x1="14.17" y1="13.62" x2="14.61" y2="12.29"/>
+    <line x1="15.42" y1="14.53" x2="16.56" y2="13.71"/>
+  </g>
+  <circle cx="13.4" cy="16" r="1.9" fill="#ffb020" stroke="#000000" stroke-width="0.6"/>
+  <circle cx="12.9" cy="15.5" r="0.5" fill="#fff3c4"/>
+  <!-- Two narrow ember eyes. -->
+  <g stroke-linecap="round">
+    <line x1="17.6" y1="12.2" x2="20.2" y2="13.6" stroke="#000000" stroke-width="2.2"/>
+    <line x1="17.6" y1="19.8" x2="20.2" y2="18.4" stroke="#000000" stroke-width="2.2"/>
+    <line x1="17.6" y1="12.2" x2="20.2" y2="13.6" stroke="#ffcf5a" stroke-width="1.3"/>
+    <line x1="17.6" y1="19.8" x2="20.2" y2="18.4" stroke="#ffcf5a" stroke-width="1.3"/>
+  </g>
+  <!-- The cutter blades on the leading corner, snipping twice a loop. -->
+  <g fill="url(#steel)" stroke="#000000" stroke-width="0.7" stroke-linejoin="round">
+    <polygon points="19.97,14.14 25.32,13.31 30.39,14.07 24.32,15.36 21.14,16.75"/>
+    <polygon points="19.97,17.86 25.32,18.69 30.39,17.93 24.32,16.64 21.14,15.25"/>
+  </g>
+  <circle cx="21.8" cy="16" r="1" fill="#2a3c4d" stroke="#000000" stroke-width="0.5"/>
+  <circle cx="21.5" cy="15.7" r="0.35" fill="#c4d6e2"/>
+  <!-- The fuse spark at the rear corner, crackling into a new shape every frame. -->
+  <circle cx="3.4" cy="16" r="2.6" fill="url(#glow)"/>
+  <g stroke="#806000" stroke-width="1.2" stroke-linecap="round">
+    <line x1="3" y1="16" x2="1.19" y2="16.85"/>
+    <line x1="3" y1="16" x2="1.19" y2="15.15"/>
+    <line x1="3" y1="16" x2="3" y2="17.6"/>
+    <line x1="3" y1="16" x2="3" y2="14.4"/>
+  </g>
+  <circle cx="2.6" cy="16" r="0.8" fill="#fff3c4"/>
+</svg>

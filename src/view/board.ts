@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
-import { artNameForBranch, artNameForTowerBase, artNameForTowerTurret, artSpriteSize, enemyArtNames, frameTexture, frameTextureFor, getArtFrames, getArtTexture } from './art.ts';
+import { artNameForBranch, artNameForTowerBase, artNameForTowerTurret, artSpriteSize, enemyArtNames, frameTexture, frameTextureFor, getArtFrames, getArtTexture, hasArt } from './art.ts';
 import { lifetimeFrame } from './anim.ts';
 import { bevel, FONT, FONT_SIZE, PAL, type BoardGeometry, type Layout } from './chrome.ts';
 import {
@@ -140,7 +140,9 @@ export const ENEMY_ART_BODY: Record<EnemyKind, number> = {
   'flyer-boss': 2.6,
   'armoured-boss': 1.6,
   'saboteur-boss': 2.4,
-  'breacher-boss': 2.2,
+  // The Ram's art gives the front of its box to the drill, so its hull is drawn smaller in the box;
+  // 2.9 keeps the hull the Breacher's size against the radius, with the drill reaching ~1.6 r ahead.
+  'breacher-boss': 2.9,
 };
 
 /** Kinds whose silhouette is oriented: they rotate with the enemy's heading. The rest are symmetric. */
@@ -1457,7 +1459,7 @@ function drawEnemy(
   // shape (the temporary fallback that keeps a half-finished art pass rendering; deleted once parity
   // is confirmed). A still is a one-frame sequence, so this path is identical to the pre-animation
   // draw; an animated asset picks its frame from the animator on top of the same texture swap. A boss
-  // variant reuses its base type's asset, drawn at the base factor against its scaled radius.
+  // variant draws its own asset against its scaled radius, falling back to its base type's.
   const bodyPx = artSpriteSize(ENEMY_ART_BODY[e.kind] * r);
   const moving = e.attackTowerId === null && now >= e.stunUntilTick;
   const tex = frameTextureFor(enemyArtNames(e.kind), bodyPx, now - e.spawnTick, e.id, moving);
@@ -1475,13 +1477,12 @@ function drawEnemy(
     drawEnemyShape(bodies, baseEnemyKind(e.kind), ex, ey, r, color, e.heading);
   }
 
-  // Boss variants get the runtime crown/notch motif that reads as "boss" without colour, because
-  // their shipped art is a copy of a base type. The exception is the Sergeant: its file is the
-  // crown-rim design, so the notch is already drawn and a runtime one would double it.
-  if (isBossVariant(e.kind) && e.kind !== 'grunt-boss') drawBossCrown(fx, ex, ey, r);
-
-  // The Ram wears a visible drill nose so the tower-eating threat reads before it lands.
-  if (e.kind === 'breacher-boss') drawRamDrill(fx, ex, ey, r, e.heading);
+  // Every boss's own art carries its crown, and the Ram's carries its drill. These runtime stand-ins
+  // are drawn only when a boss is falling back to its base type's art (its own file missing or not
+  // yet decoded), so the boss still reads as one and the Ram's threat is still telegraphed.
+  const ownArt = hasArt(e.kind);
+  if (isBossVariant(e.kind) && !ownArt) drawBossCrown(fx, ex, ey, r);
+  if (e.kind === 'breacher-boss' && !ownArt) drawRamDrill(fx, ex, ey, r, e.heading);
 
   // The shield ring: a Bastion draws one ring per remaining layer; everything else draws the single
   // shield ring whose alpha tracks the fraction left.

@@ -1,34 +1,86 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Carrier (flyer-boss), frame 2 of 24. Generated: every moving part is a function of the frame. -->
   <defs>
-    <radialGradient id="body" cx="15" cy="13" r="10" gradientUnits="userSpaceOnUse">
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff0a0"/>
+      <stop offset="1" stop-color="#c08a00"/>
+    </linearGradient>
+    <radialGradient id="goldr" cx="0.35" cy="0.35" r="0.8">
+      <stop offset="0" stop-color="#fff6c0"/>
+      <stop offset="0.6" stop-color="#e0b030"/>
+      <stop offset="1" stop-color="#8a6000"/>
+    </radialGradient>
+    <radialGradient id="ember" cx="0.4" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#ffe9a8"/>
+      <stop offset="0.5" stop-color="#ff8a1e"/>
+      <stop offset="1" stop-color="#8a2000"/>
+    </radialGradient>
+    <radialGradient id="body" cx="17" cy="13" r="10" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#b3c8d6"/>
       <stop offset="0.55" stop-color="#6b8598"/>
       <stop offset="1" stop-color="#3a5061"/>
     </radialGradient>
-    <linearGradient id="wing" x1="3" y1="0" x2="17" y2="0" gradientUnits="userSpaceOnUse">
+    <linearGradient id="wing" x1="4" y1="0" x2="19" y2="0" gradientUnits="userSpaceOnUse">
       <stop offset="0" stop-color="#c9dae5"/>
       <stop offset="1" stop-color="#7d97a9"/>
     </linearGradient>
+    <radialGradient id="sac" cx="8.6" cy="14.4" r="6.4" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e3eef4"/>
+      <stop offset="0.6" stop-color="#a9bfcd"/>
+      <stop offset="1" stop-color="#6b8598"/>
+    </radialGradient>
   </defs>
-  <!-- Two swept wings with ribs. Faces +x. -->
-  <!-- Flap frame 2 of 6: the wings rising, drawn at 79% of their spread. -->
-  <path d="M17 10.89 L3 4.16 Q6.5 8.12 5.5 12.24 L12 12.56 Z" fill="url(#wing)" stroke="#000000" stroke-width="1" stroke-linejoin="round"/>
-  <path d="M17 21.11 L3 27.84 Q6.5 23.88 5.5 19.76 L12 19.44 Z" fill="url(#wing)" stroke="#000000" stroke-width="1" stroke-linejoin="round"/>
+  <!-- Broad serrated wings, beating twice a loop. Faces +x. -->
+  <path d="M19 10.95 L4.4 3.39 Q7.6 6.75 7 8.77 L9.4 9.27 L8.6 10.78 L11.4 11.12 L10.8 12.63 L15 12.88 Z" fill="url(#wing)" stroke="#000000" stroke-width="1" stroke-linejoin="round"/>
+  <path d="M19 21.05 L4.4 28.61 Q7.6 25.25 7 23.23 L9.4 22.73 L8.6 21.22 L11.4 20.88 L10.8 19.37 L15 19.12 Z" fill="url(#wing)" stroke="#000000" stroke-width="1" stroke-linejoin="round"/>
   <g stroke="#2c3e4d" stroke-width="0.8" stroke-linecap="round" opacity="0.6">
-    <line x1="14" y1="11.13" x2="6.2" y2="7.01"/>
-    <line x1="12.5" y1="11.77" x2="6.4" y2="9.7"/>
-    <line x1="14" y1="20.87" x2="6.2" y2="24.99"/>
-    <line x1="12.5" y1="20.23" x2="6.4" y2="22.3"/>
+    <line x1="16" y1="11.2" x2="6" y2="4.74"/>
+    <line x1="14" y1="11.79" x2="7.4" y2="7.26"/>
+    <line x1="12.4" y1="12.21" x2="8.8" y2="9.78"/>
+    <line x1="16" y1="20.8" x2="6" y2="27.26"/>
+    <line x1="14" y1="20.21" x2="7.4" y2="24.74"/>
+    <line x1="12.4" y1="19.79" x2="8.8" y2="22.22"/>
   </g>
-  <!-- Body, with a short tail. -->
-  <path d="M10.5 14.6 L7 16 L10.5 17.4 Z" fill="#3a5061" stroke="#000000" stroke-width="0.8" stroke-linejoin="round"/>
-  <ellipse cx="17.5" cy="16" rx="7.5" ry="6.2" fill="url(#body)" stroke="#000000" stroke-width="1"/>
-  <path d="M12 13.4 Q14.5 10.9 18 10.8" fill="none" stroke="#e4eef4" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/>
-  <!-- Two eyes on the leading side. -->
-  <circle cx="21.4" cy="13.5" r="1.7" fill="#0e1a24"/>
-  <circle cx="21.4" cy="18.5" r="1.7" fill="#0e1a24"/>
-  <circle cx="21.6" cy="13.5" r="1.15" fill="#e6f4ff"/>
-  <circle cx="21.6" cy="18.5" r="1.15" fill="#e6f4ff"/>
-  <circle cx="22.1" cy="13.6" r="0.55" fill="#000000"/>
-  <circle cx="22.1" cy="18.4" r="0.55" fill="#000000"/>
+  <!-- The brood sac: a translucent membrane that breathes, with three young wriggling inside. -->
+  <ellipse cx="9.8" cy="16" rx="5.55" ry="5.15" fill="url(#sac)" fill-opacity="0.92" stroke="#000000" stroke-width="1"/>
+  <g fill="none" stroke="#6b8598" stroke-width="0.6" opacity="0.6" stroke-linecap="round">
+    <path d="M6 13.4 Q9 15 6.6 18.6"/>
+    <path d="M11.6 12 Q12.6 16 11.4 20"/>
+  </g>
+  <g fill="#2c3e4d">
+    <polygon points="9.39,18.84 10.69,20.4 10.34,18.82"/>
+    <polygon points="9.63,18.08 11.58,17.53 10.4,18.63"/>
+    <circle cx="9.61" cy="18.49" r="0.85"/>
+    <circle cx="9.18" cy="18.36" r="0.3" fill="#e6f4ff"/>
+    <polygon points="7.4,14.27 5.59,15.19 7.21,15.19"/>
+    <polygon points="8.09,14.67 8.19,16.69 7.38,15.29"/>
+    <circle cx="7.69" cy="14.55" r="0.85"/>
+    <circle cx="7.92" cy="14.16" r="0.3" fill="#e6f4ff"/>
+    <polygon points="12.11,14.86 11.61,12.9 11.25,14.47"/>
+    <polygon points="11.57,15.45 9.57,15.1 11.11,14.62"/>
+    <circle cx="11.77" cy="15.09" r="0.85"/>
+    <circle cx="12.1" cy="15.39" r="0.3" fill="#e6f4ff"/>
+  </g>
+  <!-- The body. -->
+  <ellipse cx="19.4" cy="16" rx="7" ry="5.8" fill="url(#body)" stroke="#000000" stroke-width="1"/>
+  <path d="M14 13.2 Q16.6 10.6 20.2 10.6" fill="none" stroke="#e4eef4" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/>
+  <!-- An armoured head plate with two horns and two ember eyes. -->
+  <g fill="#3a5061" stroke="#000000" stroke-width="0.6" stroke-linejoin="round">
+    <polygon points="26,14.2 28.8,14.9 26.2,15.3"/>
+    <polygon points="26,17.8 28.8,17.1 26.2,16.7"/>
+  </g>
+  <path d="M22.6 10.9 Q27.6 12 26.4 16 Q27.6 20 22.6 21.1 Q24.6 16 22.6 10.9 Z" fill="#3a5061" stroke="#000000" stroke-width="0.7" stroke-linejoin="round"/>
+  <circle cx="24.1" cy="13.6" r="1.35" fill="url(#ember)" stroke="#000000" stroke-width="0.4"/>
+  <circle cx="24.1" cy="18.4" r="1.35" fill="url(#ember)" stroke="#000000" stroke-width="0.4"/>
+  <ellipse cx="24.4" cy="13.6" rx="0.35" ry="0.95" fill="#000000"/>
+  <ellipse cx="24.4" cy="18.4" rx="0.35" ry="0.95" fill="#000000"/>
+  <g fill="url(#goldr)" stroke="#000000" stroke-width="0.4" stroke-linejoin="round">
+    <polygon points="17.52,14.68 18.37,12.52 18.74,14.81"/>
+    <polygon points="19.1,15.14 21.42,15.27 19.36,16.34"/>
+    <polygon points="19.16,16.78 19.75,19.03 18.1,17.4"/>
+    <polygon points="17.61,17.35 15.66,18.6 16.7,16.52"/>
+    <polygon points="16.6,16.05 14.8,14.58 17.1,14.93"/>
+  </g>
+  <circle cx="18" cy="16" r="1.6" fill="url(#goldr)" stroke="#000000" stroke-width="0.7"/>
+  <circle cx="18" cy="16" r="0.67" fill="#c02000" stroke="#000000" stroke-width="0.3"/>
 </svg>
