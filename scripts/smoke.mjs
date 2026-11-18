@@ -93,6 +93,26 @@ import { computeLayout, pixelToWorld, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FON
 import { computeHud, computeRightPanel, hudControlAt } from '../src/view/hud.ts';
 import { backingStorePixelSize } from '../src/view/screen.ts';
 import {
+  ART_MANIFEST,
+  ART_VIEWBOX,
+  ART_SILHOUETTE,
+  manifestEntry,
+  cacheKey,
+  rasterPixelSize,
+  artSpriteSize,
+  artNameForEnemy,
+  artNameForTowerBase,
+  artNameForTowerTurret,
+  artNameForBranch,
+  getArtTexture,
+  hasArt,
+  setArtDpr,
+  artDpr,
+  resetArt,
+} from '../src/view/art.ts';
+import { readdirSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import {
   CameraShake,
   shakeImpulseFor,
   SHAKE_AMPLITUDE,
@@ -3851,6 +3871,107 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   const parsed = JSON.parse(choice);
   check(parsed[0] === 98 && parsed[1] === 100,
     `the turret hits the first-placed of two equidistant towers (${parsed.join(',')})`);
+}
+
+// --- 37. Art pipeline: manifest, naming, cache, fallback, and the manifest/reality diff ---------
+{
+  const artDir = fileURLToPath(new URL('../public/art', import.meta.url));
+
+  // 37a. The manifest is well-formed: unique names, all four categories present.
+  const names = new Set();
+  let unique = true;
+  const categories = new Set();
+  for (const e of ART_MANIFEST) {
+    if (names.has(e.name)) unique = false;
+    names.add(e.name);
+    categories.add(e.category);
+  }
+  check(unique, 'every manifest entry has a unique name');
+  check(
+    ['enemies', 'towers', 'branches', 'board'].every((c) => categories.has(c)),
+    'the manifest covers enemies, towers, branches and board',
+  );
+  check(ART_VIEWBOX === 32 && ART_SILHOUETTE === 28,
+    `the viewBox contract is ${ART_VIEWBOX}x${ART_VIEWBOX}, silhouette ${ART_SILHOUETTE}px`);
+
+  // 37b. Every shipped manifest file exists on disk, and no SVG on disk is unreferenced. The
+  // shipped set grows as each art phase lands (towers, branches, board); the manifest itself lists
+  // the whole contract from the start, so unshipped entries simply fall back to procedural drawing.
+  const shippedCategories = ['enemies'];
+  const missing = ART_MANIFEST.filter(
+    (e) => shippedCategories.includes(e.category) && !existsSync(`${artDir}/${e.file}`),
+  );
+  check(missing.length === 0, `every shipped manifest file exists (${missing.map((m) => m.file).join(', ') || 'none missing'})`);
+
+  const onDisk = [];
+  const walk = (dir, rel) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const r = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(`${dir}/${entry.name}`, r);
+      else if (entry.name.endsWith('.svg')) onDisk.push(r);
+    }
+  };
+  walk(artDir, '');
+  const referenced = new Set(ART_MANIFEST.map((e) => e.file));
+  const unreferenced = onDisk.filter((f) => !referenced.has(f));
+  check(unreferenced.length === 0, `no unreferenced SVG in public/art (${unreferenced.join(', ') || 'none'})`);
+}
+
+{
+  // 37c. Every enemy and tower kind resolves an asset name, and the naming helpers agree.
+  for (const kind of ['grunt', 'runner', 'shielded', 'flyer', 'armoured', 'saboteur', 'breacher', 'boss']) {
+    check(artNameForEnemy(kind) === kind, `enemy ${kind} resolves an asset name`);
+  }
+  check(artNameForEnemy('popup') === null, 'the pop-up stays runtime (no asset)');
+  for (const kind of ['gun', 'cannon', 'laser', 'taser', 'frost', 'beacon', 'cursor', 'repair', 'wall']) {
+    check(artNameForTowerBase(kind) === `${kind}-base`, `tower ${kind} resolves a base`);
+  }
+  for (const kind of ['gun', 'cannon', 'laser', 'taser', 'frost']) {
+    check(artNameForTowerTurret(kind) === `${kind}-turret`, `tower ${kind} resolves a turret`);
+  }
+  for (const kind of ['beacon', 'cursor', 'repair', 'wall']) {
+    check(artNameForTowerTurret(kind) === null, `tower ${kind} ships no turret`);
+  }
+  check(artNameForBranch('gun', 'A') === 'gun-marksman', 'gun A names Marksman');
+  check(artNameForBranch('gun', 'B') === 'gun-repeater', 'gun B names Repeater');
+  check(artNameForBranch('cannon', 'B') === 'cannon-minesweeper', 'cannon B names Minesweeper');
+  check(artNameForBranch('cursor', 'C') === 'cursor-maintenance', 'cursor C names Maintenance');
+  check(
+    artNameForBranch('wall', 'A') === null && artNameForBranch('repair', 'A') === null,
+    'wall and repair branches carry no branch-mark asset',
+  );
+}
+
+{
+  // 37d. Raster size and cache key: the exact device-pixel size, and the key changes with DPR.
+  check(rasterPixelSize(28, 1) === 28, 'raster size at dpr 1 is the logical size');
+  check(rasterPixelSize(28, 1.5) === 42, 'raster size at dpr 1.5 rounds 28 -> 42');
+  check(rasterPixelSize(28, 2) === 56, 'raster size at dpr 2 rounds 28 -> 56');
+  check(cacheKey('grunt', 42) === 'grunt@42', 'cache key is name@pixelSize');
+  check(cacheKey('grunt', 42) !== cacheKey('grunt', 56), 'the cache key changes with the pixel size');
+
+  const before = artDpr();
+  setArtDpr(2);
+  check(artDpr() === 2, 'setArtDpr re-aims the rasteriser');
+  setArtDpr(before);
+  check(artDpr() === before, 'setArtDpr restores');
+}
+
+{
+  // 37e. Sprite sizing keeps the viewBox padding contract: the silhouette fills bodyPx, the sprite
+  // spans 32/28 of it so a `bodyPx` silhouette lands exactly `bodyPx` pixels on screen.
+  check(Math.abs(artSpriteSize(28) - 32) < 1e-9, `artSpriteSize(28) = 32 (${artSpriteSize(28)})`);
+  check(Math.abs(artSpriteSize(14) - 16) < 1e-9, `artSpriteSize(14) = 16 (${artSpriteSize(14)})`);
+}
+
+{
+  // 37f. The fallback: headlessly (no DOM) the loader yields no texture, so the caller falls back
+  // to its procedural drawing rather than crashing.
+  check(hasArt('grunt') === false, 'no asset is decoded headlessly');
+  check(getArtTexture('grunt', 28) === null, 'getArtTexture falls back to null headlessly');
+  check(manifestEntry('grunt') !== undefined, 'manifestEntry resolves a known name');
+  check(manifestEntry('no-such-asset') === undefined, 'manifestEntry rejects an unknown name');
+  resetArt();
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

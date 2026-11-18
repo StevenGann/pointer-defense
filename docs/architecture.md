@@ -6,7 +6,7 @@
 |---|---|---|
 | Language | TypeScript, strict | the game is state and numbers |
 | Bundler | Vite | fast dev server, static output for Pages |
-| Renderer | PixiJS v8 | WebGL/WebGPU, vector Graphics API, no assets |
+| Renderer | PixiJS v8 | WebGL/WebGPU, SVG art rasterised to sprites + vector Graphics API |
 | Hosting | GitHub Pages | static, free, one workflow |
 
 There is no server. The game is a single page that runs entirely in the browser, and any persistence
@@ -39,7 +39,8 @@ the same at any frame rate, which matters because a clicker's numbers are sensit
 
 ## Rules for the code
 
-- **Vector only.** Every visual is a Pixi `Graphics` call or a `Text`. No image files.
+- **Fixed art is SVG.** Enemies, towers, branch marks and the board are SVG files rasterised to
+  sprites (see `public/art/README.md`); runtime effects are Pixi `Graphics` calls or a `Text`.
 - **No HTML UI.** The page is a canvas host. Windows, buttons and panels are drawn in Pixi so that
   the whole game is one coordinate space and one render loop.
 - **Fixed timestep, 60 Hz.** Rendering interpolates. Never advance the simulation with `deltaTime`.

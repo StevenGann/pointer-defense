@@ -863,8 +863,9 @@ about the era, no CRT filter, no retro winking. The Windows look is the game's w
 Enemies are drawn in a single grey/blue family (blue-grey from `#27495d` to `#6b8598`): shape and
 outline carry identity, colour only shades it.
 
-Everything is a vector drawn at runtime. No image assets, no sprite sheets, no external fonts. The
-whole game weighs less than one photograph and scales to any DPI.
+Fixed art — enemies, towers, branch marks and the board — ships as SVG files (see §13.6); everything
+else is a vector drawn at runtime. No sprite sheets, no external fonts. The whole game weighs less
+than one photograph and scales to any DPI.
 
 ### 13.2 Shape grammar
 
@@ -936,6 +937,22 @@ dark — never the dozens of ordinary deaths and hits that happen every wave. Th
 instead. A **Screen shake** toggle in the View menu persists in the profile like sound and volume, and
 defaults **off** for users who prefer reduced motion (`prefers-reduced-motion: reduce`).
 
+### 13.6 Art pipeline
+
+Fixed art — enemy bodies, tower plinths and barrels, branch marks, the board tile, the static obstacle
+and the block — ships as hand-editable SVG files under `public/art/`. Runtime effects stay code:
+window chrome and bevels, buttons, panels, ads, health bars, range rings, shields, route dots, damage
+numbers, muzzle flashes, sparks, death pops, tooltips, menus and dialogs are composed per frame from
+state and have no fixed form to hand over.
+
+`src/view/art.ts` holds the manifest of every asset, fetches each SVG once, decodes it into an `Image`,
+and rasterises it into an offscreen canvas at the exact device-pixel size the sprite needs, so the
+vector stays crisp at any DPI. A missing or malformed file logs a warning and falls back to the
+procedural drawing for that kind, so a half-finished art pass degrades instead of crashing. The
+naming table, the 32×32 viewBox rule, the base/turret layer rule and the turret pivot convention are
+documented in [`public/art/README.md`](../public/art/README.md), which is the handover an artist works
+to.
+
 ---
 
 ## 14. Audio
@@ -977,7 +994,7 @@ One master volume, remembered in `localStorage`. No music at launch.
 | Concern | Decision |
 |---|---|
 | Language | TypeScript, strict, `noUnusedLocals`, `noUnusedParameters` |
-| Renderer | PixiJS 8, WebGL/WebGPU, everything through `Graphics` |
+| Renderer | PixiJS 8, WebGL/WebGPU, fixed art as SVGs rasterised to sprites, runtime effects through `Graphics` |
 | Resolution | `devicePixelRatio` is read live and re-applied on ratio change (display move, OS scale, browser zoom), so the backing store stays `round(css × dpr)` and text re-rasterises crisp |
 | Bundler | Vite 8, `base: /pointer-defense/` |
 | Hosting | GitHub Pages, `.github/workflows/deploy.yml` on push to `main` |

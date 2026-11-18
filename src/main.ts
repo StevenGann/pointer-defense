@@ -39,6 +39,7 @@ import { EffectsView } from './view/effects.ts';
 import { sfx, type SoundName } from './audio/sfx.ts';
 import { CameraShake, shakeImpulseFor } from './view/shake.ts';
 import { backingStorePixelSize, cssViewportSize, liveDevicePixelRatio } from './view/screen.ts';
+import { preloadArt, setArtDpr } from './view/art.ts';
 import { repairHealingCount, type Branch, type TowerKind } from './core/towers.ts';
 import pkg from '../package.json';
 
@@ -62,6 +63,7 @@ app.canvas.style.cursor = 'none';
 // — the upscale that blurs text and lines. Re-apply the live ratio whenever it drifts.
 function applyResolution(): void {
   const dpr = liveDevicePixelRatio();
+  setArtDpr(dpr);
   const size = cssViewportSize();
   const target = backingStorePixelSize(size.width, size.height, dpr);
   const current = backingStorePixelSize(app.screen.width, app.screen.height, app.renderer.resolution);
@@ -98,6 +100,7 @@ function watchResolution(): void {
   window.visualViewport?.addEventListener('resize', applyResolution);
 }
 watchResolution();
+void preloadArt();
 
 let profile: Profile = loadProfile();
 let state: RunState = createRunState(profile);

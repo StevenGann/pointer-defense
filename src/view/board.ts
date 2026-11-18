@@ -1,4 +1,5 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics, Sprite, Text } from 'pixi.js';
+import { artNameForEnemy, artSpriteSize, getArtTexture } from './art.ts';
 import { bevel, FONT, FONT_SIZE, PAL, type BoardGeometry, type Layout } from './chrome.ts';
 import {
   enemyAt,
@@ -97,6 +98,26 @@ export const ENEMY_COLOR: Record<EnemyKind, number> = {
 /** The single cyan for shield visuals: the shield ring, the impact arc and the `SHD` floater. */
 export const SHIELD_COLOR = 0x00d0d0;
 
+/**
+ * The SVG silhouette's on-screen bounding diameter, in units of the enemy's pixel radius `r`. The
+ * art is authored to fill the 32x32 viewBox's 28px silhouette, and the sprite is sized so that
+ * silhouette spans `factor × r` pixels — the same box the procedural body occupied.
+ */
+export const ENEMY_ART_BODY: Record<EnemyKind, number> = {
+  grunt: 2.0,
+  runner: 2.2,
+  shielded: 2.7,
+  flyer: 2.6,
+  armoured: 1.6,
+  saboteur: 2.4,
+  boss: 2.6,
+  breacher: 2.2,
+  popup: 2.0,
+};
+
+/** Kinds whose silhouette is oriented: they rotate with the enemy's heading. The rest are symmetric. */
+export const ENEMY_ART_ROTATES: ReadonlySet<EnemyKind> = new Set(['runner', 'flyer', 'saboteur', 'breacher']);
+
 const AURA_COLOR = 0x6699ff;
 const SLOW_COLOR = 0x00d0ff;
 
@@ -116,7 +137,10 @@ export class BoardView {
   private readonly towers = new Graphics();
   private readonly popups = new Container();
   private readonly popupGfx = new Graphics();
-  private readonly enemies = new Graphics();
+  private readonly enemies = new Container();
+  private readonly enemyBodies = new Graphics();
+  private readonly enemyFx = new Graphics();
+  private readonly enemySprites: Sprite[] = [];
   private readonly overlay = new Graphics();
   private readonly note = new Text({
     text: 'Build a maze. Towers block the route.',
@@ -130,7 +154,20 @@ export class BoardView {
   constructor() {
     this.note.anchor.set(0, 0.5);
     this.popups.addChild(this.popupGfx);
-    this.root.addChild(this.tiles, this.path, this.toggles, this.towers, this.popups, this.enemies, this.overlay, this.note);
+    this.root.addChild(this.tiles, this.path, this.toggles, this.towers, this.popups, this.enemies, this.enemyBodies, this.enemyFx, this.overlay, this.note);
+  }
+
+  /** The pooled body sprite for the `index`-th living enemy, grown on demand. */
+  private enemySprite(index: number): Sprite {
+    let s = this.enemySprites[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0.5, 0.5);
+      this.enemySprites.push(s);
+      this.enemies.addChild(s);
+    }
+    s.visible = true;
+    return s;
   }
 
   /** The caption and message Text objects for the `i`-th live pop-up, creating them on demand. */
@@ -172,7 +209,8 @@ export class BoardView {
     this.drawRoute([currentPath(state)], board, cell);
 
     this.towers.clear();
-    this.enemies.clear();
+    this.enemyBodies.clear();
+    this.enemyFx.clear();
     this.popupGfx.clear();
     this.overlay.clear();
 
@@ -228,10 +266,15 @@ export class BoardView {
       this.popupTexts[pi].message.text = '';
     }
 
+    let spriteIndex = 0;
     for (const e of layers.others) {
       if (e.dead) continue;
       const kb = knockbackFor ? knockbackFor(e.id, state.tick) : null;
-      drawEnemy(this.enemies, e, board, cell, alpha, state.tick < e.slowUntilTick, kb);
+      drawEnemy(this.enemySprite(spriteIndex), this.enemyBodies, this.enemyFx, e, board, cell, alpha, state.tick < e.slowUntilTick, kb);
+      spriteIndex++;
+    }
+    for (let i = spriteIndex; i < this.enemySprites.length; i++) {
+      this.enemySprites[i].visible = false;
     }
 
     // The flying cursor arrows live above the enemy layer so they are always visible.
@@ -930,8 +973,15 @@ function drawPopupWindow(
   g.moveTo(cx + 4, cy - 4).lineTo(cx - 4, cy + 4).stroke({ width: 1, color: PAL.text });
 }
 
+/** The flyer's non-rotating shadow, drawn beneath the body sprite (the SVG carries only the swept body). */
+function drawFlyerShadow(g: Graphics, x: number, y: number, r: number, alpha: number): void {
+  g.ellipse(x, y + r * 0.55, r * 1.15, r * 0.42).fill({ color: 0x17222b, alpha: alpha * 0.4 });
+}
+
 function drawEnemy(
-  g: Graphics,
+  sprite: Sprite,
+  bodies: Graphics,
+  fx: Graphics,
   e: Enemy,
   board: { x: number; y: number; cell: number },
   cell: number,
@@ -948,13 +998,30 @@ function drawEnemy(
   const r = radiusOf(e) * cell;
   const color = ENEMY_COLOR[e.kind];
 
-  drawEnemyShape(g, e.kind, ex, ey, r, color, e.heading);
+  // Body: the SVG sprite when the asset has loaded, otherwise the procedural shape (the temporary
+  // fallback that keeps a half-finished art pass rendering; deleted once parity is confirmed).
+  const name = artNameForEnemy(e.kind);
+  const bodyPx = artSpriteSize(ENEMY_ART_BODY[e.kind] * r);
+  const texture = name !== null ? getArtTexture(name, bodyPx) : null;
+  if (texture !== null) {
+    sprite.texture = texture;
+    sprite.visible = true;
+    sprite.position.set(ex, ey);
+    sprite.width = bodyPx;
+    sprite.height = bodyPx;
+    sprite.rotation = ENEMY_ART_ROTATES.has(e.kind) ? e.heading : 0;
+    sprite.alpha = 1;
+    if (e.kind === 'flyer') drawFlyerShadow(bodies, ex, ey, r, 1);
+  } else {
+    sprite.visible = false;
+    drawEnemyShape(bodies, e.kind, ex, ey, r, color, e.heading);
+  }
 
   // The shield ring is on whenever a shield remains, and its alpha tracks the fraction left, so a
   // Boss entering at full shield reads as heavily protected and a nearly-stripped one is faint.
   if (e.shield > 0) {
     const frac = e.maxShield > 0 ? Math.max(0, Math.min(1, e.shield / e.maxShield)) : 0;
-    g.circle(ex, ey, r + (e.kind === 'boss' ? 7 : 3)).stroke({
+    fx.circle(ex, ey, r + (e.kind === 'boss' ? 7 : 3)).stroke({
       width: 2,
       color: SHIELD_COLOR,
       alpha: 0.25 + 0.75 * frac,
@@ -966,7 +1033,7 @@ function drawEnemy(
     const n0 = r * 0.7;
     const n1 = r * 1.08;
     const nh = e.heading;
-    g.moveTo(ex + Math.cos(nh) * n0, ey + Math.sin(nh) * n0)
+    fx.moveTo(ex + Math.cos(nh) * n0, ey + Math.sin(nh) * n0)
       .lineTo(ex + Math.cos(nh) * n1, ey + Math.sin(nh) * n1)
       .stroke({ width: 2, color: PAL.highlight });
   }
@@ -975,7 +1042,7 @@ function drawEnemy(
     const sr = r + 2.5;
     const a0 = Math.PI * 0.2;
     const a1 = Math.PI * 0.8;
-    g.moveTo(ex + Math.cos(a0) * sr, ey + Math.sin(a0) * sr)
+    fx.moveTo(ex + Math.cos(a0) * sr, ey + Math.sin(a0) * sr)
       .arc(ex, ey, sr, a0, a1)
       .stroke({ width: 1, color: SLOW_COLOR });
   }
@@ -985,13 +1052,13 @@ function drawEnemy(
     // A boss always shows a health bar, even at full health, so its durability reads at a glance.
     const bw = r * 2.2;
     const by0 = ey - r - 8;
-    g.rect(ex - bw / 2, by0, bw, 3).fill({ color: PAL.dark });
-    g.rect(ex - bw / 2 + 1, by0 + 1, Math.max(0, (bw - 2) * ratio), 1).fill({ color: healthColor(ratio) });
+    fx.rect(ex - bw / 2, by0, bw, 3).fill({ color: PAL.dark });
+    fx.rect(ex - bw / 2 + 1, by0 + 1, Math.max(0, (bw - 2) * ratio), 1).fill({ color: healthColor(ratio) });
   } else if (ratio < 1) {
     const arcR = r + 4;
     const a0 = -Math.PI / 2 - Math.PI * ratio;
     const a1 = -Math.PI / 2 + Math.PI * ratio;
-    g.moveTo(ex + Math.cos(a0) * arcR, ey + Math.sin(a0) * arcR)
+    fx.moveTo(ex + Math.cos(a0) * arcR, ey + Math.sin(a0) * arcR)
       .arc(ex, ey, arcR, a0, a1)
       .stroke({
         width: 2,
