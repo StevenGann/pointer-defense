@@ -5,6 +5,15 @@
     <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pointer Defense</title>
+    <style>
+      /* The game draws its own pointer, so the OS arrow must not sit under it. Pixi re-applies an
+         inline `cursor` when it wires up its event system, which beats a plain rule on the element
+         — hence !important on the selector rather than an inline style in main.ts. */
+      #app,
+      #app canvas {
+        cursor: none !important;
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>

@@ -118,7 +118,7 @@ import {
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
 import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName } from '../src/view/tooltipText.ts';
-import { BoardView, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS } from '../src/view/board.ts';
+import { BoardView, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
 import { computeHud, computeRightPanel, hudControlAt, textWidth } from '../src/view/hud.ts';
@@ -941,6 +941,51 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   }
   check(remaining === 0, 'the missiles retarget and land (none expire in flight)');
   check(b.hp < b.maxHp, 'a missile whose target died retargets the nearest flyer');
+}
+
+
+{
+  // 46z. A Cursor tower's range ring is centred on its own cursor, not on the tower tile.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  s.phase = 'wave';
+  placeTower(s, 'cursor', 5, 5);
+  const t = towerAt(s, 5, 5);
+  t.cursorX = 7.5;
+  t.cursorY = 4.5;
+  const board = { x: 100, y: 50, cell: 20 };
+  const c = cursorRingCentre(t, board, 20);
+  check(c.x === 250 && c.y === 140, `the cursor ring follows the cursor (${c.x}, ${c.y})`);
+  const towerCentre = { x: board.x + (5 + 0.5) * 20, y: board.y + (5 + 0.5) * 20 };
+  check(c.x !== towerCentre.x || c.y !== towerCentre.y, 'the ring is not drawn on the tower tile');
+  // The art size the game draws a tower's cursor at matches the player's own arrow.
+  check(CURSOR_ARROW_PX === 16, 'a tower cursor is drawn at the same size as the player pointer');
+}
+{
+  // A missile that loses its target searches from where the missile *is*, not from its tower: the
+  // flyer that catches it is well outside the AA's 3.4-tile range.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'aa', 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'B');
+  const aa = towerAt(s, 5, 5);
+  s.phase = 'wave';
+  const a = stationary(1, 'flyer', 40, 5.5, 4.0);
+  const far = stationary(2, 'flyer', 40, 5.5, 0.0);
+  const towerDist = Math.hypot(far.x - (5 + 0.5), far.y - (5 + 0.5));
+  check(towerDist > effectiveStats(aa).range, `the far flyer is outside the AA's range (${towerDist.toFixed(1)})`);
+  s.enemies.push(a, far);
+  tick(s); // salvo launches at `a`
+  a.dead = true;
+  aa.cooldown = 100000;
+  let acquired = false;
+  for (let i = 0; i < 120 && s.projectiles.length > 0; i++) {
+    tick(s);
+    if (s.projectiles.some((p) => p.targetId === far.id)) acquired = true;
+  }
+  check(acquired, 'a missile retargets onto a flyer within its own radius, outside the tower range');
+  check(far.hp < far.maxHp, 'the retargeted missile lands on the far flyer');
 }
 {
   // Same seed reproduces the same directions; two runs of the same wave produce identical missile paths.
@@ -3610,6 +3655,10 @@ function cursorTower(tier, branch) {
     'a marked crit shakes 2 px');
   check(shakeImpulseFor({ type: 'damage', weak: false, crit: false }) === null,
     'a non-crit damage event shakes nothing');
+  check(shakeImpulseFor({ type: 'mineDetonated', x: 3, y: 4 }).amplitude === SHAKE_AMPLITUDE.mineTrip,
+    'a mine going off shakes 2 px');
+  check(SHAKE_AMPLITUDE.mineTrip < SHAKE_AMPLITUDE.leak && SHAKE_AMPLITUDE.mineTrip <= SHAKE_AMPLITUDE.toggleShut,
+    'a mine is a small shake — lighter than a leak, no heavier than a shutter');
   check(shakeImpulseFor({ type: 'leak' }).amplitude === SHAKE_AMPLITUDE.leak,
     'a leak shakes 5 px');
   check(shakeImpulseFor({ type: 'leak' }).freezeMs === SHAKE_LEAK_FREEZE_MS,

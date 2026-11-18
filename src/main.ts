@@ -89,7 +89,9 @@ await app.init({
 });
 
 document.getElementById('app')!.appendChild(app.canvas);
-app.canvas.style.cursor = 'none';
+// Pixi writes `style.cursor` itself when it wires up events, so the rule has to be important; the
+// same rule is in index.html for the first frame, before this module runs.
+app.canvas.style.setProperty('cursor', 'none', 'important');
 
 // --- Device pixel ratio ----------------------------------------------------------------------
 // The backing store is created at the ratio in force at boot, but devicePixelRatio changes when the

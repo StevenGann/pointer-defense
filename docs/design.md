@@ -351,7 +351,7 @@ the tier-3 choice is just another Upgrade button, not a branch pair.
 | Taser | **Arc** — chains to 3 targets | **Overload** — +150 % damage to shielded enemies |
 | Frost | **Deep Freeze** — 60 % slow for 2.5 s | **Shard** — no slow; damage ×4, splash 0.6 |
 | Laser | **Focus** — pierce 8, +50 % damage | **Prism** — splits into 3 short beams at −40 % damage |
-| AA | **Flak** — shells burst on the target's predicted position, splash 1.2 tiles, full to flyers and half to ground; 4.0 damage, 0.9 s | **Missile** — 4 homing missiles per salvo, each worth a quarter of a hit |
+| AA | **Flak** — shells burst on the target's predicted position, splash 1.2 tiles, full to flyers and half to ground; 4.0 damage, 0.9 s | **Missile** — 4 homing missiles per salvo, each worth a quarter of a hit; a missile that loses its target re-acquires the nearest flyer within **6 tiles of the missile**, not of the tower |
 | Beacon | **Command** — +30 % damage aura, no range bonus | **Relay** — extends pointer reach, +50 % pointer damage in radius |
 | Wall | **Bulwark** — hit points doubled again | **Mesh** — hit points doubled and it blocks flyers |
 | Cursor | **Overclock** — rate ×1.8, per-click damage ×0.6 | **Wide Search** — radius ×1.35, rate ×0.7 |
@@ -463,8 +463,11 @@ wall does.
 ### 6.7 The Cursor tower
 
 The **Cursor** is the one tower whose damage is not its own. It cannot fire; instead it carries a
-second cursor — the classic white arrow — that wanders around its home tile and clicks enemies for
-you. Every click deals **half the player's current click damage**, ladder and spec multipliers
+second cursor — the classic white arrow, drawn at the **same 16 px size as the player's own pointer**,
+not as a miniature — that wanders around its home tile and clicks enemies for you. Hovering the tower
+draws its range ring around **that cursor**, not around the tower tile: the cursor is what clicks, and
+it can be up to its full radius away from home, so a ring on the tower would describe a shot it cannot
+take. Every click deals **half the player's current click damage**, ladder and spec multipliers
 included, and is treated as pointer damage: it ignores armour and wears shields down exactly as the
 player's own clicks do. The tower's radius (3.0 → 4.0 → 4.75 tiles) and its click clock (1.5 → 2.0 →
 2.75 clicks/s) are its only stats, and at tier 3 it branches into **Overclock** (more, weaker clicks),
@@ -1225,6 +1228,11 @@ defaults **off** for users who prefer reduced motion (`prefers-reduced-motion: r
 Fixed art — enemy bodies, tower plinths and barrels, branch marks, the board tiles, combat effect
 sprites (muzzle flashes, hit sparks, shield arcs, death rings) and the UI glyphs (the cursor, the
 window controls, the check, the shutters) — ships as hand-editable SVG files under `public/art/`.
+
+Because the cursor is drawn art, the OS pointer is hidden over the game (`cursor: none !important`
+on `#app` and its canvas, since Pixi re-applies an inline cursor when it wires up events). A tower's
+own cursor is drawn at the same 16 px as the player's, so the field never shows a miniature arrow
+standing in for a real one.
 What stays code is the geometry that depends on state: window chrome and bevels, buttons, panels,
 ads, health bars, range rings, shields, route dots, damage numbers, tooltips, menus and dialogs are
 composed per frame from state and have no fixed form to hand over.

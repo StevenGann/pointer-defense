@@ -10,7 +10,8 @@ import type { GameEvent } from '../core/state.ts';
  *
  * Amplitudes are in CSS pixels and decay over ~200 ms, hard-capped at 400 ms, so only the moments a
  * player would say out loud shake: a boss falling, a leak, a shutter slamming, an ad closing, a
- * crit, or a tower going offline. Ordinary deaths and hits pop and spark instead — they do not shake.
+ * crit, a tower going offline, or a mine going off under an enemy. Ordinary deaths and hits pop and
+ * spark instead — they do not shake.
  */
 
 export const SHAKE_AMPLITUDE = {
@@ -21,6 +22,7 @@ export const SHAKE_AMPLITUDE = {
   crit: 1,
   critAimed: 2,
   towerOffline: 3,
+  mineTrip: 2,
 } as const;
 
 /** A leak also freezes the frame for a beat so the integrity loss lands. */
@@ -59,6 +61,8 @@ export function shakeImpulseFor(ev: GameEvent): ShakeImpulse | null {
       return { amplitude: SHAKE_AMPLITUDE.leak, freezeMs: SHAKE_LEAK_FREEZE_MS };
     case 'toggleChanged':
       return ev.open ? null : { amplitude: SHAKE_AMPLITUDE.toggleShut, freezeMs: 0 };
+    case 'mineDetonated':
+      return { amplitude: SHAKE_AMPLITUDE.mineTrip, freezeMs: 0 };
     default:
       return null;
   }

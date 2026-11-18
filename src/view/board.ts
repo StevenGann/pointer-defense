@@ -1103,6 +1103,19 @@ function drawGhost(
   }
 }
 
+/**
+ * Where a Cursor tower's range ring belongs: round the cursor the tower owns, not round the tower.
+ * The cursor is what actually clicks, and it wanders up to `cursorRadius` from its home tile, so a
+ * ring drawn on the tower would describe a shot it cannot take.
+ */
+export function cursorRingCentre(
+  t: Tower,
+  board: { x: number; y: number; cell: number },
+  cell: number,
+): { x: number; y: number } {
+  return { x: board.x + t.cursorX * cell, y: board.y + t.cursorY * cell };
+}
+
 function drawTowerRange(
   g: Graphics,
   t: Tower,
@@ -1113,7 +1126,8 @@ function drawTowerRange(
   const cx = board.x + (t.col + 0.5) * cell;
   const cy = board.y + (t.row + 0.5) * cell;
   if (t.kind === 'cursor') {
-    dashedCircle(g, cx, cy, cursorRadius(t) * cell, PAL.navy, 1);
+    const c = cursorRingCentre(t, board, cell);
+    dashedCircle(g, c.x, c.y, cursorRadius(t) * cell, PAL.navy, 1);
     return;
   }
   if (t.kind === 'repair') {
@@ -1180,6 +1194,9 @@ function drawCursorArrow(g: Graphics, x: number, y: number, length: number, alph
 }
 
 /** Draw a flying cursor tower's arrow, its click ring, and the 2px dip on the click frame. */
+/** The arrow's drawn size, in pixels: the same as the player's pointer. */
+export const CURSOR_ARROW_PX = 16;
+
 function drawFlyingCursor(
   g: Graphics,
   arrowSprite: Sprite,
@@ -1190,11 +1207,13 @@ function drawFlyingCursor(
   const px = board.x + t.cursorX * board.cell;
   const py = board.y + t.cursorY * board.cell;
   const dip = t.cursorClickFx === 8 ? 2 : 0;
-  const tex = getArtTexture('cursor-arrow', 12);
+  // A tower's cursor is the same size as the player's — it is the same piece of software, and a
+  // miniature arrow reads as decoration rather than as a thing that clicks.
+  const tex = getArtTexture('cursor-arrow', CURSOR_ARROW_PX);
   if (tex !== null) {
     arrowSprite.texture = tex;
-    arrowSprite.width = 12;
-    arrowSprite.height = 12;
+    arrowSprite.width = CURSOR_ARROW_PX;
+    arrowSprite.height = CURSOR_ARROW_PX;
     arrowSprite.position.set(px, py + dip);
     arrowSprite.rotation = 0;
     arrowSprite.alpha = 1;
@@ -1202,7 +1221,7 @@ function drawFlyingCursor(
     arrowSprite.visible = true;
   } else {
     arrowSprite.visible = false;
-    drawCursorArrow(g, px, py + dip, 12);
+    drawCursorArrow(g, px, py + dip, CURSOR_ARROW_PX);
   }
   // The click's fire effect: the cursor's own file when it exists, the old white ring otherwise.
   if (t.cursorClickFx > 0) {

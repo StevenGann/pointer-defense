@@ -40,8 +40,12 @@ export const MISSILE_MAX_SPEED = 9;
 export const MISSILE_TURN_RATE = 15;
 /** A missile expires this long after launch when it cannot find a target. */
 export const MISSILE_LIFETIME_TICKS = secondsToTicks(2);
-/** A missile whose target dies retargets to the nearest flyer within this radius (tiles). */
-export const MISSILE_RETARGET_RANGE = 3;
+/**
+ * A missile whose target dies retargets to the nearest flyer within this radius **of the missile
+ * itself** — not of the tower that launched it. The missile is already out over the field by then,
+ * so the launch site is the wrong centre for the search.
+ */
+export const MISSILE_RETARGET_RANGE = 6;
 /** A missile detonates when it closes to the target's radius plus this much (tiles). */
 export const MISSILE_HIT_RANGE = 0.5;
 
