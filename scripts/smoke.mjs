@@ -1173,9 +1173,9 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(!again.includes('first-blood'), 'first-blood does not fire twice');
 }
 
-// --- 15b. The achievement table: 117 definitions, unique ids, names and descriptions -----------
+// --- 15b. The achievement table: 111 definitions, unique ids, names and descriptions -----------
 {
-  check(ACHIEVEMENTS.length === 117, `exactly 117 achievements (${ACHIEVEMENTS.length})`);
+  check(ACHIEVEMENTS.length === 111, `exactly 111 achievements (${ACHIEVEMENTS.length})`);
   const ids = ACHIEVEMENTS.map((a) => a.id);
   check(new Set(ids).size === ACHIEVEMENTS.length, 'achievement ids are unique');
   check(
@@ -1187,7 +1187,12 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     ACHIEVEMENTS.every((a) => (a.hidden === true) === a.id.startsWith('shadow-')),
     'every shadow- id is hidden and nothing else is',
   );
-  // The full 117-id catalog is present verbatim, and nothing extra ships.
+  // Every remaining achievement carries a live predicate (no `() => false` placeholder).
+  check(
+    ACHIEVEMENTS.every((a) => a.when !== undefined),
+    'every achievement has a when predicate',
+  );
+  // The full 111-id catalog is present verbatim, and nothing extra ships.
   const DOC_IDS = [
     'first-blood', 'sharpshooter', 'weak-point-kills', 'crit-hits', 'crit-100', 'pointer-1k', 'click-combo', 'override',
     'pointer-only-wave', 'weak-point-10', 'crit-first', 'overclock-max', 'click-idle', 'pointer-boss-10',
@@ -1195,9 +1200,9 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     'tower-zoo', 'tier-five-first', 'sell-10', 'no-upgrade-wave', 'laser-chain', 'frost-lock', 'taser-chain', 'cannon-splash',
     'cursor-first', 'cursor-repair', 'beacon-buff', 'one-kind', 'two-kinds', 'upgrade-first', 'branch-first', 'sell-tower-first',
     'salvage-peak', 'salvage-10k', 'earn-100k', 'no-spend-wave', 'ad-collector', 'ad-ignore', 'early-call-streak', 'early-call-10',
-    'early-call-wave-1', 'idle-hour', 'sell-profit', 'no-sell',
+    'idle-hour', 'no-sell',
     'clean-wave', 'flawless-wave', 'flawless-10', 'perfect-run', 'long-road', 'maze-100', 'wave-25', 'wave-50', 'wave-100',
-    'endless-150', 'endless-200', 'integrity-1', 'speed-3', 'wave-1-no-damage', 'leak-recovery',
+    'endless-150', 'endless-200', 'integrity-1', 'speed-3', 'wave-1-no-damage',
     'boss-by-pointer', 'milestone-boss-pointer', 'boss-10', 'boss-first-wave', 'shield-break-5', 'carrier-brood',
     'dreadnought-kill', 'wirecutter-kill', 'ram-kill', 'boss-no-leak',
     'reboot-50', 'two-reboots', 'reboot-10', 'specs-banked', 'first-rp', 'rp-100', 'prestige-25', 'tree-tier-3', 'tree-complete',
@@ -1205,11 +1210,11 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     'custom-map-cleared', 'editor-first', 'map-export', 'map-import', 'fork-cleared', 'ladder-cleared',
     'shadow-ad-no-close', 'shadow-zero-towers', 'shadow-all-walls', 'shadow-sell-all', 'shadow-1hp-boss', 'shadow-pause',
     'shadow-hover', 'shadow-resize', 'shadow-mute', 'shadow-reload', 'shadow-clippy', 'shadow-monochrome', 'shadow-owl',
-    'shadow-weekend', 'shadow-flat-battery', 'shadow-printer', 'shadow-boots', 'shadow-perfect-100', 'shadow-every-map',
-    'shadow-broke', 'shadow-help-clippy', 'shadow-drag', 'shadow-tooltip', 'shadow-cheat-lose',
+    'shadow-weekend', 'shadow-flat-battery', 'shadow-boots', 'shadow-perfect-100', 'shadow-every-map',
+    'shadow-help-clippy', 'shadow-drag', 'shadow-tooltip',
   ];
   const idSet = new Set(ids);
-  check(DOC_IDS.length === 117, `the doc catalog has 117 ids (${DOC_IDS.length})`);
+  check(DOC_IDS.length === 111, `the doc catalog has 111 ids (${DOC_IDS.length})`);
   check(DOC_IDS.every((id) => idSet.has(id)), 'every doc id is present');
   check(ids.every((id) => DOC_IDS.includes(id)), 'no id ships that is not in the doc');
 }
@@ -7046,7 +7051,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(gridRowCount(0) === 0, 'grid: zero cells, zero rows');
   check(gridRowCount(8) === 1, 'grid: eight cells fill one row');
   check(gridRowCount(9) === 2, 'grid: nine cells spill to two rows');
-  check(gridRowCount(117) === 15, 'grid: 117 cells form 15 rows');
+  check(gridRowCount(111) === 14, 'grid: 111 cells form 14 rows');
   const r = gridCellRect(100, 200, 3, 2);
   check(
     r.x === 100 + 3 * (ACH_CELL + ACH_GUTTER) && r.y === 200 + 2 * (ACH_CELL + ACH_GUTTER) && r.w === ACH_CELL && r.h === ACH_CELL,
@@ -7056,7 +7061,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
 
 {
   const model = buildAchievementGrid(['first-blood'], { 'first-blood': '2026-11-18' }, 'all');
-  check(model.total === 117, 'grid: the stored total is 117');
+  check(model.total === 111, 'grid: the stored total is 111');
   check(model.earnedCount === 1, 'grid: earned count reads the profile');
   check(model.shadowCount === 0, 'grid: no shadow earned yet');
   check(

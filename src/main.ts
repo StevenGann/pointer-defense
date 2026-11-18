@@ -10,6 +10,7 @@ import {
   killAllEnemies,
   noBuildActive,
   NO_BUILD_MESSAGE,
+  notifyAchievement,
   pointerDamageMult,
   restartPointsGained,
   restartWindows,
@@ -56,7 +57,7 @@ import { sfx, type SoundName } from './audio/sfx.ts';
 import { CameraShake, shakeImpulseFor } from './view/shake.ts';
 import { backingStorePixelSize, cssViewportSize, liveDevicePixelRatio } from './view/screen.ts';
 import { getArtTexture, onArtInvalidate, preloadArt, setArtDpr } from './view/art.ts';
-import { repairHealingCount, TOWER_STATS, type Branch, type TowerKind } from './core/towers.ts';
+import { repairHealingCount, TOWER_KINDS, TOWER_STATS, type Branch, type TowerKind } from './core/towers.ts';
 import { isBossVariant, type EnemyKind } from './core/enemies.ts';
 import { encodeLevel, decodeCode } from './core/codec.ts';
 import {
@@ -74,6 +75,7 @@ import {
   type EditorModel,
 } from './core/editor.ts';
 import { LoadDialogView, menuButtonAt, MenuScreenView, loadDialogButtonAt, computeLoadDialog, type MenuButtonId } from './view/menuScreen.ts';
+import { HELP_PAGES, pageUnlocked } from './content/help.ts';
 import { EditorView, editorPaletteAt, editorToggleNudgeAt, editorToolbarAt, type EditorAction, type ToggleNudge } from './view/editor.ts';
 import pkg from '../package.json';
 
@@ -198,6 +200,49 @@ const editor: EditorModel = createEditor();
 let loadText = '';
 let loadStatus = '';
 let loadOpen = profile.lastChoice === 'load';
+
+// --- View/OS achievement state (group D: recorded via notifyAchievement) ----------------------
+// Cumulative time a tooltip has been visible this run (shadow-hover).
+let tooltipHoverMs = 0;
+// Tower kinds whose tooltip has been opened this run (shadow-tooltip).
+const tooltipTowerKinds = new Set<TowerKind>();
+// OS battery below 10% at boot (shadow-flat-battery), resolved once.
+let batteryLow = false;
+// Whether this page load was a reload after a prior run (shadow-reload).
+let reloadedAfterRun = false;
+try {
+  const nav = performance.getEntriesByType?.('navigation')?.[0] as { type?: string } | undefined;
+  reloadedAfterRun = nav?.type === 'reload' && profile.bestWave > 0;
+} catch {
+  reloadedAfterRun = false;
+}
+void (async () => {
+  try {
+    const nav = (navigator as unknown as { getBattery?: () => Promise<{ level?: number }> }).getBattery;
+    if (nav) {
+      const b = await nav();
+      batteryLow = (b.level ?? 1) <= 0.1;
+    }
+  } catch {
+    batteryLow = false;
+  }
+})();
+
+/** Grant an achievement outside the run sim (editor / menu actions), stamping and toasting it. */
+function grantAchievement(id: string): void {
+  if (profile.achievements.includes(id)) return;
+  profile.achievements.push(id);
+  state.achievements.add(id);
+  stampEarnedDates([id]);
+  saveProfile(profile);
+  toastAchievement(id);
+}
+
+/** Reset the view-scoped notify trackers when a fresh run begins. */
+function resetRunNotified(): void {
+  tooltipTowerKinds.clear();
+  tooltipHoverMs = 0;
+}
 
 function syncViewport(): void {
   state.viewport = {
@@ -327,6 +372,7 @@ function doRestartWindows(): void {
   const profileNewly = checkProfileAchievements(profile);
   saveProfile(profile);
   state = createRunState(profile);
+  resetRunNotified();
   syncViewport();
   dialog = null;
   menu = null;
@@ -337,6 +383,7 @@ function doRestartWindows(): void {
 
 function doNewRun(): void {
   state = createRunState(profile);
+  resetRunNotified();
   syncViewport();
   dialog = null;
   menu = null;
@@ -527,6 +574,8 @@ function achievementMove(dx: number, dy: number): void {
 
 function startRun(level: Level, origin: 'play' | 'load' | 'editor'): void {
   state = createRunState(profile, level);
+  resetRunNotified();
+  if (batteryLow) notifyAchievement(state, 'shadow-flat-battery');
   syncViewport();
   runOrigin = origin;
   screen = 'run';
@@ -568,6 +617,7 @@ function attemptLoad(): void {
     return;
   }
   loadInput.blur();
+  grantAchievement('map-import');
   startRun(result.level, 'load');
 }
 
@@ -585,6 +635,7 @@ function copyCode(): void {
     // clipboard may be unavailable; the editor status still confirms the code was produced.
   }
   showEditorNotice('Code copied');
+  grantAchievement('map-export');
 }
 
 /** Esc from a run: a Test run returns to the editor (drawing intact), anything else to the menu. */
@@ -617,6 +668,7 @@ const mouse = new MouseController(app, {
   screen: () => screen,
   restart: () => {
     state = createRunState(profile);
+    resetRunNotified();
     syncViewport();
   },
   restartWindows: doRestartWindows,
@@ -671,7 +723,14 @@ const mouse = new MouseController(app, {
     return true;
   },
   helpPointerMove: (x: number, y: number) => helpSession.dragTo(layout, x, y),
-  helpPointerUp: () => helpSession.endDrag(),
+  helpPointerUp: () => {
+    // shadow-drag: drag the Help window to the clamped edge and release.
+    if (helpSession.draggedToEdge) {
+      notifyAchievement(state, 'shadow-drag');
+      helpSession.draggedToEdge = false;
+    }
+    helpSession.endDrag();
+  },
   closeHelp: () => helpSession.hide(),
   achievementOpen: () => achievementSession.open,
   achievementPointerDown,
@@ -846,6 +905,7 @@ app.canvas.addEventListener('pointerdown', (e) => {
       painting = true;
       const refusal = paintEditor(editor, hit.col, hit.row);
       if (refusal) showEditorNotice(refusal);
+      else grantAchievement('editor-first');
     }
     return;
   }
@@ -1033,6 +1093,30 @@ app.ticker.add((ticker) => {
       syncBestWave();
       syncProfileAchievements();
     }
+    // Persist cross-run counters the sim just advanced (maps cleared, lifetime boss kills).
+    if (state.profileDirty) {
+      state.profileDirty = false;
+      saveProfile(profile);
+    }
+    // shadow-reload: a reload after a prior run, then the first wave of the new session clears.
+    if (reloadedAfterRun && state.clearedWaves >= 1) {
+      notifyAchievement(state, 'shadow-reload');
+      reloadedAfterRun = false;
+    }
+    // shadow-hover: a tooltip stays open for 60 cumulative seconds.
+    if (tooltip.showing) {
+      tooltipHoverMs += ticker.deltaMS;
+      if (tooltipHoverMs >= 60_000) {
+        notifyAchievement(state, 'shadow-hover');
+        tooltipHoverMs = 0;
+      }
+    } else {
+      tooltipHoverMs = 0;
+    }
+    // shadow-clippy: every currently-unlocked Help page visited before any wave clears.
+    if (state.wave === 0 && helpSession.visitedCount(profile) >= HELP_PAGES.filter((p) => pageUnlocked(p, profile)).length) {
+      notifyAchievement(state, 'shadow-clippy');
+    }
     if (state.cheatsUsed && cheatNotified !== state) {
       cheatNotified = state;
       hud.showNotice('Cheats active — this run will not be recorded', 240);
@@ -1201,6 +1285,8 @@ function updateTooltip(): void {
     }
     const tower = h.onBoard ? towerAt(state, h.col, h.row) : undefined;
     if (tower) {
+      tooltipTowerKinds.add(tower.kind);
+      if (tooltipTowerKinds.size >= TOWER_KINDS.length) notifyAchievement(state, 'shadow-tooltip');
       const healed = tower.kind === 'repair' ? repairHealingCount(state.towers, tower, state.clock) : 0;
       const maintenance = tower.kind === 'cursor' ? cursorMaintenanceStatus(state, tower) : null;
       tooltip.update(
@@ -1229,4 +1315,8 @@ app.renderer.on('resize', () => {
   layout = computeLayout(app.screen.width, app.screen.height);
   syncViewport();
   helpSession.reclamp(layout);
+  // shadow-resize: play in an 800×600 window.
+  if (screen === 'run' && Math.abs(app.screen.width - 800) <= 1 && Math.abs(app.screen.height - 600) <= 1) {
+    notifyAchievement(state, 'shadow-resize');
+  }
 });

@@ -31,7 +31,7 @@ The achievements dialog becomes a grid, not a list.
   condition on the second, and `Earned 2026-11-18` if it has fired.
 - Hidden achievements have no cell. The grid compacts.
 - A filter row above the grid: **All / Earned / Locked**, and a summary line
-  `48 / 117 · 3 shadow`.
+  `48 / 111 · 3 shadow`.
 - Reduced motion drops the pop animation when a cell fills.
 
 ## Art
@@ -112,9 +112,7 @@ filling roughly 60 % of the tile.
 | `ad-ignore` | Adblock | Let ten ads expire without closing them | A pop-up fading to grey on its own |
 | `early-call-streak` | Speedrunner | Call three waves early in a row | Three chevrons accelerating to the right |
 | `early-call-10` | Overclocked Clock | Call 10 waves early in one run | A clock with the hands bent forward |
-| `early-call-wave-1` | Jump the Gun | Call wave 1 early | A starter pistol still smoking |
 | `idle-hour` | Background Task | Leave auto-wave running for 5 minutes untouched | A taskbar icon blinking quietly |
-| `sell-profit` | Buy Low | Sell a tower for more than you paid for it | A coin balanced on a tower roof |
 | `no-sell` | Pack Rat | Reach wave 20 without selling a tower | A dusty tower with cobwebs |
 
 ### Waves and survival
@@ -135,7 +133,6 @@ filling roughly 60 % of the tile.
 | `integrity-1` | By a Thread | Survive a wave with 1 integrity left | A single cracked heart in a vice |
 | `speed-3` | Fast Forward | Play a wave at 3× speed | Three forward arrows in a chrome housing |
 | `wave-1-no-damage` | Untouched | Clear wave 1 without a single leak | A pristine first step on a staircase |
-| `leak-recovery` | Fallen but Standing | Recover from 5 integrity back to 20 in one run | A health bar with a rising arrow |
 
 ### Bosses
 
@@ -201,21 +198,18 @@ Shadow achievements do not appear until earned. They are for the odd, the silly 
 | `shadow-owl` | Night Shift | Clear a wave between 2 and 4 am local | An owl on a monitor stand |
 | `shadow-weekend` | Weekend Warrior | Clear a wave on a Sunday | A calendar page with one circled day |
 | `shadow-flat-battery` | Low Battery | Start a run while the OS reports battery below 10 % | A battery icon at one bar |
-| `shadow-printer` | Paper Jam | Spawn 50 enemies from the cheat menu, then lose | A printer eating a sheet |
 | `shadow-boots` | Blue Screen | Reboot while at wave 1 | A blue error screen with a sad face |
 | `shadow-perfect-100` | Immaculate | Reach wave 100 with no leaks, no repairs, no sells | A pristine shield under glass |
 | `shadow-every-map` | Tour Guide | Clear a wave on all six shipped maps | Six tiny maps pinned to a board |
-| `shadow-broke` | Zero Balance | Spend your last salvage on a tower that dies the same wave | An empty wallet with a receipt |
 | `shadow-help-clippy` | Paperclip | Open the Help window during a boss fight | A paperclip riding a boss |
 | `shadow-drag` | Where Did It Go | Drag the Help window off screen and back | A window half past the edge |
 | `shadow-tooltip` | Read the Manual | Open every tower tooltip in one run | A tooltip with a bookmark |
-| `shadow-cheat-lose` | That Was Fair | Use God Mode and still lose | A crown falling off a cheat code |
 
 ## Open questions, decided
 
-- **How many is too many?** 117 is the target. The list above is 24 existing plus 69 new visible plus 24 shadow. More than that and the grid stops being readable at 8 columns; add a second row of
+- **How many is too many?** 111 is the shipped count: 90 visible plus 21 shadow. More than that and the grid stops being readable at 8 columns; add a second row of
   filters before adding cells.
 - **Do shadows count toward the total?** Yes in the stored total, no in the pre-earn display. The
-  header reads `48 / 117 · 3 shadow` so a player can see shadows exist without seeing what they are.
+  header reads `48 / 111 · 3 shadow` so a player can see shadows exist without seeing what they are.
 - **Local time for the clock-based shadows.** `shadow-owl` uses the browser's local clock, which is
   the only clock a serverless game has. It is a joke achievement; do not build a timezone service for it.

@@ -48,6 +48,10 @@ export interface Profile {
   achievements: string[];
   /** The local date (YYYY-MM-DD) each achievement fired, for the grid tooltip. */
   achievementDates: Record<string, string>;
+  /** Authored map ids a wave has been cleared on, across all runs (for the every-map shadow). */
+  mapsCleared: string[];
+  /** Bosses killed by the pointer's final blow, across all runs (for the boss-hunter meta). */
+  lifetimeBossKillsByPointer: number;
   bestWave: number;
   reboots: number;
   /** Whether sound effects play at all. */
@@ -121,6 +125,8 @@ export function defaultProfile(): Profile {
     lastSalvage: 0,
     achievements: [],
     achievementDates: {},
+    mapsCleared: [],
+    lifetimeBossKillsByPointer: 0,
     bestWave: 0,
     reboots: 0,
     soundOn: true,
@@ -154,6 +160,8 @@ export function cloneProfile(p: Profile): Profile {
     lastSalvage: p.lastSalvage,
     achievements: [...p.achievements],
     achievementDates: { ...p.achievementDates },
+    mapsCleared: [...p.mapsCleared],
+    lifetimeBossKillsByPointer: p.lifetimeBossKillsByPointer,
     bestWave: p.bestWave,
     reboots: p.reboots,
     soundOn: p.soundOn,
@@ -307,8 +315,16 @@ function parseProfile(raw: string): Profile | null {
     ? [...new Set(o.seenEnemies.filter((k): k is EnemyKind => typeof k === 'string' && isEnemyKind(k as EnemyKind)))]
     : [];
   const lastChoice: MenuChoice = o.lastChoice === 'editor' || o.lastChoice === 'load' ? o.lastChoice : 'play';
+  // Cross-run achievement counters, migration-safe: absent on older saves, so they default empty.
+  const mapsCleared = Array.isArray(o.mapsCleared)
+    ? [...new Set(o.mapsCleared.filter((m): m is string => typeof m === 'string'))]
+    : [];
+  const lifetimeBossKillsByPointer =
+    typeof o.lifetimeBossKillsByPointer === 'number' && Number.isFinite(o.lifetimeBossKillsByPointer)
+      ? Math.max(0, Math.floor(o.lifetimeBossKillsByPointer))
+      : 0;
 
-  return { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, achievementDates, bestWave, reboots, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice };
+  return { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, achievementDates, mapsCleared, lifetimeBossKillsByPointer, bestWave, reboots, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice };
 }
 
 /**
