@@ -204,6 +204,35 @@ S.........T.........X
 
 ---
 
+
+### 5.7 Multi-route levels
+
+A level may author `routes: Route[]`, where a `Route` is a list of tiles from the shared spawn to the
+shared exit. A level with no `routes` keeps exactly one implicit route, which is every level shipped
+before this section — their behaviour is unchanged, including the wave hash.
+
+Routes must be **tile-disjoint except at the spawn and the exit**. `validateLevel` rejects a level whose
+routes share a corridor in the middle: two routes that overlap are one route with bookkeeping, and the
+editor-shaped data that produces them is a mistake, not a design.
+
+Each spawned enemy is assigned a route at spawn by a seeded alternating choice, and its pathing runs on
+that route's own distance field. That is what keeps the routes independent in practice: a wall placed on
+one route changes that route's field and the enemies walking it, and leaves the other route's enemies
+untouched. Blocking a route outright follows the existing blocked-path rules rather than teleporting an
+enemy to the other corridor.
+
+The value is economic: two lanes cannot be covered by one tower line, so the same salvage has to be split.
+
+Two maps ship with routes:
+
+| Map | Shape | What it asks |
+|---|---|---|
+| **Fork** | one spawn, two equal corridors that rejoin only at the exit | cover two lanes at once, or lose the one you ignored |
+| **Ladder** | two corridors joined by two cross-links | walling a cross-link changes which corridor is short, so the maze is a decision rather than a shape |
+
+The map editor does not author routes yet. A level built in the editor falls back to a single route, and
+that is stated rather than papered over.
+
 ## 6. Towers
 
 Ten towers. Each has a role and a tier ladder; nine carry **two exclusive branches** at tier 3, and the
