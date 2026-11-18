@@ -1,6 +1,6 @@
 import { secondsToTicks, TICK_HZ } from './time.ts';
 
-export type TowerKind = 'gun' | 'cannon' | 'taser' | 'frost' | 'laser' | 'beacon' | 'repair' | 'wall' | 'cursor';
+export type TowerKind = 'gun' | 'cannon' | 'taser' | 'frost' | 'laser' | 'aa' | 'beacon' | 'repair' | 'wall' | 'cursor';
 
 export type Branch = 'A' | 'B' | 'C';
 
@@ -35,9 +35,13 @@ export interface TowerStats {
   readonly auraRange: number;
   /** Fixed targeting priority this kind is locked to, overriding the player's choice (null = player's). */
   readonly targetLock: TargetMode | null;
+  /** Base: only flyers are ever acquired (ground units are never shot at). */
+  readonly targetsFlyersOnly?: boolean;
+  /** Base: damage multiplier against flyers (1 = normal). */
+  readonly flyerDamageMult?: number;
 }
 
-export const TOWER_KINDS: readonly TowerKind[] = ['gun', 'cannon', 'taser', 'frost', 'laser', 'beacon', 'repair', 'wall', 'cursor'];
+export const TOWER_KINDS: readonly TowerKind[] = ['gun', 'cannon', 'taser', 'frost', 'laser', 'aa', 'beacon', 'repair', 'wall', 'cursor'];
 
 /**
  * The run wave at which each tower kind becomes available. Gun and Wall are the starting pair,
@@ -50,6 +54,7 @@ export const TOWER_UNLOCK_WAVE: Readonly<Record<TowerKind, number>> = {
   taser: 14,
   frost: 6,
   laser: 11,
+  aa: 16,
   beacon: 8,
   repair: 18,
   wall: 0,
@@ -152,6 +157,25 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
     auraDamage: 0,
     auraRange: 0,
     targetLock: 'first',
+  },
+  aa: {
+    name: 'AA',
+    blurb: 'Flyers only, double damage',
+    cost: 40,
+    range: 3.4,
+    damage: 2.6,
+    fireInterval: secondsToTicks(0.55),
+    turnRate: 540,
+    splash: 0,
+    ignoresArmour: false,
+    slowFactor: 1,
+    slowTicks: 0,
+    pierce: 0,
+    auraDamage: 0,
+    auraRange: 0,
+    targetLock: null,
+    targetsFlyersOnly: true,
+    flyerDamageMult: 2,
   },
   beacon: {
     name: 'Beacon',
@@ -333,6 +357,7 @@ const TOWER_HP: Readonly<Record<TowerKind, number>> = {
   cannon: 140,
   taser: 120,
   laser: 120,
+  aa: 100,
   frost: 90,
   beacon: 80,
   repair: 90,
@@ -509,6 +534,8 @@ export interface Tower {
   angle: number;
   /** Ticks until the tower may fire again. */
   cooldown: number;
+  /** AA only: missile salvos fired so far, folded into the launch-direction seed. */
+  salvoCount: number;
   /** Enemies this tower landed the killing blow on. */
   kills: number;
   /** Salvage this tower earned from those kills. */
@@ -568,6 +595,7 @@ export function createTower(id: number, kind: TowerKind, col: number, row: numbe
     auraRange: 0,
     angle: 0,
     cooldown: 0,
+    salvoCount: 0,
     kills: 0,
     earned: 0,
     damageDealt: 0,
@@ -721,6 +749,15 @@ const BRANCH_EFFECTS: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch,
     A: { pierce: 8, damageMul: 1.5 },
     B: { beams: 3, beamDamage: 0.6 },
   },
+  aa: {
+    // Flak: a shell that bursts on the target's predicted position, splash 1.2 tiles, full damage to
+    // flyers and half to ground. Damage 2.6 (tier-2 3.25) + 0.75 = 4.0 per shell; interval 0.55 s
+    // rises to 0.9 s (18/11). The burst and the shell are driven by state.ts, not effectiveStats.
+    A: { damageAdd: 0.75, intervalMul: 0.9 / 0.55, splashAdd: 1.2 },
+    // Missile: four homing missiles per salvo, each worth a quarter of a hit. The salvo's own
+    // behaviour (launch, homing, retarget) lives in state.ts; the stats are unchanged.
+    B: {},
+  },
   beacon: {
     A: { auraDamage: 0.3, auraRange: 0 },
     B: { auraPointerDamage: 0.5, auraPointerRange: 0.75 },
@@ -788,8 +825,8 @@ export function effectiveStats(tower: Tower): EffectiveStats {
   let pierce = base.pierce;
   let beams = 1;
   let beamDamage = 1;
-  let targetsFlyersOnly = false;
-  let flyerDamageMult = 1;
+  let targetsFlyersOnly = base.targetsFlyersOnly ?? false;
+  let flyerDamageMult = base.flyerDamageMult ?? 1;
   let shieldedDamageMult = 1;
   let chainCount = 0;
   let chainDamage = 0;

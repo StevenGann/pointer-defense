@@ -206,10 +206,10 @@ S.........T.........X
 
 ## 6. Towers
 
-Nine towers. Each has a role and a tier ladder; eight carry **two exclusive branches** at tier 3, and the
+Ten towers. Each has a role and a tier ladder; nine carry **two exclusive branches** at tier 3, and the
 Repair tower keeps a plain upgrade ladder for now.
 
-### 6.1 The nine
+### 6.1 The ten
 
 | Tower | Unlocks | Cost | Range | Damage | Interval | Turn rate | Targeting | Role | Wants |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -218,6 +218,7 @@ Repair tower keeps a plain upgrade ladder for now.
 | **Taser** | 14 | 80 | 1.6 | 1, ignores armour | 0.12 s | instant | closest (fixed) | armour, speed, close work | the inside of a hairpin |
 | **Frost** | 6 | 70 | 2.2 | 1, slows to 30 % speed for 3.0 s | 0.60 s | instant | closest (fixed) | utility | in front of the damage |
 | **Laser** | 11 | 70 | 3.4 | 11, pierces 8 | 0.80 s | 150°/s | first (fixed) | straight lines | corridors you deliberately left open |
+| **AA** | 16 | 40 | 3.4 | 2.6, flyers only, 2× vs flyers | 0.55 s | 540°/s | player's choice | dedicated anti-air | flyer-heavy waves |
 | **Beacon** | 8 | 90 | 3.5 | none | — | — (still) | — | +60 % damage to towers in radius | a dense cluster worth buffing |
 | **Repair** | 18 | 220 | 4.5 | none (heals 2 HP/s) | — | — (still) | — | heals damaged towers in radius | a cluster of towers worth keeping alive |
 | **Wall** | 1 | 8 | — | none | — | — (still) | — | blocks the route, has hit points | a long maze made cheap |
@@ -261,6 +262,7 @@ a tower at half health stays at half of the new maximum.
 | Cannon | 140 |
 | Taser | 120 |
 | Laser | 120 |
+| AA | 100 |
 | Frost | 90 |
 | Beacon | 80 |
 | Repair | 90 |
@@ -307,6 +309,7 @@ the tier-3 choice is just another Upgrade button, not a branch pair.
 | Taser | **Arc** — chains to 3 targets | **Overload** — +150 % damage to shielded enemies |
 | Frost | **Deep Freeze** — 60 % slow for 2.5 s | **Shard** — no slow; damage ×4, splash 0.6 |
 | Laser | **Focus** — pierce 8, +50 % damage | **Prism** — splits into 3 short beams at −40 % damage |
+| AA | **Flak** — shells burst on the target's predicted position, splash 1.2 tiles, full to flyers and half to ground; 4.0 damage, 0.9 s | **Missile** — 4 homing missiles per salvo, each worth a quarter of a hit |
 | Beacon | **Command** — +30 % damage aura, no range bonus | **Relay** — extends pointer reach, +50 % pointer damage in radius |
 | Wall | **Bulwark** — hit points doubled again | **Mesh** — hit points doubled and it blocks flyers |
 | Cursor | **Overclock** — rate ×1.8, per-click damage ×0.6 | **Wide Search** — radius ×1.35, rate ×0.7 |
@@ -1155,7 +1158,8 @@ their hp and shield), so there is no fixed form to hand over.
 | Bundler | Vite 8, `base: /pointer-defense/` |
 | Hosting | GitHub Pages, `.github/workflows/deploy.yml` on push to `main` |
 | Simulation | fixed 60 Hz accumulator; rendering interpolates; the sim never sees a frame delta |
-| Determinism | no `Math.random` in the sim: a seeded PRNG in state, seeded per run |
+| Determinism | no `Math.random` in the sim: a seeded PRNG in state, seeded per run. The AA's missile launch directions are drawn from the same seeded stream, keyed by `(tick, tower id, salvo index)`, so they never touch the run's crit stream |
+| Projectiles | the AA's Flak shells and missiles are real sim entities, not hitscan: `Projectile { id, kind, x, y, vx, vy, targetId, damage, lifetime }`, ticked with the fixed 60 Hz timestep and removed on hit or expiry |
 | Persistence | one `localStorage` key, `pointer-defense/save`, versioned, schema-checked on load |
 | Structure | `src/core` pure and testable; `src/view` draws only; `src/input` translates |
 | Tests | `npm run smoke`: core scenarios, determinism at 23/60/144 Hz, and a balance harness |

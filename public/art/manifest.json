@@ -205,6 +205,14 @@
       "frames": 1
     },
     {
+      "name": "towers/aa-base",
+      "frames": 1
+    },
+    {
+      "name": "towers/aa-turret",
+      "frames": 1
+    },
+    {
       "name": "towers/beacon-base",
       "frames": 1
     },

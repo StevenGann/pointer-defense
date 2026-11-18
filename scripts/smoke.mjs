@@ -69,6 +69,8 @@ import {
   editorTileAt,
 } from '../src/core/editor.ts';
 import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, isBossKind, isBossVariant, isPopupEnemy, isFlyerKind, slowFactorFor, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS, CARRIER_BROOD_COUNT, CARRIER_BROOD_INTERVAL_TICKS, CARRIER_DEATH_BROOD_COUNT, DREADNOUGHT_PLATING, WIRECUTTER_EMP_RADIUS, WIRECUTTER_EMP_TICKS, RAM_TOWER_DPS, RAM_TURRET_DAMAGE, RAM_TURRET_RANGE } from '../src/core/enemies.ts';
+import { missileSeed } from '../src/core/projectiles.ts';
+import { rngNext } from '../src/core/rng.ts';
 import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS } from '../src/core/ads.ts';
 import {
   comboMultiplier,
@@ -650,6 +652,185 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   s2.enemies.push(e2);
   tick(s2);
   check(e2.hp < e2.maxHp, 'an instant-turn tower fires on the first tick it has a target');
+}
+
+// --- 9c. The AA tower: flyers only, 2x damage, and the Flak / Missile branches ------------------
+{
+  // A ground unit alone in range never draws a shot.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'aa', 5, 5);
+  s.phase = 'wave';
+  const grunt = stationary(1, 'grunt', 1, 5.5, 4.0);
+  s.enemies.push(grunt);
+  for (let i = 0; i < 60; i++) tick(s);
+  check(grunt.hp === grunt.maxHp, 'AA holds fire with only a ground unit in range');
+}
+{
+  // The same nominal hit lands at 2x against a flyer (2.6 base -> 5.2).
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'aa', 5, 5);
+  const aa = towerAt(s, 5, 5);
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+  s.enemies.push(flyer);
+  for (let i = 0; i < 60 && aa.damageDealt === 0; i++) tick(s);
+  check(aa.damageDealt > 0, 'AA fires at a flyer in range');
+  check(Math.abs(aa.damageDealt - 5.2) < 1e-6, `AA deals 2x nominal damage to a flyer (${aa.damageDealt.toFixed(2)} vs 5.2)`);
+}
+{
+  // Flak splash: a flyer takes full damage, a ground unit inside the radius takes half, and a ground
+  // unit outside the radius is untouched.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'aa', 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'A');
+  const aa = towerAt(s, 5, 5);
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+  const near = stationary(2, 'grunt', 1, 6.0, 4.0);
+  const far = stationary(3, 'grunt', 1, 8.0, 4.0);
+  s.enemies.push(flyer, near, far);
+  for (let i = 0; i < 200 && aa.damageDealt === 0; i++) tick(s);
+  const st = effectiveStats(aa);
+  check(st.splash > 0, 'the Flak branch adds splash');
+  const flyerDmg = st.damage * st.flyerDamageMult;
+  const groundDmg = st.damage * 0.5;
+  check(Math.abs(flyer.maxHp - flyer.hp - flyerDmg) < 1e-6,
+    `Flak deals full damage to a flyer (${(flyer.maxHp - flyer.hp).toFixed(2)} vs ${flyerDmg.toFixed(2)})`);
+  check(Math.abs(near.maxHp - near.hp - groundDmg) < 1e-6,
+    `Flak deals half damage to a ground unit (${(near.maxHp - near.hp).toFixed(2)} vs ${groundDmg.toFixed(2)})`);
+  check(far.hp === far.maxHp, 'Flak splash does not reach beyond its radius');
+}
+{
+  // Missile: four missiles launch, all home on the designated target, and land within the salvo window.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'aa', 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'B');
+  const aa = towerAt(s, 5, 5);
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+  s.enemies.push(flyer);
+  tick(s); // fire the salvo
+  check(s.projectiles.length === 4, `a missile salvo launches 4 missiles (${s.projectiles.length})`);
+  check(s.projectiles.every((p) => p.kind === 'missile' && p.targetId === flyer.id),
+    'all four missiles home on the designated target');
+  aa.cooldown = 100000; // hold further salvos so the four land in isolation
+  const hpBefore = flyer.hp;
+  let landedBy = -1;
+  for (let i = 1; i <= 120; i++) {
+    tick(s);
+    if (s.projectiles.length === 0) {
+      landedBy = i;
+      break;
+    }
+  }
+  check(landedBy > 0 && landedBy <= 120, `the four missiles land within the salvo window (${landedBy} ticks)`);
+  const fullHit = effectiveStats(aa).damage * 2;
+  check(Math.abs(hpBefore - flyer.hp - fullHit) < 1e-6,
+    `four missiles deal one full hit (${(hpBefore - flyer.hp).toFixed(2)} vs ${fullHit.toFixed(2)})`);
+}
+{
+  // A missile never damages a ground unit, even one sitting on the flyer's flight path.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'aa', 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'B');
+  const aa = towerAt(s, 5, 5);
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+  const grunt = stationary(2, 'grunt', 1, 5.6, 4.0);
+  s.enemies.push(flyer, grunt);
+  tick(s);
+  aa.cooldown = 100000;
+  for (let i = 0; i < 120; i++) tick(s);
+  check(grunt.hp === grunt.maxHp, 'a missile never damages a ground unit');
+  check(flyer.hp < flyer.maxHp, 'the missiles still reach the flyer');
+}
+{
+  // A missile whose target dies retargets the nearest flyer within range.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'aa', 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'B');
+  const aa = towerAt(s, 5, 5);
+  s.phase = 'wave';
+  const a = stationary(1, 'flyer', 20, 5.5, 4.0);
+  const b = stationary(2, 'flyer', 20, 6.0, 4.0);
+  s.enemies.push(a, b);
+  tick(s); // salvo homes on `a`
+  check(s.projectiles.every((p) => p.targetId === a.id), 'the salvo homes on the first flyer');
+  a.dead = true; // the target dies mid-flight
+  aa.cooldown = 100000;
+  let remaining = 0;
+  for (let i = 0; i < 120 && s.projectiles.length > 0; i++) {
+    tick(s);
+    remaining = s.projectiles.length;
+  }
+  check(remaining === 0, 'the missiles retarget and land (none expire in flight)');
+  check(b.hp < b.maxHp, 'a missile whose target died retargets the nearest flyer');
+}
+{
+  // Same seed reproduces the same directions; two runs of the same wave produce identical missile paths.
+  const dirs = (tick, towerId, salvo) => {
+    let rng = missileSeed(tick, towerId, salvo);
+    const out = [];
+    for (let i = 0; i < 4; i++) {
+      const r = rngNext(rng);
+      rng = r.next;
+      out.push(r.value);
+    }
+    return out;
+  };
+  check(JSON.stringify(dirs(100, 7, 0)) === JSON.stringify(dirs(100, 7, 0)), 'the same seed reproduces the same launch directions');
+  check(JSON.stringify(dirs(100, 7, 0)) !== JSON.stringify(dirs(100, 8, 0)), 'a different tower id yields different directions');
+
+  const trace = () => {
+    const s = allUnlocked();
+    s.economy.salvage = 100000;
+    placeTower(s, 'aa', 5, 5);
+    upgradeTower(s, 5, 5);
+    chooseBranch(s, 5, 5, 'B');
+    s.phase = 'wave';
+    s.enemies.push(stationary(1, 'flyer', 20, 5.5, 4.0));
+    const path = [];
+    for (let i = 0; i < 40; i++) {
+      tick(s);
+      for (const p of s.projectiles) path.push([p.kind, p.id, +p.x.toFixed(4), +p.y.toFixed(4)]);
+    }
+    return JSON.stringify(path);
+  };
+  check(trace() === trace(), 'two runs of the same flyer wave produce identical missile paths');
+}
+{
+  // The fixed-timestep equivalence holds with projectiles in flight: the frame rate never changes the
+  // missiles' integrated positions, because their motion comes from the same fixed tick as everything
+  // else.
+  const run = (frameMs) => {
+    const s = allUnlocked();
+    s.economy.salvage = 100000;
+    placeTower(s, 'aa', 5, 5);
+    upgradeTower(s, 5, 5);
+    chooseBranch(s, 5, 5, 'B');
+    s.phase = 'wave';
+    s.enemies.push(stationary(1, 'flyer', 20, 5.5, 4.0));
+    for (let t = 0; t < 100 * TICK_MS - frameMs; t += frameMs) step(s, frameMs);
+    while (s.tick < 120) tick(s);
+    return JSON.stringify([
+      s.projectiles.map((p) => [p.kind, p.id, +p.x.toFixed(4), +p.y.toFixed(4), +p.vx.toFixed(4), +p.vy.toFixed(4)]),
+      s.enemies.map((e) => [e.id, e.hp]),
+      s.economy.damage.tower,
+    ]);
+  };
+  const at60 = run(TICK_MS);
+  check(at60 === run(1000 / 144), 'projectiles in flight: same result at 60 Hz and 144 Hz frames');
+  check(at60 === run(1000 / 23), 'projectiles in flight: same result at 23 Hz frames');
 }
 
 // --- 10. Precision clicking: weak points deal 2x, combo scales and resets ----------------------
@@ -3242,7 +3423,7 @@ function cursorTower(tier, branch) {
 {
   // 33a. Every kind carries a non-zero hit-point pool that matches the table, and the palette order
   // puts the repair tower between Beacon and Wall.
-  const HP_TABLE = { gun: 100, cannon: 140, taser: 120, laser: 120, frost: 90, beacon: 80, repair: 90, cursor: 80 };
+  const HP_TABLE = { gun: 100, cannon: 140, taser: 120, laser: 120, aa: 100, frost: 90, beacon: 80, repair: 90, cursor: 80 };
   for (const [kind, hp] of Object.entries(HP_TABLE)) {
     const t = createTower(1, kind, 0, 0);
     check(t.maxHp === hp && t.hp === hp, `${kind} has a ${hp} HP pool (${t.maxHp})`);
@@ -3371,12 +3552,12 @@ function cursorTower(tier, branch) {
 }
 
 {
-  // 33i. Nine palette buttons fit inside the left panel at the smallest and largest layouts.
+  // 33i. Every palette button fits inside the left panel at the smallest and largest layouts.
   for (const [vw, vh] of [[1280, 720], [1600, 900]]) {
     const l = computeLayout(vw, vh);
     const h = computeHud(l, createRunState());
     check(
-      h.towers.length === 9 && h.towers.every((t) => t.rect.y + t.rect.h <= l.leftPanel.y + l.leftPanel.h),
+      h.towers.length === TOWER_KINDS.length && h.towers.every((t) => t.rect.y + t.rect.h <= l.leftPanel.y + l.leftPanel.h),
       `${h.towers.length} palette buttons fit in the left panel at ${vw}x${vh}`,
     );
   }
@@ -4145,10 +4326,10 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     check(artNameForEnemy(kind) === kind, `enemy ${kind} resolves an asset name`);
   }
   check(artNameForEnemy('popup') === null, 'the pop-up stays runtime (no asset)');
-  for (const kind of ['gun', 'cannon', 'laser', 'taser', 'frost', 'beacon', 'cursor', 'repair', 'wall']) {
+  for (const kind of ['gun', 'cannon', 'laser', 'taser', 'frost', 'aa', 'beacon', 'cursor', 'repair', 'wall']) {
     check(artNameForTowerBase(kind) === `${kind}-base`, `tower ${kind} resolves a base`);
   }
-  for (const kind of ['gun', 'cannon', 'laser', 'taser', 'frost']) {
+  for (const kind of ['gun', 'cannon', 'laser', 'taser', 'frost', 'aa']) {
     check(artNameForTowerTurret(kind) === `${kind}-turret`, `tower ${kind} resolves a turret`);
   }
   for (const kind of ['beacon', 'cursor', 'repair', 'wall']) {
