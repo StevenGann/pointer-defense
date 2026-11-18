@@ -4,6 +4,7 @@ import {
   buySpec,
   createRunState,
   cursorMaintenanceStatus,
+  enemyAt,
   enterEndless,
   noBuildActive,
   NO_BUILD_MESSAGE,
@@ -22,6 +23,7 @@ import { HudView, hudControlAt, paletteTowerAt, type HudAction } from './view/hu
 import { paletteTooltipLines, TooltipView, towerTooltipLines } from './view/tooltip.ts';
 import {
   branchTooltipLines,
+  enemyTooltipLines,
   lockedPaletteLine,
   pointerTooltipLines,
   repairTooltipLines,
@@ -42,6 +44,7 @@ import { CameraShake, shakeImpulseFor } from './view/shake.ts';
 import { backingStorePixelSize, cssViewportSize, liveDevicePixelRatio } from './view/screen.ts';
 import { preloadArt, setArtDpr } from './view/art.ts';
 import { repairHealingCount, TOWER_STATS, type Branch, type TowerKind } from './core/towers.ts';
+import { isBossVariant } from './core/enemies.ts';
 import pkg from '../package.json';
 
 const app = new Application();
@@ -572,6 +575,17 @@ function updateTooltip(): void {
             return locked === null ? desc : [locked, ...desc];
           })();
       tooltip.update({ key: `palette:${palette}`, lines }, h.x, h.y, viewportW, viewportH);
+      return;
+    }
+    const hoveredEnemy = h.onBoard && state.phase === 'wave' ? enemyAt(state, h.worldX, h.worldY) : undefined;
+    if (hoveredEnemy && isBossVariant(hoveredEnemy.kind)) {
+      tooltip.update(
+        { key: `enemy:${hoveredEnemy.id}`, lines: enemyTooltipLines(hoveredEnemy) },
+        h.x,
+        h.y,
+        viewportW,
+        viewportH,
+      );
       return;
     }
     const tower = h.onBoard ? towerAt(state, h.col, h.row) : undefined;

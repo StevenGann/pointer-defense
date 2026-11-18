@@ -47,12 +47,12 @@ import {
 import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
-import { buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, isBossWave, MODIFIER_POOL, popupCountForWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
+import { buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, isBossWave, isTypeBossWave, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
 import { LEVELS, DEFAULT_LEVEL, createGrid, levelById, toggleOpenAt, validateLevel, MAX_TOGGLES } from '../src/core/levels.ts';
-import { createEnemy, isPopupEnemy, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS } from '../src/core/enemies.ts';
+import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, isBossKind, isBossVariant, isPopupEnemy, PACER_AURA_RADIUS, WARDEN_INTERVAL_TICKS, WARDEN_RADIUS, WARDEN_SHIELD, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS } from '../src/core/enemies.ts';
 import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS } from '../src/core/ads.ts';
 import {
   comboMultiplier,
@@ -860,7 +860,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     h ^= table.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
-  check((h >>> 0).toString(16) === 'db85906d', `waves 1..100 balance table unchanged (hash ${(h >>> 0).toString(16)})`);
+  check((h >>> 0).toString(16) === 'c1a1a62', `waves 1..100 balance table unchanged (hash ${(h >>> 0).toString(16)})`);
 }
 
 {
@@ -4150,6 +4150,202 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   const at60 = run(TICK_MS);
   check(at60 === run(1000 / 144), 'unlock wave: same result at 60 Hz and 144 Hz frames');
   check(at60 === run(1000 / 23), 'unlock wave: same result at 23 Hz frames');
+}
+
+// --- 39. Boss variants (pass 1: Sergeant, Pacer, Bastion) -------------------------------------
+
+{
+  // 39a. Stats: HP multiple, speed, scale (radius), integrity and kill value match the design table.
+  const sergeant = ENEMY_STATS['grunt-boss'];
+  const pacer = ENEMY_STATS['runner-boss'];
+  const bastion = ENEMY_STATS['shielded-boss'];
+  check(sergeant.name === 'Sergeant' && sergeant.hp === 200, `Sergeant is 10x grunt HP (${sergeant.hp})`);
+  check(sergeant.speed === 0.55 && sergeant.scale === 1.6 && sergeant.integrity === 4,
+    `Sergeant speed/scale/integrity (${sergeant.speed}/${sergeant.scale}/${sergeant.integrity})`);
+  check(sergeant.radius === 0.3 * 1.6, `Sergeant radius is grunt x1.6 (${sergeant.radius})`);
+  check(sergeant.value === 24, `Sergeant kill value is 6x grunt (${sergeant.value})`);
+  check(pacer.name === 'Pacer' && pacer.hp === 60 && pacer.speed === 0.85 && pacer.scale === 1.5,
+    `Pacer stats (${pacer.hp}/${pacer.speed}/${pacer.scale})`);
+  check(pacer.integrity === 3 && pacer.radius === 0.18 * 1.5 && pacer.value === 36,
+    `Pacer integrity/radius/value (${pacer.integrity}/${pacer.radius}/${pacer.value})`);
+  check(bastion.name === 'Bastion' && bastion.hp === 240 && bastion.speed === 0.45 && bastion.scale === 1.6,
+    `Bastion stats (${bastion.hp}/${bastion.speed}/${bastion.scale})`);
+  check(bastion.integrity === 4 && bastion.armour === 2 && bastion.value === 60,
+    `Bastion integrity/armour/value (${bastion.integrity}/${bastion.armour}/${bastion.value})`);
+  check(bastion.shield === BASTION_SHIELD_LAYERS * BASTION_SHIELD_LAYER_VALUE,
+    `Bastion shield is ${BASTION_SHIELD_LAYERS} layers of ${BASTION_SHIELD_LAYER_VALUE} (${bastion.shield})`);
+  check(enemyKillValue('grunt-boss', 1) === 24 && enemyKillValue('runner-boss', 1) === 36 && enemyKillValue('shielded-boss', 1) === 60,
+    'kill value at wave 1 is 6x the base type');
+}
+
+{
+  // 39b. Base-type membership: boss variants count as their base type for tower rules.
+  check(baseEnemyKind('grunt-boss') === 'grunt', 'Sergeant counts as a grunt');
+  check(baseEnemyKind('runner-boss') === 'runner', 'Pacer counts as a runner');
+  check(baseEnemyKind('shielded-boss') === 'shielded', 'Bastion counts as shielded');
+  check(baseEnemyKind('grunt') === 'grunt', 'an ordinary grunt maps to itself');
+  check(isBossVariant('grunt-boss') && isBossVariant('runner-boss') && isBossVariant('shielded-boss'),
+    'the three pass-1 kinds are boss variants');
+  check(!isBossVariant('boss') && !isBossVariant('grunt'), 'the marker boss and ordinary enemies are not variants');
+  check(isBossKind('boss') && isBossKind('shielded-boss'), 'boss variants and the marker boss are all bosses');
+}
+
+{
+  // 39c. A Taser Overload treats a Bastion as shielded: its 2.5x shielded multiplier applies.
+  const drop = (kind) => {
+    const s = allUnlocked();
+    s.economy.salvage = 10000;
+    placeTower(s, 'taser', 5, 5);
+    upgradeTower(s, 5, 5);
+    chooseBranch(s, 5, 5, 'B');
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const e = stationary(1, kind, 24, 5.5, 4.5);
+    e.shield = 0;
+    e.shieldsRemaining = 0;
+    e.maxShield = 0;
+    s.enemies.push(e);
+    tick(s);
+    return e.maxHp - e.hp;
+  };
+  const gruntDrop = drop('grunt');
+  const bastionDrop = drop('shielded-boss');
+  check(Math.abs(bastionDrop / gruntDrop - 2.5) < 1e-9,
+    `Overload deals ${bastionDrop} to a Bastion vs ${gruntDrop} to a grunt (2.5x shielded)`);
+}
+
+{
+  // 39d. Bastion shield layers strip one per hit: three pointer clicks strip three layers and the
+  // enemy's hit points are untouched until the last layer is gone.
+  const s = createRunState();
+  s.phase = 'wave';
+  const b = stationary(1, 'shielded-boss', 24, 5.5, 5.5);
+  check(b.shieldsRemaining === BASTION_SHIELD_LAYERS && b.shield === 45, 'a fresh Bastion has three layers');
+  s.enemies.push(b);
+
+  pointerDown(s, b.x, b.y);
+  pointerUp(s);
+  check(b.shieldsRemaining === 2 && b.shield === 30, `one hit strips one layer (${b.shieldsRemaining}, shield ${b.shield})`);
+  check(b.hp === b.maxHp, 'hit points are untouched while a layer remains');
+
+  pointerDown(s, b.x, b.y);
+  pointerUp(s);
+  check(b.shieldsRemaining === 1 && b.shield === 15, `two hits strip two layers (${b.shieldsRemaining}, shield ${b.shield})`);
+
+  pointerDown(s, b.x, b.y);
+  pointerUp(s);
+  check(b.shieldsRemaining === 0 && b.shield === 0, 'three hits strip all three layers');
+  check(b.hp === b.maxHp, 'no hit points were lost while stripping layers');
+}
+
+{
+  // 39e. The Warden grant never stacks and never refreshes an enemy that already has shield.
+  const s = createRunState();
+  s.phase = 'wave';
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const bastion = stationary(1, 'shielded-boss', 24, 5.5, 5.5);
+  const grunt = stationary(2, 'grunt', 24, 5.5, 6.5); // 1 tile from the Bastion, inside 3.5
+  s.enemies.push(bastion, grunt);
+
+  for (let i = 0; i < WARDEN_INTERVAL_TICKS; i++) tick(s);
+  check(grunt.shield === WARDEN_SHIELD, `the Warden grants a ${WARDEN_SHIELD}-point shield (${grunt.shield})`);
+
+  for (let i = 0; i < WARDEN_INTERVAL_TICKS; i++) tick(s);
+  check(grunt.shield === WARDEN_SHIELD, `the Warden grant never stacks (${grunt.shield})`);
+
+  grunt.shield = 5;
+  for (let i = 0; i < WARDEN_INTERVAL_TICKS; i++) tick(s);
+  check(grunt.shield === 5, 'the Warden never refreshes an enemy that already has shield');
+  check(WARDEN_RADIUS === 3.5, `the Warden radius is 3.5 tiles (${WARDEN_RADIUS})`);
+}
+
+{
+  // 39f. The Pacer aura: a slow enemy inside 3 tiles is raised to the Pacer's speed; outside it is
+  // unchanged; and an ordinary grunt is unchanged by the aura's absence.
+  const distOf = (kind, withPacer, pacerX) => {
+    const s = createRunState();
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const e = createEnemy(1, kind, 12, SPAWN, EXIT);
+    e.stunUntilTick = 0;
+    s.enemies.push(e);
+    if (withPacer) {
+      const p = createEnemy(2, 'runner-boss', 18, SPAWN, EXIT);
+      p.x = pacerX;
+      p.y = 6.5;
+      p.prevX = p.x;
+      p.prevY = p.y;
+      p.col = Math.floor(p.x);
+      p.row = 6;
+      p.stunUntilTick = 999999;
+      s.enemies.push(p);
+    }
+    for (let i = 0; i < TICK_HZ; i++) tick(s);
+    return e.dist;
+  };
+  const noPacer = distOf('breacher', false, 0);
+  const inAura = distOf('breacher', true, 1.0);
+  const outAura = distOf('breacher', true, 12.0);
+  check(inAura > noPacer, `Pacer raises a slow enemy inside the aura (${inAura.toFixed(2)} > ${noPacer.toFixed(2)} tiles/s)`);
+  check(Math.abs(outAura - noPacer) < 1e-9, `outside the aura a slow enemy is unchanged (${outAura.toFixed(2)})`);
+
+  const gruntNoPacer = distOf('grunt', false, 0);
+  const gruntWithPacer = distOf('grunt', true, 1.0);
+  check(Math.abs(gruntNoPacer - 1.6) < 1e-6, `an ordinary grunt keeps its speed without a Pacer (${gruntNoPacer.toFixed(3)})`);
+  check(Math.abs(gruntWithPacer - gruntNoPacer) < 1e-9, 'a grunt (faster than the Pacer) is unchanged by the aura');
+  check(PACER_AURA_RADIUS === 3, `the Pacer aura radius is 3 tiles (${PACER_AURA_RADIUS})`);
+}
+
+{
+  // 39g. The spawn schedule: first appearance at the unlock wave, never before, every fifth wave
+  // after that, favouring the newest type, and never replacing a marker boss.
+  check(typeBossUnlockWave('grunt-boss') === 12, 'Sergeant unlocks at wave 12');
+  check(typeBossUnlockWave('runner-boss') === 18, 'Pacer unlocks at wave 18');
+  check(typeBossUnlockWave('shielded-boss') === 24, 'Bastion unlocks at wave 24');
+  check(typeBossKindForWave(12) === 'grunt-boss', 'wave 12 spawns a Sergeant');
+  check(typeBossKindForWave(18) === 'runner-boss', 'wave 18 spawns a Pacer');
+  check(typeBossKindForWave(24) === 'shielded-boss', 'wave 24 spawns a Bastion');
+  check(typeBossKindForWave(11) === null, 'no type boss before wave 12');
+  check(buildSchedule(12).filter((sp) => sp.kind === 'grunt-boss').length === 1, 'wave 12 schedule has one Sergeant');
+  check(buildSchedule(18).filter((sp) => sp.kind === 'runner-boss').length === 1, 'wave 18 schedule has one Pacer');
+  check(buildSchedule(24).filter((sp) => sp.kind === 'shielded-boss').length === 1, 'wave 24 schedule has one Bastion');
+  for (const w of [29, 34, 39, 44, 49, 54, 59]) {
+    check(isTypeBossWave(w), `wave ${w} is a type-boss wave`);
+    check(buildSchedule(w).filter((sp) => sp.kind.endsWith('-boss')).length === 1, `wave ${w} carries one type boss`);
+  }
+  for (const w of [10, 25, 50, 75, 100]) {
+    check(buildSchedule(w).filter((sp) => sp.kind.endsWith('-boss')).length === 0,
+      `a type boss never replaces the marker boss on wave ${w}`);
+  }
+  check(typeBossKindForWave(29) === typeBossKindForWave(29), 'type-boss selection is deterministic');
+  check(isTypeBossWave(29) && !isTypeBossWave(28) && !isTypeBossWave(100), 'the fifth-wave cadence holds after wave 24');
+}
+
+{
+  // 39h. A boss variant death shakes like a boss (4 px), and a boss variant leak costs its integrity.
+  check(shakeImpulseFor({ type: 'kill', kind: 'grunt-boss' }).amplitude === SHAKE_AMPLITUDE.bossDeath,
+    'a Sergeant death shakes 4 px');
+  check(shakeImpulseFor({ type: 'kill', kind: 'runner-boss' }).amplitude === SHAKE_AMPLITUDE.bossDeath,
+    'a Pacer death shakes 4 px');
+  check(shakeImpulseFor({ type: 'kill', kind: 'shielded-boss' }).amplitude === SHAKE_AMPLITUDE.bossDeath,
+    'a Bastion death shakes 4 px');
+
+  const leakCost = (kind) => {
+    const s = stateOnLevel('open-field');
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const start = s.integrity;
+    s.enemies.push(createEnemy(1, kind, 12, SPAWN, EXIT));
+    let t = 0;
+    while (s.enemies.length > 0 && t < 20000) {
+      tick(s);
+      t++;
+    }
+    return start - s.integrity;
+  };
+  check(leakCost('grunt-boss') === 4, 'a Sergeant leak costs 4 integrity');
+  check(leakCost('runner-boss') === 3, 'a Pacer leak costs 3 integrity');
+  check(leakCost('shielded-boss') === 4, 'a Bastion leak costs 4 integrity');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

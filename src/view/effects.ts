@@ -1,6 +1,6 @@
 import { Container, Graphics } from 'pixi.js';
 import { PAL, worldToPixel, type Layout } from './chrome.ts';
-import { ENEMY_STATS, type EnemyKind } from '../core/enemies.ts';
+import { ENEMY_STATS, isBossVariant, type EnemyKind } from '../core/enemies.ts';
 import type { Tower, TowerKind } from '../core/towers.ts';
 import type { RunState } from '../core/state.ts';
 import { ENEMY_COLOR, SHIELD_COLOR, TOWER_COLOR } from './board.ts';
@@ -242,6 +242,15 @@ export class EffectsView {
       const r0 = cell * ENEMY_STATS[d.kind].radius;
       const a = 1 - t;
       g.circle(p.x, p.y, r0 * (1 + t * 1.5)).stroke({ width: 2, color, alpha: a });
+      if (isBossVariant(d.kind)) {
+        // A boss-variant death pops with its crown notch, so a boss falling reads differently from
+        // an ordinary death.
+        const nw = r0 * 0.32;
+        g.moveTo(p.x - nw, p.y - r0 * (1 + t * 1.5))
+          .lineTo(p.x, p.y - r0 * (1 + t * 1.5) - r0 * 0.18)
+          .lineTo(p.x + nw, p.y - r0 * (1 + t * 1.5))
+          .stroke({ width: 1, color: PAL.dark, alpha: a });
+      }
       for (let i = 0; i < 3; i++) {
         const ang = (Math.PI * 2 * i) / 3 + t * 0.7;
         const dist = r0 * (0.35 + t * 1.4);

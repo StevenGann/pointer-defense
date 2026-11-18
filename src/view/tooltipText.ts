@@ -42,6 +42,7 @@ import {
 import { SPEC_CAPS, SPEC_NAMES, specEffectText, type SpecKind, type SpecLevels } from '../core/save.ts';
 import { pointerDamageMult } from '../core/state.ts';
 import { TICK_HZ } from '../core/time.ts';
+import { ENEMY_STATS, type Enemy } from '../core/enemies.ts';
 
 /**
  * Tooltip *text* for the spend controls, kept Pixi-free so the smoke harness can assert that a
@@ -460,6 +461,17 @@ export function branchTooltipLines(tower: Tower, branch: Branch, salvage: number
   if (behaviour) segments.push({ text: `, ${behaviour}` });
   segments.push({ text: `, $${formatNumber(cost)}` });
   return [segments];
+}
+
+/**
+ * Tooltip for a boss variant the pointer is resting on: its name, live hit points and — for the
+ * Bastion — how many shield layers remain. Boss variants are the only enemies with a tooltip so far.
+ */
+export function enemyTooltipLines(e: Enemy): TooltipLine[] {
+  const name = ENEMY_STATS[e.kind].name;
+  const hp = `${Math.ceil(e.hp)} / ${e.maxHp} HP`;
+  if (e.kind === 'shielded-boss') return [name, hp, `Shield layers: ${e.shieldsRemaining}`];
+  return [name, hp];
 }
 
 /** Format a click-damage value: whole numbers stay bare, fractions keep one decimal. */
