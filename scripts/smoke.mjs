@@ -10,6 +10,7 @@
 // sealed boards, and flyers beat grunts across the board.
 
 import { FLYER_OFF_KIND_DAMAGE,
+  buildStats,
   createRunState,
   cursorMaintenanceStatus,
   GOD_SALVAGE_CEILING,
@@ -135,6 +136,7 @@ import {
 import { backingStorePixelSize } from '../src/view/screen.ts';
 import { HELP_PAGES, pageUnlocked, lockedReason, pageById } from '../src/content/help.ts';
 import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, HelpSession, HELP_W, HELP_H } from '../src/view/help.ts';
+import { buildAchievementGrid, gridRowCount, gridCellRect, ACH_COLUMNS, ACH_CELL, ACH_GUTTER, computeAchievementGrid, achievementGridHitAt, AchievementSession } from '../src/view/dialog.ts';
 import {
   ART_MANIFEST,
   ART_VIEWBOX,
@@ -170,6 +172,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { animFrame, currentAnimFrame, DEFAULT_ANIM, entityOffset } from '../src/view/anim.ts';
 import { scanArt } from './art-manifest.mjs';
+import { runAchArt } from './ach-art.mjs';
 import { EffectsView } from '../src/view/effects.ts';
 import { fileURLToPath } from 'node:url';
 import {
@@ -1170,15 +1173,45 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(!again.includes('first-blood'), 'first-blood does not fire twice');
 }
 
-// --- 15b. The achievement table: 24 definitions, unique ids, names and descriptions ------------
+// --- 15b. The achievement table: 117 definitions, unique ids, names and descriptions -----------
 {
-  check(ACHIEVEMENTS.length === 24, `exactly 24 achievements (${ACHIEVEMENTS.length})`);
+  check(ACHIEVEMENTS.length === 117, `exactly 117 achievements (${ACHIEVEMENTS.length})`);
   const ids = ACHIEVEMENTS.map((a) => a.id);
   check(new Set(ids).size === ACHIEVEMENTS.length, 'achievement ids are unique');
   check(
     ACHIEVEMENTS.every((a) => a.name.trim().length > 0 && a.description.trim().length > 0),
     'every achievement has a name and a description',
   );
+  // Every shadow- id is hidden, and nothing else is.
+  check(
+    ACHIEVEMENTS.every((a) => (a.hidden === true) === a.id.startsWith('shadow-')),
+    'every shadow- id is hidden and nothing else is',
+  );
+  // The full 117-id catalog is present verbatim, and nothing extra ships.
+  const DOC_IDS = [
+    'first-blood', 'sharpshooter', 'weak-point-kills', 'crit-hits', 'crit-100', 'pointer-1k', 'click-combo', 'override',
+    'pointer-only-wave', 'weak-point-10', 'crit-first', 'overclock-max', 'click-idle', 'pointer-boss-10',
+    'five-tier-five', 'beacon-field', 'maxed-branch', 'aa-flak', 'mine-layer', 'wall-only-wave', 'toggle-master', 'repair-shop',
+    'tower-zoo', 'tier-five-first', 'sell-10', 'no-upgrade-wave', 'laser-chain', 'frost-lock', 'taser-chain', 'cannon-splash',
+    'cursor-first', 'cursor-repair', 'beacon-buff', 'one-kind', 'two-kinds', 'upgrade-first', 'branch-first', 'sell-tower-first',
+    'salvage-peak', 'salvage-10k', 'earn-100k', 'no-spend-wave', 'ad-collector', 'ad-ignore', 'early-call-streak', 'early-call-10',
+    'early-call-wave-1', 'idle-hour', 'sell-profit', 'no-sell',
+    'clean-wave', 'flawless-wave', 'flawless-10', 'perfect-run', 'long-road', 'maze-100', 'wave-25', 'wave-50', 'wave-100',
+    'endless-150', 'endless-200', 'integrity-1', 'speed-3', 'wave-1-no-damage', 'leak-recovery',
+    'boss-by-pointer', 'milestone-boss-pointer', 'boss-10', 'boss-first-wave', 'shield-break-5', 'carrier-brood',
+    'dreadnought-kill', 'wirecutter-kill', 'ram-kill', 'boss-no-leak',
+    'reboot-50', 'two-reboots', 'reboot-10', 'specs-banked', 'first-rp', 'rp-100', 'prestige-25', 'tree-tier-3', 'tree-complete',
+    'fast-boot-40', 'no-cheats-100', 'all-help',
+    'custom-map-cleared', 'editor-first', 'map-export', 'map-import', 'fork-cleared', 'ladder-cleared',
+    'shadow-ad-no-close', 'shadow-zero-towers', 'shadow-all-walls', 'shadow-sell-all', 'shadow-1hp-boss', 'shadow-pause',
+    'shadow-hover', 'shadow-resize', 'shadow-mute', 'shadow-reload', 'shadow-clippy', 'shadow-monochrome', 'shadow-owl',
+    'shadow-weekend', 'shadow-flat-battery', 'shadow-printer', 'shadow-boots', 'shadow-perfect-100', 'shadow-every-map',
+    'shadow-broke', 'shadow-help-clippy', 'shadow-drag', 'shadow-tooltip', 'shadow-cheat-lose',
+  ];
+  const idSet = new Set(ids);
+  check(DOC_IDS.length === 117, `the doc catalog has 117 ids (${DOC_IDS.length})`);
+  check(DOC_IDS.every((id) => idSet.has(id)), 'every doc id is present');
+  check(ids.every((id) => DOC_IDS.includes(id)), 'no id ships that is not in the doc');
 }
 
 // --- 15c. Each new run-state achievement fires once and only once -----------------------------
@@ -7005,6 +7038,119 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   const s = createRunState(defaultProfile());
   check(s.wave === 0 && s.economy.salvage === 60 && s.integrity === 20 && s.towers.length === 0,
     'a run with an empty tree is identical to today');
+}
+
+// --- 46. The achievements grid ---------------------------------------------------------------
+{
+  check(ACH_COLUMNS === 8, 'grid: eight columns');
+  check(gridRowCount(0) === 0, 'grid: zero cells, zero rows');
+  check(gridRowCount(8) === 1, 'grid: eight cells fill one row');
+  check(gridRowCount(9) === 2, 'grid: nine cells spill to two rows');
+  check(gridRowCount(117) === 15, 'grid: 117 cells form 15 rows');
+  const r = gridCellRect(100, 200, 3, 2);
+  check(
+    r.x === 100 + 3 * (ACH_CELL + ACH_GUTTER) && r.y === 200 + 2 * (ACH_CELL + ACH_GUTTER) && r.w === ACH_CELL && r.h === ACH_CELL,
+    'grid: a cell lands at col*pitch, row*pitch',
+  );
+}
+
+{
+  const model = buildAchievementGrid(['first-blood'], { 'first-blood': '2026-11-18' }, 'all');
+  check(model.total === 117, 'grid: the stored total is 117');
+  check(model.earnedCount === 1, 'grid: earned count reads the profile');
+  check(model.shadowCount === 0, 'grid: no shadow earned yet');
+  check(
+    model.entries.every((e) => !e.id.startsWith('shadow-')),
+    'grid: a hidden achievement has no cell before earning',
+  );
+  const earnedShadow = buildAchievementGrid(['shadow-owl'], {}, 'all');
+  check(earnedShadow.shadowCount === 1, 'grid: an earned shadow is counted');
+  check(earnedShadow.entries.some((e) => e.id === 'shadow-owl'), 'grid: an earned shadow gets a cell');
+  check(model.entries.find((e) => e.id === 'first-blood').earnedDate === '2026-11-18', 'grid: earned date is attached');
+
+  const client = { x: 0, y: 0, w: 1280, h: 800 };
+  const al = computeAchievementGrid(model, client);
+  check(al.window.w === 560, 'grid: the window is 560 wide');
+  const cells = al.cells;
+  check(new Set(cells.slice(0, 8).map((c) => c.rect.y)).size === 1, 'grid: the first eight cells share a row');
+  check(cells.length <= 8 || cells[8].rect.y > cells[0].rect.y, 'grid: the ninth cell starts the next row');
+  const hit = achievementGridHitAt(al, model, cells[0].rect.x + 4, cells[0].rect.y + 4);
+  check(hit !== null && hit.type === 'cell' && hit.id === model.entries[0].id, 'grid: a click on a cell hit-tests to that cell');
+  const session = new AchievementSession();
+  session.show();
+  check(session.open, 'grid session: show opens the grid');
+  session.hide();
+  check(!session.open, 'grid session: hide closes the grid');
+}
+
+// --- 47. Representative conditions fire from constructed stats --------------------------------
+{
+  const base = buildStats(createRunState());
+  const p = defaultProfile();
+  const fires = (id, overrides) => ACHIEVEMENTS.find((a) => a.id === id).when({ ...base, ...overrides }, p);
+  const cases = [
+    ['first-blood', { kills: 1 }],
+    ['crit-hits', { critHits: 25 }],
+    ['crit-100', { critHits: 100 }],
+    ['weak-point-10', { weakHits: 10 }],
+    ['sharpshooter', { weakHits: 100 }],
+    ['pointer-1k', { pointerHits: 1000 }],
+    ['salvage-peak', { salvagePeak: 1000 }],
+    ['salvage-10k', { salvagePeak: 10000 }],
+    ['earn-100k', { earned: 100000 }],
+    ['ad-collector', { adsClosed: 10 }],
+    ['ad-ignore', { adsExpired: 10 }],
+    ['early-call-10', { earlyCalls: 10 }],
+    ['early-call-streak', { earlyCallStreak: 3 }],
+    ['wave-25', { wave: 25 }],
+    ['wave-100', { wave: 100 }],
+    ['endless-150', { endlessWave: 150 }],
+    ['boss-10', { bossesKilled: 10 }],
+    ['shield-break-5', { shieldsBroken: 5 }],
+    ['mine-layer', { minesTriggered: 25 }],
+    ['shadow-all-walls', { wallsBuilt: 40 }],
+  ];
+  let allFired = true;
+  for (const [id, overrides] of cases) {
+    if (!fires(id, overrides)) {
+      allFired = false;
+      console.log(`  missing fire: ${id}`);
+    }
+  }
+  check(cases.length === 20, `20 representative conditions are enumerated (${cases.length})`);
+  check(allFired, '20 representative conditions fire from constructed stats');
+}
+
+// --- 48. A cheated run records nothing, shadows included --------------------------------------
+{
+  const s = createRunState();
+  s.cheatsUsed = true;
+  s.wallsBuilt = 40; // shadow-all-walls is met
+  s.wave = 5; // shadow-zero-towers is met
+  s.towersBuilt = 0;
+  s.pointerHits = 0;
+  const got = checkAchievements(s);
+  check(got.length === 0, 'a cheated run records no achievement');
+  check(!got.some((id) => id.startsWith('shadow-')), 'no shadow achievement fires on a cheated run');
+}
+
+// --- 49. The art script is idempotent and never overwrites ------------------------------------
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'pd-ach-'));
+  try {
+    const achDir = join(tmp, 'achievements');
+    mkdirSync(achDir, { recursive: true });
+    writeFileSync(join(achDir, '_placeholder.svg'), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44"/>');
+    const custom = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44"><!-- artist work --></svg>';
+    writeFileSync(join(achDir, 'first-blood.svg'), custom);
+    const first = runAchArt(tmp);
+    check(first.copied > 0 && first.skipped >= 1, `ach-art copies missing ids and keeps existing (${first.copied}/${first.skipped})`);
+    check(readFileSync(join(achDir, 'first-blood.svg'), 'utf8') === custom, 'ach-art never overwrites an existing file');
+    const second = runAchArt(tmp);
+    check(second.copied === 0, 'ach-art is idempotent (second run copies nothing)');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
