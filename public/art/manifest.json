@@ -753,6 +753,22 @@
       "frames": 1
     },
     {
+      "name": "mines/mine-armed",
+      "frames": 1
+    },
+    {
+      "name": "mines/mine-unarmed",
+      "frames": 1
+    },
+    {
+      "name": "projectiles/missile",
+      "frames": 1
+    },
+    {
+      "name": "projectiles/shell",
+      "frames": 1
+    },
+    {
       "name": "towers/aa-base",
       "frames": 1
     },

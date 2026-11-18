@@ -190,6 +190,10 @@ export class BoardView {
   private readonly ghost = new Container();
   private readonly ghostBase = new Sprite();
   private readonly ghostTurret = new Sprite();
+  private readonly mineArt = new Container();
+  private readonly mineArtPool: Sprite[] = [];
+  private readonly projectileArt = new Container();
+  private readonly projectileArtPool: Sprite[] = [];
   private readonly overlay = new Graphics();
   private readonly popupTexts: { title: Text; message: Text }[] = [];
 
@@ -203,7 +207,7 @@ export class BoardView {
     this.ghostTurret.visible = false;
     this.ghost.addChild(this.ghostBase, this.ghostTurret);
     this.popups.addChild(this.popupGfx);
-    this.root.addChild(this.tileSprites, this.tiles, this.path, this.mines, this.shutterSprites, this.toggles, this.towerSprites, this.towers, this.wrenches, this.popups, this.enemies, this.enemyBodies, this.enemyFx, this.cursorArrows, this.ghost, this.overlay);
+    this.root.addChild(this.tileSprites, this.tiles, this.path, this.mines, this.mineArt, this.shutterSprites, this.toggles, this.towerSprites, this.towers, this.wrenches, this.popups, this.enemies, this.enemyBodies, this.enemyFx, this.cursorArrows, this.ghost, this.overlay, this.projectileArt);
   }
 
   /** The pooled body sprite for the `index`-th living enemy, grown on demand. */
@@ -214,6 +218,32 @@ export class BoardView {
       s.anchor.set(0.5, 0.5);
       this.enemySprites.push(s);
       this.enemies.addChild(s);
+    }
+    s.visible = true;
+    return s;
+  }
+
+  /** The pooled sprite for the `index`-th drawn mine, grown on demand. */
+  private mineArtSprite(index: number): Sprite {
+    let s = this.mineArtPool[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0.5, 0.5);
+      this.mineArtPool.push(s);
+      this.mineArt.addChild(s);
+    }
+    s.visible = true;
+    return s;
+  }
+
+  /** The pooled sprite for the `index`-th in-flight projectile, grown on demand. */
+  private projectileArtSprite(index: number): Sprite {
+    let s = this.projectileArtPool[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0.5, 0.5);
+      this.projectileArtPool.push(s);
+      this.projectileArt.addChild(s);
     }
     s.visible = true;
     return s;
@@ -349,7 +379,28 @@ export class BoardView {
     this.drawRoute(currentRoutes(state), board, cell);
 
     this.mines.clear();
-    for (const m of state.mines) drawMine(this.mines, m, board, cell, state.clock);
+    let mineArtIndex = 0;
+    for (const m of state.mines) {
+      const armed = state.clock >= m.armedAtTick;
+      const tex = getArtTexture(armed ? 'mine-armed' : 'mine-unarmed', Math.round(cell * 0.5));
+      if (tex === null) {
+        drawMine(this.mines, m, board, cell, state.clock);
+        continue;
+      }
+      const spr = this.mineArtSprite(mineArtIndex++);
+      spr.texture = tex;
+      spr.width = cell * 0.5;
+      spr.height = cell * 0.5;
+      spr.position.set(board.x + m.x * cell, board.y + m.y * cell);
+      // The file carries the lamp colour; alpha is the only runtime difference between states.
+      spr.alpha = armed ? 1 : 0.5;
+      spr.rotation = 0;
+      if (armed) {
+        const pr = cell * 0.16 * (1.35 + 0.15 * Math.sin(state.clock * 0.35));
+        this.mines.circle(board.x + m.x * cell, board.y + m.y * cell, pr).stroke({ width: 1, color: PAL.dark, alpha: 0.35 });
+      }
+    }
+    for (let i = mineArtIndex; i < this.mineArtPool.length; i++) this.mineArtPool[i].visible = false;
 
     this.towers.clear();
     this.enemyBodies.clear();
@@ -440,7 +491,7 @@ export class BoardView {
 
     // In-flight projectiles draw above enemies: a small square for a Flak shell, a tapered dart with
     // a fading trail for a missile.
-    drawProjectiles(this.overlay, state, board);
+    drawProjectiles(this.overlay, this.projectileArtSprite.bind(this), this.projectileArtPool, state, board);
 
     // The flying cursor arrows live above the enemy layer so they are always visible.
     let arrowIndex = 0;
@@ -1137,17 +1188,35 @@ function drawFlyingCursor(
 /** Draw in-flight projectiles as vector shapes: a shell is a small square, a missile a tapered dart. */
 function drawProjectiles(
   g: Graphics,
+  spriteAt: (index: number) => Sprite,
+  pool: Sprite[],
   state: RunState,
   board: { x: number; y: number; cell: number },
 ): void {
-  if (state.projectiles.length === 0) return;
+  if (state.projectiles.length === 0) {
+    for (const s of pool) s.visible = false;
+    return;
+  }
   const cell = board.cell;
+  let artIndex = 0;
   for (const p of state.projectiles) {
     const px = board.x + p.x * cell;
     const py = board.y + p.y * cell;
     const heading = Math.atan2(p.vy, p.vx);
     const cos = Math.cos(heading);
     const sin = Math.sin(heading);
+    // The SVGs are drawn nose-up, so the sprite's rotation is the heading plus a quarter turn.
+    const size = p.kind === 'shell' ? Math.round(cell * 0.16) : Math.round(cell * 0.5);
+    const tex = getArtTexture(p.kind, size);
+    if (tex !== null) {
+      const spr = spriteAt(artIndex++);
+      spr.texture = tex;
+      spr.width = size;
+      spr.height = size;
+      spr.position.set(px, py);
+      spr.rotation = heading + Math.PI / 2;
+      continue;
+    }
     if (p.kind === 'shell') {
       const s = Math.max(2, Math.round(cell * 0.12));
       g.rect(Math.round(px - s / 2), Math.round(py - s / 2), s, s).fill(0x2a2a2a).stroke({ width: 1, color: 0x0a0a0a });
@@ -1169,6 +1238,7 @@ function drawProjectiles(
       g.moveTo(tx, ty).lineTo(px, py).stroke({ width: 1, color: 0x0a0a0a, alpha: 0.6 });
     }
   }
+  for (let i = artIndex; i < pool.length; i++) pool[i].visible = false;
 }
 
 function drawTowerShape(

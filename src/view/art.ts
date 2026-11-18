@@ -19,7 +19,17 @@ import { currentAnimFrame, lifetimeFrame, secondsToWholeTicks, type AnimMeta } f
  * `scripts/smoke.mjs`, so an unreferenced SVG or a listed-but-absent one fails the smoke run.
  */
 
-export type ArtCategory = 'enemies' | 'towers' | 'branches' | 'board' | 'fx' | 'ui' | 'wall' | 'achievements';
+export type ArtCategory =
+  | 'enemies'
+  | 'towers'
+  | 'branches'
+  | 'board'
+  | 'fx'
+  | 'ui'
+  | 'wall'
+  | 'achievements'
+  | 'projectiles'
+  | 'mines';
 
 export interface ArtEntry {
   /** The unique asset name, e.g. `grunt`, `gun-base`, `gun-marksman`, `tile`. */
@@ -109,6 +119,12 @@ const WALL_NAMES = [
   'wall-damaged-3',
 ] as const;
 
+/** In-flight ordnance. One file per `ProjectileKind`, rotated to its heading by the renderer. */
+const PROJECTILE_NAMES = ['shell', 'missile'] as const;
+
+/** Mines, split by arming state so the lamp can change without tinting the file. */
+const MINE_NAMES = ['mine-armed', 'mine-unarmed'] as const;
+
 function entries(category: ArtCategory, dir: string, names: readonly string[]): ArtEntry[] {
   return names.map((name) => ({ name, category, file: `${dir}/${name}.svg` }));
 }
@@ -124,6 +140,8 @@ export const ART_MANIFEST: readonly ArtEntry[] = [
   ...entries('ui', 'ui', UI_NAMES),
   ...entries('wall', 'wall', WALL_NAMES),
   ...entries('achievements', 'achievements', ACHIEVEMENT_NAMES),
+  ...entries('projectiles', 'projectiles', PROJECTILE_NAMES),
+  ...entries('mines', 'mines', MINE_NAMES),
 ];
 
 const MANIFEST_BY_NAME: ReadonlyMap<string, ArtEntry> = new Map(ART_MANIFEST.map((e) => [e.name, e]));

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A flak shell in flight: a stubby dark casing with a hot rim, drawn to read at 4-6 px. The
+       artist can add the fuse and casing detail; keep the silhouette a fat round, not a square. -->
+  <circle cx="16" cy="16" r="8" fill="#2a2a2a" stroke="#0a0a0a" stroke-width="1.5"/>
+  <circle cx="16" cy="16" r="4.5" fill="#7a4a1e"/>
+  <circle cx="13.6" cy="13.4" r="2.2" fill="#ffcf6a"/>
+</svg>
