@@ -156,13 +156,14 @@ import { secondsToTicks, TICK_HZ, TICK_MS } from './time.ts';
 import {
   cloneProfile,
   defaultProfile,
-  specGain,
+  rpGain,
   SPEC_CAPS,
-  totalSpecs,
+  specLevelCost,
   type Profile,
   type SpecKind,
   type SpecLevels,
 } from './save.ts';
+import { effectsFor, type TreeEffects } from './tree.ts';
 
 /**
  * The run state and the functions that change it.
@@ -183,12 +184,25 @@ export const AUTO_WAVE_DELAY_TICKS = secondsToTicks(1.5);
 export const RAM_SALVAGE_PER_POINT = 5;
 const SPEC_DAMAGE_PCT_PER_POINT = 0.02;
 
-export function towerDamageMult(specs: SpecLevels): number {
-  return 1 + SPEC_DAMAGE_PCT_PER_POINT * specs.cpu;
+/** The passive prestige bonus: +0.5% tower and pointer damage per prestige level (docs §12.1). */
+const PRESTIGE_DAMAGE_PCT_PER_LEVEL = 0.005;
+
+export function towerDamageMult(s: RunState): number {
+  return 1 + SPEC_DAMAGE_PCT_PER_POINT * s.specs.cpu + s.treeEffects.towerDamagePct + s.rpEarned * PRESTIGE_DAMAGE_PCT_PER_LEVEL;
 }
 
-export function pointerDamageMult(specs: SpecLevels): number {
-  return 1 + SPEC_DAMAGE_PCT_PER_POINT * specs.gpu;
+export function pointerDamageMult(s: RunState): number {
+  return 1 + SPEC_DAMAGE_PCT_PER_POINT * s.specs.gpu + s.treeEffects.pointerDamagePct + s.rpEarned * PRESTIGE_DAMAGE_PCT_PER_LEVEL;
+}
+
+/** The build cost of a tower kind, after the tree's cost multiplier. */
+export function towerCost(s: RunState, kind: TowerKind): number {
+  return Math.round(TOWER_STATS[kind].cost * s.treeEffects.costMultiplier);
+}
+
+/** Whether a tower kind is unlocked for this run (Early Access unlocks everything at wave 1). */
+export function towerUnlocked(s: RunState, kind: TowerKind): boolean {
+  return s.treeEffects.unlockAllTowers || isTowerUnlocked(kind, s.wave);
 }
 
 /** One-shot things that happened during a tick; the view drains `events` to spawn effects. */
@@ -315,8 +329,12 @@ export interface RunState {
   };
   /** Permanent spec levels applied to this run (mirrors the profile, drives the bonuses). */
   specs: SpecLevels;
-  /** Banked, unspent specs — the currency the spec shop spends (mirrors the profile). */
-  unspentSpecs: number;
+  /** Unspent Restore Points — the currency the Restore tree and spec levels spend. */
+  rp: number;
+  /** Lifetime Restore Points earned — the prestige level (drives the passive bonus). */
+  rpEarned: number;
+  /** The profile's Restore-tree effects, merged into one value (identity for an empty tree). */
+  treeEffects: TreeEffects;
   /** Achievement ids unlocked so far this run (seeded from the profile). */
   achievements: Set<string>;
   /** Weak-point hits this run, for the sharpshooter achievement. */
@@ -380,8 +398,12 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     gpu: profile.specs.gpu,
     disk: profile.specs.disk,
   };
+  const treeEffects = effectsFor(profile);
+  const startSalvage =
+    STARTING_SALVAGE + specs.ram * RAM_SALVAGE_PER_POINT + treeEffects.startSalvageFlat + Math.floor(profile.lastSalvage * treeEffects.startSalvagePct);
+  const startIntegrity = STARTING_INTEGRITY + specs.disk + treeEffects.integrity;
   const exit = level.exits[0];
-  return {
+  const s: RunState = {
     grid,
     levelId: level.id,
     level,
@@ -395,10 +417,10 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     flyerField: buildAirField(grid.cols, grid.rows, blocked, exit),
     blocked,
     phase: 'build',
-    wave: 0,
+    wave: treeEffects.startingWave,
     clearedWaves: 0,
-    integrity: STARTING_INTEGRITY + specs.disk,
-    economy: createEconomy(STARTING_SALVAGE + specs.ram * RAM_SALVAGE_PER_POINT),
+    integrity: startIntegrity,
+    economy: createEconomy(startSalvage),
     pointer: createPointer(),
     towers: [],
     enemies: [],
@@ -430,7 +452,9 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
       rightPanel: { x: 1086, y: 70, w: 168, h: 680 },
     },
     specs,
-    unspentSpecs: profile.unspentSpecs,
+    rp: profile.rp,
+    rpEarned: profile.rpEarned,
+    treeEffects,
     achievements: new Set(profile.achievements),
     weakPointHits: 0,
     adsDismissed: 0,
@@ -441,7 +465,7 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     bossKilledByPointer: false,
     weakPointKills: 0,
     critHits: 0,
-    salvagePeak: STARTING_SALVAGE + specs.ram * RAM_SALVAGE_PER_POINT,
+    salvagePeak: startSalvage,
     soldTower: false,
     earlyCallsInARow: 0,
     clearedFlawlessWave: false,
@@ -451,11 +475,57 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     speed: 1,
     onboarding: profile.reboots === 0 && profile.achievements.length === 0,
     placedFirstTower: false,
-    autoWave: profile.autoWave,
+    autoWave: profile.autoWave || treeEffects.autoWave,
     autoWaveAtTick: 0,
     godMode: false,
     cheatsUsed: false,
   };
+  preloadTowers(s);
+  rebuildField(s);
+  return s;
+}
+
+/** Place the Preload node's free Gun towers near the spawn, without spending salvage. */
+function preloadTowers(s: RunState): void {
+  const count = s.treeEffects.preloadGuns;
+  if (count <= 0) return;
+  const spawn = spawnTile(s);
+  const offsets: readonly (readonly [number, number])[] = [
+    [1, 0],
+    [1, -1],
+    [1, 1],
+    [2, 0],
+    [2, -1],
+    [2, 1],
+    [3, 0],
+    [3, -1],
+    [3, 1],
+    [1, -2],
+    [1, 2],
+    [0, -1],
+    [0, 1],
+  ];
+  let placed = 0;
+  for (const [dc, dr] of offsets) {
+    if (placed >= count) break;
+    const col = spawn.col + dc;
+    const row = spawn.row + dr;
+    if (!inBounds(col, row)) continue;
+    if (tileAt(s.grid, col, row) !== 'buildable') continue;
+    if (toggleAtTile(s, col, row)) continue;
+    if (towerAt(s, col, row)) continue;
+    const idx = row * s.grid.cols + col;
+    if (wouldSeal(s, idx)) continue;
+    const tower = createTower(s.nextId++, 'gun', col, row);
+    tower.placedTick = s.clock;
+    if (s.treeEffects.startTier > 1) {
+      tower.tier = s.treeEffects.startTier as Tier;
+      refreshTowerHp(tower);
+    }
+    s.blocked.add(idx);
+    s.towers.push(tower);
+    placed++;
+  }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -505,12 +575,12 @@ export function selectedTower(s: RunState): Tower | undefined {
 
 export function canPlace(s: RunState, kind: TowerKind, col: number, row: number): boolean {
   if (s.phase !== 'build' && s.phase !== 'wave') return false;
-  if (!isTowerUnlocked(kind, s.wave)) return false;
+  if (!towerUnlocked(s, kind)) return false;
   if (!inBounds(col, row) || tileAt(s.grid, col, row) !== 'buildable') return false;
   if (toggleAtTile(s, col, row)) return false; // toggles are permanent map elements
   if (noBuildActive(s)) return false;
   if (towerAt(s, col, row)) return false;
-  if (!canAfford(s.economy, TOWER_STATS[kind].cost)) return false;
+  if (!canAfford(s.economy, towerCost(s, kind))) return false;
   return !wouldSeal(s, row * s.grid.cols + col);
 }
 
@@ -547,7 +617,7 @@ export function towerRangeMult(s: RunState): number {
 // Player actions (reducers)
 
 export function selectTower(s: RunState, kind: TowerKind | null): void {
-  if (kind !== null && !isTowerUnlocked(kind, s.wave)) return;
+  if (kind !== null && !towerUnlocked(s, kind)) return;
   s.selected = s.selected === kind ? null : kind;
   if (s.selected !== null) s.selectedTowerId = null;
 }
@@ -560,10 +630,14 @@ export function selectPlacedTower(s: RunState, tower: Tower): void {
 
 export function placeTower(s: RunState, kind: TowerKind, col: number, row: number): boolean {
   if (!canPlace(s, kind, col, row)) return false;
-  spend(s.economy, TOWER_STATS[kind].cost);
+  spend(s.economy, towerCost(s, kind));
   s.blocked.add(row * s.grid.cols + col);
   const tower = createTower(s.nextId++, kind, col, row);
   tower.placedTick = s.clock;
+  if (s.treeEffects.startTier > 1) {
+    tower.tier = s.treeEffects.startTier as Tier;
+    refreshTowerHp(tower);
+  }
   if (kind === 'cursor') {
     // The cursor's wander is a deterministic path seeded from the run's PRNG stream and the tower
     // id: the same seed reproduces the same wander, and a different seed drifts differently.
@@ -757,7 +831,7 @@ export function sellTower(s: RunState, col: number, row: number): boolean {
   if (noBuildActive(s)) return false;
   const t = towerAt(s, col, row);
   if (!t) return false;
-  const refund = sellValue(t);
+  const refund = sellValue(t, s.treeEffects.sellRefund);
   s.towers = s.towers.filter((x) => x.id !== t.id);
   s.blocked.delete(row * s.grid.cols + col);
   s.mines = s.mines.filter((m) => m.towerId !== t.id);
@@ -787,7 +861,7 @@ export function startRepair(s: RunState, col: number, row: number): boolean {
 
   t.repairStartHp = t.hp;
   t.repairMissing = repairHpToRestore(t);
-  t.repairDurationTicks = repairDurationTicks(t);
+  t.repairDurationTicks = repairDurationTicks(t, s.treeEffects.repairSpeedMult);
   t.repairReadyAt = s.clock + t.repairDurationTicks;
 
   // The tile is off the field while the repair runs, so the route re-paths immediately. Any breacher
@@ -965,11 +1039,12 @@ export function autoWaveStatus(s: RunState): string | null {
   return `Auto: next wave in ${remaining.toFixed(1)} s`;
 }
 
-/** Spend one banked spec on a permanent upgrade. Capped rows and an empty bank are refused. */
+/** Spend RP on a permanent spec level. The cost curves with the level; capped rows are refused. */
 export function buySpec(s: RunState, kind: SpecKind): boolean {
-  if (s.unspentSpecs <= 0) return false;
   if (s.specs[kind] >= SPEC_CAPS[kind]) return false;
-  s.unspentSpecs -= 1;
+  const cost = specLevelCost(s.specs[kind]);
+  if (s.rp < cost) return false;
+  s.rp -= cost;
   s.specs[kind] += 1;
   return true;
 }
@@ -980,13 +1055,23 @@ export interface RestartResult {
   profile: Profile;
 }
 
+/** The Restore Points this run would bank on a reboot, after the RP-gain modifier and Windows Update. */
+export function restartPointsGained(s: RunState, profile: Profile): number {
+  const effects = effectsFor(profile);
+  return Math.max(0, Math.floor(rpGain(s.economy.earned) * effects.rpGainMult) + effects.extraSpecsPerReboot);
+}
+
 export function restartWindows(s: RunState, profile: Profile): RestartResult {
-  const gained = specGain(s.economy.earned);
   const next = cloneProfile(profile);
-  next.unspentSpecs += gained;
   next.reboots += 1;
-  if (!s.cheatsUsed) next.bestWave = Math.max(next.bestWave, s.wave);
-  if (!s.cheatsUsed && !next.achievements.includes('reboot-50') && totalSpecs(next) >= 50) {
+  // A cheated run records nothing: no Restore Points, no best wave, no achievements (docs §12.4).
+  if (s.cheatsUsed) return { gained: 0, profile: next };
+  const gained = restartPointsGained(s, profile);
+  next.rp += gained;
+  next.rpEarned += gained;
+  next.lastSalvage = s.economy.earned;
+  next.bestWave = Math.max(next.bestWave, s.wave);
+  if (!next.achievements.includes('reboot-50') && next.rpEarned >= 50) {
     next.achievements.push('reboot-50');
   }
   return { gained, profile: next };
@@ -1026,7 +1111,7 @@ export function checkAchievements(s: RunState): string[] {
   if (s.earlyCallsInARow >= 3) add('early-call-streak');
   if (s.clearedFlawlessWave) add('flawless-wave');
   if (s.milestoneBossByPointer) add('milestone-boss-pointer');
-  if (s.unspentSpecs > 0) add('specs-banked');
+  if (s.rp > 0) add('specs-banked');
   if (s.clearedWaves > 0 && !LEVELS.some((l) => l.id === s.levelId)) add('custom-map-cleared');
 
   return unlocked;
@@ -1074,7 +1159,7 @@ export function pointerDown(s: RunState, x: number, y: number): boolean {
   const roll = nextCritRoll(s.rng, marked, weak);
   s.rng = roll.next;
   s.pointer.targetId = target.id;
-  const base = clickDamage(s.pointer) * relay.damage * pointerDamageMult(s.specs);
+  const base = clickDamage(s.pointer) * relay.damage * pointerDamageMult(s);
   const amount =
     base *
     comboMultiplier(s.pointer) *
@@ -2042,7 +2127,7 @@ function cursorStepOk(s: RunState, x: number, y: number): boolean {
 
 /** A cursor click's damage: half the player's click damage, pointer-sourced (no crit, no mark). */
 function cursorDamage(s: RunState, t: Tower): number {
-  return cursorClickDamage(t, clickDamage(s.pointer), pointerDamageMult(s.specs));
+  return cursorClickDamage(t, clickDamage(s.pointer), pointerDamageMult(s));
 }
 
 /** A cursor click: pointer damage on the target, then the clock gate re-arms. */
@@ -2290,7 +2375,7 @@ function fireTowers(s: RunState): void {
     const st = effectiveStats(t);
     if (st.damage <= 0 || st.fireInterval <= 0) continue; // beacon never fires
     const range = (st.range + t.auraRange) * towerRangeMult(s);
-    const dmg = st.damage * t.auraDamage * buff * towerDamageMult(s.specs);
+    const dmg = st.damage * t.auraDamage * buff * towerDamageMult(s);
 
     // Manual Override: while it is on, the marked enemy is this tower's target whenever it is in
     // range, overriding every targeting mode and lock. Pop-up shields are never pierced.
@@ -2652,7 +2737,7 @@ function applyReticle(s: RunState): void {
   damageEnemy(
     s,
     target,
-    dpt * relay.damage * comboMultiplier(p) * pointerDamageMult(s.specs) * (roll.crit ? CRIT_MULTIPLIER : 1),
+    dpt * relay.damage * comboMultiplier(p) * pointerDamageMult(s) * (roll.crit ? CRIT_MULTIPLIER : 1),
     'pointer',
     true,
     undefined,
