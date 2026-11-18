@@ -352,7 +352,13 @@ the tier-3 choice is just another Upgrade button, not a branch pair.
 | Frost | **Deep Freeze** — 60 % slow for 2.5 s | **Shard** — no slow; damage ×4, splash 0.6 |
 | Laser | **Focus** — pierce 8, +50 % damage | **Prism** — splits into 3 short beams at −40 % damage |
 | AA | **Flak** — shells burst on the target's predicted position, splash 1.2 tiles, full to flyers and half to ground; 4.0 damage, 0.9 s | **Missile** — 4 homing missiles per salvo, each worth a quarter of a hit; a missile that loses its target re-acquires the nearest flyer within **6 tiles of the missile**, not of the tower |
-| Beacon | **Command** — +30 % damage aura, no range bonus | **Relay** — extends pointer reach, +50 % pointer damage in radius |
+| Beacon | **Command** — +30 % damage aura *on top of* the base +60 % (so +90 %), no range bonus | **Relay** — extends pointer reach, +50 % pointer damage in radius |
+
+Branch effects on the Beacon's aura add to the base rather than replacing it, the same as every
+other numeric branch effect. This is not a detail: when the two aura fields were assigned instead,
+Command quietly landed *below* an un-branched Beacon (+30 % against +60 %), and the branch a player
+paid for made the tower worse. The tooltips show the resulting percentage, so a wrong number is now
+visible on screen rather than buried in `effectiveStats`.
 | Wall | **Bulwark** — hit points doubled again | **Mesh** — hit points doubled and it blocks flyers |
 | Cursor | **Overclock** — rate ×1.8, per-click damage ×0.6 | **Wide Search** — radius ×1.35, rate ×0.7 |
 

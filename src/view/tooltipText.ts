@@ -168,6 +168,15 @@ export function paletteTooltipLines(kind: TowerKind): string[] {
   if (kind === 'repair') {
     return ['Repair  $220', 'heals 2 HP/s to towers within 4.5 tiles'];
   }
+  if (kind === 'beacon') {
+    const b = TOWER_STATS.beacon;
+    return [
+      `Beacon  $${formatNumber(b.cost)}`,
+      `+${Math.round(b.auraDamage * 100)}% damage to every tower within ${b.range.toFixed(1)} tiles`,
+      'It deals no damage itself — it makes the towers around it hit harder',
+      'Cursors are pointer damage and take nothing from a Beacon',
+    ];
+  }
   if (kind === 'aa') {
     return ['AA  $40', 'anti-air: flyers only, 2x damage to flyers', 'Range 3.4 · Damage 2.6 · 1.8/s', 'Holds fire on ground-only waves'];
   }
@@ -231,6 +240,27 @@ export function towerTooltipLines(
               : 'Closed — blocks ground'
             : 'Blocks ground only';
     const lines = [name, hp, blocks, `Sell $${formatNumber(sellValue(tower))}`];
+    if (isFullyUpgraded(tower)) lines.push('Fully upgraded');
+    return lines;
+  }
+
+  if (tower.kind === 'beacon') {
+    const st = effectiveStats(tower);
+    const radius = st.range + tower.auraRange;
+    const aura = Math.round(st.auraDamage * 100);
+    const lines = [
+      name,
+      `+${aura}% damage to every tower within ${radius.toFixed(1)} tiles`,
+      'Deals no damage itself · Cursors take nothing from it',
+    ];
+    if (tower.branch === 'B') {
+      lines.push(
+        `Relay: +${Math.round(st.auraPointerDamage * 100)}% pointer damage and +${st.auraPointerRange.toFixed(2)} tiles of click reach inside the same radius`,
+      );
+    } else if (tower.branch === 'A') {
+      lines.push('Command: the aura is the whole of it, and it is stronger for it');
+    }
+    lines.push(`Sell $${formatNumber(sellValue(tower))}`);
     if (isFullyUpgraded(tower)) lines.push('Fully upgraded');
     return lines;
   }
@@ -425,6 +455,16 @@ export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[
 
   const next = (tower.tier + 1) as Tier;
 
+  if (tower.kind === 'beacon') {
+    const before = effectiveStats(tower);
+    const after = effectiveStats({ ...tower, tier: next, branch: tower.branch });
+    return [[
+      { text: `${TOWER_STATS.beacon.name} T${tower.tier} → T${next} — aura +${Math.round(before.auraDamage * 100)}% → ` },
+      good(`+${Math.round(after.auraDamage * 100)}%`),
+      { text: `, $${formatNumber(cost)}` },
+    ]];
+  }
+
   if (tower.kind === 'wall') {
     const before = wallMaxHp(tower.tier, tower.branch);
     const after = wallMaxHp(next, tower.branch);
@@ -475,6 +515,22 @@ export function branchTooltipLines(tower: Tower, branch: Branch, salvage: number
   if (salvage < cost) return [cannotAffordText(salvage, cost)];
 
   const name = branchName(tower.kind, branch);
+
+  if (tower.kind === 'beacon') {
+    const before = effectiveStats(tower);
+    const after = effectiveStats({ ...tower, tier: 3, branch });
+    const segments: TooltipSegment[] = [
+      { text: `${name} — aura +${Math.round(before.auraDamage * 100)}% → ` },
+      good(`+${Math.round(after.auraDamage * 100)}%`),
+    ];
+    if (branch === 'B') {
+      segments.push({
+        text: `, plus +${Math.round(after.auraPointerDamage * 100)}% pointer damage and +${after.auraPointerRange.toFixed(2)} tiles of click reach inside the radius`,
+      });
+    }
+    segments.push({ text: `, $${formatNumber(cost)}` });
+    return [segments];
+  }
 
   if (tower.kind === 'cannon' && branch === 'B') {
     const secs = (MINE_EXPIRE_TICKS / TICK_HZ).toFixed(0);

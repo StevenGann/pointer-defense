@@ -906,8 +906,11 @@ export function effectiveStats(tower: Tower): EffectiveStats {
       if (e.targetsFlyersOnly !== undefined) targetsFlyersOnly = e.targetsFlyersOnly;
       if (e.chainCount !== undefined) chainCount = e.chainCount;
       if (e.chainDamage !== undefined) chainDamage = e.chainDamage;
-      if (e.auraDamage !== undefined) auraDamage = e.auraDamage;
-      if (e.auraRange !== undefined) auraRange = e.auraRange;
+      // Aura magnitudes are *additive* onto the base, like every other numeric branch effect.
+      // They were assignments, which silently made Command (+30%) weaker than the un-branched
+      // Beacon (+60%) — the design text reads "+30% damage aura" as the branch's contribution.
+      if (e.auraDamage !== undefined) auraDamage += e.auraDamage;
+      if (e.auraRange !== undefined) auraRange += e.auraRange;
       if (e.auraPointerDamage !== undefined) auraPointerDamage = e.auraPointerDamage;
       if (e.auraPointerRange !== undefined) auraPointerRange = e.auraPointerRange;
     }

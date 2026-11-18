@@ -944,6 +944,36 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 }
 
 
+
+{
+  // 46aa. The Beacon's branch is a real upgrade, not a silent downgrade: Command *adds* +30% to the
+  // +60% base aura (the branch effect was assigned where every other numeric effect adds), and both
+  // the placed-tower tooltip and the branch preview say so in numbers.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'beacon', 5, 5);
+  const b = towerAt(s, 5, 5);
+  const base = effectiveStats(b);
+  check(Math.abs(base.auraDamage - 0.6) < 1e-9, `an un-branched Beacon is +60% (${base.auraDamage})`);
+  b.branch = 'A';
+  b.tier = 3;
+  const command = effectiveStats(b);
+  check(Math.abs(command.auraDamage - 0.9) < 1e-9, `Command is +90%, not +30% (${command.auraDamage})`);
+  b.branch = 'B';
+  const relay = effectiveStats(b);
+  check(Math.abs(relay.auraDamage - 0.6) < 1e-9 && Math.abs(relay.auraPointerDamage - 0.5) < 1e-9,
+    'Relay keeps the +60% aura and adds +50% pointer damage');
+  const relayLines = towerTooltipLines(b, s.clock);
+  check(relayLines.some((l) => l.includes('+60% damage')), `the Relay tooltip states its aura (${relayLines.join(' | ')})`);
+  check(relayLines.some((l) => l.includes('50% pointer damage') && l.includes('0.75')),
+    `the Relay tooltip states the pointer bonus (${relayLines.join(' | ')})`);
+  b.branch = 'A';
+  const cmdLines = towerTooltipLines(b, s.clock);
+  check(cmdLines.some((l) => l.includes('+90% damage')), `the Command tooltip states +90% (${cmdLines.join(' | ')})`);
+  const palette = paletteTooltipLines('beacon');
+  check(palette.some((l) => l.includes('+60% damage')), `the palette says what a Beacon does (${palette.join(' | ')})`);
+  check(paletteTooltipLines('beacon').some((l) => l.includes('Cursors')), 'the palette warns that Cursors take nothing');
+}
 {
   // 46z. A Cursor tower's range ring is centred on its own cursor, not on the tower tile.
   const s = allUnlocked();
