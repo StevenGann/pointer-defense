@@ -16,6 +16,7 @@ import {
   towerUnlockWave,
   TOWER_KINDS,
   TOWER_STATS,
+  isTowerKind,
   type TowerKind,
 } from '../core/towers.ts';
 import { type SpecKind } from '../core/save.ts';
@@ -98,16 +99,9 @@ export interface MouseContext {
 
 /** HUD actions the No-Build modifier disables (placing, upgrading, branching, selling, repairing,
  *  and retargeting). Used to surface a status message when a greyed button is clicked anyway. */
-const NO_BUILD_HUD_ACTIONS: ReadonlySet<HudAction> = new Set([
-  'gun',
-  'cannon',
-  'taser',
-  'frost',
-  'laser',
-  'beacon',
-  'repair',
-  'wall',
-  'cursor',
+const NO_BUILD_HUD_ACTIONS: ReadonlySet<HudAction> = new Set<HudAction>([
+  // Every tower kind, from the one list that defines them, so a new tower is covered without an edit here.
+  ...TOWER_KINDS,
   'upgrade',
   'branchA',
   'branchB',
@@ -318,18 +312,14 @@ export class MouseController {
   };
 
   private dispatch(hud: HudAction, s: RunState): void {
+    // Every tower kind in the palette selects a tower. Driving this off TOWER_KINDS rather than a hand
+    // written case list is what stops a new tower from being drawn but unclickable: the AA tower shipped
+    // with a button and no case here, so its clicks fell through the switch and did nothing.
+    if (isTowerKind(hud)) {
+      selectTower(s, hud);
+      return;
+    }
     switch (hud) {
-      case 'gun':
-      case 'cannon':
-      case 'taser':
-      case 'frost':
-      case 'laser':
-      case 'beacon':
-      case 'repair':
-      case 'wall':
-      case 'cursor':
-        selectTower(s, hud);
-        break;
       case 'pointer':
         upgradePointer(s);
         break;
@@ -362,7 +352,7 @@ export class MouseController {
         if (tower) sellTower(s, tower.col, tower.row);
         break;
       }
-      case 'repair': {
+      case 'repairTower': {
         const tower = selectedTower(s);
         if (tower) startRepair(s, tower.col, tower.row);
         break;

@@ -43,6 +43,11 @@ export interface TowerStats {
 
 export const TOWER_KINDS: readonly TowerKind[] = ['gun', 'cannon', 'taser', 'frost', 'laser', 'aa', 'beacon', 'repair', 'wall', 'cursor'];
 
+/** True when an arbitrary value is a tower kind. Used where a hud action may be a tower or a control. */
+export function isTowerKind(v: unknown): v is TowerKind {
+  return typeof v === 'string' && (TOWER_KINDS as readonly string[]).includes(v);
+}
+
 /**
  * The run wave at which each tower kind becomes available. Gun and Wall are the starting pair,
  * available from the initial build phase (wave 0); every other kind unlocks at the listed wave and

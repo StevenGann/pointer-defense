@@ -219,6 +219,11 @@ Repair tower keeps a plain upgrade ladder for now.
 | **Frost** | 6 | 70 | 2.2 | 1, slows to 30 % speed for 3.0 s | 0.60 s | instant | closest (fixed) | utility | in front of the damage |
 | **Laser** | 11 | 70 | 3.4 | 11, pierces 8 | 0.80 s | 150°/s | first (fixed) | straight lines | corridors you deliberately left open |
 | **AA** | 16 | 40 | 3.4 | 2.6, flyers only, 2× vs flyers | 0.55 s | 540°/s | player's choice | dedicated anti-air | flyer-heavy waves |
+
+Every **other** tower deals 0.25× its damage to a flyer (`FLYER_OFF_KIND_DAMAGE`). Air is the AA
+tower's job: a gun line that clears every ground wave still leaks flyers without one, because a Gun's
+3 damage lands as 0.75. The floor on armour damage is `min(1, dmg)`, not a flat 1, so that reduction is
+not rounded back up to a full point.
 | **Beacon** | 8 | 90 | 3.5 | none | — | — (still) | — | +60 % damage to towers in radius | a dense cluster worth buffing |
 | **Repair** | 18 | 220 | 4.5 | none (heals 2 HP/s) | — | — (still) | — | heals damaged towers in radius | a cluster of towers worth keeping alive |
 | **Wall** | 1 | 8 | — | none | — | — (still) | — | blocks the route, has hit points | a long maze made cheap |

@@ -55,7 +55,7 @@ export type HudAction =
   | 'map'
   | 'upgrade'
   | 'sell'
-  | 'repair'
+  | 'repairTower'
   | 'target'
   | 'branchA'
   | 'branchB'
@@ -523,7 +523,7 @@ export function hudControlAt(l: Layout, s: RunState, px: number, py: number): Hu
       const repairing = isRepairing(tower, s.clock);
       const full = repairHpToRestore(tower) <= 0;
       const affordableRepair = canAfford(s.economy, repairCost(tower));
-      return { action: 'repair', enabled: !frozen && !repairing && !full && affordableRepair };
+      return { action: 'repairTower', enabled: !frozen && !repairing && !full && affordableRepair };
     }
     if (pointInRect(h.detail.sell, px, py)) return { action: 'sell', enabled: !frozen };
   } else {
@@ -1001,7 +1001,7 @@ export class HudView {
         const hp = repairHpToRestore(tower);
         const cost = repairCost(tower);
         const enabled = !frozen && !repairing && hp > 0 && canAfford(s.economy, cost);
-        drawButton(g, d.repair, enabled, hoverHud === 'repair');
+        drawButton(g, d.repair, enabled, hoverHud === 'repairTower');
         this.repairButton.text = repairing
           ? `Repairing — ${repairRemainingSeconds(tower, s.clock).toFixed(1)} s`
           : hp <= 0

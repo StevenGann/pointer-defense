@@ -9,7 +9,7 @@
 // Then the maze: sealed placements are rejected, walls force detours, the distance field reports
 // sealed boards, and flyers beat grunts across the board.
 
-import {
+import { FLYER_OFF_KIND_DAMAGE,
   createRunState,
   cursorMaintenanceStatus,
   placeTower,
@@ -681,6 +681,37 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   for (let i = 0; i < 60 && aa.damageDealt === 0; i++) tick(s);
   check(aa.damageDealt > 0, 'AA fires at a flyer in range');
   check(Math.abs(aa.damageDealt - 5.2) < 1e-6, `AA deals 2x nominal damage to a flyer (${aa.damageDealt.toFixed(2)} vs 5.2)`);
+}
+{
+  // Air belongs to the AA. Every other tower only chips a flyer, so a ground-winning line still leaks
+  // without one: a Gun's 3 damage lands as 0.75, which is 7x worse than the AA's 5.2.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 5, 5);
+  const gun = towerAt(s, 5, 5);
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+  s.enemies.push(flyer);
+  for (let i = 0; i < 120 && gun.damageDealt === 0; i++) tick(s);
+  const want = 3 * FLYER_OFF_KIND_DAMAGE;
+  check(Math.abs(gun.damageDealt - want) < 1e-6,
+    `a Gun deals ${FLYER_OFF_KIND_DAMAGE}x to a flyer (${gun.damageDealt.toFixed(2)} vs ${want.toFixed(2)})`);
+  check(5.2 / gun.damageDealt > 6, 'the AA hits a flyer at least six times harder than a Gun');
+}
+{
+  // Every tower in the palette must be clickable. This is the AA bug in general form: a kind drawn in
+  // the palette with no dispatch case is a button that does nothing.
+  const layout = computeLayout(1280, 800);
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  const h = computeHud(layout, s);
+  const dead = [];
+  for (const t of h.towers) {
+    const hit = hudControlAt(layout, s, t.rect.x + t.rect.w - 4, t.rect.y + t.rect.h / 2);
+    if (!hit || hit.action !== t.kind || !hit.enabled) dead.push(t.kind);
+  }
+  check(dead.length === 0, `every palette tower is a live control (dead: ${dead.join(', ') || 'none'})`);
+  check(h.towers.some((t) => t.kind === 'aa'), 'the AA tower has a palette button');
 }
 {
   // Flak splash: a flyer takes full damage, a ground unit inside the radius takes half, and a ground

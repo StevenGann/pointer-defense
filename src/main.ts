@@ -917,7 +917,7 @@ function hudTooltipLines(action: HudAction, s: RunState): TooltipLine[] {
     case 'sell':
       if (noBuildActive(s)) return [NO_BUILD_MESSAGE];
       return tower ? sellTooltipLines(tower) : [];
-    case 'repair':
+    case 'repairTower':
       if (noBuildActive(s)) return [NO_BUILD_MESSAGE];
       return tower ? repairTooltipLines(tower, s.clock, s.economy.salvage) : [];
     case 'target': {

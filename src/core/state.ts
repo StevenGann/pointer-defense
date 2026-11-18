@@ -1695,9 +1695,20 @@ function acquireTargets(s: RunState, t: Tower, st: EffectiveStats, range: number
   return out.slice(0, limit);
 }
 
-function perEnemyDamage(st: EffectiveStats, e: Enemy, dmg: number): number {
+/**
+ * How much of a non-AA tower's damage reaches a flyer. Air belongs to the AA tower: everything else only
+ * chips at it, so a gun line that wins every ground wave still needs anti-air or it leaks. Chosen as a
+ * hypothesis — sharp enough that the AA earns its slot, not so sharp that a flyer wave is unanswerable
+ * without one.
+ */
+export const FLYER_OFF_KIND_DAMAGE = 0.25;
+
+function perEnemyDamage(st: EffectiveStats, e: Enemy, dmg: number, towerKind: TowerKind): number {
   let d = dmg;
-  if (baseEnemyKind(e.kind) === 'flyer') d *= st.flyerDamageMult;
+  if (baseEnemyKind(e.kind) === 'flyer') {
+    d *= st.flyerDamageMult;
+    if (towerKind !== 'aa') d *= FLYER_OFF_KIND_DAMAGE;
+  }
   if (baseEnemyKind(e.kind) === 'shielded') d *= st.shieldedDamageMult;
   return d;
 }
@@ -1710,7 +1721,7 @@ function applySlow(s: RunState, e: Enemy, factor: number, ticks: number): void {
 }
 
 function hitEnemy(s: RunState, t: Tower, st: EffectiveStats, e: Enemy, dmg: number): void {
-  damageEnemy(s, e, perEnemyDamage(st, e, dmg), 'tower', st.ignoresArmour, t);
+  damageEnemy(s, e, perEnemyDamage(st, e, dmg, t.kind), 'tower', st.ignoresArmour, t);
   if (st.slowFactor < 1 && st.slowTicks > 0 && !e.dead) applySlow(s, e, st.slowFactor, st.slowTicks);
 }
 
@@ -2415,7 +2426,11 @@ function damageEnemy(
     if (e.shield > 0) return;
     // Armour and plating are both flat per-hit reductions; a tower that ignores armour ignores both
     // (the Taser), and the pointer never passes through here at all.
-    if (!ignoresArmour) dmg = Math.max(1, dmg - ENEMY_STATS[e.kind].armour - ENEMY_STATS[e.kind].plating);
+    // The floor exists so armour never makes a hit literally zero. It is `min(1, dmg)` rather than a flat
+    // 1 so a hit that was already reduced below 1 - a non-AA tower chipping a flyer - stays reduced.
+    if (!ignoresArmour) {
+      dmg = Math.max(Math.min(1, dmg), dmg - ENEMY_STATS[e.kind].armour - ENEMY_STATS[e.kind].plating);
+    }
   }
   if (dmg <= 0) return;
   e.hp -= dmg;
