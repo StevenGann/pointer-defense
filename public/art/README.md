@@ -122,3 +122,28 @@ branch mark, and the Repair tower has no branches.
 2. `src/view/art.ts` already lists it in `ART_MANIFEST`; the game picks it up on the next load.
 3. `npm run smoke` fails if a file is unreferenced or missing, so the manifest and the directory can
    never drift apart.
+
+## Collaborating on art
+
+Art is expected to be edited by more than one person, including someone pushing SVG files directly.
+
+- **Keep filenames stable.** The engine finds a file by its name in the manifest
+  (`src/view/art.ts`), not by scanning the directory. Renaming a file without updating the manifest
+  turns the sprite off and the code silently falls back to the old procedural drawing.
+- **Adding a brand-new asset** (a new enemy, a new tower, a new branch) means two edits: the file in
+  `public/art/`, and one line in `ART_MANIFEST`. A new file with no manifest entry is inert, and the
+  smoke run will flag it as unreferenced.
+- **Iterate freely.** A missing or malformed file degrades to the procedural drawing and logs a
+  warning, so art can be pushed in a half-finished state without breaking a build.
+
+### Conflicts: the more complex file wins
+
+When two branches change the same SVG, the **more complex** version wins — the more elaborate drawing
+is the one closest to final art. Do not hand-merge path data; it produces neither version.
+
+    node scripts/art-merge.mjs            # dry run: reports each conflicted SVG and the winner
+    node scripts/art-merge.mjs --apply    # keeps the more complex side and stages it
+
+Complexity is `100 x element count + path command count + stripped byte length / 100`, so more shapes
+dominate, path detail breaks ties, and size settles the rest. The script only touches `*.svg` conflicts;
+resolve everything else by hand, then rerun it.
