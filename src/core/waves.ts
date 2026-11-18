@@ -159,14 +159,14 @@ export function typeBossUnlockWave(kind: EnemyKind): number {
 
 /**
  * Whether a wave carries a single type boss. The three unlock waves (12/18/24) are the bosses'
- * first appearance; after that one boss rides every fifth wave (24 + 5k). The marker bosses at
+ * first appearance; after that one boss rides every eighth wave (24 + 8k). The marker bosses at
  * 10/25/50/75/100 are never replaced — these waves simply do not coincide with a type-boss wave in
  * pass 1, though a type boss may later share a marker wave once pass 3 widens the schedule.
  */
 export function isTypeBossWave(wave: number): boolean {
   if (wave < 12 || wave > WAVE_COUNT) return false;
   if (wave === 12 || wave === 18 || wave === 24) return true;
-  return wave > 24 && (wave - 24) % 5 === 0;
+  return wave > 24 && (wave - 24) % 8 === 0;
 }
 
 /**

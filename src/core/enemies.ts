@@ -39,10 +39,10 @@ const GRUNT_SPEED = 1.6;
 export const BASTION_SHIELD_LAYERS = 3;
 /** Each Bastion layer is worth the base Shielded shield (15 points). */
 export const BASTION_SHIELD_LAYER_VALUE = 15;
-/** The Warden aura's flat shield grant, radius and 2 s clock. */
-export const WARDEN_SHIELD = 15;
-export const WARDEN_RADIUS = 3.5;
-export const WARDEN_INTERVAL_TICKS = TICK_HZ * 2;
+/** The Warden aura's flat shield grant, radius and 3 s clock. */
+export const WARDEN_SHIELD = 8;
+export const WARDEN_RADIUS = 3.0;
+export const WARDEN_INTERVAL_TICKS = TICK_HZ * 3;
 /** The Pacer's aura radius: enemies inside move at the Pacer's speed or their own, whichever is faster. */
 export const PACER_AURA_RADIUS = 3;
 
@@ -84,9 +84,9 @@ export const ENEMY_STATS: Readonly<Record<EnemyKind, EnemyStats>> = {
   boss: { name: 'Boss', hp: 450, speed: 0.8, radius: 0.55, armour: 6, shield: 120, value: 120, wallDps: 0, integrity: 3, scale: 1 },
   breacher: { name: 'Breacher', hp: 55, speed: 0.6, radius: 0.42, armour: 0, shield: 0, value: 14, wallDps: 12, integrity: 1, scale: 1 },
   popup: { name: 'Pop-up', hp: 60, speed: 0.7, radius: 0.4, armour: 0, shield: 0, value: 18, wallDps: 0, integrity: 0, scale: 1 },
-  'grunt-boss': { name: 'Sergeant', hp: 200, speed: 0.55, radius: 0.48, armour: 0, shield: 0, value: 24, wallDps: 0, integrity: 4, scale: 1.6 },
-  'runner-boss': { name: 'Pacer', hp: 60, speed: 0.85, radius: 0.27, armour: 0, shield: 0, value: 36, wallDps: 0, integrity: 3, scale: 1.5 },
-  'shielded-boss': { name: 'Bastion', hp: 240, speed: 0.45, radius: 0.576, armour: 2, shield: BASTION_SHIELD_LAYERS * BASTION_SHIELD_LAYER_VALUE, value: 60, wallDps: 0, integrity: 4, scale: 1.6 },
+  'grunt-boss': { name: 'Sergeant', hp: 120, speed: 0.55, radius: 0.48, armour: 0, shield: 0, value: 24, wallDps: 0, integrity: 4, scale: 1.6 },
+  'runner-boss': { name: 'Pacer', hp: 40, speed: 0.85, radius: 0.27, armour: 0, shield: 0, value: 36, wallDps: 0, integrity: 3, scale: 1.5 },
+  'shielded-boss': { name: 'Bastion', hp: 150, speed: 0.45, radius: 0.576, armour: 2, shield: BASTION_SHIELD_LAYERS * BASTION_SHIELD_LAYER_VALUE, value: 60, wallDps: 0, integrity: 4, scale: 1.6 },
 };
 
 /**

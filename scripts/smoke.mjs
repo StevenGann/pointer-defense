@@ -860,7 +860,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     h ^= table.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
-  check((h >>> 0).toString(16) === 'c1a1a62', `waves 1..100 balance table unchanged (hash ${(h >>> 0).toString(16)})`);
+  check((h >>> 0).toString(16) === '96749030', `waves 1..100 balance table unchanged (hash ${(h >>> 0).toString(16)})`);
 }
 
 {
@@ -4159,16 +4159,16 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   const sergeant = ENEMY_STATS['grunt-boss'];
   const pacer = ENEMY_STATS['runner-boss'];
   const bastion = ENEMY_STATS['shielded-boss'];
-  check(sergeant.name === 'Sergeant' && sergeant.hp === 200, `Sergeant is 10x grunt HP (${sergeant.hp})`);
+  check(sergeant.name === 'Sergeant' && sergeant.hp === 120, `Sergeant is 6x grunt HP (${sergeant.hp})`);
   check(sergeant.speed === 0.55 && sergeant.scale === 1.6 && sergeant.integrity === 4,
     `Sergeant speed/scale/integrity (${sergeant.speed}/${sergeant.scale}/${sergeant.integrity})`);
   check(sergeant.radius === 0.3 * 1.6, `Sergeant radius is grunt x1.6 (${sergeant.radius})`);
   check(sergeant.value === 24, `Sergeant kill value is 6x grunt (${sergeant.value})`);
-  check(pacer.name === 'Pacer' && pacer.hp === 60 && pacer.speed === 0.85 && pacer.scale === 1.5,
+  check(pacer.name === 'Pacer' && pacer.hp === 40 && pacer.speed === 0.85 && pacer.scale === 1.5,
     `Pacer stats (${pacer.hp}/${pacer.speed}/${pacer.scale})`);
   check(pacer.integrity === 3 && pacer.radius === 0.18 * 1.5 && pacer.value === 36,
     `Pacer integrity/radius/value (${pacer.integrity}/${pacer.radius}/${pacer.value})`);
-  check(bastion.name === 'Bastion' && bastion.hp === 240 && bastion.speed === 0.45 && bastion.scale === 1.6,
+  check(bastion.name === 'Bastion' && bastion.hp === 150 && bastion.speed === 0.45 && bastion.scale === 1.6,
     `Bastion stats (${bastion.hp}/${bastion.speed}/${bastion.scale})`);
   check(bastion.integrity === 4 && bastion.armour === 2 && bastion.value === 60,
     `Bastion integrity/armour/value (${bastion.integrity}/${bastion.armour}/${bastion.value})`);
@@ -4244,7 +4244,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   s.phase = 'wave';
   s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const bastion = stationary(1, 'shielded-boss', 24, 5.5, 5.5);
-  const grunt = stationary(2, 'grunt', 24, 5.5, 6.5); // 1 tile from the Bastion, inside 3.5
+  const grunt = stationary(2, 'grunt', 24, 5.5, 6.5); // 1 tile from the Bastion, inside 3.0
   s.enemies.push(bastion, grunt);
 
   for (let i = 0; i < WARDEN_INTERVAL_TICKS; i++) tick(s);
@@ -4256,7 +4256,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   grunt.shield = 5;
   for (let i = 0; i < WARDEN_INTERVAL_TICKS; i++) tick(s);
   check(grunt.shield === 5, 'the Warden never refreshes an enemy that already has shield');
-  check(WARDEN_RADIUS === 3.5, `the Warden radius is 3.5 tiles (${WARDEN_RADIUS})`);
+  check(WARDEN_RADIUS === 3.0, `the Warden radius is 3.0 tiles (${WARDEN_RADIUS})`);
 }
 
 {
@@ -4297,7 +4297,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
 }
 
 {
-  // 39g. The spawn schedule: first appearance at the unlock wave, never before, every fifth wave
+  // 39g. The spawn schedule: first appearance at the unlock wave, never before, every eighth wave
   // after that, favouring the newest type, and never replacing a marker boss.
   check(typeBossUnlockWave('grunt-boss') === 12, 'Sergeant unlocks at wave 12');
   check(typeBossUnlockWave('runner-boss') === 18, 'Pacer unlocks at wave 18');
@@ -4309,7 +4309,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(buildSchedule(12).filter((sp) => sp.kind === 'grunt-boss').length === 1, 'wave 12 schedule has one Sergeant');
   check(buildSchedule(18).filter((sp) => sp.kind === 'runner-boss').length === 1, 'wave 18 schedule has one Pacer');
   check(buildSchedule(24).filter((sp) => sp.kind === 'shielded-boss').length === 1, 'wave 24 schedule has one Bastion');
-  for (const w of [29, 34, 39, 44, 49, 54, 59]) {
+  for (const w of [32, 40, 48, 56, 64, 72, 80, 88, 96]) {
     check(isTypeBossWave(w), `wave ${w} is a type-boss wave`);
     check(buildSchedule(w).filter((sp) => sp.kind.endsWith('-boss')).length === 1, `wave ${w} carries one type boss`);
   }
@@ -4317,8 +4317,8 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     check(buildSchedule(w).filter((sp) => sp.kind.endsWith('-boss')).length === 0,
       `a type boss never replaces the marker boss on wave ${w}`);
   }
-  check(typeBossKindForWave(29) === typeBossKindForWave(29), 'type-boss selection is deterministic');
-  check(isTypeBossWave(29) && !isTypeBossWave(28) && !isTypeBossWave(100), 'the fifth-wave cadence holds after wave 24');
+  check(typeBossKindForWave(32) === typeBossKindForWave(32), 'type-boss selection is deterministic');
+  check(isTypeBossWave(32) && !isTypeBossWave(31) && !isTypeBossWave(100), 'the eighth-wave cadence holds after wave 24');
 }
 
 {
