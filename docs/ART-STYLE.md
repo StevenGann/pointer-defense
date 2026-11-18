@@ -127,7 +127,7 @@ Do not bake any of these into a file.
 |---|---|---|
 | Health bar | A thin bar at the top of the tile | Damage state |
 | Range ring | A 1 px dashed navy circle | Shown on hover and while placing |
-| Placement preview | A ghost of the tower plus the range ring | Where the next tower would go. The ghost is drawn by code and does not use your file |
+| Placement preview | A ghost of the tower plus the range ring | Where the next tower would go. The ghost reuses your base and turret art at 50% alpha, so it reads as the same tower |
 | Shield ring | A cyan ring outside the body | Shield strength |
 | Weak-point notch | A short white tick on the leading edge | An aimed click pays double |
 | Slow arc | A pale blue arc | Frost is on this enemy |
