@@ -1,6 +1,478 @@
 {
   "assets": [
     {
+      "name": "achievements/_placeholder",
+      "frames": 1
+    },
+    {
+      "name": "achievements/aa-flak",
+      "frames": 1
+    },
+    {
+      "name": "achievements/ad-collector",
+      "frames": 1
+    },
+    {
+      "name": "achievements/ad-ignore",
+      "frames": 1
+    },
+    {
+      "name": "achievements/all-help",
+      "frames": 1
+    },
+    {
+      "name": "achievements/beacon-buff",
+      "frames": 1
+    },
+    {
+      "name": "achievements/beacon-field",
+      "frames": 1
+    },
+    {
+      "name": "achievements/boss-10",
+      "frames": 1
+    },
+    {
+      "name": "achievements/boss-by-pointer",
+      "frames": 1
+    },
+    {
+      "name": "achievements/boss-first-wave",
+      "frames": 1
+    },
+    {
+      "name": "achievements/boss-no-leak",
+      "frames": 1
+    },
+    {
+      "name": "achievements/branch-first",
+      "frames": 1
+    },
+    {
+      "name": "achievements/cannon-splash",
+      "frames": 1
+    },
+    {
+      "name": "achievements/carrier-brood",
+      "frames": 1
+    },
+    {
+      "name": "achievements/clean-wave",
+      "frames": 1
+    },
+    {
+      "name": "achievements/click-combo",
+      "frames": 1
+    },
+    {
+      "name": "achievements/click-idle",
+      "frames": 1
+    },
+    {
+      "name": "achievements/crit-100",
+      "frames": 1
+    },
+    {
+      "name": "achievements/crit-first",
+      "frames": 1
+    },
+    {
+      "name": "achievements/crit-hits",
+      "frames": 1
+    },
+    {
+      "name": "achievements/cursor-first",
+      "frames": 1
+    },
+    {
+      "name": "achievements/cursor-repair",
+      "frames": 1
+    },
+    {
+      "name": "achievements/custom-map-cleared",
+      "frames": 1
+    },
+    {
+      "name": "achievements/dreadnought-kill",
+      "frames": 1
+    },
+    {
+      "name": "achievements/early-call-10",
+      "frames": 1
+    },
+    {
+      "name": "achievements/early-call-streak",
+      "frames": 1
+    },
+    {
+      "name": "achievements/early-call-wave-1",
+      "frames": 1
+    },
+    {
+      "name": "achievements/earn-100k",
+      "frames": 1
+    },
+    {
+      "name": "achievements/editor-first",
+      "frames": 1
+    },
+    {
+      "name": "achievements/endless-150",
+      "frames": 1
+    },
+    {
+      "name": "achievements/endless-200",
+      "frames": 1
+    },
+    {
+      "name": "achievements/fast-boot-40",
+      "frames": 1
+    },
+    {
+      "name": "achievements/first-blood",
+      "frames": 1
+    },
+    {
+      "name": "achievements/first-rp",
+      "frames": 1
+    },
+    {
+      "name": "achievements/five-tier-five",
+      "frames": 1
+    },
+    {
+      "name": "achievements/flawless-10",
+      "frames": 1
+    },
+    {
+      "name": "achievements/flawless-wave",
+      "frames": 1
+    },
+    {
+      "name": "achievements/fork-cleared",
+      "frames": 1
+    },
+    {
+      "name": "achievements/frost-lock",
+      "frames": 1
+    },
+    {
+      "name": "achievements/idle-hour",
+      "frames": 1
+    },
+    {
+      "name": "achievements/integrity-1",
+      "frames": 1
+    },
+    {
+      "name": "achievements/ladder-cleared",
+      "frames": 1
+    },
+    {
+      "name": "achievements/laser-chain",
+      "frames": 1
+    },
+    {
+      "name": "achievements/leak-recovery",
+      "frames": 1
+    },
+    {
+      "name": "achievements/long-road",
+      "frames": 1
+    },
+    {
+      "name": "achievements/map-export",
+      "frames": 1
+    },
+    {
+      "name": "achievements/map-import",
+      "frames": 1
+    },
+    {
+      "name": "achievements/maxed-branch",
+      "frames": 1
+    },
+    {
+      "name": "achievements/maze-100",
+      "frames": 1
+    },
+    {
+      "name": "achievements/milestone-boss-pointer",
+      "frames": 1
+    },
+    {
+      "name": "achievements/mine-layer",
+      "frames": 1
+    },
+    {
+      "name": "achievements/no-cheats-100",
+      "frames": 1
+    },
+    {
+      "name": "achievements/no-sell",
+      "frames": 1
+    },
+    {
+      "name": "achievements/no-spend-wave",
+      "frames": 1
+    },
+    {
+      "name": "achievements/no-upgrade-wave",
+      "frames": 1
+    },
+    {
+      "name": "achievements/one-kind",
+      "frames": 1
+    },
+    {
+      "name": "achievements/overclock-max",
+      "frames": 1
+    },
+    {
+      "name": "achievements/override",
+      "frames": 1
+    },
+    {
+      "name": "achievements/perfect-run",
+      "frames": 1
+    },
+    {
+      "name": "achievements/pointer-1k",
+      "frames": 1
+    },
+    {
+      "name": "achievements/pointer-boss-10",
+      "frames": 1
+    },
+    {
+      "name": "achievements/pointer-only-wave",
+      "frames": 1
+    },
+    {
+      "name": "achievements/prestige-25",
+      "frames": 1
+    },
+    {
+      "name": "achievements/ram-kill",
+      "frames": 1
+    },
+    {
+      "name": "achievements/reboot-10",
+      "frames": 1
+    },
+    {
+      "name": "achievements/reboot-50",
+      "frames": 1
+    },
+    {
+      "name": "achievements/repair-shop",
+      "frames": 1
+    },
+    {
+      "name": "achievements/rp-100",
+      "frames": 1
+    },
+    {
+      "name": "achievements/salvage-10k",
+      "frames": 1
+    },
+    {
+      "name": "achievements/salvage-peak",
+      "frames": 1
+    },
+    {
+      "name": "achievements/sell-10",
+      "frames": 1
+    },
+    {
+      "name": "achievements/sell-profit",
+      "frames": 1
+    },
+    {
+      "name": "achievements/sell-tower-first",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-1hp-boss",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-ad-no-close",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-all-walls",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-boots",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-broke",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-cheat-lose",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-clippy",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-drag",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-every-map",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-flat-battery",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-help-clippy",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-hover",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-monochrome",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-mute",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-owl",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-pause",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-perfect-100",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-printer",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-reload",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-resize",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-sell-all",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-tooltip",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-weekend",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-zero-towers",
+      "frames": 1
+    },
+    {
+      "name": "achievements/sharpshooter",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shield-break-5",
+      "frames": 1
+    },
+    {
+      "name": "achievements/specs-banked",
+      "frames": 1
+    },
+    {
+      "name": "achievements/speed-3",
+      "frames": 1
+    },
+    {
+      "name": "achievements/taser-chain",
+      "frames": 1
+    },
+    {
+      "name": "achievements/tier-five-first",
+      "frames": 1
+    },
+    {
+      "name": "achievements/toggle-master",
+      "frames": 1
+    },
+    {
+      "name": "achievements/tower-zoo",
+      "frames": 1
+    },
+    {
+      "name": "achievements/tree-complete",
+      "frames": 1
+    },
+    {
+      "name": "achievements/tree-tier-3",
+      "frames": 1
+    },
+    {
+      "name": "achievements/two-kinds",
+      "frames": 1
+    },
+    {
+      "name": "achievements/two-reboots",
+      "frames": 1
+    },
+    {
+      "name": "achievements/upgrade-first",
+      "frames": 1
+    },
+    {
+      "name": "achievements/wall-only-wave",
+      "frames": 1
+    },
+    {
+      "name": "achievements/wave-1-no-damage",
+      "frames": 1
+    },
+    {
+      "name": "achievements/wave-100",
+      "frames": 1
+    },
+    {
+      "name": "achievements/wave-25",
+      "frames": 1
+    },
+    {
+      "name": "achievements/wave-50",
+      "frames": 1
+    },
+    {
+      "name": "achievements/weak-point-10",
+      "frames": 1
+    },
+    {
+      "name": "achievements/weak-point-kills",
+      "frames": 1
+    },
+    {
+      "name": "achievements/wirecutter-kill",
+      "frames": 1
+    },
+    {
       "name": "board/block",
       "frames": 1
     },
