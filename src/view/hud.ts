@@ -13,6 +13,7 @@ import {
   hasBranches,
   isOffline,
   isRepairing,
+  isTowerUnlocked,
   repairCost,
   repairHealRate,
   repairHealingCount,
@@ -496,7 +497,7 @@ export function hudControlAt(l: Layout, s: RunState, px: number, py: number): Hu
   } else {
     for (const t of h.towers) {
       if (pointInRect(t.rect, px, py)) {
-        return { action: t.kind, enabled: !frozen && canAfford(s.economy, TOWER_STATS[t.kind].cost) };
+        return { action: t.kind, enabled: !frozen && isTowerUnlocked(t.kind, s.wave) && canAfford(s.economy, TOWER_STATS[t.kind].cost) };
       }
     }
   }
@@ -970,7 +971,7 @@ export class HudView {
     for (let i = 0; i < h.towers.length; i++) {
       this.towerButtons[i].visible = true;
       const { kind, rect } = h.towers[i];
-      const enabled = !frozen && canAfford(s.economy, TOWER_STATS[kind].cost);
+      const enabled = !frozen && isTowerUnlocked(kind, s.wave) && canAfford(s.economy, TOWER_STATS[kind].cost);
       const armed = s.selected === kind;
       // Onboarding: on a fresh profile the Gun button pulses every 2 s until the first placement.
       const pulse =

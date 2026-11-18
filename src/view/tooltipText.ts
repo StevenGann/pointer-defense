@@ -9,6 +9,7 @@ import {
   isFullyUpgraded,
   isGateLocked,
   isRepairing,
+  isTowerUnlocked,
   repairCost,
   repairDurationTicks,
   repairHealRate,
@@ -17,6 +18,7 @@ import {
   repairRemainingSeconds,
   sellValue,
   TOWER_STATS,
+  towerUnlockWave,
   upgradeCost,
   wallMaxHp,
   type Branch,
@@ -146,6 +148,11 @@ function traits(st: {
   if (st.pierce > 0) out.push('pierce');
   if (st.auraDamage > 0 || st.auraRange > 0) out.push('aura');
   return out;
+}
+
+/** The "Unlocks at wave N" line for a build-palette tower that is still locked, or null. */
+export function lockedPaletteLine(kind: TowerKind, wave: number): string | null {
+  return isTowerUnlocked(kind, wave) ? null : `Unlocks at wave ${towerUnlockWave(kind)}`;
 }
 
 /** Tooltip lines for a build-palette button (the tower's base, un-upgraded stats). */

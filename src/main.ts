@@ -22,6 +22,7 @@ import { HudView, hudControlAt, paletteTowerAt, type HudAction } from './view/hu
 import { paletteTooltipLines, TooltipView, towerTooltipLines } from './view/tooltip.ts';
 import {
   branchTooltipLines,
+  lockedPaletteLine,
   pointerTooltipLines,
   repairTooltipLines,
   sellTooltipLines,
@@ -40,7 +41,7 @@ import { sfx, type SoundName } from './audio/sfx.ts';
 import { CameraShake, shakeImpulseFor } from './view/shake.ts';
 import { backingStorePixelSize, cssViewportSize, liveDevicePixelRatio } from './view/screen.ts';
 import { preloadArt, setArtDpr } from './view/art.ts';
-import { repairHealingCount, type Branch, type TowerKind } from './core/towers.ts';
+import { repairHealingCount, TOWER_STATS, type Branch, type TowerKind } from './core/towers.ts';
 import pkg from '../package.json';
 
 const app = new Application();
@@ -462,6 +463,9 @@ function drainEvents(): void {
       case 'toggleChanged':
         hud.showNotice(`Shutter ${ev.index} ${ev.open ? 'opened' : 'closed'}`, 120);
         break;
+      case 'towerUnlocked':
+        hud.showNotice(ev.kinds.map((k) => `${TOWER_STATS[k].name} unlocked`).join(', '));
+        break;
       case 'click':
         break;
     }
@@ -560,7 +564,13 @@ function updateTooltip(): void {
   if (!suppressed) {
     const palette = paletteTowerAt(layout, state, h.x, h.y);
     if (palette !== null) {
-      const lines = noBuildActive(state) ? [NO_BUILD_MESSAGE] : paletteTooltipLines(palette);
+      const lines = noBuildActive(state)
+        ? [NO_BUILD_MESSAGE]
+        : ((): TooltipLine[] => {
+            const locked = lockedPaletteLine(palette, state.wave);
+            const desc = paletteTooltipLines(palette);
+            return locked === null ? desc : [locked, ...desc];
+          })();
       tooltip.update({ key: `palette:${palette}`, lines }, h.x, h.y, viewportW, viewportH);
       return;
     }

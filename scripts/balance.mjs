@@ -27,7 +27,7 @@ import {
   cycleLevel,
   closePopupEnemy,
 } from '../src/core/state.ts';
-import { TOWER_KINDS, TOWER_STATS, upgradeCost, repairCost, isRepairing } from '../src/core/towers.ts';
+import { TOWER_KINDS, TOWER_STATS, upgradeCost, repairCost, isRepairing, isTowerUnlocked } from '../src/core/towers.ts';
 import { spend } from '../src/core/economy.ts';
 import { radiusOf, isPopupEnemy, setBreacherTurretDamage } from '../src/core/enemies.ts';
 import { buildField, isSealed, pathTiles } from '../src/core/pathfield.ts';
@@ -446,13 +446,15 @@ function futureSpecialistSlots(counts) {
   );
 }
 
-/** Pick the tower kind for a coverage placement, per the build policy. */
-function decideKind(counts, wave) {
-  if (counts.frost < frostTarget(wave)) return 'frost';
-  if (counts.beacon < beaconTarget(wave)) return 'beacon';
-  if (counts.laser < laserTarget(wave)) return 'laser';
-  if (counts.taser < taserTarget(wave)) return 'taser';
-  if (counts.cannon < cannonTarget(wave)) return 'cannon';
+/** Pick the tower kind for a coverage placement, per the build policy. A specialist the policy
+ *  wants but that has not unlocked yet (e.g. the Cannon the plan asks for as wave 4 opens) is skipped,
+ *  so the policy falls back to the always-available Gun instead of failing the placement. */
+function decideKind(s, counts, wave) {
+  if (counts.frost < frostTarget(wave) && isTowerUnlocked('frost', s.wave)) return 'frost';
+  if (counts.beacon < beaconTarget(wave) && isTowerUnlocked('beacon', s.wave)) return 'beacon';
+  if (counts.laser < laserTarget(wave) && isTowerUnlocked('laser', s.wave)) return 'laser';
+  if (counts.taser < taserTarget(wave) && isTowerUnlocked('taser', s.wave)) return 'taser';
+  if (counts.cannon < cannonTarget(wave) && isTowerUnlocked('cannon', s.wave)) return 'cannon';
   return 'gun';
 }
 
@@ -499,7 +501,7 @@ function nextTowerCost(s, counts, wave, wallIdx, maxTowers) {
     const mazeKind = wallMode ? 'wall' : 'gun';
     return TOWER_STATS[mazeKind].cost;
   }
-  return TOWER_STATS[decideKind(counts, wave)].cost;
+  return TOWER_STATS[decideKind(s, counts, wave)].cost;
 }
 
 /**
@@ -563,7 +565,7 @@ function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, 
   const path = currentPath(s);
   for (let guard = 0; guard < 400; guard++) {
     if (s.towers.length >= maxTowers) break;
-    const kind = decideKind(counts, wave);
+    const kind = decideKind(s, counts, wave);
     // Coverage slots are reserved for the specialists; the maze walls already provide the Guns.
     if (kind === 'gun') break;
     const tile = tileForKind(s, path, kind);

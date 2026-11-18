@@ -211,17 +211,17 @@ Repair tower keeps a plain upgrade ladder for now.
 
 ### 6.1 The nine
 
-| Tower | Cost | Range | Damage | Interval | Turn rate | Targeting | Role | Wants |
-|---|---|---|---|---|---|---|---|---|
-| **Gun** | 25 | 2.6 | 3 | 0.50 s | 720°/s | player's choice | cheap single-target backbone | the longest stretch of route it can reach |
-| **Cannon** | 90 | 3.0 | 5 + splash 1.0 | 1.60 s | 90°/s | strongest (fixed) | clusters and corners | where the maze doubles back |
-| **Taser** | 80 | 1.6 | 1, ignores armour | 0.12 s | instant | closest (fixed) | armour, speed, close work | the inside of a hairpin |
-| **Frost** | 70 | 2.2 | 1, slows to 30 % speed for 3.0 s | 0.60 s | instant | closest (fixed) | utility | in front of the damage |
-| **Laser** | 70 | 3.4 | 11, pierces 8 | 0.80 s | 150°/s | first (fixed) | straight lines | corridors you deliberately left open |
-| **Beacon** | 90 | 3.5 | none | — | — (still) | — | +60 % damage to towers in radius | a dense cluster worth buffing |
-| **Repair** | 220 | 4.5 | none (heals 2 HP/s) | — | — (still) | — | heals damaged towers in radius | a cluster of towers worth keeping alive |
-| **Wall** | 8 | — | none | — | — (still) | — | blocks the route, has hit points | a long maze made cheap |
-| **Cursor** | 250 | 2.5 | ½ your click damage | 1.0 s | — (still) | shielded, then nearest (fixed) | an autonomous hand that clicks for you | a pointer ladder worth feeding |
+| Tower | Unlocks | Cost | Range | Damage | Interval | Turn rate | Targeting | Role | Wants |
+|---|---|---|---|---|---|---|---|---|---|---|
+| **Gun** | 1 | 25 | 2.6 | 3 | 0.50 s | 720°/s | player's choice | cheap single-target backbone | the longest stretch of route it can reach |
+| **Cannon** | 4 | 90 | 3.0 | 5 + splash 1.0 | 1.60 s | 90°/s | strongest (fixed) | clusters and corners | where the maze doubles back |
+| **Taser** | 14 | 80 | 1.6 | 1, ignores armour | 0.12 s | instant | closest (fixed) | armour, speed, close work | the inside of a hairpin |
+| **Frost** | 6 | 70 | 2.2 | 1, slows to 30 % speed for 3.0 s | 0.60 s | instant | closest (fixed) | utility | in front of the damage |
+| **Laser** | 11 | 70 | 3.4 | 11, pierces 8 | 0.80 s | 150°/s | first (fixed) | straight lines | corridors you deliberately left open |
+| **Beacon** | 8 | 90 | 3.5 | none | — | — (still) | — | +60 % damage to towers in radius | a dense cluster worth buffing |
+| **Repair** | 18 | 220 | 4.5 | none (heals 2 HP/s) | — | — (still) | — | heals damaged towers in radius | a cluster of towers worth keeping alive |
+| **Wall** | 1 | 8 | — | none | — | — (still) | — | blocks the route, has hit points | a long maze made cheap |
+| **Cursor** | 24 | 250 | 2.5 | ½ your click damage | 1.0 s | — (still) | shielded, then nearest (fixed) | an autonomous hand that clicks for you | a pointer ladder worth feeding |
 
 Four towers are **locked** to one targeting mode and ignore the player's choice. The **Taser** always
 fires at the nearest enemy in range — a Tesla coil discharges into whatever is nearest, so its
@@ -471,6 +471,30 @@ target: at 0% health it is the lowest fraction, so it wins the choice over any m
 **Walls are the exception.** A wall at 0 HP is destroyed as it is today, removed from the board and
 re-opening the route in the same tick — a wall that stayed would keep the maze closed. Say it plainly:
 walls are destroyed, everything else goes offline.
+
+### 6.10 Tower unlocks
+
+The palette is gated so each tower arrives when the enemy it answers does. Gun and Wall are the
+starting pair — available from the initial build phase before wave 1 — and every later kind unlocks at
+a fixed wave, permanently, for the rest of the run (endless included):
+
+| Wave | Unlock | Why then |
+|---|---|---|
+| 1 | Gun, Wall | the two that teach the game: damage and the maze |
+| 4 | Cannon | the first tank enemies reward a slow, heavy hitter |
+| 6 | Frost | flyers arrive around here; slowing what you cannot block is the lesson |
+| 8 | Beacon | support arrives once the player has enough towers to cluster |
+| 11 | Laser | the first boss clears at 10; the long-range single-target answer |
+| 14 | Taser | breachers walk from 12; a wall-chewer needs a tower that punishes close |
+| 18 | Repair | towers start taking real chip damage once breachers are common |
+| 24 | Cursor | the pointer ladder should be familiar before it can be delegated |
+
+A locked tower stays in the palette, **greyed and disabled**, in its normal position — visible, never
+hidden. Its tooltip reads `Unlocks at wave 18` above the normal description. Its keyboard shortcut is
+inert and the status bar says why (`Frost unlocks at wave 6`), and `canPlace` refuses a locked kind even
+if a stale selection still points at it. The wave that unlocks a tower shows a one-line status message
+(`Frost unlocked`), and the build phase after that wave is the first time the button is live. Unlocks
+never re-lock, so a tower bought once stays available through endless.
 
 ---
 

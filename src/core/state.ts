@@ -46,6 +46,7 @@ import {
   isOffline,
   isRepairing,
   isToggleGate,
+  isTowerUnlocked,
   isWall,
   recomputeAuras,
   refreshTowerHp,
@@ -55,6 +56,7 @@ import {
   repairHealTargets,
   repairHpToRestore,
   TOGGLE_LOCK_TICKS,
+  TOWER_KINDS,
   TOWER_STATS,
   sellValue,
   upgradeCost,
@@ -164,7 +166,8 @@ export type GameEvent =
   | { type: 'towerOffline'; x: number; y: number; towerId: number }
   | { type: 'adSpawned'; kind: AdKind }
   | { type: 'adDismissed'; kind: AdKind }
-  | { type: 'toggleChanged'; index: number; open: boolean };
+  | { type: 'toggleChanged'; index: number; open: boolean }
+  | { type: 'towerUnlocked'; kinds: TowerKind[] };
 
 /** One started wave's live spawn queue. Spawn ticks are relative to `startTick`. */
 export interface WaveRun {
@@ -390,6 +393,7 @@ export function selectedTower(s: RunState): Tower | undefined {
 
 export function canPlace(s: RunState, kind: TowerKind, col: number, row: number): boolean {
   if (s.phase !== 'build' && s.phase !== 'wave') return false;
+  if (!isTowerUnlocked(kind, s.wave)) return false;
   if (!inBounds(col, row) || tileAt(s.grid, col, row) !== 'buildable') return false;
   if (toggleAtTile(s, col, row)) return false; // toggles are permanent map elements
   if (noBuildActive(s)) return false;
@@ -431,6 +435,7 @@ export function towerRangeMult(s: RunState): number {
 // Player actions (reducers)
 
 export function selectTower(s: RunState, kind: TowerKind | null): void {
+  if (kind !== null && !isTowerUnlocked(kind, s.wave)) return;
   s.selected = s.selected === kind ? null : kind;
   if (s.selected !== null) s.selectedTowerId = null;
 }
@@ -756,6 +761,8 @@ export function startWave(s: RunState): boolean {
   s.modifiers = waveModifiers(s.wave);
   recomputeAuras(s.towers);
   s.events.push({ type: 'waveStarted', wave: s.wave });
+  const unlocked = TOWER_KINDS.filter((k) => isTowerUnlocked(k, s.wave) && !isTowerUnlocked(k, s.wave - 1));
+  if (unlocked.length > 0) s.events.push({ type: 'towerUnlocked', kinds: unlocked });
   if (early) {
     s.calledEarly = true;
     earn(s.economy, earlyCallBonus(elapsed, s.wave));
