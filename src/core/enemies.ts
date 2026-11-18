@@ -136,6 +136,8 @@ export interface Enemy {
   shieldsRemaining: number;
   /** Distance travelled this run, in tiles. */
   dist: number;
+  /** The sim tick at which this enemy spawned; the frame animation clock counts up from here. */
+  spawnTick: number;
   x: number;
   y: number;
   /** Position at the previous tick, for render interpolation. */
@@ -227,6 +229,7 @@ export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Ti
     maxShield: shield,
     shieldsRemaining: kind === 'shielded-boss' ? BASTION_SHIELD_LAYERS : 0,
     dist: 0,
+    spawnTick: 0,
     x,
     y,
     prevX: x,

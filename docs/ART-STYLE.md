@@ -4,9 +4,10 @@ Read this before you draw anything for `public/art/`. It explains the look, the 
 engine draws on top of your files, and the mistakes that cost the most.
 
 The technical contract (file names, the 32×32 viewBox, layers, facing) is in
-[`public/art/README.md`](../public/art/README.md). The engine depends on that contract. This file is
-about intent, and **it is a guide, not a rule book**. Break it when the art is better for it, and say
-why in the pull request.
+[`public/art/README.md`](../public/art/README.md), and frame-sequence animation — walk cycles, chewing,
+spins — is in [`docs/ART-ANIMATION.md`](ART-ANIMATION.md). The engine depends on those contracts. This
+file is about intent, and **it is a guide, not a rule book**. Break it when the art is better for it,
+and say why in the pull request.
 
 ---
 
@@ -219,16 +220,20 @@ repairing). Leave this file white. A grey or coloured face cannot be tinted corr
   period.
 - **Heavy blur and drop-shadow filters.** A small offset shadow drawn as a shape is fine. SVG filter
   effects are slow to rasterise and look out of period.
-- **Animation.** The engine rasterises each file once, so SVG animation does not play.
+- **SVG's own animation.** The engine rasterises frames and drives frame-sequence animation itself
+  from numbered files (see [Animation](#9-animation)); `<animate>` and CSS keyframes do not play.
 
 ---
 
 ## 7. Things to coordinate
 
-- **Adding an asset** needs the file *and* one line in `ART_MANIFEST` (`src/view/art.ts`). A file with
-  no manifest entry does nothing.
+- **Adding frames** to an existing asset needs only the numbered files plus a `.json` — no code
+  change. See [Animation](#9-animation) and [`docs/ART-ANIMATION.md`](ART-ANIMATION.md).
+- **Adding a new asset** (a new enemy, tower or branch) still needs the code to know its name: the
+  naming helpers in `src/view/art.ts` map each kind to its file. A file with no code reference does
+  nothing, and the smoke run flags it as unreferenced.
 - **Renaming a file** makes the game fall back to the old code-drawn shape with no error. Rename the
-  manifest entry in the same commit.
+  code reference in the same commit.
 - **A new enemy** also needs a size factor in `ENEMY_ART_BODY` and, if it must face its heading, an
   entry in `ENEMY_ART_ROTATES` (both in `src/view/board.ts`).
 - **A new tower with a turret** needs an entry in `TOWER_TURRET_KINDS` (`src/view/art.ts`).
@@ -248,3 +253,37 @@ repairing). Leave this file white. A grey or coloured face cannot be tinted corr
 - [ ] No runtime state baked in.
 - [ ] File name matches the manifest.
 - [ ] `npm run smoke` passes.
+
+---
+
+## 9. Animation
+
+Frame-sequence animation is driven by numbered files, not code — the full contract is in
+[`docs/ART-ANIMATION.md`](ART-ANIMATION.md). This section is the taste part: what is worth animating
+and what will hurt you.
+
+**Animate the small motions, keep the silhouette.** A good frame only moves a *part*: a leg, an eye, a
+jaw, a spinning ring. The outline the engine sizes the sprite and the hitbox from must stay put, or a
+player aiming at the weak point is aiming at a moving target.
+
+Worth animating:
+
+- **Walk cycles.** Enemies that travel should step, not glide. Two to four poses around the base frame
+  read as a walk at 8 fps; `when: "moving"` keeps the base pose while they stop.
+- **Chewing.** A Breacher biting a wall is the classic case for `when: "moving"` — the walk cycle must
+  stop while it chews, or it looks like it is marching through the wall.
+- **Spin.** A rotating part (a turret hub, a beacon lamp, a radar ring) can spin with a short loop.
+
+Do not animate:
+
+- **Silhouette changes that break hitbox reading.** Never shift the outer bounds or the leading edge
+  from frame to frame. The weak-point notch and the click area are drawn from the same bounds the still
+  used.
+- **Sub-2 px detail.** A 1 px line or a single-pixel dot that moves between frames flickers at 20 px
+  and reads as noise, not motion. Keep the smallest moving element at 2 px or larger.
+- **Colour-only pulses.** A frame that differs only by hue is the same frame to a colour-blind player
+  and adds nothing but file count.
+
+When in doubt, leave it still. A clean still beats a muddy animation, and every still is already a
+valid one-frame sequence — the engine costs nothing extra to draw it.
+
