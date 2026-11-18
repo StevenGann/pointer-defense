@@ -7228,6 +7228,21 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(cells.length <= 8 || cells[8].rect.y > cells[0].rect.y, 'grid: the ninth cell starts the next row');
   const hit = achievementGridHitAt(al, model, cells[0].rect.x + 4, cells[0].rect.y + 4);
   check(hit !== null && hit.type === 'cell' && hit.id === model.entries[0].id, 'grid: a click on a cell hit-tests to that cell');
+  // The scrollbar: a thumb proportional to what is visible, always inside its track, and gone when
+  // the whole catalog fits.
+  check(al.maxScroll > 0, 'grid: 118 cells do not fit the viewport, so there is a scroll');
+  check(al.scrollbar.x >= al.grid.x && al.scrollbar.x + al.scrollbar.w <= al.grid.x + al.grid.w,
+    'grid: the scrollbar sits inside the grid viewport');
+  check(al.thumb.h < al.scrollbar.h, 'grid: the thumb is shorter than its track');
+  check(al.thumb.y >= al.scrollbar.y && al.thumb.y + al.thumb.h <= al.scrollbar.y + al.scrollbar.h,
+    'grid: the thumb starts inside the track');
+  const bottom = computeAchievementGrid({ ...model, scroll: al.maxScroll }, client);
+  check(Math.abs(bottom.thumb.y + bottom.thumb.h - (al.scrollbar.y + al.scrollbar.h)) <= 1,
+    'grid: at the bottom the thumb reaches the end of the track');
+  const roomy = computeAchievementGrid({ ...model, entries: model.entries.slice(0, 8) }, client);
+  check(roomy.maxScroll === 0 && roomy.thumb.h === roomy.scrollbar.h,
+    'grid: a catalog that fits has a full-length thumb and no scrolling');
+
   const session = new AchievementSession();
   session.show();
   check(session.open, 'grid session: show opens the grid');

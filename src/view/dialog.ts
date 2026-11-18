@@ -163,6 +163,12 @@ export const ACH_SUMMARY_H = 18;
 export const ACH_FILTER_H = 22;
 export const ACH_BUTTON_H = 28;
 export const ACH_BUTTON_W = 64;
+/** Tooltip panel, matching the cream box the palette and tower tooltips use. */
+const TOOLTIP_FILL = 0xffffe1;
+const TOOLTIP_TEXT = 0x000000;
+const TOOLTIP_STATUS = 0x555555;
+const TOOLTIP_MAX_W = 230;
+const TOOLTIP_MIN_W = 130;
 
 export type AchievementFilter = 'all' | 'earned' | 'locked';
 
@@ -204,6 +210,9 @@ export interface AchievementGridLayout {
   /** One cell rect per entry, in window coordinates (contentY already includes scroll). */
   cells: { id: string; rect: Rect }[];
   maxScroll: number;
+  /** The scroll track beside the grid, and the thumb inside it. Sized by the scroll fraction. */
+  scrollbar: Rect;
+  thumb: Rect;
 }
 
 /** The number of grid rows a cell count needs at eight columns. */
@@ -286,6 +295,12 @@ export function computeAchievementGrid(model: AchievementGridModel, client: Rect
   const maxScroll = Math.max(0, gridContentH - gridH);
   const scroll = Math.min(Math.max(0, model.scroll), maxScroll);
   const contentY = grid.y - scroll;
+  // The scrollbar sits in the spare width right of the centred columns, so it never covers a tile.
+  const scrollbar: Rect = { x: contentX + contentW + 10, y: grid.y + 1, w: 8, h: Math.max(0, grid.h - 2) };
+  const trackH = scrollbar.h;
+  const thumbH = maxScroll > 0 ? Math.max(18, Math.round(trackH * (gridH / Math.max(1, gridContentH)))) : trackH;
+  const thumbY = maxScroll > 0 ? Math.round((trackH - thumbH) * (scroll / maxScroll)) : 0;
+  const thumb: Rect = { x: scrollbar.x, y: scrollbar.y + thumbY, w: scrollbar.w, h: thumbH };
   const close: Rect = {
     x: window.x + window.w - ACH_PAD - ACH_BUTTON_W,
     y: window.y + window.h - ACH_PAD - ACH_BUTTON_H,
@@ -296,7 +311,7 @@ export function computeAchievementGrid(model: AchievementGridModel, client: Rect
     id: e.id,
     rect: gridCellRect(contentX, contentY, i % ACH_COLUMNS, Math.floor(i / ACH_COLUMNS)),
   }));
-  return { window, title, summary, filterAll, filterEarned, filterLocked, close, grid, contentX, contentY, cells, maxScroll };
+  return { window, title, summary, filterAll, filterEarned, filterLocked, close, grid, contentX, contentY, cells, maxScroll, scrollbar, thumb };
 }
 
 export type AchievementGridHit =
@@ -396,6 +411,13 @@ export class AchievementGridView {
   private readonly summaryText: Text;
   private readonly filterTexts: Text[] = [];
   private readonly closeText: Text;
+  /**
+   * The tooltip owns a layer of its own, added last. It used to be painted into the same Graphics as
+   * the grid, which is the *first* child of the root — so its box was drawn under the icon sprites
+   * and only the text showed, floating over the tiles with no panel behind it.
+   */
+  private readonly tooltipLayer = new Container();
+  private readonly tooltipG = new Graphics();
   private readonly tooltipTexts: Text[] = [];
 
   constructor() {
@@ -422,12 +444,15 @@ export class AchievementGridView {
     this.closeText = makeText('Close', PAL.text);
     this.closeText.anchor.set(0.5, 0.5);
     this.root.addChild(this.closeText);
+    this.tooltipLayer.addChild(this.tooltipG);
     for (let i = 0; i < 3; i++) {
       const t = makeText('', PAL.text);
       t.anchor.set(0, 0);
       this.tooltipTexts.push(t);
-      this.root.addChild(t);
+      this.tooltipLayer.addChild(t);
     }
+    // Last in the root: a tooltip is never under the thing it describes.
+    this.root.addChild(this.tooltipLayer);
   }
 
   draw(model: AchievementGridModel | null, l: Layout): void {
@@ -438,6 +463,7 @@ export class AchievementGridView {
       this.summaryText.text = '';
       for (const s of this.iconSprites) s.visible = false;
       for (const t of this.tooltipTexts) t.text = '';
+      this.tooltipG.clear();
       for (const t of this.filterTexts) t.visible = false;
       this.closeText.visible = false;
       return;
@@ -459,8 +485,8 @@ export class AchievementGridView {
     ];
     for (let i = 0; i < filters.length; i++) {
       const f = filters[i];
-      if (model.filter === f.value) bevel(g, f.rect, true, PAL.face);
-      else g.rect(f.rect.x, f.rect.y, f.rect.w, f.rect.h).fill(PAL.face);
+      // Every tab is a button; the active one is pressed in, the way a Win95 control shows state.
+      bevel(g, f.rect, model.filter !== f.value, PAL.face);
       const t = this.filterTexts[i];
       t.style.fill = model.filter === f.value ? PAL.text : PAL.shadow;
       t.position.set(f.rect.x + f.rect.w / 2, f.rect.y + f.rect.h / 2);
@@ -497,6 +523,11 @@ export class AchievementGridView {
     }
     for (let i = visible; i < this.iconSprites.length; i++) this.iconSprites[i].visible = false;
 
+    if (al.maxScroll > 0) {
+      g.rect(al.scrollbar.x, al.scrollbar.y, al.scrollbar.w, al.scrollbar.h).fill(PAL.shadow);
+      bevel(g, al.thumb, true, PAL.face);
+    }
+
     bevel(g, al.close, true, PAL.face);
     this.closeText.position.set(al.close.x + al.close.w / 2, al.close.y + al.close.h / 2);
     this.closeText.visible = true;
@@ -512,26 +543,47 @@ export class AchievementGridView {
   }
 
   private drawTooltip(entry: AchievementGridEntry, cell: Rect, al: AchievementGridLayout): void {
-    const lines = [
-      entry.name,
-      entry.description,
-      entry.earned ? (entry.earnedDate ? `Earned ${entry.earnedDate}` : 'Earned') : 'Locked',
-    ];
-    const width = Math.min(220, Math.max(120, ...lines.map((s) => s.length * 6 + 16)));
-    const height = 16 * 3 + 8;
+    const g = this.tooltipG;
+    g.clear();
+
+    const [nameT, descT, statusT] = this.tooltipTexts;
+    const padX = 6;
+    const padY = 4;
+    nameT.text = entry.name;
+    nameT.style.fill = TOOLTIP_TEXT;
+    statusT.text = entry.earned ? (entry.earnedDate ? `Earned ${entry.earnedDate}` : 'Earned') : 'Locked';
+    statusT.style.fill = TOOLTIP_STATUS;
+
+    // The panel is sized from the name and the status line, then the description wraps *into* that
+    // width. Sizing from the description first made it wrap at its own measured width, which is a
+    // circle — the box came out two words wide.
+    const width = Math.min(
+      TOOLTIP_MAX_W,
+      Math.max(TOOLTIP_MIN_W, Math.ceil(Math.max(nameT.width, statusT.width)) + padX * 2 + 4),
+    );
+    descT.style.wordWrap = true;
+    descT.style.fill = TOOLTIP_TEXT;
+    descT.style.wordWrapWidth = width - padX * 2;
+    descT.text = entry.description;
+    const descH = Math.max(12, descT.height);
+    const height = padY + nameT.height + 2 + descH + 3 + statusT.height + padY;
+
     let tx = cell.x + cell.w + 6;
     if (tx + width > al.window.x + al.window.w - 4) tx = cell.x - width - 6;
+    if (tx < al.window.x + 4) tx = cell.x + cell.w + 6;
     const ty = Math.min(Math.max(al.window.y + 4, cell.y), al.window.y + al.window.h - height - 4);
-    bevel(this.g, { x: tx, y: ty, w: width, h: height }, true, PAL.face);
-    for (let i = 0; i < 3; i++) {
-      const t = this.tooltipTexts[i];
-      t.text = lines[i];
-      t.style.fill = i === 0 ? PAL.text : i === 1 ? PAL.shadow : PAL.text;
-      t.position.set(tx + 8, ty + 8 + i * 16);
-    }
+
+    // The same cream panel the rest of the game uses, so a tooltip reads as a tooltip.
+    g.rect(tx, ty, width, height).fill(TOOLTIP_FILL);
+    g.rect(tx, ty, width, height).stroke({ width: 1, color: TOOLTIP_TEXT });
+
+    nameT.position.set(tx + padX, ty + padY);
+    descT.position.set(tx + padX, ty + padY + nameT.height + 2);
+    statusT.position.set(tx + padX, ty + padY + nameT.height + 2 + descH + 3);
   }
 
   private clearTooltip(): void {
+    this.tooltipG.clear();
     for (const t of this.tooltipTexts) t.text = '';
   }
 }
