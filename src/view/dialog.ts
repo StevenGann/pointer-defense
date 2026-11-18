@@ -177,7 +177,7 @@ export interface AchievementGridEntry {
 export interface AchievementGridModel {
   /** The visible cells, already filtered and with hidden-unearned achievements removed. */
   entries: AchievementGridEntry[];
-  /** The stored total (117), which never moves when a shadow becomes visible. */
+  /** The stored total (118), which never moves when a shadow becomes visible. */
   total: number;
   earnedCount: number;
   /** How many shadow achievements have fired (the `· N shadow` figure). */

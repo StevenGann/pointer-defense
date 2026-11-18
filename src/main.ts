@@ -479,6 +479,10 @@ function menuAction(id: string): void {
       break;
     case 'show-help':
       helpSession.show(layout);
+      // shadow-help-clippy: open the Help window while a boss is on the board.
+      if (state.phase === 'wave' && state.enemies.some((e) => e.isBoss && !e.dead)) {
+        notifyAchievement(state, 'shadow-help-clippy');
+      }
       break;
     case 'sound':
       profile.soundOn = !profile.soundOn;

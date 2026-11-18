@@ -105,6 +105,10 @@
       "frames": 1
     },
     {
+      "name": "achievements/early-call-wave-1",
+      "frames": 1
+    },
+    {
       "name": "achievements/earn-100k",
       "frames": 1
     },
@@ -166,6 +170,10 @@
     },
     {
       "name": "achievements/laser-chain",
+      "frames": 1
+    },
+    {
+      "name": "achievements/leak-recovery",
       "frames": 1
     },
     {
@@ -277,6 +285,10 @@
       "frames": 1
     },
     {
+      "name": "achievements/sell-profit",
+      "frames": 1
+    },
+    {
       "name": "achievements/sell-tower-first",
       "frames": 1
     },
@@ -297,7 +309,19 @@
       "frames": 1
     },
     {
+      "name": "achievements/shadow-broke",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-cheat-lose",
+      "frames": 1
+    },
+    {
       "name": "achievements/shadow-clippy",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-console",
       "frames": 1
     },
     {
@@ -338,6 +362,10 @@
     },
     {
       "name": "achievements/shadow-perfect-100",
+      "frames": 1
+    },
+    {
+      "name": "achievements/shadow-printer",
       "frames": 1
     },
     {

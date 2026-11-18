@@ -489,6 +489,22 @@ export interface RunState {
   clearedBossNoLeak: boolean;
   /** True once every tower standing at wave start was sold and the wave still cleared. */
   clearedSellAllWave: boolean;
+  /** True once a wave cleared with no tower built during that wave (pointer-only). */
+  clearedNoTowerWave: boolean;
+  /** True once a tower was sold in the same wave it was built (sell-profit). */
+  soldTowerSameWave: boolean;
+  /** True once a wave was called early before any tower was built (early-call-wave-1). */
+  calledEarlyBeforeTower: boolean;
+  /** Consecutive waves cleared since the last leak (leak-recovery). */
+  wavesClearedSinceLeak: number;
+  /** Enemies spawned from the cheat menu this run (shadow-printer). */
+  cheatSpawns: number;
+  /** True while this wave has seen salvage hit zero (shadow-broke). */
+  salvageHitZeroThisWave: boolean;
+  /** True while this wave has seen a tower go offline (shadow-broke). */
+  towerOfflineThisWave: boolean;
+  /** True once salvage hit zero and a tower went offline in the same wave (shadow-broke). */
+  shadowBroke: boolean;
 
   // --- Per-shot / per-wave tallies (the group B and A rules) -----------------------------------
   /** Max enemies a single beam (Laser) killed in one shot. */
@@ -656,6 +672,14 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     clearedNoSpendWave: false,
     clearedBossNoLeak: false,
     clearedSellAllWave: false,
+    clearedNoTowerWave: false,
+    soldTowerSameWave: false,
+    calledEarlyBeforeTower: false,
+    wavesClearedSinceLeak: 0,
+    cheatSpawns: 0,
+    salvageHitZeroThisWave: false,
+    towerOfflineThisWave: false,
+    shadowBroke: false,
     maxBeamKills: 0,
     maxChainKills: 0,
     maxSplashKills: 0,
@@ -708,6 +732,7 @@ function preloadTowers(s: RunState): void {
     if (wouldSeal(s, idx)) continue;
     const tower = createTower(s.nextId++, 'gun', col, row);
     tower.placedTick = s.clock;
+    tower.builtWave = s.wave;
     if (s.treeEffects.startTier > 1) {
       tower.tier = s.treeEffects.startTier as Tier;
       refreshTowerHp(tower);
@@ -827,6 +852,7 @@ export function placeTower(s: RunState, kind: TowerKind, col: number, row: numbe
   s.blocked.add(row * s.grid.cols + col);
   const tower = createTower(s.nextId++, kind, col, row);
   tower.placedTick = s.clock;
+  tower.builtWave = s.wave;
   if (s.treeEffects.startTier > 1) {
     tower.tier = s.treeEffects.startTier as Tier;
     refreshTowerHp(tower);
@@ -1041,6 +1067,7 @@ export function sellTower(s: RunState, col: number, row: number): boolean {
   s.soldTower = true;
   s.towersSold++;
   s.idleTicks = 0;
+  if (t.builtWave === s.wave) s.soldTowerSameWave = true;
   if (s.selectedTowerId === t.id) s.selectedTowerId = null;
   rebuildField(s);
   recomputeAuras(s.towers, s.clock);
@@ -1190,6 +1217,8 @@ export function startWave(s: RunState): boolean {
   s.phase = 'wave';
   s.waveTick = 0;
   s.idleTicks = 0;
+  s.salvageHitZeroThisWave = false;
+  s.towerOfflineThisWave = false;
   s.autoWaveAtTick = 0; // any start — manual or automatic — cancels a pending countdown
   s.leaksByWave.set(s.wave, 0);
   s.modifiers = waveModifiers(s.wave);
@@ -1201,6 +1230,7 @@ export function startWave(s: RunState): boolean {
     s.calledEarly = true;
     s.earlyCalls++;
     s.earlyCallsInARow++;
+    if (s.towersBuilt === 0) s.calledEarlyBeforeTower = true;
     earn(s.economy, earlyCallBonus(elapsed, s.wave));
   } else {
     s.earlyCallsInARow = 0;
@@ -1445,6 +1475,12 @@ export function buildStats(s: RunState): AchievementStats {
     runLost: s.phase === 'halted',
     runEnded: s.phase === 'halted' || s.phase === 'victory',
     specTotal: s.specs.cpu + s.specs.ram + s.specs.gpu + s.specs.disk,
+    clearedNoTowerWave: s.clearedNoTowerWave,
+    soldTowerSameWave: s.soldTowerSameWave,
+    calledEarlyBeforeTower: s.calledEarlyBeforeTower,
+    wavesClearedSinceLeak: s.wavesClearedSinceLeak,
+    cheatSpawns: s.cheatSpawns,
+    shadowBroke: s.shadowBroke,
   };
 }
 
@@ -1455,12 +1491,14 @@ export function buildStats(s: RunState): AchievementStats {
  * the whole engine.
  */
 export function checkAchievements(s: RunState): string[] {
-  if (s.cheatsUsed) return [];
   const unlocked: string[] = [];
   const stats = buildStats(s);
   const profile = s.profile;
   for (const a of ACHIEVEMENTS) {
     if (s.achievements.has(a.id)) continue;
+    // A cheated run records nothing — except the cheat-only shadows, whose condition *is* the
+    // cheating (docs/design.md §12.4). They still need the sim state to match.
+    if (s.cheatsUsed && !a.cheatOnly) continue;
     if (!a.when || !a.when(stats, profile)) continue;
     s.achievements.add(a.id);
     unlocked.push(a.id);
@@ -1475,7 +1513,7 @@ export function checkAchievements(s: RunState): string[] {
  * every other achievement. Kept deliberately narrow — callers pass an id, nothing more.
  */
 export function notifyAchievement(s: RunState, id: string): void {
-  if (s.cheatsUsed) return;
+  if (s.cheatsUsed && !ACHIEVEMENTS.some((a) => a.id === id && a.cheatOnly)) return;
   s.notified.add(id);
 }
 
@@ -1600,6 +1638,7 @@ export function spawnCheatEnemy(s: RunState, kind: EnemyKind): boolean {
   enemy.spawnTick = s.tick;
   s.enemies.push(enemy);
   s.cheatsUsed = true;
+  s.cheatSpawns++;
   return true;
 }
 
@@ -1652,6 +1691,10 @@ export function tick(s: RunState): void {
   }
   if (s.godMode) s.economy.salvage = Math.max(s.economy.salvage, GOD_SALVAGE_CEILING);
   if (s.economy.salvage > s.salvagePeak) s.salvagePeak = s.economy.salvage;
+  if (s.economy.salvage === 0) {
+    s.salvageHitZeroThisWave = true;
+    if (s.towerOfflineThisWave) s.shadowBroke = true;
+  }
   updateToggles(s);
   tickRepairs(s);
   tickRepairAuras(s);
@@ -2138,6 +2181,8 @@ function damageTower(s: RunState, tower: Tower, amount: number): void {
     tower.hp = 0;
     recomputeAuras(s.towers, s.clock); // an offline beacon/repair stops buffing/healing immediately
     s.events.push({ type: 'towerOffline', x: tower.col + 0.5, y: tower.row + 0.5, towerId: tower.id });
+    s.towerOfflineThisWave = true;
+    if (s.salvageHitZeroThisWave) s.shadowBroke = true;
   }
 }
 
@@ -2199,6 +2244,7 @@ function fireBreacherTurrets(s: RunState): void {
 function leak(s: RunState, e: Enemy): void {
   e.dead = true;
   s.totalLeaks++;
+  s.wavesClearedSinceLeak = 0;
   s.leaksByWave.set(e.wave, (s.leaksByWave.get(e.wave) ?? 0) + 1);
   if (baseEnemyKind(e.kind) === 'flyer') s.flyerLeaksByWave.set(e.wave, (s.flyerLeaksByWave.get(e.wave) ?? 0) + 1);
   if (!s.godMode) s.integrity = Math.max(0, s.integrity - ENEMY_STATS[e.kind].integrity);
@@ -3275,15 +3321,18 @@ function clearDue(s: RunState): void {
     const bonus = waveClearBonus(run.wave);
     earn(s.economy, bonus);
     s.events.push({ type: 'waveCleared', wave: run.wave, bonus });
-    if ((s.leaksByWave.get(run.wave) ?? 0) === 0) {
+    const waveLeaks = s.leaksByWave.get(run.wave) ?? 0;
+    if (waveLeaks === 0) {
       s.clearedFlawlessWave = true;
       s.perfectWaves++;
       s.perfectWaveStreak++;
       if (run.wave === 1) s.clearedWave1NoLeak = true;
+      if (s.totalLeaks > 0) s.wavesClearedSinceLeak++;
     } else {
       s.perfectWaveStreak = 0;
+      s.wavesClearedSinceLeak = 0;
     }
-    if (run.wave >= 40 && (s.leaksByWave.get(run.wave) ?? 0) === 0) s.clearedWaveNoLeaks = true;
+    if (run.wave >= 40 && waveLeaks === 0) s.clearedWaveNoLeaks = true;
     evaluateWaveAchievements(s, run.wave);
     cleared.add(run);
   }
@@ -3309,6 +3358,7 @@ function evaluateWaveAchievements(s: RunState, wave: number): void {
 
   const builtThisWave = s.towersBuilt - snap.towersBuilt;
   const wallsThisWave = s.wallsBuilt - snap.wallsBuilt;
+  if (builtThisWave === 0) s.clearedNoTowerWave = true;
   if (builtThisWave >= 1 && builtThisWave === wallsThisWave && s.towers.length >= 1 && s.towers.every((t) => isWall(t))) {
     s.clearedWallOnlyWave = true;
   }

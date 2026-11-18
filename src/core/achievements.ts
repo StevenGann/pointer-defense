@@ -137,6 +137,11 @@ export interface AchievementDef {
   readonly description: string;
   /** A shadow achievement has no cell on the grid until it fires (docs/ACHIEVEMENTS.md). */
   readonly hidden?: boolean;
+  /**
+   * Still awarded on a cheated run, and only for achievements whose condition *is* the cheating.
+   * Everything else refuses a cheated run (docs/design.md 12.4).
+   */
+  readonly cheatOnly?: boolean;
   readonly when?: (s: AchievementStats, p: Profile) => boolean;
 }
 
@@ -212,6 +217,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: 'integrity-1', name: 'By a Thread', description: 'Survive a wave with 1 integrity left', when: (s) => s.integrity === 1 },
   { id: 'speed-3', name: 'Fast Forward', description: 'Play a wave at 3× speed', when: (s) => s.wavesAtThreeSpeed >= 1 },
   { id: 'wave-1-no-damage', name: 'Untouched', description: 'Clear wave 1 without a single leak', when: (s) => s.clearedWave1NoLeak },
+  { id: 'leak-recovery', name: 'Rally', description: 'Clear five consecutive waves after losing integrity at least once', hidden: true, when: (s) => s.wavesClearedSinceLeak >= 5 },
 
   // --- Bosses -------------------------------------------------------------------------------
   { id: 'boss-by-pointer', name: 'Boss by Pointer', description: 'Kill a boss with the pointer alone', when: (s) => s.bossKilledByPointer },
@@ -248,7 +254,7 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: 'ladder-cleared', name: 'Rung by Rung', description: 'Clear wave 10 on The Ladder', when: (s) => s.mapId === 'ladder' && s.clearedWaves >= 10 },
 
   // --- Shadow -------------------------------------------------------------------------------
-  { id: 'shadow-ad-no-close', name: 'Customer Service', description: 'Lose a run with 10 unopened ads on screen', hidden: true, when: (s) => s.adsExpired >= 10 && s.runLost },
+  { id: 'shadow-ad-no-close', name: 'Customer Service', description: 'Let ten ads expire, then lose the run', hidden: true, when: (s) => s.adsExpired >= 10 && s.runLost },
   { id: 'shadow-zero-towers', name: 'Pacifist', description: 'Reach wave 5 with no towers and no clicks', hidden: true, when: (s) => s.wave >= 5 && s.towersBuilt === 0 && s.pointerHits === 0 },
   { id: 'shadow-all-walls', name: 'Wall Street', description: 'Build 40 walls in one run', hidden: true, when: (s) => s.wallsBuilt >= 40 },
   { id: 'shadow-sell-all', name: 'Fire Sale', description: 'Sell every tower at once from a full board', hidden: true, when: (s) => s.clearedSellAllWave },
@@ -269,6 +275,10 @@ export const ACHIEVEMENTS: readonly AchievementDef[] = [
   { id: 'shadow-help-clippy', name: 'Paperclip', description: 'Open the Help window during a boss fight', hidden: true, when: (s) => s.notified.has('shadow-help-clippy') },
   { id: 'shadow-drag', name: 'Where Did It Go', description: 'Drag the Help window off screen and back', hidden: true, when: (s) => s.notified.has('shadow-drag') },
   { id: 'shadow-tooltip', name: 'Read the Manual', description: 'Open every tower tooltip in one run', hidden: true, when: (s) => s.notified.has('shadow-tooltip') },
+  { id: 'shadow-printer', name: 'Paper Jam', description: 'Spawn 50 enemies from the cheat menu, then lose', hidden: true, cheatOnly: true, when: (s) => s.cheatSpawns >= 50 && s.runLost },
+  { id: 'shadow-cheat-lose', name: 'That Was Fair', description: 'Use a cheat and still lose the run', hidden: true, cheatOnly: true, when: (s) => s.cheatsUsed && s.integrity === 0 && s.runLost },
+  { id: 'shadow-console', name: 'Cheated Cookies Taste Awful', description: 'Use the cheat menu at all', hidden: true, cheatOnly: true, when: (s) => s.cheatsUsed },
+  { id: 'shadow-broke', name: 'Zero Balance', description: 'Hit zero salvage and have a tower go offline in the same wave', hidden: true, when: (s) => s.shadowBroke },
 ];
 
 export function achievementName(id: string): string {
