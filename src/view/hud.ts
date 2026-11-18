@@ -85,7 +85,7 @@ const TEXT_WIDTH_CACHE_MAX = 256;
 const textWidthCache = new Map<string, number>();
 
 /** Measure a string with the same font the HUD draws with, without adding it to the scene. */
-function textWidth(text: string, size: number): number {
+export function textWidth(text: string, size: number): number {
   const key = `${size}|${text}`;
   const cached = textWidthCache.get(key);
   if (cached !== undefined) return cached;
@@ -114,13 +114,26 @@ function textWidth(text: string, size: number): number {
   return width;
 }
 
-function fitButtonText(preferred: string, fallbacks: readonly string[]): string {
+function fitButtonText(preferred: string, fallbacks: readonly string[], maxWidth = SPEC_BUTTON_MAX): string {
   for (const candidate of [preferred, ...fallbacks]) {
-    if (Math.ceil(textWidth(candidate, SPEC_FONT_SIZE)) + SPEC_BUTTON_PAD <= SPEC_BUTTON_MAX) {
+    if (Math.ceil(textWidth(candidate, SPEC_FONT_SIZE)) + SPEC_BUTTON_PAD <= maxWidth) {
       return candidate;
     }
   }
   return fallbacks[fallbacks.length - 1] ?? preferred;
+}
+
+/** Short button labels for branch names too long for a full-width row; the tooltip keeps the full
+ *  name and description. */
+const BRANCH_LABEL_FALLBACKS: Readonly<Partial<Record<TowerKind, Readonly<Partial<Record<Branch, string>>>>>> = {
+  cursor: { B: 'Wide' },
+};
+
+/** The label a branch button shows: the full name, or a short form when the full name overflows. */
+function branchButtonLabel(kind: TowerKind, branch: Branch, maxWidth: number): string {
+  const preferred = branchName(kind, branch);
+  const fallback = BRANCH_LABEL_FALLBACKS[kind]?.[branch];
+  return fallback === undefined ? preferred : fitButtonText(preferred, [fallback], maxWidth);
 }
 
 function truncateText(text: string, maxWidth: number): string {
@@ -142,6 +155,7 @@ function fitSpecLabel(verbose: string, compact: string, width: number): string {
 
 interface BranchButton {
   branch: Branch;
+  label: string;
   rect: Rect;
 }
 
@@ -264,13 +278,26 @@ export function computeHud(l: Layout, s: RunState): HudLayout {
     if (tower.tier === 2 && hasBranches(tower.kind)) {
       const gap = 4;
       const list: Branch[] = tower.kind === 'wall' || tower.kind === 'cursor' ? ['A', 'B', 'C'] : ['A', 'B'];
-      const bw = Math.floor((innerW - gap * (list.length - 1)) / list.length);
-      list.forEach((branch, i) => {
-        const x = innerX + i * (bw + gap);
-        const w = i === list.length - 1 ? innerX + innerW - x : bw;
-        branches.push({ branch, rect: { x, y: cy, w, h: 24 } });
-      });
-      cy += 24 + 4;
+      if (list.length > 2) {
+        // A three-branch tower (wall, cursor) stacks its choices vertically — one full-width button
+        // per row — so a long branch name shrinks to fit instead of overprinting its neighbour.
+        for (const branch of list) {
+          branches.push({
+            branch,
+            label: branchButtonLabel(tower.kind, branch, innerW),
+            rect: { x: innerX, y: cy, w: innerW, h: 24 },
+          });
+          cy += 24 + 4;
+        }
+      } else {
+        const bw = Math.floor((innerW - gap * (list.length - 1)) / list.length);
+        list.forEach((branch, i) => {
+          const x = innerX + i * (bw + gap);
+          const w = i === list.length - 1 ? innerX + innerW - x : bw;
+          branches.push({ branch, label: branchName(tower.kind, branch), rect: { x, y: cy, w, h: 24 } });
+        });
+        cy += 24 + 4;
+      }
     }
 
     // A tower with hit points gains a Repair button above Sell. The action is refused at full health
@@ -918,7 +945,7 @@ export class HudView {
           enabled,
           hoverHud === (b.branch === 'A' ? 'branchA' : b.branch === 'B' ? 'branchB' : 'branchC'),
         );
-        text.text = branchName(tower.kind, b.branch);
+        text.text = b.label;
         text.style.fill = enabled ? PAL.text : PAL.shadow;
         text.position.set(b.rect.x + b.rect.w / 2, b.rect.y + Math.floor(b.rect.h / 2));
       }

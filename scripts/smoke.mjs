@@ -44,15 +44,15 @@ import {
   NO_BUILD_MESSAGE,
   AUTO_WAVE_DELAY_TICKS,
 } from '../src/core/state.ts';
-import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
+import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
-import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, popupCountForWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
+import { buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, isBossWave, MODIFIER_POOL, popupCountForWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
 import { LEVELS, DEFAULT_LEVEL, createGrid, levelById, toggleOpenAt, validateLevel, MAX_TOGGLES } from '../src/core/levels.ts';
-import { createEnemy, isPopupEnemy, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS } from '../src/core/enemies.ts';
+import { createEnemy, isPopupEnemy, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS } from '../src/core/enemies.ts';
 import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS } from '../src/core/ads.ts';
 import {
   comboMultiplier,
@@ -91,7 +91,7 @@ import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay,
 import { BoardView, staticLayerKey } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE } from '../src/view/chrome.ts';
-import { computeHud, computeRightPanel, hudControlAt } from '../src/view/hud.ts';
+import { computeHud, computeRightPanel, hudControlAt, textWidth } from '../src/view/hud.ts';
 import { backingStorePixelSize } from '../src/view/screen.ts';
 import {
   ART_MANIFEST,
@@ -110,7 +110,9 @@ import {
   setArtDpr,
   artDpr,
   resetArt,
+  injectArtTexture,
 } from '../src/view/art.ts';
+import { Texture } from 'pixi.js';
 import { readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import {
@@ -845,6 +847,66 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(s.endless && s.phase === 'build', 'endless returns to build phase');
   check(startWave(s), 'endless starts wave 101');
   check(s.wave === 101, 'endless continues at 101');
+}
+
+// --- 16b. Endless curve: 1-100 unchanged, HP bands, count/interval, modifier stacking ---------
+{
+  // Waves 1..100 must be byte-identical: hash the full balance table (HP scale, value scale,
+  // enemy count and kill value per wave) and compare against the committed pre-curve hash.
+  let table = '';
+  for (let w = 1; w <= 100; w++) {
+    table += `${waveHpScale(w)}|${waveValueScale(w)}|${waveEnemyCount(w)}|${waveKillValue(w)}\n`;
+  }
+  let h = 0x811c9dc5;
+  for (let i = 0; i < table.length; i++) {
+    h ^= table.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  check((h >>> 0).toString(16) === 'db85906d', `waves 1..100 balance table unchanged (hash ${(h >>> 0).toString(16)})`);
+}
+
+{
+  // HP escalates in compounding bands with no step or dip at the band edges.
+  const hp = waveHpScale;
+  const close = (a, b) => Math.abs(a - b) < 1e-9;
+  check(hp(100) < hp(101), `hp rises across 100->101 (${hp(100).toFixed(3)} -> ${hp(101).toFixed(3)})`);
+  check(hp(125) < hp(126), `hp rises across 125->126 (${hp(125).toFixed(3)} -> ${hp(126).toFixed(3)})`);
+  check(hp(150) < hp(151), `hp rises across 150->151 (${hp(150).toFixed(3)} -> ${hp(151).toFixed(3)})`);
+  check(hp(175) < hp(176), `hp rises across 175->176 (${hp(175).toFixed(3)} -> ${hp(176).toFixed(3)})`);
+  check(close(hp(101) / hp(100), 1.02), '101-125 rate is 1.020');
+  check(close(hp(126) / hp(125), 1.035), '126-150 rate is 1.035');
+  check(close(hp(151) / hp(150), 1.05), '151-175 rate is 1.050');
+  check(close(hp(176) / hp(175), 1.065), '176+ base rate is 1.065');
+  check(close(hp(201) / hp(200), 1.07), 'rate climbs to 1.070 at wave 201');
+  check(close(hp(500) / hp(499), 1.12), 'rate caps at 1.12');
+}
+
+{
+  // The enemy-count baseline grows again and the spawn interval tightens toward its floor.
+  check(endlessCountBase(100) === 66, 'count baseline stays 66 through wave 100');
+  check(endlessCountBase(101) === 72, 'count baseline rises to 72 at wave 101');
+  check(endlessCountBase(126) === 78, 'count baseline rises to 78 at wave 126');
+  check(endlessCountBase(251) === 108, 'count baseline reaches 108 at wave 251');
+  check(endlessCountBase(276) === 110, 'count baseline caps at 110');
+  check(endlessCountBase(500) === 110, 'count baseline holds the 110 cap');
+
+  check(endlessIntervalScale(100) === 1, 'interval scale is 1 through wave 100');
+  check(endlessIntervalScale(101) === 0.96, 'interval tightens to 0.96 at wave 101');
+  check(endlessIntervalScale(126) === 0.92, 'interval tightens to 0.92 at wave 126');
+  check(endlessIntervalScale(326) === 0.6, 'interval scale floors at 0.60');
+  check(endlessIntervalScale(500) === 0.6, 'interval scale holds the 0.60 floor');
+}
+
+{
+  // Modifiers stack harder deep in endless: two at 149, three at 150, three at 199, four at 200.
+  const distinct = (mods) => new Set(mods).size === mods.length;
+  check(waveModifiers(149).length === 2, 'wave 149 stacks two modifiers');
+  check(waveModifiers(150).length === 3, 'wave 150 stacks three modifiers');
+  check(distinct(waveModifiers(150)), 'wave 150 modifiers are distinct');
+  check(waveModifiers(199).length === 3, 'wave 199 still stacks three modifiers');
+  check(waveModifiers(200).length === 4, 'wave 200 stacks four modifiers');
+  check(distinct(waveModifiers(200)), 'wave 200 modifiers are distinct');
+  check(waveModifiers(120).length === 2, 'wave 120 still stacks two modifiers');
 }
 
 // --- 17. Early-call waves: bonus, schedules, per-wave leaks and victory -----------------------
@@ -3501,6 +3563,82 @@ function maintenanceRig(gunHp) {
   check(h.detail !== null && h.detail.branches.length === 3, 'a tier-2 cursor offers three branches');
 }
 
+{
+  // 34k. Three-branch towers stack their buttons vertically and never overlap, and every label
+  // shrinks to fit its button's inner width.
+  const intersects = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  const c = towerAt(s, 5, 5);
+  c.tier = 2;
+  selectPlacedTower(s, c);
+  const l = computeLayout(1280, 720);
+  const h = computeHud(l, s);
+  const buttons = h.detail.branches;
+  check(buttons.length === 3, 'a tier-2 cursor offers three branch buttons');
+
+  for (let i = 0; i < buttons.length; i++) {
+    for (let j = i + 1; j < buttons.length; j++) {
+      check(!intersects(buttons[i].rect, buttons[j].rect),
+        `cursor branch buttons ${i} and ${j} do not overlap`);
+    }
+    const labelW = Math.ceil(textWidth(buttons[i].label, FONT_SIZE.small));
+    const innerW = buttons[i].rect.w - 12;
+    check(labelW <= innerW,
+      `cursor branch label "${buttons[i].label}" fits its button (${labelW} <= ${innerW})`);
+  }
+
+  const last = buttons[buttons.length - 1].rect;
+  check(last.y + last.h <= l.leftPanel.y + l.leftPanel.h,
+    `the last cursor branch button stays above the panel bottom (${last.y + last.h} <= ${l.leftPanel.y + l.leftPanel.h})`);
+  check(h.detail.sell.y + h.detail.sell.h <= l.leftPanel.y + l.leftPanel.h,
+    'the cursor sell row is not pushed off the panel');
+}
+
+{
+  // 34l. A two-branch tower keeps the side-by-side row and its full, unchanged branch names.
+  const intersects = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+  const s = createRunState();
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 5, 5);
+  upgradeTower(s, 5, 5);
+  selectPlacedTower(s, towerAt(s, 5, 5));
+  const h = computeHud(computeLayout(1280, 720), s);
+  const buttons = h.detail.branches;
+  check(buttons.length === 2, 'a tier-2 gun offers two branch buttons');
+  check(!intersects(buttons[0].rect, buttons[1].rect), 'gun branch buttons do not overlap');
+  check(buttons[0].rect.y === buttons[1].rect.y, 'gun branch buttons share one row');
+  check(buttons[0].rect.w === buttons[1].rect.w, 'gun branch buttons split the row evenly');
+  check(buttons[0].label === branchName('gun', 'A') && buttons[1].label === branchName('gun', 'B'),
+    'gun branch buttons keep their full branch names');
+}
+
+{
+  // 34m. Every branching tower renders its branch buttons fully inside the panel at 1280x720 and
+  // 1600x900.
+  for (const [vw, vh] of [[1280, 720], [1600, 900]]) {
+    const l = computeLayout(vw, vh);
+    for (const kind of TOWER_KINDS) {
+      if (!hasBranches(kind)) continue;
+      const s = allUnlocked();
+      s.economy.salvage = 100000;
+      check(placeTower(s, kind, 5, 5), `place a ${kind} to inspect its branch row`);
+      check(upgradeTower(s, 5, 5), `upgrade ${kind} to tier 2`);
+      selectPlacedTower(s, towerAt(s, 5, 5));
+      const h = computeHud(l, s);
+      const buttons = h.detail.branches;
+      const inside = buttons.every((b) =>
+        b.rect.x >= l.leftPanel.x &&
+        b.rect.x + b.rect.w <= l.leftPanel.x + l.leftPanel.w &&
+        b.rect.y + b.rect.h <= l.leftPanel.y + l.leftPanel.h);
+      check(inside, `${kind} branch buttons stay inside the panel at ${vw}x${vh}`);
+    }
+  }
+}
+
 // --- 35. No-Build freezes the board -----------------------------------------------------------
 
 {
@@ -3981,6 +4119,107 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(getArtTexture('grunt', 28) === null, 'getArtTexture falls back to null headlessly');
   check(manifestEntry('grunt') !== undefined, 'manifestEntry resolves a known name');
   check(manifestEntry('no-such-asset') === undefined, 'manifestEntry rejects an unknown name');
+  resetArt();
+}
+
+// --- 37g. The placement ghost uses the same SVG art as a placed tower --------------------------
+{
+  resetArt();
+  const gunBase = new Texture({ width: 4, height: 4 });
+  const gunTurret = new Texture({ width: 8, height: 8 });
+  const beaconBase = new Texture({ width: 6, height: 6 });
+  const wallBase = new Texture({ width: 6, height: 6 });
+  injectArtTexture('gun-base', gunBase);
+  injectArtTexture('gun-turret', gunTurret);
+  injectArtTexture('beacon-base', beaconBase);
+  injectArtTexture('wall-base', wallBase);
+
+  const layout = computeLayout(1280, 800);
+  const board = layout.board;
+  const cell = board.cell;
+  const cx = board.x + (4 + 0.5) * cell;
+  const cy = board.y + (6 + 0.5) * cell;
+  const hover = { col: 4, row: 6, onBoard: true, x: 0, y: 0 };
+
+  // A turret kind previews its base and turret sprites, and the base is the same texture the placed
+  // tower uses (identity, not "something drawn").
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  check(placeTower(s, 'gun', 3, 6), 'ghost: place a gun to anchor texture identity');
+  selectTower(s, 'gun');
+  const view = new BoardView();
+  view.draw(s, layout, 0, hover);
+  check(view.towerBaseSprites[0].visible, 'ghost: the placed gun draws its base sprite');
+  check(view.ghostBase.visible, 'ghost: the preview base sprite is visible at the hovered tile');
+  check(view.ghostBase.texture === view.towerBaseSprites[0].texture,
+    'ghost: the preview uses the placed tower\'s base texture');
+  check(view.ghostBase.texture === gunBase, 'ghost: the preview base is the gun-base texture');
+  check(view.ghostBase.alpha === 0.5, 'ghost: the preview base is at 50% alpha');
+  check(view.ghostBase.position.x === cx && view.ghostBase.position.y === cy,
+    'ghost: the preview base sits at the hovered tile');
+  check(view.ghostTurret.visible, 'ghost: a turret kind previews its turret');
+  check(view.ghostTurret.texture === gunTurret, 'ghost: the turret preview uses the gun-turret texture');
+  check(view.ghostTurret.alpha === 0.5, 'ghost: the turret preview is at 50% alpha');
+  check(view.ghostTurret.rotation === 0, 'ghost: a fresh turret faces north');
+
+  // The ghost sprites are pooled: the same two sprites serve every frame, no per-frame allocation.
+  const baseRef = view.ghostBase;
+  const turretRef = view.ghostTurret;
+  for (let i = 0; i < 10; i++) view.draw(s, layout, 0, hover);
+  check(view.ghostBase === baseRef && view.ghostTurret === turretRef,
+    'ghost: pooled sprites persist across frames');
+  check(view.ghost.children.length === 2, 'ghost: exactly two pooled sprites (base + turret)');
+
+  // Moving off the board hides the ghost on the next frame.
+  view.draw(s, layout, 0, { col: 4, row: 6, onBoard: false, x: 0, y: 0 });
+  check(!view.ghostBase.visible && !view.ghostTurret.visible, 'ghost: leaving the board hides the ghost');
+
+  // The ghost returns on re-entry, and cancelling the selection hides it.
+  view.draw(s, layout, 0, hover);
+  check(view.ghostBase.visible && view.ghostTurret.visible, 'ghost: the ghost returns when hovering back');
+  cancelSelection(s);
+  view.draw(s, layout, 0, hover);
+  check(!view.ghostBase.visible && !view.ghostTurret.visible, 'ghost: cancelling the selection hides the ghost');
+
+  // A turret-less kind previews base only.
+  const s2 = stateOnLevel('open-field');
+  s2.wave = 24;
+  s2.economy.salvage = 10000;
+  const view2 = new BoardView();
+  selectTower(s2, 'beacon');
+  view2.draw(s2, layout, 0, hover);
+  check(view2.ghostBase.visible, 'ghost: a turret-less kind previews its base');
+  check(view2.ghostBase.texture === beaconBase, 'ghost: the beacon base is the injected texture');
+  check(!view2.ghostTurret.visible, 'ghost: a turret-less kind previews no turret');
+
+  // The wall preview uses the wall base art at the default (closed, un-upgraded) appearance.
+  const s3 = stateOnLevel('open-field');
+  s3.economy.salvage = 10000;
+  const view3 = new BoardView();
+  selectTower(s3, 'wall');
+  view3.draw(s3, layout, 0, hover);
+  check(view3.ghostBase.visible, 'ghost: the wall preview uses the wall base art');
+  check(view3.ghostBase.texture === wallBase, 'ghost: the wall base is the injected texture');
+  check(view3.ghostBase.alpha === 0.5, 'ghost: the wall preview is at 50% alpha');
+  check(!view3.ghostTurret.visible, 'ghost: the wall preview has no turret');
+
+  resetArt();
+}
+
+// --- 37h. The ghost falls back to the procedural shape when the art texture is absent ----------
+{
+  resetArt();
+  const layout = computeLayout(1280, 800);
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  selectTower(s, 'gun');
+  const view = new BoardView();
+  const hover = { col: 4, row: 6, onBoard: true, x: 0, y: 0 };
+  view.draw(s, layout, 0, hover);
+  check(!view.ghostBase.visible && !view.ghostTurret.visible,
+    'ghost fallback: no sprites are shown without art');
+  check(view.overlay.context.instructions.length > 0,
+    'ghost fallback: the procedural ghost drew into the overlay');
   resetArt();
 }
 

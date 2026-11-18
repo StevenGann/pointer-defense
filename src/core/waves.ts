@@ -39,7 +39,20 @@ export const WAVE_COUNT = 100;
 export const ENDLESS_SEED_OFFSET = 1_000_000;
 
 /** Per-wave enemy cap: late waves are won by damage and maze, not by attrition. */
-export const WAVE_ENEMY_CAP = 70;
+export const WAVE_ENEMY_CAP = 110;
+
+/** Endless enemy-count baseline: 66 through wave 100, then +6 per 25 waves, capped at 110. */
+export function endlessCountBase(wave: number): number {
+  if (wave < 101) return 66;
+  return Math.min(110, 72 + 6 * Math.floor((wave - 101) / 25));
+}
+
+/** Endless spawn-interval scale: 0.96 from wave 101, tightening 4% per 25 waves, floored at 0.60. */
+export function endlessIntervalScale(wave: number): number {
+  if (wave < 101) return 1;
+  const k = 1 + Math.floor((wave - 101) / 25);
+  return Math.max(0.6, (100 - 4 * k) / 100);
+}
 
 export type ModifierId = 'fog' | 'no-build' | 'fast' | 'blackout' | 'rush';
 
@@ -165,14 +178,26 @@ export function popupAliveCap(wave: number): number {
 // ---------------------------------------------------------------------------------------------
 // Modifiers
 
-/** The modifiers for a wave: one from 51, two (distinct) from 120 in endless. Empty before 51. */
+/**
+ * The modifiers for a wave: one from 51, two (distinct) from 120, three from 150 and four from 200.
+ * Empty before 51. Every extra modifier is distinct and derived from the wave's seeded hash, so the
+ * same wave always stacks the same modifiers.
+ */
 export function waveModifiers(wave: number): readonly ModifierId[] {
   if (wave < 51) return [];
-  const first = MODIFIER_POOL[hashInt(wave) % MODIFIER_POOL.length];
+  const pool = MODIFIER_POOL;
+  const first = pool[hashInt(wave) % pool.length];
   if (wave < 120) return [first];
-  const idx = MODIFIER_POOL.indexOf(first);
-  const offset = 1 + (hashInt(wave ^ 0x51ab3) % (MODIFIER_POOL.length - 1));
-  return [first, MODIFIER_POOL[(idx + offset) % MODIFIER_POOL.length]];
+  const idx = pool.indexOf(first);
+  const offset = 1 + (hashInt(wave ^ 0x51ab3) % (pool.length - 1));
+  const second = pool[(idx + offset) % pool.length];
+  if (wave < 150) return [first, second];
+  const rest2 = pool.filter((m) => m !== first && m !== second);
+  const third = rest2[hashInt(wave ^ 0x7f4a7c15) % rest2.length];
+  if (wave < 200) return [first, second, third];
+  const rest3 = rest2.filter((m) => m !== third);
+  const fourth = rest3[hashInt(wave ^ 0x2c1b3c6d) % rest3.length];
+  return [first, second, third, fourth];
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -185,7 +210,7 @@ function totalCount(wave: number): number {
   else if (wave <= 40) base = 42;
   else if (wave <= 60) base = 52;
   else if (wave <= 80) base = 60;
-  else base = 66;
+  else base = endlessCountBase(wave);
   const jitter = Math.floor(waveRng(wave)() * 7) - 3; // -3..+3
   return Math.min(WAVE_ENEMY_CAP, Math.max(8, base + jitter));
 }
@@ -298,7 +323,7 @@ export function buildSchedule(wave: number): Spawn[] {
   const groups = [...def.groups];
   if (isBossWave(wave)) groups.push(...bossGroups(wave));
   const rush = waveModifiers(wave).includes('rush');
-  const intervalScale = rush ? 0.75 : 1;
+  const intervalScale = (rush ? 0.75 : 1) * endlessIntervalScale(wave);
   const out: Spawn[] = [];
   for (const grp of groups) {
     const interval = Math.max(1, Math.round(grp.interval * intervalScale));

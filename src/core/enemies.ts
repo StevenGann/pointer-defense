@@ -126,12 +126,29 @@ export interface Enemy {
  * Enemies get tougher each wave; salvage grows more slowly so towers stay a real investment.
  * Piecewise per docs/design.md §8.3: linear to wave 20, then exponential — HP outgrows value on
  * purpose so the curve visibly bends around wave 60 and the player starts thinking about a reboot.
+ *
+ * Waves 101+ are endless and escalate in compounding bands (docs/design.md §8.3): the rate climbs
+ * through four band steps and then +0.005 every 25 waves, capped at 1.12, so a maxed board cannot
+ * coast forever.
  */
+
+/** The per-wave HP growth multiplier for endless waves (101+). */
+export function endlessHpRate(wave: number): number {
+  const w = Math.max(101, wave);
+  if (w <= 125) return 1.02;
+  if (w <= 150) return 1.035;
+  if (w <= 175) return 1.05;
+  return Math.min(1.12, (1065 + 5 * Math.floor((w - 176) / 25)) / 1000);
+}
+
 export function waveHpScale(wave: number): number {
   const w = Math.max(1, wave);
   if (w <= 20) return 1 + 0.18 * (w - 1);
   if (w <= 60) return 4.42 * Math.pow(1.015, w - 20);
-  return 4.42 * Math.pow(1.015, 40) * Math.pow(1.001, w - 60);
+  if (w <= 100) return 4.42 * Math.pow(1.015, 40) * Math.pow(1.001, w - 60);
+  let scale = 4.42 * Math.pow(1.015, 40) * Math.pow(1.001, 40);
+  for (let i = 101; i <= w; i++) scale *= endlessHpRate(i);
+  return scale;
 }
 
 export function waveValueScale(wave: number): number {

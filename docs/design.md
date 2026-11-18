@@ -575,7 +575,7 @@ wave timer.
 ```
 hpScale(w)    = 1 + 0.18·(w−1)          for w ≤ 20
               = 4.42 · 1.015^(w−20)     for 20 < w ≤ 60
-              = 8.02 · 1.001^(w−60)     for w > 60
+              = 8.02 · 1.001^(w−60)     for 60 < w ≤ 100
 valueScale(w) = 1 + 0.06·(w−1)          for w ≤ 50
               = 3.94 · 1.012^(w−50)     for w > 50
 ```
@@ -583,6 +583,29 @@ valueScale(w) = 1 + 0.06·(w−1)          for w ≤ 50
 HP outgrows value on purpose. The curve bends twice: it steepens through the Specialists and Attrition
 bands, then flattens past wave 60 so that one reboot's worth of specs is enough to carry a competent
 player to wave 100. Without the reboot the same player runs out of integrity somewhere in the Siege band.
+
+**Endless** continues the HP curve in compounding bands, so a maxed board cannot coast forever:
+
+| Waves | HP rate per wave | Spawn interval scale | Enemy-count baseline |
+|---|---|---|---|
+| ≤ 100 | as above | 1.00 | 66 |
+| 101–125 | 1.020 | 0.96 | 72 |
+| 126–150 | 1.035 | 0.92 | 78 |
+| 151–175 | 1.050 | 0.88 | 84 |
+| 176–200 | 1.065 | 0.84 | 90 |
+| 201–225 | 1.070 | 0.80 | 96 |
+| 226–250 | 1.075 | 0.76 | 102 |
+
+The HP rate then climbs +0.005 every 25 waves, capped at **1.12**; the spawn-interval scale tightens
+4 % per 25 waves down to a floor of **0.60**; and the enemy-count baseline rises 6 per 25 waves,
+capped at **110**. Each band compounds on the one before, so there is no step or dip at a band edge —
+only a steeper slope. Modifiers stack harder too: one from wave 51, two distinct from wave 120, three
+from 150, four from 200.
+
+The measured curve: `waveHpScale` is **12.40** at wave 120, **32.36** at 150, **528.9** at 200 and
+**17,507** at 250 (wave 100 is 8.35). The balance harness's `--endless` flag drives the standard build
+past victory until it dies; every authored map currently falls between wave 119 and 126 under this
+curve.
 
 From wave 51 each wave takes one modifier from a small pool: **fog** (range −20 %), **no-build**
 (the whole board is frozen for the wave), **fast forward** (speed +15 %), **blackout** (salvage
@@ -599,7 +622,14 @@ and the relevant buttons render disabled for the duration of the wave, re-enabli
 ### 8.4 Victory and endless
 
 Clearing wave 100 grants victory and unlocks **endless**: procedural composition from a weighted pool,
-scaling continues, modifiers stack. Endless exists for players who do not want to reboot yet.
+scaling continues (see the endless table in §8.3), modifiers stack. Endless exists for players who do
+not want to reboot yet — but it is now a mode that eventually ends the run rather than a flat coast.
+
+The balance harness measures it with `npm run balance -- --endless`: the standard build plays through
+the victory transition and keeps going until integrity hits zero, then reports the wave reached per
+map. The target is that a maxed, competently played board does not walk past wave 150, and every map
+dies between wave 110 and 220. If a map passes 250 the 101–125 rate is raised 0.005 and the run
+re-measured.
 
 ### 8.5 Call the next wave early
 
