@@ -3,11 +3,11 @@
 Read [`docs/ART-STYLE.md`](../../docs/ART-STYLE.md) first: it explains the Windows 95 motif, the
 limited palette, what the engine draws on top of your files, and what to avoid.
 
-This directory is the source of truth for every **fixed** piece of art. Anything that changes at
-runtime — window chrome, buttons, panels, health bars, range rings, shields, route dots, damage
-numbers, muzzle flashes, sparks, death pops, tooltips, menus, dialogs — is drawn in code from state
-and has no file here. **What is in this directory is what an artist owns; what is not is what the
-code owns.**
+This directory is the source of truth for every **fixed** piece of art: anything whose *shape* is
+constant and only its position, scale, rotation, alpha or colour changes at runtime. What stays in
+code is the geometry that depends on state — window chrome, buttons, panels, health bars, range
+rings, shields, route dots, damage numbers, tooltips, menus, dialogs. **What is in this directory is
+what an artist owns; what is not is what the code owns.**
 
 ## The contract
 
@@ -111,12 +111,54 @@ branch mark, and the Repair tower has no branches.
 | `obstacle.svg` | a blocked / desk-object tile |
 | `block.svg` | a static block |
 
+### `fx/`
+
+Effect sprites: fixed shapes whose only runtime variation is position, scale, rotation, alpha or
+tint. The engine positions, scales, rotates and fades them from the existing effect code; nothing
+about the timing or motion changed. Effect sprites are the one exception to "colour lives in the
+file" — they may be tinted at runtime (see `docs/ART-STYLE.md`), because a death ring takes the
+enemy's colour and nine near-identical files would be worse than one.
+
+| File | Represents |
+|---|---|
+| `muzzle-gun.svg` | the gun's bright wedge, tip ahead along the barrel |
+| `muzzle-cannon.svg` | a round puff: white outer, maroon core (the cannon's colour) |
+| `muzzle-frost.svg` | the same puff in the frost colour (ice-blue core) |
+| `muzzle-laser.svg` | the cross spark: two perpendicular white lines |
+| `muzzle-taser.svg` | the short arc flicker around the aim direction |
+| `spark-hit.svg` | three short radiating lines from a hit |
+| `shield-arc.svg` | the 270-degree cyan arc, scaled to the hit radius |
+| `death-ring.svg` | the expanding ring with three shards; white, tinted to the enemy's colour |
+
+### `ui/`
+
+UI glyphs: fixed chrome marks. Most keep their colour in the file; the two white templates below
+are tinted to the live colour, and the tint is noted per asset.
+
+| File | Represents |
+|---|---|
+| `cursor-arrow.svg` | the white pointer, tip at the top-left |
+| `offline-wrench.svg` | the red crossed mark on an offline tower |
+| `shutter-open.svg` | the open gate leaf's faint outline (white, tinted grey-to-warm as the close nears) |
+| `shutter-closed.svg` | the closed gate leaf: a solid grey tile |
+| `check.svg` | the tick used by the HUD checkbox and the menu check (white, tinted to the text colour) |
+| `glyph-minimize.svg` | the window minimize glyph |
+| `glyph-maximize.svg` | the window maximize glyph |
+| `glyph-close.svg` | the window close glyph |
+| `arrow-left.svg` | the title-bar left arrow |
+| `arrow-right.svg` | the mirrored right arrow (reserved) |
+
+The Cursor tower's own plinth is `towers/cursor-base.svg`; `cursor-arrow.svg` here is the flying
+cursor and the OS pointer.
+
 ## The runtime effects that recolour art
 
 - **Damage flash** — not currently applied; when it is, it will be a white tint on the sprite.
 - **Offline towers** — a grey desaturation wash is applied to the sprite, plus a red crossed wrench.
 - **Wall face shade** — `wall-base.svg` is white; the engine tints it to the raised / pressed / disabled
   / damaged grey, because a button's shade is stateful and a tint cannot brighten a pre-greyed face.
+- **Death ring** — `death-ring.svg` is white; the engine tints it to the dead enemy's colour (the one
+  effect-sprite tint, see `docs/ART-STYLE.md`).
 - **Shield ring, slow arc, weak-point notch, health bar** — drawn by code on top of the enemy sprite.
 
 ## Adding or changing art

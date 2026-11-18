@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A round puff: white outer ring, maroon core (the cannon's identity colour). -->
+  <circle cx="16" cy="16" r="8.3" fill="#ffffff"/>
+  <circle cx="16" cy="16" r="3.7" fill="#800000"/>
+</svg>

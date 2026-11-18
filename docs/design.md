@@ -1022,11 +1022,12 @@ defaults **off** for users who prefer reduced motion (`prefers-reduced-motion: r
 
 ### 13.6 Art pipeline (see also `docs/ART-STYLE.md`, the visual style guide for artists)
 
-Fixed art — enemy bodies, tower plinths and barrels, branch marks, the board tile, the static obstacle
-and the block — ships as hand-editable SVG files under `public/art/`. Runtime effects stay code:
-window chrome and bevels, buttons, panels, ads, health bars, range rings, shields, route dots, damage
-numbers, muzzle flashes, sparks, death pops, tooltips, menus and dialogs are composed per frame from
-state and have no fixed form to hand over.
+Fixed art — enemy bodies, tower plinths and barrels, branch marks, the board tiles, combat effect
+sprites (muzzle flashes, hit sparks, shield arcs, death rings) and the UI glyphs (the cursor, the
+window controls, the check, the shutters) — ships as hand-editable SVG files under `public/art/`.
+What stays code is the geometry that depends on state: window chrome and bevels, buttons, panels,
+ads, health bars, range rings, shields, route dots, damage numbers, tooltips, menus and dialogs are
+composed per frame from state and have no fixed form to hand over.
 
 `src/view/art.ts` holds the manifest of every asset, fetches each SVG once, decodes it into an `Image`,
 and rasterises it into an offscreen canvas at the exact device-pixel size the sprite needs, so the

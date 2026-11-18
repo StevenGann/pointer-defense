@@ -1,4 +1,4 @@
-import { Application, Container, Graphics } from 'pixi.js';
+import { Application, Container, Graphics, Sprite } from 'pixi.js';
 import './style.css';
 import {
   buySpec,
@@ -42,7 +42,7 @@ import { EffectsView } from './view/effects.ts';
 import { sfx, type SoundName } from './audio/sfx.ts';
 import { CameraShake, shakeImpulseFor } from './view/shake.ts';
 import { backingStorePixelSize, cssViewportSize, liveDevicePixelRatio } from './view/screen.ts';
-import { onArtInvalidate, preloadArt, setArtDpr } from './view/art.ts';
+import { getArtTexture, onArtInvalidate, preloadArt, setArtDpr } from './view/art.ts';
 import { repairHealingCount, TOWER_STATS, type Branch, type TowerKind } from './core/towers.ts';
 import { isBossVariant } from './core/enemies.ts';
 import pkg from '../package.json';
@@ -124,8 +124,11 @@ const tooltip = new TooltipView();
 
 // Art loads without blocking the first frame; when it (or a DPR change) invalidates, the board drops
 // its cached procedural art and re-reads the texture lookup on the next frame.
-onArtInvalidate(() => board.invalidateArt());
-void preloadArt();
+onArtInvalidate(() => {
+  board.invalidateArt();
+  drawCursorArrow();
+});
+void preloadArt().then(() => drawCursorArrow());
 
 const root = new Container();
 app.stage.addChild(root);
@@ -158,16 +161,34 @@ function syncViewport(): void {
 }
 syncViewport();
 
-const cursor = new Graphics();
-drawCursorArrow(cursor);
-root.addChild(cursor);
+const cursor = new Sprite();
+cursor.anchor.set(0, 0);
+cursor.visible = false;
+const cursorFallback = new Graphics();
+root.addChild(cursor, cursorFallback);
 
-function drawCursorArrow(g: Graphics): void {
-  g.clear();
-  g.poly([0, 0, 0, 13, 3.5, 10, 5.5, 16, 8, 14, 6.5, 10, 11, 10])
-    .fill(PAL.highlight)
-    .stroke({ width: 1, color: PAL.dark });
+function drawCursorArrow(): void {
+  const tex = getArtTexture('cursor-arrow', 16);
+  if (tex !== null) {
+    cursor.texture = tex;
+    cursor.width = 16;
+    cursor.height = 16;
+    cursor.rotation = 0;
+    cursor.alpha = 1;
+    cursor.tint = 0xffffff;
+    cursor.visible = true;
+    cursorFallback.visible = false;
+  } else {
+    cursor.visible = false;
+    cursorFallback.visible = true;
+    cursorFallback.clear();
+    cursorFallback
+      .poly([0, 0, 0, 13, 3.5, 10, 5.5, 16, 8, 14, 6.5, 10, 11, 10])
+      .fill(PAL.highlight)
+      .stroke({ width: 1, color: PAL.dark });
+  }
 }
+drawCursorArrow();
 
 // --- Meta-game wiring ---------------------------------------------------------------------------
 

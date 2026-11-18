@@ -1,5 +1,6 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { COLS, ROWS } from '../core/grid.ts';
+import { getArtTexture } from './art.ts';
 
 /**
  * Windows 95 chrome primitives and the single window model.
@@ -209,21 +210,36 @@ function drawArrowIcon(g: Graphics, x: number, y: number): void {
     .fill(PAL.titleInverse);
 }
 
-function drawControlGlyph(g: Graphics, r: Rect, kind: 'min' | 'max' | 'close'): void {
+function drawControlGlyph(g: Graphics, spr: Sprite, r: Rect, kind: 'min' | 'max' | 'close'): void {
   const cx = r.x + Math.floor(r.w / 2);
   const cy = r.y + Math.floor(r.h / 2);
-  if (kind === 'min') {
-    g.rect(cx - 3, r.y + r.h - 5, 6, 2).fill(PAL.text);
-  } else if (kind === 'max') {
-    g.rect(cx - 4, cy - 4, 9, 8).stroke({ width: 1, color: PAL.text });
-    g.rect(cx - 4, cy - 4, 9, 2).fill(PAL.text);
+  const name = kind === 'min' ? 'glyph-minimize' : kind === 'max' ? 'glyph-maximize' : 'glyph-close';
+  const size = kind === 'min' ? 10 : kind === 'max' ? 12 : 14;
+  const tex = getArtTexture(name, size);
+  if (tex !== null) {
+    spr.texture = tex;
+    spr.width = size;
+    spr.height = size;
+    spr.rotation = 0;
+    spr.alpha = 1;
+    spr.tint = 0xffffff;
+    spr.visible = true;
+    spr.position.set(cx, kind === 'min' ? r.y + r.h - 4 : cy);
   } else {
-    g.moveTo(cx - 4, cy - 4).lineTo(cx + 4, cy + 4).stroke({ width: 1, color: PAL.text });
-    g.moveTo(cx + 4, cy - 4).lineTo(cx - 4, cy + 4).stroke({ width: 1, color: PAL.text });
+    spr.visible = false;
+    if (kind === 'min') {
+      g.rect(cx - 3, r.y + r.h - 5, 6, 2).fill(PAL.text);
+    } else if (kind === 'max') {
+      g.rect(cx - 4, cy - 4, 9, 8).stroke({ width: 1, color: PAL.text });
+      g.rect(cx - 4, cy - 4, 9, 2).fill(PAL.text);
+    } else {
+      g.moveTo(cx - 4, cy - 4).lineTo(cx + 4, cy + 4).stroke({ width: 1, color: PAL.text });
+      g.moveTo(cx + 4, cy - 4).lineTo(cx - 4, cy + 4).stroke({ width: 1, color: PAL.text });
+    }
   }
 }
 
-function drawControlButtons(g: Graphics, title: Rect): void {
+function drawControlButtons(g: Graphics, sprites: readonly Sprite[], title: Rect): void {
   const bw = CONTROL_BOX_W;
   const bh = CONTROL_BOX_H;
   const y = title.y + Math.floor((title.h - bh) / 2);
@@ -231,24 +247,36 @@ function drawControlButtons(g: Graphics, title: Rect): void {
   const close: Rect = { x: right - bw, y, w: bw, h: bh };
   const maxi: Rect = { x: close.x - 2 - bw, y, w: bw, h: bh };
   const mini: Rect = { x: maxi.x - 2 - bw, y, w: bw, h: bh };
-  for (const [r, kind] of [
+  const boxes = [
     [mini, 'min'],
     [maxi, 'max'],
     [close, 'close'],
-  ] as const) {
+  ] as const;
+  for (let i = 0; i < boxes.length; i++) {
+    const [r, kind] = boxes[i];
     bevel(g, r, true);
-    drawControlGlyph(g, r, kind);
+    drawControlGlyph(g, sprites[i], r, kind);
   }
 }
 
 export class ChromeView {
   readonly root = new Container();
   private readonly frame = new Graphics();
+  private readonly glyphs = new Container();
+  readonly arrowIcon = new Sprite();
+  readonly controlGlyphs: Sprite[] = [new Sprite(), new Sprite(), new Sprite()];
   private readonly titleText: Text;
   private readonly menuTexts: Text[];
 
   constructor() {
-    this.root.addChild(this.frame);
+    this.root.addChild(this.frame, this.glyphs);
+    this.arrowIcon.anchor.set(0.5, 0.5);
+    this.arrowIcon.visible = false;
+    for (const s of this.controlGlyphs) {
+      s.anchor.set(0.5, 0.5);
+      s.visible = false;
+    }
+    this.glyphs.addChild(this.arrowIcon, ...this.controlGlyphs);
     this.titleText = new Text({
       text: 'Pointer Defense',
       style: { fontFamily: FONT, fontSize: FONT_SIZE.body, fontWeight: 'bold', fill: PAL.titleInverse },
@@ -274,9 +302,22 @@ export class ChromeView {
     g.rect(l.title.x, l.title.y, l.title.w, l.title.h).fill(PAL.title);
     const iconX = l.title.x + 2;
     const iconY = l.title.y + 1;
-    drawArrowIcon(g, iconX, iconY);
+    const arrowTex = getArtTexture('arrow-left', 16);
+    if (arrowTex !== null) {
+      this.arrowIcon.texture = arrowTex;
+      this.arrowIcon.width = 16;
+      this.arrowIcon.height = 16;
+      this.arrowIcon.position.set(iconX + 6, iconY + 7.5);
+      this.arrowIcon.rotation = 0;
+      this.arrowIcon.alpha = 1;
+      this.arrowIcon.tint = 0xffffff;
+      this.arrowIcon.visible = true;
+    } else {
+      this.arrowIcon.visible = false;
+      drawArrowIcon(g, iconX, iconY);
+    }
     this.titleText.position.set(iconX + 16 + 2, l.title.y + Math.floor(l.title.h / 2));
-    drawControlButtons(g, l.title);
+    drawControlButtons(g, this.controlGlyphs, l.title);
 
     // Menu bar.
     g.rect(l.menu.x, l.menu.y, l.menu.w, l.menu.h).fill(PAL.face);

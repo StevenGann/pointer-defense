@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A white ring and three shards; the engine tints it to the dead enemy's colour. -->
+  <circle cx="16" cy="16" r="12" fill="none" stroke="#ffffff" stroke-width="2"/>
+  <circle cx="23" cy="16" r="2.4" fill="#ffffff"/>
+  <circle cx="12.5" cy="22.1" r="2.4" fill="#ffffff"/>
+  <circle cx="12.5" cy="9.9" r="2.4" fill="#ffffff"/>
+</svg>

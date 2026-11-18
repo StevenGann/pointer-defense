@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The classic white pointer, tip at the top-left origin. -->
+  <polygon points="0,0 0,26 7,20 11,32 16,28 13,20 22,20" fill="#ffffff" stroke="#000000" stroke-width="2" stroke-linejoin="round"/>
+</svg>

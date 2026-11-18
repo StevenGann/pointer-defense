@@ -96,6 +96,15 @@ twice.
 | `#d00000` | Offline tower mark |
 | red to green | Health bar |
 
+### The one exception: effect sprites may be tinted
+
+Colour lives in the file, with one exception. Effects are colour-coded by what *caused* them rather
+than by what they are: a death ring takes the enemy's colour, so a Grunt's ring is blue-grey and a
+Boss's is darker still. Shipping nine near-identical death-ring files would be worse for an artist
+than one, so **effect sprites are the single exception — the engine may tint them at runtime.** A
+death ring is authored white and tinted to the dead enemy's colour; a shield arc keeps its cyan in
+the file. Everything else keeps its colour in the file.
+
 ---
 
 ## 3. Rules of form

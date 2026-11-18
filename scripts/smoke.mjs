@@ -88,9 +88,9 @@ import {
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
 import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName } from '../src/view/tooltipText.ts';
-import { BoardView, staticLayerKey } from '../src/view/board.ts';
+import { BoardView, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
-import { computeLayout, pixelToWorld, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE } from '../src/view/chrome.ts';
+import { computeLayout, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE } from '../src/view/chrome.ts';
 import { computeHud, computeRightPanel, hudControlAt, textWidth } from '../src/view/hud.ts';
 import { backingStorePixelSize } from '../src/view/screen.ts';
 import {
@@ -114,7 +114,8 @@ import {
   onArtInvalidate,
 } from '../src/view/art.ts';
 import { Texture } from 'pixi.js';
-import { readdirSync, existsSync } from 'node:fs';
+import { readdirSync, existsSync, readFileSync } from 'node:fs';
+import { EffectsView } from '../src/view/effects.ts';
 import { fileURLToPath } from 'node:url';
 import {
   CameraShake,
@@ -4049,8 +4050,8 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   }
   check(unique, 'every manifest entry has a unique name');
   check(
-    ['enemies', 'towers', 'branches', 'board'].every((c) => categories.has(c)),
-    'the manifest covers enemies, towers, branches and board',
+    ['enemies', 'towers', 'branches', 'board', 'fx', 'ui'].every((c) => categories.has(c)),
+    'the manifest covers enemies, towers, branches, board, fx and ui',
   );
   check(ART_VIEWBOX === 32 && ART_SILHOUETTE === 28,
     `the viewBox contract is ${ART_VIEWBOX}x${ART_VIEWBOX}, silhouette ${ART_SILHOUETTE}px`);
@@ -4058,11 +4059,30 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   // 37b. Every shipped manifest file exists on disk, and no SVG on disk is unreferenced. The
   // shipped set grows as each art phase lands (towers, branches, board); the manifest itself lists
   // the whole contract from the start, so unshipped entries simply fall back to procedural drawing.
-  const shippedCategories = ['enemies', 'towers', 'branches', 'board'];
+  const shippedCategories = ['enemies', 'towers', 'branches', 'board', 'fx', 'ui'];
   const missing = ART_MANIFEST.filter(
     (e) => shippedCategories.includes(e.category) && !existsSync(`${artDir}/${e.file}`),
   );
   check(missing.length === 0, `every shipped manifest file exists (${missing.map((m) => m.file).join(', ') || 'none missing'})`);
+
+  // Every fx and ui asset parses as SVG: a single 32x32-viewBox root that closes cleanly. A malformed
+  // file (truncated, wrong viewBox, unbalanced tags) would fail the rasteriser, so it is rejected here
+  // rather than silently falling back to the procedural drawing.
+  const svgLooksValid = (text) => {
+    const t = text.trim();
+    return (
+      t.startsWith('<svg') &&
+      t.endsWith('</svg>') &&
+      t.includes('viewBox="0 0 32 32"') &&
+      (t.match(/</g) || []).length === (t.match(/>/g) || []).length
+    );
+  };
+  const malformed = ART_MANIFEST.filter((e) => {
+    if (e.category !== 'fx' && e.category !== 'ui') return false;
+    if (!existsSync(`${artDir}/${e.file}`)) return false;
+    return !svgLooksValid(readFileSync(`${artDir}/${e.file}`, 'utf8'));
+  });
+  check(malformed.length === 0, `every fx and ui asset parses as SVG (${malformed.map((m) => m.file).join(', ') || 'none malformed'})`);
 
   const onDisk = [];
   const walk = (dir, rel) => {
@@ -4593,6 +4613,62 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   }
   check(typeBossKindForWave(32) === typeBossKindForWave(32), 'type-boss selection is deterministic');
   check(isTypeBossWave(32) && !isTypeBossWave(31) && !isTypeBossWave(100), 'the eighth-wave cadence holds after wave 24');
+}
+
+// --- 37i. Effects draw sprites from the fx assets, tint only the death ring ---------------------
+{
+  resetArt();
+  const layout = computeLayout(1280, 800);
+  const gunMuzzle = new Texture({ width: 4, height: 4 });
+  const spark = new Texture({ width: 4, height: 4 });
+  const shield = new Texture({ width: 4, height: 4 });
+  const death = new Texture({ width: 4, height: 4 });
+  injectArtTexture('muzzle-gun', gunMuzzle);
+  injectArtTexture('spark-hit', spark);
+  injectArtTexture('shield-arc', shield);
+  injectArtTexture('death-ring', death);
+
+  const s = createRunState();
+  s.tick = 10;
+
+  // A gun muzzle flash draws the muzzle-gun sprite, visible, and no procedural fallback runs.
+  const fx = new EffectsView();
+  fx.addShot(createTower(1, 'gun', 3, 6), 8, 6);
+  fx.draw(s, layout);
+  check(fx.muzzleSprites[0].visible, 'effects: a gun shot draws a muzzle sprite');
+  check(fx.muzzleSprites[0].texture === gunMuzzle, 'effects: the muzzle uses the muzzle-gun texture');
+
+  // A death ring uses the death-ring texture, is tinted to the dead enemy's colour, and sits at the
+  // death's world position.
+  fx.addDeath('grunt', 5, 6);
+  fx.draw(s, layout);
+  check(fx.deathSprites[0].texture === death, 'effects: a death draws the death-ring texture');
+  check(fx.deathSprites[0].tint === ENEMY_COLOR.grunt, 'effects: the death ring is tinted to the enemy colour');
+  const dp = worldToPixel(layout, 5, 6);
+  check(
+    Math.round(fx.deathSprites[0].position.x) === Math.round(dp.x) &&
+      Math.round(fx.deathSprites[0].position.y) === Math.round(dp.y),
+    'effects: the death ring sits at the death position',
+  );
+
+  // A shield hit uses the shield-arc texture and is left untinted (its cyan lives in the file).
+  fx.addShieldHit(7, 8);
+  fx.draw(s, layout);
+  check(fx.shieldSprites[0].texture === shield, 'effects: a shield hit draws the shield-arc texture');
+  check(fx.shieldSprites[0].tint === 0xffffff, 'effects: the shield arc stays cyan (no tint applied)');
+
+  // A hit spark draws the spark-hit texture at the impact point.
+  fx.addHitSpark(9, 10);
+  fx.draw(s, layout);
+  check(fx.sparkSprites[0].texture === spark, 'effects: a hit spark draws the spark-hit texture');
+  const sp = worldToPixel(layout, 9, 10);
+  check(
+    Math.round(fx.sparkSprites[0].position.x) === Math.round(sp.x) &&
+      Math.round(fx.sparkSprites[0].position.y) === Math.round(sp.y),
+    'effects: the spark sits at the impact position',
+  );
+
+  resetArt();
 }
 
 {

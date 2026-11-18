@@ -1,9 +1,10 @@
-import { Container, Graphics } from 'pixi.js';
+import { Container, Graphics, Sprite } from 'pixi.js';
 import { PAL, worldToPixel, type Layout } from './chrome.ts';
 import { ENEMY_STATS, isBossVariant, type EnemyKind } from '../core/enemies.ts';
 import type { Tower, TowerKind } from '../core/towers.ts';
 import type { RunState } from '../core/state.ts';
 import { ENEMY_COLOR, SHIELD_COLOR, TOWER_COLOR } from './board.ts';
+import { getArtTexture } from './art.ts';
 
 /**
  * Short-lived combat effects, timed in fixed ticks so a 30 fps and a 60 fps frame show the same
@@ -24,6 +25,22 @@ const CAP_TRACER = 256;
 const CAP_SPARK = 96;
 const CAP_SHIELD = 96;
 const CAP_DEATH = 96;
+
+/**
+ * The asset for each weapon's muzzle flash. The beacon (and any kind without a file) has none. The
+ * colours are baked into each file — the gun, laser and taser flashes are always white, and the
+ * cannon/frost puffs carry their own identity colour — so no runtime tint is needed here.
+ */
+const MUZZLE_ASSET: Readonly<Partial<Record<TowerKind, string>>> = {
+  gun: 'muzzle-gun',
+  cannon: 'muzzle-cannon',
+  frost: 'muzzle-frost',
+  laser: 'muzzle-laser',
+  taser: 'muzzle-taser',
+};
+
+/** The death-ring ring radius in viewBox units; the sprite is scaled so this maps to the live radius. */
+const DEATH_RING_SVG_RADIUS = 12;
 
 interface Muzzle {
   x: number;
@@ -85,6 +102,10 @@ function compact(arr: { born: number }[], now: number, life: number): void {
 export class EffectsView {
   readonly root = new Container();
   private readonly g = new Graphics();
+  private readonly muzzleLayer = new Container();
+  private readonly sparkLayer = new Container();
+  private readonly shieldLayer = new Container();
+  private readonly deathLayer = new Container();
 
   private muzzles: Muzzle[] = [];
   private tracers: Tracer[] = [];
@@ -93,8 +114,28 @@ export class EffectsView {
   private deaths: Death[] = [];
   private readonly knockbacks = new Map<number, Knockback>();
 
+  readonly muzzleSprites: Sprite[] = [];
+  readonly sparkSprites: Sprite[] = [];
+  readonly shieldSprites: Sprite[] = [];
+  readonly deathSprites: Sprite[] = [];
+
   constructor() {
-    this.root.addChild(this.g);
+    // Tracers stay procedural (their geometry is state). Sprite layers sit above them in the same
+    // order the old single-Graphics draw painted: muzzles, sparks, shield arcs, deaths.
+    this.root.addChild(this.g, this.muzzleLayer, this.sparkLayer, this.shieldLayer, this.deathLayer);
+  }
+
+  /** The pooled sprite for `pool[index]`, created on demand and reused forever (no per-frame alloc). */
+  private pooledSprite(pool: Sprite[], layer: Container, index: number): Sprite {
+    let s = pool[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0.5, 0.5);
+      pool[index] = s;
+      layer.addChild(s);
+    }
+    s.visible = true;
+    return s;
   }
 
   addShot(tower: Tower | undefined, x: number, y: number): void {
@@ -199,69 +240,138 @@ export class EffectsView {
       g.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).stroke({ width: 2, color: t.color, alpha: a });
     }
 
-    for (const m of this.muzzles) {
+    for (let i = 0; i < this.muzzles.length; i++) {
+      const m = this.muzzles[i];
       const age = now - m.born;
       const a = 1 - age / MUZZLE_TICKS;
       const p = worldToPixel(layout, m.x, m.y);
       const ox = p.x + Math.cos(m.angle) * cell * 0.25;
       const oy = p.y + Math.sin(m.angle) * cell * 0.25;
-      drawMuzzle(g, m.kind, m.color, ox, oy, m.angle, cell, a);
+      const name = MUZZLE_ASSET[m.kind];
+      const tex = name !== undefined ? getArtTexture(name, cell) : null;
+      const spr = this.pooledSprite(this.muzzleSprites, this.muzzleLayer, i);
+      if (tex !== null) {
+        spr.texture = tex;
+        spr.width = cell;
+        spr.height = cell;
+        spr.position.set(ox, oy);
+        spr.rotation = m.angle;
+        spr.alpha = a;
+        spr.tint = 0xffffff;
+      } else {
+        spr.visible = false;
+        drawMuzzle(g, m.kind, m.color, ox, oy, m.angle, cell, a);
+      }
     }
+    hideSprites(this.muzzleSprites, this.muzzles.length);
 
     // A hit spark: three short lines radiating from the impact point.
-    for (const s of this.sparks) {
+    for (let i = 0; i < this.sparks.length; i++) {
+      const s = this.sparks[i];
       const age = now - s.born;
       const a = 1 - age / HIT_TICKS;
       const p = worldToPixel(layout, s.x, s.y);
-      const r = cell * 0.22;
-      for (let i = 0; i < 3; i++) {
-        const ang = (Math.PI * 2 * i) / 3 + 0.4;
-        g.moveTo(p.x + Math.cos(ang) * r * 0.4, p.y + Math.sin(ang) * r * 0.4)
-          .lineTo(p.x + Math.cos(ang) * r, p.y + Math.sin(ang) * r);
+      const tex = getArtTexture('spark-hit', cell);
+      const spr = this.pooledSprite(this.sparkSprites, this.sparkLayer, i);
+      if (tex !== null) {
+        spr.texture = tex;
+        spr.width = cell;
+        spr.height = cell;
+        spr.position.set(p.x, p.y);
+        spr.rotation = 0;
+        spr.alpha = a;
+        spr.tint = 0xffffff;
+      } else {
+        spr.visible = false;
+        const r = cell * 0.22;
+        for (let k = 0; k < 3; k++) {
+          const ang = (Math.PI * 2 * k) / 3 + 0.4;
+          g.moveTo(p.x + Math.cos(ang) * r * 0.4, p.y + Math.sin(ang) * r * 0.4)
+            .lineTo(p.x + Math.cos(ang) * r, p.y + Math.sin(ang) * r);
+        }
+        g.stroke({ width: 1, color: PAL.highlight, alpha: a });
       }
-      g.stroke({ width: 1, color: PAL.highlight, alpha: a });
     }
+    hideSprites(this.sparkSprites, this.sparks.length);
 
     // A shield hit draws a cyan arc at the impact point instead of a spark.
-    for (const s of this.shieldArcs) {
+    for (let i = 0; i < this.shieldArcs.length; i++) {
+      const s = this.shieldArcs[i];
       const age = now - s.born;
       const a = 1 - age / SHIELD_ARC_TICKS;
       const p = worldToPixel(layout, s.x, s.y);
-      const r = cell * 0.22;
-      g.moveTo(p.x + r, p.y)
-        .arc(p.x, p.y, r, 0, Math.PI * 1.5)
-        .stroke({ width: 2, color: SHIELD_COLOR, alpha: a });
+      const tex = getArtTexture('shield-arc', cell);
+      const spr = this.pooledSprite(this.shieldSprites, this.shieldLayer, i);
+      if (tex !== null) {
+        spr.texture = tex;
+        spr.width = cell;
+        spr.height = cell;
+        spr.position.set(p.x, p.y);
+        spr.rotation = 0;
+        spr.alpha = a;
+        spr.tint = 0xffffff;
+      } else {
+        spr.visible = false;
+        const r = cell * 0.22;
+        g.moveTo(p.x + r, p.y)
+          .arc(p.x, p.y, r, 0, Math.PI * 1.5)
+          .stroke({ width: 2, color: SHIELD_COLOR, alpha: a });
+      }
     }
+    hideSprites(this.shieldSprites, this.shieldArcs.length);
 
-    // A death pop: a ring that expands and fades, with three small pieces flying outward.
-    for (const d of this.deaths) {
+    // A death pop: the ring-plus-shards asset, tinted to the enemy's colour and scaled/rotated/faded
+    // so the ring expands and the shards orbit exactly as the procedural version did.
+    for (let i = 0; i < this.deaths.length; i++) {
+      const d = this.deaths[i];
       const age = now - d.born;
       const t = age / DEATH_TICKS;
       const p = worldToPixel(layout, d.x, d.y);
       const color = ENEMY_COLOR[d.kind];
       const r0 = cell * ENEMY_STATS[d.kind].radius;
       const a = 1 - t;
-      g.circle(p.x, p.y, r0 * (1 + t * 1.5)).stroke({ width: 2, color, alpha: a });
+      const tex = getArtTexture('death-ring', cell);
+      const spr = this.pooledSprite(this.deathSprites, this.deathLayer, i);
+      if (tex !== null) {
+        spr.texture = tex;
+        const size = r0 * (32 / DEATH_RING_SVG_RADIUS) * (1 + t * 1.5);
+        spr.width = size;
+        spr.height = size;
+        spr.position.set(p.x, p.y);
+        spr.rotation = t * 0.7;
+        spr.alpha = a;
+        spr.tint = color;
+        spr.visible = true;
+      } else {
+        spr.visible = false;
+        g.circle(p.x, p.y, r0 * (1 + t * 1.5)).stroke({ width: 2, color, alpha: a });
+        for (let k = 0; k < 3; k++) {
+          const ang = (Math.PI * 2 * k) / 3 + t * 0.7;
+          const dist = r0 * (0.35 + t * 1.4);
+          g.circle(
+            p.x + Math.cos(ang) * dist,
+            p.y + Math.sin(ang) * dist,
+            Math.max(1, r0 * 0.16 * (1 - t)),
+          ).fill({ color, alpha: a });
+        }
+      }
       if (isBossVariant(d.kind)) {
         // A boss-variant death pops with its crown notch, so a boss falling reads differently from
-        // an ordinary death.
+        // an ordinary death. Drawn over whichever version of the ring is in use.
         const nw = r0 * 0.32;
         g.moveTo(p.x - nw, p.y - r0 * (1 + t * 1.5))
           .lineTo(p.x, p.y - r0 * (1 + t * 1.5) - r0 * 0.18)
           .lineTo(p.x + nw, p.y - r0 * (1 + t * 1.5))
           .stroke({ width: 1, color: PAL.dark, alpha: a });
       }
-      for (let i = 0; i < 3; i++) {
-        const ang = (Math.PI * 2 * i) / 3 + t * 0.7;
-        const dist = r0 * (0.35 + t * 1.4);
-        g.circle(
-          p.x + Math.cos(ang) * dist,
-          p.y + Math.sin(ang) * dist,
-          Math.max(1, r0 * 0.16 * (1 - t)),
-        ).fill({ color, alpha: a });
-      }
     }
+    hideSprites(this.deathSprites, this.deaths.length);
   }
+}
+
+/** Hide any pooled sprites past the live effect count, so leftovers from a busier frame vanish. */
+function hideSprites(pool: Sprite[], count: number): void {
+  for (let i = count; i < pool.length; i++) pool[i].visible = false;
 }
 
 /**
