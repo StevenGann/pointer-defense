@@ -1,24 +1,69 @@
 {
   "name": "pointer-defense",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.48.0",
   "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "vite",
     "predev": "npm run art:manifest",
     "build": "tsc && vite build",
     "prebuild": "npm run art:manifest",
+    "build:steam": "tsc && vite build --base=./",
+    "prebuild:steam": "npm run art:manifest",
     "art:manifest": "node scripts/art-manifest.mjs",
     "smoke": "node scripts/smoke.mjs",
     "balance": "node scripts/balance.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "pack": "npm run build:steam && electron-builder",
+    "pack:win": "npm run build:steam && electron-builder --win",
+    "pack:linux": "npm run build:steam && electron-builder --linux"
   },
   "devDependencies": {
+    "electron": "^45.3.4",
+    "electron-builder": "^26.18.0",
+    "pixi.js": "^8.23.0",
     "typescript": "~7.0.2",
     "vite": "^8.3.6"
   },
   "description": "Tower defense where clicking is the economy and towers are the time to click.",
   "dependencies": {
-    "pixi.js": "^8.23.0"
+    "steamworks.js": "^0.4.0"
+  },
+  "build": {
+    "appId": "com.stevengann.pointerdefense",
+    "productName": "Pointer Defense",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "public/art/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/steamworks.js/**"
+    ],
+    "extraResources": [
+      {
+        "from": "steam_appid.txt",
+        "to": "steam_appid.txt"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Game"
+    },
+    "nsis": {
+      "oneClick": false
+    }
   }
 }

@@ -23,6 +23,7 @@ import { SPAWN_KINDS, spawnKindLabel } from './core/cheats.ts';
 import { DEFAULT_LEVEL, type Level } from './core/levels.ts';
 import { addSeenEnemies, loadProfile, saveProfile, specGain, type Profile, type SpecKind } from './core/save.ts';
 import { achievementName, ACHIEVEMENTS } from './core/achievements.ts';
+import { unlockAchievement } from './steam.ts';
 import { ChromeView, computeLayout, PAL, pixelToWorld, pointInRect, type Layout, type MenuName } from './view/chrome.ts';
 import { BoardView } from './view/board.ts';
 import { HudView, hudControlAt, paletteTowerAt, type HudAction } from './view/hud.ts';
@@ -247,6 +248,8 @@ function syncProfileMeta(): void {
 
 function toastAchievement(id: string): void {
   hud.showNotice(`Achievement: ${achievementName(id)}`, 180);
+  // The wrapper reports the unlock to Steam when it is live; a no-op in the browser.
+  unlockAchievement(id);
 }
 
 /** Push any achievement unlocked in the sim this frame into the profile and toast it. */
