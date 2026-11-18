@@ -1426,6 +1426,35 @@ The point of this window is to explain a mechanic the player has **already met**
 is coming. Every gate exists to protect that: enemy and boss pages wait for an encounter, tower pages
 wait for an unlock, locked rows hide the name, and the always-available pages never name an enemy,
 boss or tower the player has not seen. This is the standing rule for any future Help page.
+## 22. Cheats
+
+A testing tool for reaching any state without grinding. It is deliberately visible now and hidden
+behind an easter egg before public release, so it is built switchable from the start: one constant in
+`src/core/cheats.ts`, `CHEATS_VISIBLE`, gates the whole feature. Every read goes through
+`cheatsEnabled()`; flipping the constant to false removes the menu word, disables the shortcuts and
+hides every trace of cheats without touching the rest of the code.
+
+The **Cheats** menu word sits between View and Help. Its dropdown holds:
+
+- **God Mode** — a checkable row. While on, integrity never falls (leaks still walk the lane, they
+  just cost nothing, so the HUD keeps showing the real value) and salvage is topped up to a large
+  ceiling before it is spent, so any purchase can be repeated forever.
+- **Spawn** — a second column listing every enemy kind and every boss variant. Clicking one spawns it
+  immediately at the spawn tile with the current wave's scaling, exactly as the wave had released it;
+  pop-ups are included, and a cheated boss still runs the boss bar, its first-appearance NEW tag and
+  `seenBossKinds`.
+- **Kill All** — empties the field instantly, awarding no salvage and no achievement progress. It does
+  not advance the wave: the schedule keeps running, so a wave can be killed and the next one allowed to
+  come.
+
+Keyboard shortcuts exist so testing is not a menu marathon: **Ctrl+Shift+G** toggles God Mode and
+**Ctrl+Shift+K** kills all. Both read the same gate.
+
+A run in which any cheat was used is **flagged**: no achievements fire, no `bestWave` update is
+recorded, the status line shows `Cheats active — this run will not be recorded` once when the first
+cheat is used, and a small CHEATS marker stays in the status line while it is active. Nothing is
+persisted — the flag dies with the run. With cheats off, the simulation is byte-identical and the
+wave 1–100 balance hash is unchanged.
 
 ---
 

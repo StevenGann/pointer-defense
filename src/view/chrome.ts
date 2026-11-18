@@ -1,5 +1,6 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { COLS, ROWS } from '../core/grid.ts';
+import { cheatsEnabled } from '../core/cheats.ts';
 import { getArtTexture } from './art.ts';
 
 /**
@@ -186,14 +187,36 @@ export function bevel(g: Graphics, r: Rect, raised: boolean, face: number = PAL.
   vline(g, x1 - 0.5, y0, y1, br[0]);
 }
 
-const MENU_ITEMS = ['File', 'View', 'Help'] as const;
+export type MenuName = 'file' | 'view' | 'cheats' | 'help';
 
-/** Hit rectangles for the three menu words, left-padded 8px, left at x+6. */
+interface MenuItem {
+  name: MenuName;
+  label: string;
+}
+
+/** The menu-bar words. Cheats is inserted after View, only while the cheats gate is open. */
+export function menuItems(): readonly MenuItem[] {
+  if (cheatsEnabled()) {
+    return [
+      { name: 'file', label: 'File' },
+      { name: 'view', label: 'View' },
+      { name: 'cheats', label: 'Cheats' },
+      { name: 'help', label: 'Help' },
+    ];
+  }
+  return [
+    { name: 'file', label: 'File' },
+    { name: 'view', label: 'View' },
+    { name: 'help', label: 'Help' },
+  ];
+}
+
+/** Hit rectangles for the menu words, left-padded 8px, left at x+6. */
 export function menuWordRects(menu: Rect): Rect[] {
   const out: Rect[] = [];
   let x = menu.x + 6;
-  for (const word of MENU_ITEMS) {
-    const width = word.length * 7;
+  for (const item of menuItems()) {
+    const width = item.label.length * 7;
     out.push({ x, y: menu.y, w: width, h: menu.h });
     x += width + 8;
   }
@@ -203,6 +226,17 @@ export function menuWordRects(menu: Rect): Rect[] {
 export function menuItemAt(menu: Rect, px: number, py: number): number {
   if (py < menu.y || py >= menu.y + menu.h) return -1;
   return menuWordRects(menu).findIndex((r) => pointInRect(r, px, py));
+}
+
+/** The menu name under a point, or null when the point is not on a menu word. */
+export function menuNameAt(menu: Rect, px: number, py: number): MenuName | null {
+  const i = menuItemAt(menu, px, py);
+  return i < 0 ? null : menuItems()[i].name;
+}
+
+/** The menu-bar index of a named menu word, for laying its dropdown out under the word. */
+export function menuIndex(name: MenuName): number {
+  return menuItems().findIndex((item) => item.name === name);
 }
 
 function drawArrowIcon(g: Graphics, x: number, y: number): void {
@@ -283,8 +317,8 @@ export class ChromeView {
     });
     this.titleText.anchor.set(0, 0.5);
     this.root.addChild(this.titleText);
-    this.menuTexts = MENU_ITEMS.map(
-      (word) => new Text({ text: word, style: { fontFamily: FONT, fontSize: FONT_SIZE.body, fill: PAL.text } }),
+    this.menuTexts = menuItems().map(
+      (item) => new Text({ text: item.label, style: { fontFamily: FONT, fontSize: FONT_SIZE.body, fill: PAL.text } }),
     );
     for (const t of this.menuTexts) {
       t.anchor.set(0, 0.5);

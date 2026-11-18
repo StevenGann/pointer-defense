@@ -12,8 +12,11 @@
 import { FLYER_OFF_KIND_DAMAGE,
   createRunState,
   cursorMaintenanceStatus,
+  GOD_SALVAGE_CEILING,
+  killAllEnemies,
   placeTower,
   canPlace,
+  spawnCheatEnemy,
   startWave,
   tick,
   pointerDown,
@@ -36,6 +39,7 @@ import { FLYER_OFF_KIND_DAMAGE,
   cycleTargetMode,
   startRepair,
   upgradePointer,
+  toggleGodMode,
   toggleManualOverride,
   toggleAutoWave,
   anyTowerRepairing,
@@ -92,6 +96,7 @@ import {
 } from '../src/core/pointer.ts';
 import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies } from '../src/core/save.ts';
 import { restartWindows, checkAchievements, enterEndless, pointerDamageMult } from '../src/core/state.ts';
+import { cheatsEnabled, setCheatsVisibleForTests, SPAWN_KINDS } from '../src/core/cheats.ts';
 import { dashRects, offsetSegment, routeOffset } from '../src/view/route.ts';
 import { enemyDrawOrder, popupCloseHit, popupCloseRect, popupWindowRect, POPUP_TITLE_H, POPUP_CLOSE_W, POPUP_CLOSE_H } from '../src/view/popupEnemy.ts';
 import { adCloseRect } from '../src/view/ad.ts';
@@ -108,7 +113,7 @@ import {
 import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName } from '../src/view/tooltipText.ts';
 import { BoardView, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
-import { computeLayout, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE } from '../src/view/chrome.ts';
+import { computeLayout, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
 import { computeHud, computeRightPanel, hudControlAt, textWidth } from '../src/view/hud.ts';
 import {
   advanceBossBars,
@@ -6292,6 +6297,165 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
 
   session.contents();
   check(session.expanded === null, 'Contents collapses the tree back to the top');
+}
+
+// --- 46. Cheats ------------------------------------------------------------------------------
+{
+  // The menu word exists only while the gate is open. `menuNameAt` maps the same rects the chrome
+  // draws, so the word is present in both the hit-test and the label list, or in neither.
+  check(cheatsEnabled(), 'the cheats gate is open by default');
+  check(menuItems().some((m) => m.name === 'cheats'), 'the Cheats menu word is present while visible');
+
+  const layout = computeLayout(1280, 800);
+  const cheatIdx = menuItems().findIndex((m) => m.name === 'cheats');
+  const cheatRect = menuWordRects(layout.menu)[cheatIdx];
+  check(menuNameAt(layout.menu, cheatRect.x + 2, cheatRect.y + 2) === 'cheats',
+    'the Cheats word hit-rect maps to the Cheats name');
+
+  setCheatsVisibleForTests(false);
+  check(!cheatsEnabled(), 'the cheats gate closes');
+  check(!menuItems().some((m) => m.name === 'cheats'), 'the Cheats menu word is absent while hidden');
+  check(menuItems().map((m) => m.name).join(',') === 'file,view,help', 'the hidden menu bar is File, View, Help');
+
+  setCheatsVisibleForTests(true);
+  check(menuItems().some((m) => m.name === 'cheats'), 'the Cheats menu word returns when re-enabled');
+  const withCheats = menuItems().map((m) => m.name);
+  check(withCheats.indexOf('view') + 1 === withCheats.indexOf('cheats'), 'Cheats sits after View');
+  check(withCheats.indexOf('cheats') + 1 === withCheats.indexOf('help'), 'Cheats sits before Help');
+}
+
+{
+  // God Mode stops integrity loss and keeps money from ever running out.
+  const s = allUnlocked();
+  s.economy.salvage = 0;
+  toggleGodMode(s);
+  check(s.godMode, 'God Mode turns on');
+  check(s.cheatsUsed, 'using God Mode flags the run');
+  check(s.economy.salvage >= GOD_SALVAGE_CEILING, 'God Mode tops salvage up to the ceiling');
+
+  // A leak costs nothing while God Mode is on.
+  s.phase = 'wave';
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const grunt = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+  s.enemies.push(grunt);
+  const integrityBefore = s.integrity;
+  let t = 0;
+  while (s.enemies.length > 0 && t < 5000) {
+    tick(s);
+    t++;
+  }
+  check(grunt.dead, 'the grunt leaked while God Mode was on');
+  check(s.integrity === integrityBefore, `God Mode stops integrity loss (integrity ${s.integrity})`);
+
+  // A purchase spends from the ceiling and the next tick tops it back up: buy repeatedly forever.
+  s.phase = 'build';
+  const cost = TOWER_STATS.gun.cost;
+  const beforeSpend = s.economy.salvage;
+  check(placeTower(s, 'gun', 3, 6), 'a tower is bought in God Mode');
+  check(s.economy.salvage === beforeSpend - cost, 'a God Mode purchase spends the salvage');
+  tick(s);
+  check(s.economy.salvage >= GOD_SALVAGE_CEILING, 'the next tick tops God Mode salvage back to the ceiling');
+}
+
+{
+  // Spawn lists every enemy kind and every boss variant, and spawns exactly that kind at the spawn
+  // tile with the current wave's scaling.
+  const listed = new Set(SPAWN_KINDS);
+  const all = Object.keys(ENEMY_STATS);
+  check(all.every((k) => listed.has(k)), 'Spawn lists every enemy kind and every boss variant');
+  check(SPAWN_KINDS.length === all.length, `Spawn lists exactly ${all.length} kinds (${SPAWN_KINDS.length})`);
+
+  const s = allUnlocked();
+  s.phase = 'wave';
+  s.wave = 12;
+  const before = s.enemies.length;
+  check(spawnCheatEnemy(s, 'grunt-boss'), 'spawn a boss');
+  check(s.enemies.length === before + 1, 'spawning puts exactly one enemy on the field');
+  const spawned = s.enemies[s.enemies.length - 1];
+  check(spawned.kind === 'grunt-boss', 'the spawned enemy is the requested kind');
+  check(spawned.col === s.level.starts[0].col && spawned.row === s.level.starts[0].row, 'the enemy sits on the spawn tile');
+  const expected = createEnemy(999, 'grunt-boss', 12, s.level.starts[0], s.level.exits[0]);
+  check(spawned.maxHp === expected.maxHp && spawned.value === expected.value, 'the enemy uses the current wave scaling');
+  check(spawned.isBoss, 'a spawned boss is marked a boss');
+
+  // Pop-ups are included.
+  check(spawnCheatEnemy(s, 'popup'), 'spawn a pop-up');
+  check(s.enemies.some((e) => e.kind === 'popup' && !e.dead), 'the pop-up is on the field');
+
+  // A cheated boss is still a boss encounter for the bar, the NEW tag and seenBossKinds.
+  const seen = new Set();
+  const tracks = [];
+  const newlySeen = advanceBossBars(tracks, [spawned], s.tick, seen, false);
+  check(newlySeen.includes('grunt-boss'), 'a spawned boss registers a first appearance');
+  check(seen.has('grunt-boss'), 'a spawned boss records seenBossKinds');
+  check(livingBosses([spawned]).some((e) => e.kind === 'grunt-boss'), 'a spawned boss shows on the boss bar');
+}
+
+{
+  // Kill All empties the field, awards nothing, and leaves the wave live.
+  const s = stateOnLevel('open-field');
+  startWave(s);
+  while (s.enemies.length === 0) tick(s);
+  const salvageBefore = s.economy.salvage;
+  const earnedBefore = s.economy.earned;
+  const killsBefore = { tower: s.economy.kills.tower, pointer: s.economy.kills.pointer };
+  const runsBefore = s.runs.length;
+  const spawnsBefore = s.runs[0].spawns.length;
+
+  killAllEnemies(s);
+  check(s.enemies.length === 0, 'Kill All empties the field');
+  check(s.economy.salvage === salvageBefore && s.economy.earned === earnedBefore, 'Kill All awards no salvage');
+  check(s.economy.kills.tower === killsBefore.tower && s.economy.kills.pointer === killsBefore.pointer, 'Kill All records no kills');
+  check(s.phase === 'wave', 'the wave stays live after Kill All');
+  check(s.runs.length === runsBefore && s.runs[0].spawns.length === spawnsBefore, 'the wave schedule is untouched by Kill All');
+  check(s.cheatsUsed, 'Kill All flags the run');
+}
+
+{
+  // A cheated run records no achievement and no bestWave.
+  const s = createRunState();
+  s.phase = 'wave';
+  const grunt = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+  s.enemies.push(grunt);
+  s.cheatsUsed = true;
+  while (!grunt.dead) {
+    pointerDown(s, grunt.x, grunt.y);
+    pointerUp(s);
+  }
+  check(grunt.dead, 'the grunt died in a cheated run');
+  check(checkAchievements(s).length === 0, 'a cheated run fires no achievement');
+  check(!s.achievements.has('first-blood'), 'the first-blood achievement is not recorded in a cheated run');
+
+  s.wave = 52;
+  const before = defaultProfile();
+  const { profile } = restartWindows(s, before);
+  check(profile.bestWave === before.bestWave, 'a cheated run does not update bestWave');
+}
+
+{
+  // With the gate closed the reducers are inert and nothing is flagged, and the wave 1..100 balance
+  // hash is byte-identical.
+  setCheatsVisibleForTests(false);
+  const s = createRunState();
+  toggleGodMode(s);
+  check(!s.godMode && !s.cheatsUsed, 'God Mode is inert while cheats are hidden');
+  const before = s.enemies.length;
+  check(!spawnCheatEnemy(s, 'grunt'), 'Spawn is refused while cheats are hidden');
+  check(s.enemies.length === before, 'no enemy appears while cheats are hidden');
+  killAllEnemies(s);
+  check(!s.cheatsUsed, 'Kill All does not flag a hidden-cheats run');
+  setCheatsVisibleForTests(true);
+
+  let table = '';
+  for (let w = 1; w <= 100; w++) {
+    table += `${waveHpScale(w)}|${waveValueScale(w)}|${waveEnemyCount(w)}|${waveKillValue(w)}\n`;
+  }
+  let h = 0x811c9dc5;
+  for (let i = 0; i < table.length; i++) {
+    h ^= table.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  check((h >>> 0).toString(16) === '5b6e087d', 'waves 1..100 balance table unchanged with cheats off');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

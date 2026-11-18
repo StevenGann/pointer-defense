@@ -7,19 +7,23 @@ import {
   cursorMaintenanceStatus,
   enemyAt,
   enterEndless,
+  killAllEnemies,
   noBuildActive,
   NO_BUILD_MESSAGE,
   restartWindows,
   selectedTower,
+  spawnCheatEnemy,
   step,
   toggleAutoWave,
+  toggleGodMode,
   towerAt,
   type RunState,
 } from './core/state.ts';
+import { SPAWN_KINDS, spawnKindLabel } from './core/cheats.ts';
 import { DEFAULT_LEVEL, type Level } from './core/levels.ts';
 import { addSeenEnemies, loadProfile, saveProfile, specGain, type Profile, type SpecKind } from './core/save.ts';
 import { achievementName, ACHIEVEMENTS } from './core/achievements.ts';
-import { ChromeView, computeLayout, PAL, pixelToWorld, pointInRect, type Layout } from './view/chrome.ts';
+import { ChromeView, computeLayout, PAL, pixelToWorld, pointInRect, type Layout, type MenuName } from './view/chrome.ts';
 import { BoardView } from './view/board.ts';
 import { HudView, hudControlAt, paletteTowerAt, type HudAction } from './view/hud.ts';
 import { paletteTooltipLines, TooltipView, towerTooltipLines } from './view/tooltip.ts';
@@ -48,7 +52,7 @@ import { CameraShake, shakeImpulseFor } from './view/shake.ts';
 import { backingStorePixelSize, cssViewportSize, liveDevicePixelRatio } from './view/screen.ts';
 import { getArtTexture, onArtInvalidate, preloadArt, setArtDpr } from './view/art.ts';
 import { repairHealingCount, TOWER_STATS, type Branch, type TowerKind } from './core/towers.ts';
-import { isBossVariant } from './core/enemies.ts';
+import { isBossVariant, type EnemyKind } from './core/enemies.ts';
 import { encodeLevel, decodeCode } from './core/codec.ts';
 import {
   clearEditor,
@@ -173,6 +177,7 @@ window.addEventListener('keydown', () => sfx.ensure());
 
 let menu: OpenMenu | null = null;
 let dialog: DialogModel | null = null;
+let cheatNotified: RunState | null = null;
 
 // --- Screens ---------------------------------------------------------------------------------
 // The app is one of three screens: the main menu, a live run, or the map editor. `runOrigin` says
@@ -284,15 +289,28 @@ function doNewRun(): void {
   menu = null;
 }
 
-function openMenu(name: 'file' | 'view' | 'help' | null): void {
+function openMenu(name: MenuName | null): void {
   menu = name ? buildMenu(name) : null;
 }
 
-function buildMenu(name: 'file' | 'view' | 'help'): OpenMenu {
+function buildMenu(name: MenuName): OpenMenu {
   if (name === 'view') {
     return {
       name,
       entries: [{ id: 'shake', label: profile.shakeOn ? 'Screen shake: On' : 'Screen shake: Off' }],
+    };
+  }
+  if (name === 'cheats') {
+    return {
+      name,
+      entries: [
+        { id: 'god-mode', label: 'God Mode', checked: state.godMode },
+        { id: 'kill-all', label: 'Kill All' },
+      ],
+      secondColumn: [
+        { id: 'spawn-header', label: 'Spawn', disabled: true },
+        ...SPAWN_KINDS.map((kind) => ({ id: `spawn:${kind}`, label: spawnKindLabel(kind) })),
+      ],
     };
   }
   if (name === 'help') {
@@ -385,6 +403,17 @@ function menuAction(id: string): void {
       profile.shakeOn = !profile.shakeOn;
       shake.setEnabled(profile.shakeOn);
       saveProfile(profile);
+      break;
+    case 'god-mode':
+      toggleGodMode(state);
+      break;
+    case 'kill-all':
+      killAllEnemies(state);
+      break;
+    default:
+      if (id.startsWith('spawn:')) {
+        spawnCheatEnemy(state, id.slice('spawn:'.length) as EnemyKind);
+      }
       break;
   }
 }
@@ -878,8 +907,14 @@ app.ticker.add((ticker) => {
   if (running) {
     const alpha = step(state, ticker.deltaMS);
     drainEvents();
-    syncAchievements();
-    syncBestWave();
+    if (!state.cheatsUsed) {
+      syncAchievements();
+      syncBestWave();
+    }
+    if (state.cheatsUsed && cheatNotified !== state) {
+      cheatNotified = state;
+      hud.showNotice('Cheats active — this run will not be recorded', 240);
+    }
     board.draw(
       state,
       layout,
