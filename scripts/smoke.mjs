@@ -44,7 +44,7 @@ import {
   NO_BUILD_MESSAGE,
   AUTO_WAVE_DELAY_TICKS,
 } from '../src/core/state.ts';
-import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
+import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, isBossWave, MODIFIER_POOL, popupCountForWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
@@ -91,7 +91,7 @@ import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay,
 import { BoardView, staticLayerKey } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE } from '../src/view/chrome.ts';
-import { computeHud, computeRightPanel, hudControlAt } from '../src/view/hud.ts';
+import { computeHud, computeRightPanel, hudControlAt, textWidth } from '../src/view/hud.ts';
 import { backingStorePixelSize } from '../src/view/screen.ts';
 import {
   ART_MANIFEST,
@@ -3561,6 +3561,82 @@ function maintenanceRig(gunHp) {
   selectPlacedTower(s, c);
   const h = computeHud(computeLayout(1280, 720), s);
   check(h.detail !== null && h.detail.branches.length === 3, 'a tier-2 cursor offers three branches');
+}
+
+{
+  // 34k. Three-branch towers stack their buttons vertically and never overlap, and every label
+  // shrinks to fit its button's inner width.
+  const intersects = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  const c = towerAt(s, 5, 5);
+  c.tier = 2;
+  selectPlacedTower(s, c);
+  const l = computeLayout(1280, 720);
+  const h = computeHud(l, s);
+  const buttons = h.detail.branches;
+  check(buttons.length === 3, 'a tier-2 cursor offers three branch buttons');
+
+  for (let i = 0; i < buttons.length; i++) {
+    for (let j = i + 1; j < buttons.length; j++) {
+      check(!intersects(buttons[i].rect, buttons[j].rect),
+        `cursor branch buttons ${i} and ${j} do not overlap`);
+    }
+    const labelW = Math.ceil(textWidth(buttons[i].label, FONT_SIZE.small));
+    const innerW = buttons[i].rect.w - 12;
+    check(labelW <= innerW,
+      `cursor branch label "${buttons[i].label}" fits its button (${labelW} <= ${innerW})`);
+  }
+
+  const last = buttons[buttons.length - 1].rect;
+  check(last.y + last.h <= l.leftPanel.y + l.leftPanel.h,
+    `the last cursor branch button stays above the panel bottom (${last.y + last.h} <= ${l.leftPanel.y + l.leftPanel.h})`);
+  check(h.detail.sell.y + h.detail.sell.h <= l.leftPanel.y + l.leftPanel.h,
+    'the cursor sell row is not pushed off the panel');
+}
+
+{
+  // 34l. A two-branch tower keeps the side-by-side row and its full, unchanged branch names.
+  const intersects = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+  const s = createRunState();
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 5, 5);
+  upgradeTower(s, 5, 5);
+  selectPlacedTower(s, towerAt(s, 5, 5));
+  const h = computeHud(computeLayout(1280, 720), s);
+  const buttons = h.detail.branches;
+  check(buttons.length === 2, 'a tier-2 gun offers two branch buttons');
+  check(!intersects(buttons[0].rect, buttons[1].rect), 'gun branch buttons do not overlap');
+  check(buttons[0].rect.y === buttons[1].rect.y, 'gun branch buttons share one row');
+  check(buttons[0].rect.w === buttons[1].rect.w, 'gun branch buttons split the row evenly');
+  check(buttons[0].label === branchName('gun', 'A') && buttons[1].label === branchName('gun', 'B'),
+    'gun branch buttons keep their full branch names');
+}
+
+{
+  // 34m. Every branching tower renders its branch buttons fully inside the panel at 1280x720 and
+  // 1600x900.
+  for (const [vw, vh] of [[1280, 720], [1600, 900]]) {
+    const l = computeLayout(vw, vh);
+    for (const kind of TOWER_KINDS) {
+      if (!hasBranches(kind)) continue;
+      const s = allUnlocked();
+      s.economy.salvage = 100000;
+      check(placeTower(s, kind, 5, 5), `place a ${kind} to inspect its branch row`);
+      check(upgradeTower(s, 5, 5), `upgrade ${kind} to tier 2`);
+      selectPlacedTower(s, towerAt(s, 5, 5));
+      const h = computeHud(l, s);
+      const buttons = h.detail.branches;
+      const inside = buttons.every((b) =>
+        b.rect.x >= l.leftPanel.x &&
+        b.rect.x + b.rect.w <= l.leftPanel.x + l.leftPanel.w &&
+        b.rect.y + b.rect.h <= l.leftPanel.y + l.leftPanel.h);
+      check(inside, `${kind} branch buttons stay inside the panel at ${vw}x${vh}`);
+    }
+  }
 }
 
 // --- 35. No-Build freezes the board -----------------------------------------------------------
