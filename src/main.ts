@@ -39,6 +39,7 @@ import { MenuView, type OpenMenu } from './view/menu.ts';
 import { DialogView, type DialogModel } from './view/dialog.ts';
 import { MouseController } from './input/mouse.ts';
 import { EffectsView } from './view/effects.ts';
+import { BossBarView } from './view/bossBars.ts';
 import { sfx, type SoundName } from './audio/sfx.ts';
 import { CameraShake, shakeImpulseFor } from './view/shake.ts';
 import { backingStorePixelSize, cssViewportSize, liveDevicePixelRatio } from './view/screen.ts';
@@ -115,6 +116,11 @@ shake.setEnabled(profile.shakeOn);
 const chrome = new ChromeView();
 const board = new BoardView();
 const effects = new EffectsView();
+const bossBars = new BossBarView((seen) => {
+  profile.seenBossKinds = seen;
+  saveProfile(profile);
+});
+bossBars.syncSeen(profile.seenBossKinds);
 const hud = new HudView();
 const ad = new AdView();
 const numbers = new FloatingNumbersView();
@@ -129,7 +135,7 @@ void preloadArt();
 
 const root = new Container();
 app.stage.addChild(root);
-root.addChild(chrome.root, board.root, effects.root, numbers.root, hud.root, ad.root, menuView.root, dialogView.root, tooltip.root);
+root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, ad.root, menuView.root, dialogView.root, tooltip.root);
 
 sfx.setEnabled(profile.soundOn);
 sfx.setVolume(profile.volume);
@@ -497,6 +503,7 @@ app.ticker.add((ticker) => {
   );
   effects.draw(state, layout);
   numbers.draw(state, layout);
+  bossBars.draw(state, layout, profile.shakeOn);
   hud.draw(state, layout, mouse.hover.hud);
   ad.draw(state);
   dialogView.draw(dialog, layout);

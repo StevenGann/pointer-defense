@@ -1076,6 +1076,31 @@ One master volume, remembered in `localStorage`. No music at launch.
 - **No confirmation dialogs.** Selling is reversible by rebuilding.
 - Keyboard: `1–9` select a tower, `Esc` cancels, `Enter` starts the wave.
 
+### 15.1 Boss bars
+
+When a boss is on the field it announces itself the way a Minecraft boss does: its name across the top
+of the field, with a bar under it, so a player always knows which enemy is the boss and how much is
+left. The name is the boss's, uppercased and letter-spaced; under it sits a **health bar** (a near-black
+track with a deep-red fill and a pale "damage lag" segment that drains to the true value over about
+400 ms), and a **shield bar** above that (cyan) when the boss has one. A Bastion's shield bar is
+**segmented per layer** — three segments, one per remaining layer, with stripped segments left as a dim
+outline so the player can see what is left.
+
+The bars sit **horizontally centred over the board field, just under its top edge** — below the window
+title bar and below the wave banner when one is showing — and never over a side panel. A bar is at most
+`min(320, fieldWidth − 48)` wide, so it never touches the board edges. Up to **three** bars stack,
+ordered by spawn time; a fourth boss drops the oldest rather than shrinking the rest. A bar appears
+over 150 ms and fades out 600 ms after its boss dies or leaves.
+
+The **first time a boss type appears in a profile** the bar is the teaching moment: the frame flashes
+once, the name carries a `NEW` tag for 2.5 s, and a one-line subtitle names the gimmick in plain words —
+the Sergeant *shrugs off damage*, the Pacer makes *anything near it keep pace*, the Bastion wears
+*three layers of shielding*. Later appearances show the bar with no flourish. With screen shake off
+(`prefers-reduced-motion`) there is no flash and no drain — the bar shows the true value.
+
+These are **runtime chrome**, not SVG assets: their geometry is state-driven (which bosses are alive,
+their hp and shield), so there is no fixed form to hand over.
+
 ---
 
 ## 16. Technical

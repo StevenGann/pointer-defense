@@ -7,6 +7,8 @@
  * in-memory copy so a broken store never stops the game from running.
  */
 
+import { isBossVariant, type EnemyKind } from './enemies.ts';
+
 export const SAVE_KEY = 'pointer-defense/save';
 
 /** Bump this when the schema changes in a way an older build could not read. */
@@ -39,6 +41,8 @@ export interface Profile {
   autoWave: boolean;
   /** Screen shake. Defaults off for users who prefer reduced motion. */
   shakeOn: boolean;
+  /** Boss kinds already announced (first appearance), so a type's teaching moment fires once. */
+  seenBossKinds: EnemyKind[];
 }
 
 export const SPEC_KINDS: readonly SpecKind[] = ['cpu', 'ram', 'gpu', 'disk'];
@@ -98,6 +102,7 @@ export function defaultProfile(): Profile {
     volume: 'med',
     autoWave: false,
     shakeOn: !prefersReducedMotion(),
+    seenBossKinds: [],
   };
 }
 
@@ -124,6 +129,7 @@ export function cloneProfile(p: Profile): Profile {
     volume: p.volume,
     autoWave: p.autoWave,
     shakeOn: p.shakeOn,
+    seenBossKinds: [...p.seenBossKinds],
   };
 }
 
@@ -193,8 +199,12 @@ function parseProfile(raw: string): Profile | null {
   const volume: VolumeLevel = o.volume === 'low' || o.volume === 'high' ? o.volume : 'med';
   const autoWave = typeof o.autoWave === 'boolean' ? o.autoWave : false;
   const shakeOn = typeof o.shakeOn === 'boolean' ? o.shakeOn : !prefersReducedMotion();
+  // Cap the set at the boss kinds that exist, and drop duplicates: an old save simply records none.
+  const seenBossKinds = Array.isArray(o.seenBossKinds)
+    ? [...new Set(o.seenBossKinds.filter((k): k is EnemyKind => typeof k === 'string' && isBossVariant(k as EnemyKind)))]
+    : [];
 
-  return { version: SAVE_VERSION, specs, unspentSpecs, achievements, bestWave, reboots, soundOn, volume, autoWave, shakeOn };
+  return { version: SAVE_VERSION, specs, unspentSpecs, achievements, bestWave, reboots, soundOn, volume, autoWave, shakeOn, seenBossKinds };
 }
 
 /**
