@@ -96,12 +96,10 @@ The **Pop-up** enemy is a Windows window and stays runtime (it is chrome, not ar
 | `beacon-base.svg` | ring with a dot |
 | `cursor-base.svg` | grey plinth with a cursor-shaped cap |
 | `repair-base.svg` | ring with a white cross |
-| `wall-base.svg` | a white button-face template; the engine applies the Win95 grey per state and draws the bevel in code |
 
-Beacon, Cursor, Repair and Wall ship only a base — the loader treats a missing turret as "no
-rotation". The wall's face is a button, so its bevel and its raised / pressed / disabled shade are
-runtime chrome: `wall-base.svg` is a white template that the engine tints to the state's grey (see
-below), because the shade changes with state and damage and a tint cannot brighten a pre-greyed face.
+Beacon, Cursor and Repair ship only a base — the loader treats a missing turret as "no rotation".
+The Wall is the one tower with no base plinth here: its face and overlays live in [`wall/`](#wall)
+below, because its look is a stateful button rather than a fixed icon.
 
 ### `branches/`
 
@@ -129,8 +127,35 @@ so the mark lands exactly where the procedural spec put it.
 | `cursor-wide-search.svg` | the wide-search mark |
 | `cursor-maintenance.svg` | an open-end wrench |
 
-Walls carry their branch in the button face (Bulwark's inner rim, Mesh's crosshatch), not in a
-branch mark, and the Repair tower has no branches.
+Walls carry their branch as a wall overlay (Bulwark's inner rim, Mesh's crosshatch), not as a branch
+mark, and the Repair tower has no branches.
+
+### `wall/`
+
+The Wall's face is a Windows button, so it is split into a **tier face** plus **overlays** rather
+than a single fixed icon. The engine still draws the button's outline and bevel in code (they are
+runtime chrome), and it tints the tier face to the live raised / pressed / disabled grey — exactly as
+the old `towers/wall-base.svg` white template worked — so leave the tier faces light.
+
+| File | Represents |
+|---|---|
+| `wall-t1.svg` | the tier-1 face plate |
+| `wall-t2.svg` | the tier-2 face plate |
+| `wall-t3.svg` | the tier-3 face plate |
+| `wall-t4.svg` | a reserved tier-4 face plate (placeholder copy) |
+| `wall-t5.svg` | a reserved tier-5 face plate (placeholder copy) |
+| `wall-bulwark.svg` | the Bulwark branch's raised inner rim (an overlay) |
+| `wall-mesh.svg` | the Mesh branch's crosshatch (an overlay) |
+| `wall-repairing.svg` | the diagonal repair hatch (an overlay) |
+| `wall-damaged-1.svg` | damage overlay, stage 1 (the top third of HP) |
+| `wall-damaged-2.svg` | damage overlay, stage 2 (the middle third of HP) |
+| `wall-damaged-3.svg` | damage overlay, stage 3 (the bottom third of HP) |
+
+A wall draws one tier face (tinted) and up to two overlays: a branch mark, then a damage stage — or
+the repair hatch in place of both while a repair runs. The damage stage is chosen from the HP fraction
+in integer thirds, so a wall sitting exactly on a third line never flickers between two stages. These
+are placeholder files that reproduce the old code-drawn look; an artist may add per-tier detail and
+richer damage without touching the code.
 
 ### `board/`
 
@@ -185,8 +210,9 @@ cursor and the OS pointer.
 
 - **Damage flash** — not currently applied; when it is, it will be a white tint on the sprite.
 - **Offline towers** — a grey desaturation wash is applied to the sprite, plus a red crossed wrench.
-- **Wall face shade** — `wall-base.svg` is white; the engine tints it to the raised / pressed / disabled
-  / damaged grey, because a button's shade is stateful and a tint cannot brighten a pre-greyed face.
+- **Wall face shade** — the `wall-t1`..`wall-t5` faces are light; the engine tints the chosen tier face
+  to the raised / pressed / disabled grey, because a button's shade is stateful and a tint cannot
+  brighten a pre-greyed face. Damage is a separate overlay, not a tint.
 - **Death ring** — `death-ring.svg` is white; the engine tints it to the dead enemy's colour (the one
   effect-sprite tint, see `docs/ART-STYLE.md`).
 - **Shield ring, slow arc, weak-point notch, health bar** — drawn by code on top of the enemy sprite.

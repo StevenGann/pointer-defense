@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Repairing: a diagonal hatch over the whole face, drawn while the repair job runs. -->
+  <path fill="none" stroke="#808080" stroke-width="1"
+        d="M24 0 L32 8 M20 0 L32 12 M16 0 L32 16 M12 0 L32 20 M8 0 L32 24 M4 0 L32 28 M0 0 L32 32 M0 4 L28 32 M0 8 L24 32 M0 12 L20 32 M0 16 L16 32 M0 20 L12 32 M0 24 L8 32"/>
+</svg>

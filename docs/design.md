@@ -255,6 +255,11 @@ tick, and nothing is refunded. The other towers keep a fixed pool (see the HP ta
 Breacher's turret can deplete; when it runs out the tower goes offline rather than leaving the board
 (see §6.9).
 
+A wall's face is art (`public/art/wall/`), not code: a tier plate plus overlays for the Bulwark rim,
+the Mesh crosshatch, the repair hatch and damage. Damage is read in integer thirds of `hp / maxHp`
+(the bottom third is heaviest), and the engine falls back to the old code-drawn button when the files
+are missing.
+
 #### Hit points
 
 `maxHp` is set at placement and, for a wall, re-derived from its tier and branch when it changes. An

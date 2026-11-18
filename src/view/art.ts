@@ -18,7 +18,7 @@ import { currentAnimFrame, lifetimeFrame, secondsToWholeTicks, type AnimMeta } f
  * `scripts/smoke.mjs`, so an unreferenced SVG or a listed-but-absent one fails the smoke run.
  */
 
-export type ArtCategory = 'enemies' | 'towers' | 'branches' | 'board' | 'fx' | 'ui';
+export type ArtCategory = 'enemies' | 'towers' | 'branches' | 'board' | 'fx' | 'ui' | 'wall';
 
 export interface ArtEntry {
   /** The unique asset name, e.g. `grunt`, `gun-base`, `gun-marksman`, `tile`. */
@@ -44,7 +44,7 @@ const ENEMY_KINDS = [
 ] as const;
 
 /** Towers ship a base plinth (never rotates) and, for those with a barrel, a turret (rotates). */
-const TOWER_BASE_KINDS = ['gun', 'cannon', 'laser', 'taser', 'frost', 'aa', 'beacon', 'cursor', 'repair', 'wall'] as const;
+const TOWER_BASE_KINDS = ['gun', 'cannon', 'laser', 'taser', 'frost', 'aa', 'beacon', 'cursor', 'repair'] as const;
 const TOWER_TURRET_KINDS = ['gun', 'cannon', 'laser', 'taser', 'frost', 'aa'] as const;
 
 /** Branch marks, one file each. Wall and repair branches carry their identity in the base, not here. */
@@ -86,6 +86,25 @@ const UI_NAMES = [
   'arrow-right',
 ] as const;
 
+/**
+ * The wall's button faces and overlays. A wall draws one tier face (`wall-t1`..`wall-t5`, tinted to
+ * its live grey) plus any overlays its state adds: the Bulwark inner rim, the Mesh crosshatch, the
+ * repair hatch, and a damage stage. The bevel and outline stay procedural (see `board.ts`).
+ */
+const WALL_NAMES = [
+  'wall-t1',
+  'wall-t2',
+  'wall-t3',
+  'wall-t4',
+  'wall-t5',
+  'wall-bulwark',
+  'wall-mesh',
+  'wall-repairing',
+  'wall-damaged-1',
+  'wall-damaged-2',
+  'wall-damaged-3',
+] as const;
+
 function entries(category: ArtCategory, dir: string, names: readonly string[]): ArtEntry[] {
   return names.map((name) => ({ name, category, file: `${dir}/${name}.svg` }));
 }
@@ -99,6 +118,7 @@ export const ART_MANIFEST: readonly ArtEntry[] = [
   ...entries('board', 'board', BOARD_NAMES),
   ...entries('fx', 'fx', FX_NAMES),
   ...entries('ui', 'ui', UI_NAMES),
+  ...entries('wall', 'wall', WALL_NAMES),
 ];
 
 const MANIFEST_BY_NAME: ReadonlyMap<string, ArtEntry> = new Map(ART_MANIFEST.map((e) => [e.name, e]));

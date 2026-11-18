@@ -46,7 +46,7 @@ function baseName(rel) {
 function staticReason(base) {
   if (base.startsWith('branches/')) return 'branch marks are static';
   if (base.startsWith('board/')) return 'board tiles are static';
-  if (base === 'towers/wall-base') return 'the wall face is static';
+  if (base.startsWith('wall/')) return 'the wall face is static';
   if (base.startsWith('ui/')) {
     if (base === 'ui/shutter-open' || base === 'ui/shutter-closed') return null;
     return 'ui glyphs are static';

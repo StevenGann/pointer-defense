@@ -194,9 +194,11 @@ the pip lands there.
 
 ### The wall
 
-`wall-base.svg` is a plain white square. The engine tints it and draws the whole button bevel in
-code, because the wall changes look with its state (plain, branched, open gate, locked, damaged,
-repairing). Leave this file white. A grey or coloured face cannot be tinted correctly.
+The wall's face lives in `public/art/wall/`: one tier plate (`wall-t1`..`wall-t5`) plus overlays for
+the Bulwark rim, the Mesh crosshatch, the repair hatch and three damage stages. The engine tints the
+tier plate and draws the button bevel in code, because the wall changes look with its state (plain,
+branched, open gate, locked, damaged, repairing). Leave the tier plates light. A grey or coloured
+face cannot be tinted correctly.
 
 ### Branch marks
 

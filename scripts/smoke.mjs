@@ -104,6 +104,9 @@ import { adCloseRect } from '../src/view/ad.ts';
 import {
   hatchSegments,
   lerpColor,
+  wallArt,
+  wallButtonSpec,
+  wallDamageStage,
   wallFocusRect,
   wallFootprintSize,
   wallSpec,
@@ -1708,6 +1711,40 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   const focus = wallFocusRect(14, 14, 28);
   check(focus.w === 20 && focus.h === 20, `focus rect is inset 4 px (${focus.w}x${focus.h})`);
   check(lerpColor(0x000000, 0xffffff, 0.5) === 0x808080, `lerpColor blends colours (${lerpColor(0x000000, 0xffffff, 0.5).toString(16)})`);
+}
+
+{
+  // 18e continues: the wall resolves a tier face plus overlays, and the damage stage is integer thirds.
+  check(wallDamageStage(60, 60) === 0, 'a full wall is damage stage 0');
+  check(wallDamageStage(59, 60) === 1, 'the top third of HP is damage stage 1');
+  check(wallDamageStage(40, 60) === 1, 'exactly two thirds is stage 1 (no flicker)');
+  check(wallDamageStage(39, 60) === 2, 'just below two thirds is stage 2');
+  check(wallDamageStage(20, 60) === 2, 'exactly one third is stage 2 (no flicker)');
+  check(wallDamageStage(19, 60) === 3, 'the bottom third of HP is damage stage 3');
+
+  check(wallArt({ branch: null, open: false, hp: 60, maxHp: 60 }).face === 'wall-t1', 'a plain tier-1 wall uses the wall-t1 face');
+  check(wallArt({ branch: null, open: false, hp: 180, maxHp: 180, tier: 2 }).face === 'wall-t2', 'a tier-2 wall uses the wall-t2 face');
+  check(wallArt({ branch: 'C', open: true, hp: 540, maxHp: 540, tier: 3 }).face === 'wall-t3', 'a tier-3 Toggle uses the wall-t3 face');
+  check(wallArt({ branch: 'A', open: false, hp: 1080, maxHp: 1080, tier: 3 }).overlays.includes('wall-bulwark'),
+    'Bulwark adds the inner-rim overlay');
+  check(wallArt({ branch: 'B', open: false, hp: 1080, maxHp: 1080, tier: 3 }).overlays.includes('wall-mesh'),
+    'Mesh adds the crosshatch overlay');
+  check(wallArt({ branch: 'A', open: false, hp: 540, maxHp: 1080, tier: 3, repairing: true }).overlays.includes('wall-repairing'),
+    'a repairing wall adds the repair overlay');
+  check(!wallArt({ branch: 'A', open: false, hp: 540, maxHp: 1080, tier: 3, repairing: true }).overlays.includes('wall-bulwark'),
+    'a repairing wall drops the branch overlay');
+  check(wallArt({ branch: 'A', open: false, hp: 100, maxHp: 1080, tier: 3 }).overlays.includes('wall-damaged-3'),
+    'a heavily damaged wall adds the stage-3 damage overlay');
+  check(wallArt({ branch: 'A', open: false, hp: 900, maxHp: 1080, tier: 3 }).overlays.includes('wall-damaged-1'),
+    'a lightly damaged wall adds the stage-1 damage overlay');
+  check(wallArt({ branch: 'C', open: true, hp: 100, maxHp: 540, tier: 3 }).overlays.every((o) => !o.startsWith('wall-damaged')),
+    'an open Toggle never reads damage');
+
+  // The button spec ignores damage, so the art path's tint and bevel do not double the overlay.
+  const damaged = wallButtonSpec({ branch: 'A', open: false, hp: 100, maxHp: 1080, tier: 3 });
+  check(damaged.face === WALL_FACE, 'the button spec keeps the raised face at any HP');
+  check(wallSpec({ branch: 'A', open: false, hp: 100, maxHp: 1080 }).face === WALL_FACE_PRESSED,
+    'the full spec still presses the face below a third HP (procedural fallback)');
 }
 
 {
@@ -4599,8 +4636,8 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   }
   check(unique, 'every manifest entry has a unique name');
   check(
-    ['enemies', 'towers', 'branches', 'board', 'fx', 'ui'].every((c) => categories.has(c)),
-    'the manifest covers enemies, towers, branches, board, fx and ui',
+    ['enemies', 'towers', 'branches', 'board', 'fx', 'ui', 'wall'].every((c) => categories.has(c)),
+    'the manifest covers enemies, towers, branches, board, fx, ui and wall',
   );
   check(ART_VIEWBOX === 32 && ART_SILHOUETTE === 28,
     `the viewBox contract is ${ART_VIEWBOX}x${ART_VIEWBOX}, silhouette ${ART_SILHOUETTE}px`);
@@ -4608,7 +4645,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   // 37b. Every shipped manifest file exists on disk, and no SVG on disk is unreferenced. The
   // shipped set grows as each art phase lands (towers, branches, board); the manifest itself lists
   // the whole contract from the start, so unshipped entries simply fall back to procedural drawing.
-  const shippedCategories = ['enemies', 'towers', 'branches', 'board', 'fx', 'ui'];
+  const shippedCategories = ['enemies', 'towers', 'branches', 'board', 'fx', 'ui', 'wall'];
   const missing = ART_MANIFEST.filter(
     (e) => shippedCategories.includes(e.category) && !existsSync(`${artDir}/${e.file}`),
   );
@@ -4666,7 +4703,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     );
   }
   check(enemyArtNames('grunt').length === 1, 'a base enemy resolves exactly one art name');
-  for (const kind of ['gun', 'cannon', 'laser', 'taser', 'frost', 'aa', 'beacon', 'cursor', 'repair', 'wall']) {
+  for (const kind of ['gun', 'cannon', 'laser', 'taser', 'frost', 'aa', 'beacon', 'cursor', 'repair']) {
     check(artNameForTowerBase(kind) === `${kind}-base`, `tower ${kind} resolves a base`);
   }
   for (const kind of ['gun', 'cannon', 'laser', 'taser', 'frost', 'aa']) {
@@ -4674,6 +4711,10 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   }
   for (const kind of ['beacon', 'cursor', 'repair', 'wall']) {
     check(artNameForTowerTurret(kind) === null, `tower ${kind} ships no turret`);
+  }
+  // The wall ships a tier face plus overlays in the wall/ category, not a single tower base plinth.
+  for (const name of ['wall-t1', 'wall-t2', 'wall-t3', 'wall-t4', 'wall-t5', 'wall-bulwark', 'wall-mesh', 'wall-repairing', 'wall-damaged-1', 'wall-damaged-2', 'wall-damaged-3']) {
+    check(manifestEntry(name)?.category === 'wall', `wall asset ${name} is in the wall category`);
   }
   check(artNameForBranch('gun', 'A') === 'gun-marksman', 'gun A names Marksman');
   check(artNameForBranch('gun', 'B') === 'gun-repeater', 'gun B names Repeater');
@@ -4723,11 +4764,11 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   const gunBase = new Texture({ width: 4, height: 4 });
   const gunTurret = new Texture({ width: 8, height: 8 });
   const beaconBase = new Texture({ width: 6, height: 6 });
-  const wallBase = new Texture({ width: 6, height: 6 });
+  const wallT1 = new Texture({ width: 6, height: 6 });
   injectArtTexture('gun-base', gunBase);
   injectArtTexture('gun-turret', gunTurret);
   injectArtTexture('beacon-base', beaconBase);
-  injectArtTexture('wall-base', wallBase);
+  injectArtTexture('wall-t1', wallT1);
 
   const layout = computeLayout(1280, 800);
   const board = layout.board;
@@ -4787,14 +4828,14 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(view2.ghostBase.texture === beaconBase, 'ghost: the beacon base is the injected texture');
   check(!view2.ghostTurret.visible, 'ghost: a turret-less kind previews no turret');
 
-  // The wall preview uses the wall base art at the default (closed, un-upgraded) appearance.
+  // The wall preview uses the tier-1 face art at the default (closed, un-upgraded) appearance.
   const s3 = stateOnLevel('open-field');
   s3.economy.salvage = 10000;
   const view3 = new BoardView();
   selectTower(s3, 'wall');
   view3.draw(s3, layout, 0, hover);
-  check(view3.ghostBase.visible, 'ghost: the wall preview uses the wall base art');
-  check(view3.ghostBase.texture === wallBase, 'ghost: the wall base is the injected texture');
+  check(view3.ghostBase.visible, 'ghost: the wall preview uses the tier-1 face art');
+  check(view3.ghostBase.texture === wallT1, 'ghost: the wall face is the injected wall-t1 texture');
   check(view3.ghostBase.alpha === 0.5, 'ghost: the wall preview is at 50% alpha');
   check(!view3.ghostTurret.visible, 'ghost: the wall preview has no turret');
 
@@ -4815,6 +4856,22 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     'ghost fallback: no sprites are shown without art');
   check(view.overlay.context.instructions.length > 0,
     'ghost fallback: the procedural ghost drew into the overlay');
+  resetArt();
+}
+
+// --- 37h2. A wall falls back to the procedural button when its face art is absent ---------------
+{
+  resetArt();
+  const layout = computeLayout(1280, 800);
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  placeTower(s, 'wall', 3, 6);
+  const view = new BoardView();
+  const hover = { col: 4, row: 6, onBoard: false, x: 0, y: 0 };
+  view.draw(s, layout, 0, hover);
+  check(!view.towerBaseSprites[0].visible, 'wall fallback: no face sprite without wall art');
+  check(view.wallOverlaySprites.every((sp) => !sp.visible), 'wall fallback: no overlay sprites without wall art');
+  check(view.towers.context.instructions.length > 0, 'wall fallback: the procedural button drew into the towers layer');
   resetArt();
 }
 
@@ -5339,14 +5396,14 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     write('ui/glyph-close.2.svg');
     write('branches/gun-marksman.svg');
     write('branches/gun-marksman.1.svg');
-    write('towers/wall-base.svg');
-    write('towers/wall-base.1.svg');
+    write('wall/wall-t1.svg');
+    write('wall/wall-t1.1.svg');
     const f = scanArt(tmp);
     check(f.warnings.some((m) => m.includes('ui/glyph-close.1.svg') && m.includes('will never play') && m.includes('ui glyphs are static')),
       'manifest: a numbered frame on a ui glyph warns it will never play');
     check(f.warnings.some((m) => m.includes('branches/gun-marksman.1.svg') && m.includes('branch marks are static')),
       'manifest: a numbered frame on a branch mark warns it is static');
-    check(f.warnings.some((m) => m.includes('towers/wall-base.1.svg') && m.includes('the wall face is static')),
+    check(f.warnings.some((m) => m.includes('wall/wall-t1.1.svg') && m.includes('the wall face is static')),
       'manifest: a numbered frame on the wall face warns it is static');
     check(f.assets.find((x) => x.name === 'ui/glyph-close').frames === 1, 'manifest: a static asset stays one frame');
 

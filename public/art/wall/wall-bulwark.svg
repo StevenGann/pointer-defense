@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Bulwark: an inner raised rim over the tier face. Light top-left, dark bottom-right. -->
+  <g fill="none" stroke-width="1">
+    <path d="M5 5.5 H27" stroke="#ffffff"/>
+    <path d="M5 6.5 H27" stroke="#dfdfdf"/>
+    <path d="M5 25.5 H27" stroke="#808080"/>
+    <path d="M5 26.5 H27" stroke="#404040"/>
+    <path d="M5.5 5 V27" stroke="#ffffff"/>
+    <path d="M6.5 5 V27" stroke="#dfdfdf"/>
+    <path d="M25.5 5 V27" stroke="#808080"/>
+    <path d="M26.5 5 V27" stroke="#404040"/>
+  </g>
+</svg>

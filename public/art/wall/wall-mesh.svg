@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Mesh: a crosshatch over the tier face (both diagonal families). -->
+  <g fill="none" stroke="#808080" stroke-width="1">
+    <path d="M24 0 L32 8 M20 0 L32 12 M16 0 L32 16 M12 0 L32 20 M8 0 L32 24 M4 0 L32 28 M0 0 L32 32 M0 4 L28 32 M0 8 L24 32 M0 12 L20 32 M0 16 L16 32 M0 20 L12 32 M0 24 L8 32"/>
+    <path d="M0 4 L4 0 M0 8 L8 0 M0 12 L12 0 M0 16 L16 0 M0 20 L20 0 M0 24 L24 0 M0 28 L28 0 M0 32 L32 0 M4 32 L32 4 M8 32 L32 8 M12 32 L32 12 M16 32 L32 16 M20 32 L32 20 M24 32 L32 24 M28 32 L32 28"/>
+  </g>
+</svg>

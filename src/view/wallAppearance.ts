@@ -36,6 +36,8 @@ export interface WallState {
   readonly open: boolean;
   readonly hp: number;
   readonly maxHp: number;
+  /** The wall's tier (1..3 today), which picks the base face plate. Defaults to 1 for the ghost. */
+  readonly tier?: number;
   /** A Toggle gate whose flip cooldown is still running: draw it as a disabled button. */
   readonly locked?: boolean;
   /** A wall mid-repair: draw it as a disabled button with a diagonal hatch over the face. */
@@ -71,7 +73,13 @@ export function lerpColor(a: number, b: number, t: number): number {
   return (r << 16) | (g << 8) | bl;
 }
 
-export function wallSpec(wall: WallState): WallSpec {
+/**
+ * The wall's button spec *before* damage is applied: the face shade and bevel for the wall's live
+ * state (plain / branched / open gate / locked / repairing). Damage is drawn separately — as the
+ * three `wall-damaged-*` overlays in the art path, or as the bevel change below in the procedural
+ * fallback — so the two never fight over the same shade.
+ */
+export function wallButtonSpec(wall: WallState): WallSpec {
   const branch = wall.branch;
   const open = wall.open;
   const locked = wall.locked === true;
@@ -80,7 +88,6 @@ export function wallSpec(wall: WallState): WallSpec {
   let face = WALL_FACE;
   let tl: readonly [number, number] = RAISED_TL;
   let br: readonly [number, number] = RAISED_BR;
-  let pressed = false;
 
   if (repairing) {
     // A mid-repair wall is off the field: a disabled button under a diagonal hatch, so the player
@@ -99,21 +106,6 @@ export function wallSpec(wall: WallState): WallSpec {
     face = WALL_FACE_PRESSED;
     tl = PRESSED_TL;
     br = PRESSED_BR;
-    pressed = true;
-  }
-
-  // Damage reads through the bevel. An open gate cannot be damaged, and a repair has already painted
-  // its own state, so neither participates in the damage read.
-  if (!repairing && wall.hp < wall.maxHp && !pressed && !locked) {
-    const ratio = wall.maxHp > 0 ? wall.hp / wall.maxHp : 0;
-    if (ratio < 1 / 3) {
-      face = WALL_FACE_PRESSED;
-      tl = PRESSED_TL;
-      br = PRESSED_BR;
-    } else if (ratio <= 2 / 3) {
-      const fade = 2 - 3 * ratio; // 1 at one third, 0 at two thirds
-      tl = [lerpColor(tl[0], face, fade), tl[1]];
-    }
   }
 
   return {
@@ -124,6 +116,78 @@ export function wallSpec(wall: WallState): WallSpec {
     crosshatch: !repairing && branch === 'B',
     hatched: repairing,
   };
+}
+
+export function wallSpec(wall: WallState): WallSpec {
+  const spec = wallButtonSpec(wall);
+  const repairing = wall.repairing === true;
+  const locked = wall.locked === true;
+  const pressed = wall.branch === 'C' && wall.open;
+
+  // Damage reads through the bevel. An open gate cannot be damaged, and a repair has already painted
+  // its own state, so neither participates in the damage read.
+  if (!repairing && wall.hp < wall.maxHp && !pressed && !locked) {
+    const ratio = wall.maxHp > 0 ? wall.hp / wall.maxHp : 0;
+    if (ratio < 1 / 3) {
+      return { ...spec, face: WALL_FACE_PRESSED, tl: PRESSED_TL, br: PRESSED_BR };
+    }
+    if (ratio <= 2 / 3) {
+      const fade = 2 - 3 * ratio; // 1 at one third, 0 at two thirds
+      return { ...spec, tl: [lerpColor(spec.tl[0], spec.face, fade), spec.tl[1]] };
+    }
+  }
+
+  return spec;
+}
+
+/**
+ * The damage stage, in integer thirds, so the boundary never flickers: stage 1 is the top third of
+ * health (light scuffs), stage 2 the middle third, stage 3 the bottom third. A full wall is stage 0.
+ * Integer comparisons (`3·hp` against `maxHp` and `2·maxHp`) keep the cut lines exact, so a wall at
+ * exactly one- or two-thirds of its pool lands on the same stage every tick.
+ */
+export function wallDamageStage(hp: number, maxHp: number): number {
+  if (maxHp <= 0 || hp >= maxHp) return 0;
+  if (hp * 3 < maxHp) return 3;
+  if (hp * 3 < maxHp * 2) return 2;
+  return 1;
+}
+
+/** The art a wall draws: a single tier face plate plus zero or more overlays, in draw order. */
+export interface WallArt {
+  /** The base face asset name (`wall-t1`..`wall-t5`), tinted to the live button grey. */
+  readonly face: string;
+  /** Overlay asset names in draw order: a branch mark, then a damage stage or the repair hatch. */
+  readonly overlays: readonly string[];
+}
+
+/**
+ * Resolve a wall to its art names, independent of the texture loader so the smoke test can check it
+ * headlessly. The face is the wall's tier plate (`wall-t1`..`wall-t5`; tiers 4 and 5 are reserved
+ * placeholders the wall never reaches). Bulwark and Mesh add their branch mark as an overlay; a
+ * repairing wall adds the hatch instead of any branch mark or damage; damage is the integer-third
+ * stage above.
+ */
+export function wallArt(wall: WallState): WallArt {
+  const tier = Math.min(Math.max(wall.tier ?? 1, 1), 5);
+  const branch = wall.branch;
+  const repairing = wall.repairing === true;
+  const locked = wall.locked === true;
+  const pressed = branch === 'C' && wall.open;
+
+  const overlays: string[] = [];
+  if (!repairing) {
+    if (branch === 'A') overlays.push('wall-bulwark');
+    else if (branch === 'B') overlays.push('wall-mesh');
+  }
+  if (repairing) {
+    overlays.push('wall-repairing');
+  } else if (wall.hp < wall.maxHp && !pressed && !locked) {
+    const stage = wallDamageStage(wall.hp, wall.maxHp);
+    if (stage > 0) overlays.push(`wall-damaged-${stage}`);
+  }
+
+  return { face: `wall-t${tier}`, overlays };
 }
 
 /** The wall footprint: `cell - 6` px, centred, so the grid lines still read around it. */

@@ -31,6 +31,8 @@ import {
   lerpColor,
   RAISED_BR,
   RAISED_TL,
+  wallArt,
+  wallButtonSpec,
   wallFocusRect,
   wallFootprintSize,
   wallSpec,
@@ -175,6 +177,7 @@ export class BoardView {
   private readonly towerBaseSprites: Sprite[] = [];
   private readonly towerTurretSprites: Sprite[] = [];
   private readonly towerMarkSprites: Sprite[] = [];
+  private readonly wallOverlaySprites: Sprite[] = [];
   private readonly popups = new Container();
   private readonly popupGfx = new Graphics();
   private readonly tileSprites = new Container();
@@ -294,6 +297,19 @@ export class BoardView {
     return s;
   }
 
+  /** The pooled sprite for the `index`-th wall overlay (branch mark, damage or repair hatch). */
+  private wallOverlaySprite(index: number): Sprite {
+    let s = this.wallOverlaySprites[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0.5, 0.5);
+      this.wallOverlaySprites.push(s);
+      this.towerSprites.addChild(s);
+    }
+    s.visible = true;
+    return s;
+  }
+
   /** The caption and message Text objects for the `i`-th live pop-up, creating them on demand. */
   private popupText(i: number): { title: Text; message: Text } {
     while (this.popupTexts.length <= i) {
@@ -350,14 +366,23 @@ export class BoardView {
     for (let i = shutterIndex; i < this.shutterSpritePool.length; i++) this.shutterSpritePool[i].visible = false;
 
     let towerIndex = 0;
+    let wallOverlayIndex = 0;
     for (const t of state.towers) {
-      drawTower(this.towerBaseSprite(towerIndex), this.towerTurretSprite(towerIndex), this.towerMarkSprite(towerIndex), this.wrenchSprite(towerIndex), this.towers, t, board, cell, state.clock);
+      const baseSprite = this.towerBaseSprite(towerIndex);
+      const turretSprite = this.towerTurretSprite(towerIndex);
+      const markSprite = this.towerMarkSprite(towerIndex);
+      const wrenchSprite = this.wrenchSprite(towerIndex);
+      // Wall overlays are drawn after the base so they sit on top of the face sprite.
+      const overlayA = t.kind === 'wall' ? this.wallOverlaySprite(wallOverlayIndex++) : null;
+      const overlayB = t.kind === 'wall' ? this.wallOverlaySprite(wallOverlayIndex++) : null;
+      drawTower(baseSprite, turretSprite, markSprite, wrenchSprite, this.towers, t, board, cell, state.clock, overlayA, overlayB);
       towerIndex++;
     }
     for (let i = towerIndex; i < this.towerBaseSprites.length; i++) this.towerBaseSprites[i].visible = false;
     for (let i = towerIndex; i < this.towerTurretSprites.length; i++) this.towerTurretSprites[i].visible = false;
     for (let i = towerIndex; i < this.towerMarkSprites.length; i++) this.towerMarkSprites[i].visible = false;
     for (let i = towerIndex; i < this.wrenchSprites.length; i++) this.wrenchSprites[i].visible = false;
+    for (let i = wallOverlayIndex; i < this.wallOverlaySprites.length; i++) this.wallOverlaySprites[i].visible = false;
 
     const rangeMult = towerRangeMult(state);
     const hoveredTower = hover.onBoard ? towerAt(state, hover.col, hover.row) : undefined;
@@ -457,6 +482,7 @@ export class BoardView {
     this.towerBaseSprites.length = 0;
     this.towerTurretSprites.length = 0;
     this.towerMarkSprites.length = 0;
+    this.wallOverlaySprites.length = 0;
 
     this.tileSprites.removeChildren();
 
@@ -707,12 +733,14 @@ function drawTower(
   board: { x: number; y: number; cell: number },
   cell: number,
   clock: number,
+  overlayA: Sprite | null = null,
+  overlayB: Sprite | null = null,
 ): void {
   const cx = board.x + (t.col + 0.5) * cell;
   const cy = board.y + (t.row + 0.5) * cell;
   if (t.kind === 'wall') {
     const repairing = isRepairing(t, clock);
-    drawWallTower(baseSprite, g, { ...t, locked: isGateLocked(t, clock), repairing }, cx, cy, cell);
+    drawWallTower(baseSprite, overlayA, overlayB, g, { ...t, locked: isGateLocked(t, clock), repairing }, cx, cy, cell);
     if (repairing) {
       // A repair replaces the health bar with a progress bar: how far the job has to run.
       drawBar(g, cx, cy, cell, repairProgress(t, clock), REPAIR_COLOR);
@@ -815,21 +843,57 @@ function drawTowerBody(
   }
 }
 
-/** Draw a wall as a tinted face sprite plus the procedural button bevel and branch marks. */
+/** Draw a wall as a tinted face sprite plus the procedural button bevel, with overlay sprites on top. */
 function drawWallTower(
   baseSprite: Sprite,
+  overlayA: Sprite | null,
+  overlayB: Sprite | null,
   g: Graphics,
   wall: WallState,
   cx: number,
   cy: number,
   cell: number,
 ): void {
-  const spec = wallSpec(wall);
   const size = wallFootprintSize(cell);
-  const faceTex = getArtTexture('wall-base', size);
+  const art = wallArt(wall);
+  const faceTex = getArtTexture(art.face, size);
   if (faceTex !== null) {
-    // The face is a white button template; the Win95 grey is applied per state (a button's bevel and
-    // its raised/disabled/pressed shade are runtime chrome).
+    drawWallArt(baseSprite, overlayA, overlayB, g, wall, cx, cy, cell, 1);
+  } else {
+    baseSprite.visible = false;
+    if (overlayA) overlayA.visible = false;
+    if (overlayB) overlayB.visible = false;
+    drawWallShape(g, wall, cx, cy, cell, 1);
+  }
+}
+
+/**
+ * The art path for a wall: a tinted face plate (sprite) under the procedural outline and bevel, with
+ * the branch mark, damage stage and repair hatch drawn as overlay sprites when their art is present
+ * and falling back to the procedural strokes when a single overlay is missing. The face is the wall's
+ * tier plate (`wall-t1`..`wall-t5`), tinted to the live button grey exactly as the old white template.
+ */
+function drawWallArt(
+  baseSprite: Sprite,
+  overlayA: Sprite | null,
+  overlayB: Sprite | null,
+  g: Graphics,
+  wall: WallState,
+  cx: number,
+  cy: number,
+  cell: number,
+  alpha: number,
+): void {
+  const spec = wallButtonSpec(wall);
+  const art = wallArt(wall);
+  const size = wallFootprintSize(cell);
+  const x = Math.round(cx - size / 2);
+  const y = Math.round(cy - size / 2);
+  const s = Math.round(size);
+
+  // The face plate: a light tier template tinted to the button's raised/disabled/pressed grey.
+  const faceTex = getArtTexture(art.face, size);
+  if (faceTex !== null) {
     baseSprite.texture = faceTex;
     baseSprite.visible = true;
     baseSprite.position.set(cx, cy);
@@ -837,11 +901,55 @@ function drawWallTower(
     baseSprite.height = size;
     baseSprite.tint = spec.face;
     baseSprite.rotation = 0;
-    baseSprite.alpha = 1;
-    drawWallFaceDetails(g, spec, cx, cy, cell, 1);
+    baseSprite.alpha = alpha;
   } else {
     baseSprite.visible = false;
-    drawWallShape(g, wall, cx, cy, cell, 1);
+  }
+
+  // The outline and bevel stay procedural: they are the button's runtime chrome.
+  g.rect(x + 0.5, y + 0.5, s - 1, s - 1).stroke({ width: 1, color: WALL_OUTLINE, alpha });
+  wallBevel(g, x + 1, y + 1, s - 2, spec.tl, spec.br, alpha);
+
+  // Branch mark, damage stage and repair hatch: a sprite when the artist has shipped it, the old
+  // procedural strokes when not (the damage stage has no additive fallback; the health bar covers it).
+  const sprites = [overlayA, overlayB];
+  let si = 0;
+  for (const name of art.overlays) {
+    const tex = getArtTexture(name, size);
+    const sprite = sprites[si];
+    if (tex !== null && sprite) {
+      sprite.texture = tex;
+      sprite.visible = true;
+      sprite.position.set(cx, cy);
+      sprite.width = size;
+      sprite.height = size;
+      sprite.tint = 0xffffff;
+      sprite.rotation = 0;
+      sprite.alpha = alpha;
+    } else {
+      if (sprite) sprite.visible = false;
+      drawWallOverlayFallback(g, name, x, y, s, alpha);
+    }
+    si++;
+  }
+  for (; si < sprites.length; si++) {
+    const sprite = sprites[si];
+    if (sprite) sprite.visible = false;
+  }
+}
+
+/** The procedural detail that backs a wall overlay when its art file is missing. */
+function drawWallOverlayFallback(g: Graphics, name: string, x: number, y: number, s: number, alpha: number): void {
+  if (name === 'wall-bulwark') {
+    wallBevel(g, x + 4, y + 4, s - 8, RAISED_TL, RAISED_BR, alpha);
+  } else if (name === 'wall-mesh') {
+    for (const seg of hatchSegments(x + 3, y + 3, s - 6, 4)) {
+      g.moveTo(seg.x1, seg.y1).lineTo(seg.x2, seg.y2).stroke({ width: 1, color: PAL.shadow, alpha });
+    }
+  } else if (name === 'wall-repairing') {
+    for (const seg of repairHatch(x + 1, y + 1, s - 2, 4)) {
+      g.moveTo(seg.x1, seg.y1).lineTo(seg.x2, seg.y2).stroke({ width: 1, color: PAL.shadow, alpha });
+    }
   }
 }
 
@@ -861,9 +969,10 @@ function drawGhost(
 ): void {
   if (kind === 'wall') {
     const wall = { branch: null, open: false, hp: 1, maxHp: 1, locked: false };
-    const spec = wallSpec(wall);
+    const spec = wallButtonSpec(wall);
+    const art = wallArt(wall);
     const size = wallFootprintSize(cell);
-    const faceTex = getArtTexture('wall-base', size);
+    const faceTex = getArtTexture(art.face, size);
     if (faceTex !== null) {
       baseSprite.texture = faceTex;
       baseSprite.visible = true;

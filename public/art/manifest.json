@@ -337,10 +337,6 @@
       "frames": 1
     },
     {
-      "name": "towers/wall-base",
-      "frames": 1
-    },
-    {
       "name": "ui/arrow-left",
       "frames": 1
     },
@@ -378,6 +374,50 @@
     },
     {
       "name": "ui/shutter-open",
+      "frames": 1
+    },
+    {
+      "name": "wall/wall-bulwark",
+      "frames": 1
+    },
+    {
+      "name": "wall/wall-damaged-1",
+      "frames": 1
+    },
+    {
+      "name": "wall/wall-damaged-2",
+      "frames": 1
+    },
+    {
+      "name": "wall/wall-damaged-3",
+      "frames": 1
+    },
+    {
+      "name": "wall/wall-mesh",
+      "frames": 1
+    },
+    {
+      "name": "wall/wall-repairing",
+      "frames": 1
+    },
+    {
+      "name": "wall/wall-t1",
+      "frames": 1
+    },
+    {
+      "name": "wall/wall-t2",
+      "frames": 1
+    },
+    {
+      "name": "wall/wall-t3",
+      "frames": 1
+    },
+    {
+      "name": "wall/wall-t4",
+      "frames": 1
+    },
+    {
+      "name": "wall/wall-t5",
       "frames": 1
     }
   ]

@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Damage stage 3 (heavy): a web of cracks over a darkened face. -->
+  <rect x="2" y="2" width="28" height="28" fill="#000000" opacity="0.18"/>
+  <g fill="none" stroke="#404040" stroke-width="1">
+    <path d="M8 8 L12 11 L10 15 L15 19 L13 24 L18 27"/>
+    <path d="M12 11 L17 10 L22 14"/>
+    <path d="M10 15 L5 18 L8 23"/>
+    <path d="M15 19 L20 18 L25 22"/>
+    <path d="M22 6 L20 12"/>
+    <path d="M26 14 L22 18"/>
+  </g>
+</svg>

@@ -253,7 +253,7 @@ Warnings (printed, then the build continues):
 [art] warning: enemies/grunt.json: animation metadata ignored (enemies/grunt.svg has no numbered frames)
 [art] warning: ui/glyph-close.1.svg will never play: ui glyphs are static
 [art] warning: branches/gun-marksman.1.svg will never play: branch marks are static
-[art] warning: towers/wall-base.1.svg will never play: the wall face is static
+[art] warning: wall/wall-t1.1.svg will never play: the wall face is static
 [art] warning: board/tile.1.svg will never play: board tiles are static
 ```
 
