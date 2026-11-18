@@ -256,9 +256,12 @@ function parseProfile(raw: string): Profile | null {
     gpu: sanitizeSpecLevel(specsRaw.gpu, SPEC_CAPS.gpu),
     disk: sanitizeSpecLevel(specsRaw.disk, SPEC_CAPS.disk),
   };
-  // Restore Points and the tree shipped after the spec-bank era; an older save migrates to zero.
+  // Restore Points and the tree shipped after the spec-bank era. A version-1 save keeps its banked
+  // points: `unspentSpecs` was the old currency and converts one-for-one into Restore Points.
+  const banked = typeof o.unspentSpecs === 'number' && Number.isFinite(o.unspentSpecs)
+    ? Math.max(0, Math.floor(o.unspentSpecs)) : 0;
   const rp =
-    typeof o.rp === 'number' && Number.isFinite(o.rp) ? Math.max(0, Math.floor(o.rp)) : 0;
+    typeof o.rp === 'number' && Number.isFinite(o.rp) ? Math.max(0, Math.floor(o.rp)) : banked;
   const rpEarned =
     typeof o.rpEarned === 'number' && Number.isFinite(o.rpEarned)
       ? Math.max(0, Math.floor(o.rpEarned))

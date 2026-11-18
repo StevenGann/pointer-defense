@@ -1071,7 +1071,10 @@ export function restartWindows(s: RunState, profile: Profile): RestartResult {
   next.rpEarned += gained;
   next.lastSalvage = s.economy.earned;
   next.bestWave = Math.max(next.bestWave, s.wave);
-  if (!next.achievements.includes('reboot-50') && next.rpEarned >= 50) {
+  // "Reboot with 50 or more total specs" is about specs owned, not points banked: a player who spends
+  // every point on the tree still owns those levels.
+  const totalSpecLevels = next.specs.cpu + next.specs.ram + next.specs.gpu + next.specs.disk;
+  if (!next.achievements.includes('reboot-50') && totalSpecLevels >= 50) {
     next.achievements.push('reboot-50');
   }
   return { gained, profile: next };

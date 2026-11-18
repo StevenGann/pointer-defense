@@ -6966,7 +6966,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
 }
 
 {
-  // 45g. A version-1 save migrates: specs kept, Restore Points and the tree zeroed.
+  // 45g. A version-1 save migrates: specs kept, banked points carried into Restore Points.
   const store = {
     value: JSON.stringify({
       version: 1,
@@ -6983,8 +6983,10 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(migrated.version === 2, 'a version-1 save migrates to version 2');
   check(migrated.specs.cpu === 5 && migrated.specs.ram === 3 && migrated.specs.gpu === 2 && migrated.specs.disk === 1,
     'migration keeps the four spec fields');
-  check(migrated.rp === 0 && migrated.rpEarned === 0 && migrated.tree.length === 0 && migrated.lastSalvage === 0,
-    'migration zeroes Restore Points, the tree and the last-salvage carry');
+  check(migrated.rp === 9 && migrated.rpEarned === 9,
+    'migration carries the old banked specs into Restore Points');
+  check(migrated.tree.length === 0 && migrated.lastSalvage === 0,
+    'migration leaves the tree empty and the last-salvage carry at zero');
   check(migrated.achievements.includes('first-blood') && migrated.bestWave === 12 && migrated.reboots === 2,
     'migration keeps the pre-RP profile fields');
 }
