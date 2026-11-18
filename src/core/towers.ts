@@ -310,6 +310,20 @@ export function isOffline(tower: Tower): boolean {
 }
 
 /**
+ * True while a Wirecutter's EMP has knocked this tower offline at the given clock. It is separate
+ * from `isOffline`: the tower keeps its hit points and simply returns when the clock passes
+ * `empUntilTick`, so it is never touched by the repair flow.
+ */
+export function isEmpDisabled(tower: Tower, clock: number): boolean {
+  return tower.empUntilTick !== 0 && clock < tower.empUntilTick;
+}
+
+/** True when the tower is out of action right now: at 0 HP (offline) or knocked out by an EMP. */
+export function isDown(tower: Tower, clock: number): boolean {
+  return isOffline(tower) || isEmpDisabled(tower, clock);
+}
+
+/**
  * The hit-point pool of every non-wall tower. Walls use `wallMaxHp` (tier and branch dependent);
  * every other kind keeps this fixed pool for its whole life, so an upgrade never changes its
  * ceiling — it only has to not reset current HP.
@@ -355,7 +369,7 @@ export function repairRadius(t: Tower): number {
  */
 export function repairHealTargets(towers: readonly Tower[], healer: Tower, clock: number): Tower[] {
   if (healer.kind !== 'repair') return [];
-  if (isOffline(healer)) return []; // an offline repair tower projects no aura
+  if (isDown(healer, clock)) return []; // an offline (or EMP'd) repair tower projects no aura
   if (isRepairing(healer, clock)) return []; // a repair tower mid-repair is off the field too
   const r = repairRadius(healer);
   const r2 = r * r;
@@ -507,6 +521,8 @@ export interface Tower {
   hp: number;
   /** Hit points at full health (the kind's fixed pool, or a wall's tier/branch total). */
   maxHp: number;
+  /** EMP only: sim tick before which this tower is knocked offline by a Wirecutter (0 = not EMP'd). */
+  empUntilTick: number;
   /** Toggle gates only: true while the gate is open (walkable, cannot be attacked). */
   open: boolean;
   /** Toggle gates only: simulation tick before which another flip is refused. */
@@ -558,6 +574,7 @@ export function createTower(id: number, kind: TowerKind, col: number, row: numbe
     targetMode: 'first',
     hp: towerMaxHp(kind, 1, null),
     maxHp: towerMaxHp(kind, 1, null),
+    empUntilTick: 0,
     open: false,
     toggleReadyAt: 0,
     repairReadyAt: 0,
@@ -634,13 +651,13 @@ export function isFullyUpgraded(tower: Tower): boolean {
  * Recompute every tower's beacon aura bonuses. Idempotent; called whenever the set of towers
  * changes. Each tower starts at 1x damage / +0 range, then beacons in range multiply/add.
  */
-export function recomputeAuras(towers: Tower[]): void {
+export function recomputeAuras(towers: Tower[], clock: number): void {
   for (const t of towers) {
     t.auraDamage = 1;
     t.auraRange = 0;
   }
   for (const b of towers) {
-    if (isOffline(b)) continue; // an offline beacon projects no aura
+    if (isDown(b, clock)) continue; // an offline (or EMP'd) beacon projects no aura
     const st = effectiveStats(b);
     if (st.auraDamage <= 0 && st.auraRange <= 0) continue;
     const r = st.range;

@@ -23,14 +23,25 @@ import {
   BREACHER_TURRET_DAMAGE,
   BREACHER_TURRET_INTERVAL_TICKS,
   BREACHER_TURRET_RANGE,
+  CARRIER_BROOD_COUNT,
+  CARRIER_BROOD_INTERVAL_TICKS,
+  CARRIER_BROOD_SCATTER_TICKS,
+  CARRIER_DEATH_BROOD_COUNT,
   createEnemy,
   ENEMY_STATS,
+  isFlyerKind,
   isPopupEnemy,
   isWeakPointHit,
   PACER_AURA_RADIUS,
   popupCovers,
   radiusOf,
+  RAM_TOWER_DPS,
+  RAM_TURRET_DAMAGE,
+  RAM_TURRET_RANGE,
+  slowFactorFor,
   speedPerTick,
+  WIRECUTTER_EMP_RADIUS,
+  WIRECUTTER_EMP_TICKS,
   type Enemy,
   type EnemyKind,
 } from './enemies.ts';
@@ -46,6 +57,7 @@ import {
   effectiveStats,
   isGateLocked,
   isGateOpen,
+  isDown,
   isOffline,
   isRepairing,
   isToggleGate,
@@ -189,6 +201,8 @@ export interface RunState {
   field: Int32Array;
   /** Ground field for breachers: walls are walkable, other towers still block. */
   breacherField: Int32Array;
+  /** Ground field for the Ram: only terrain and closed toggles block; towers are chewed, not routed around. */
+  ramField: Int32Array;
   /** Air field for flyers: only Mesh walls block, terrain and other towers are ignored. */
   flyerField: Int32Array;
   /** Tower tiles (blocked for pathing), by index row * COLS + col. */
@@ -298,6 +312,7 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     toggles,
     field: buildField(grid, initialGroundBlocked(toggles), level.exits[0]),
     breacherField: buildField(grid, blocked, level.exits[0]),
+    ramField: buildField(grid, initialGroundBlocked(toggles), level.exits[0]),
     flyerField: buildAirField(grid.cols, grid.rows, blocked, level.exits[0]),
     blocked,
     phase: 'build',
@@ -464,7 +479,7 @@ export function placeTower(s: RunState, kind: TowerKind, col: number, row: numbe
   }
   s.towers.push(tower);
   rebuildField(s);
-  recomputeAuras(s.towers);
+  recomputeAuras(s.towers, s.clock);
   s.placedFirstTower = true;
   return true;
 }
@@ -567,6 +582,13 @@ function breacherBlocked(s: RunState): Set<number> {
   return out;
 }
 
+/** The set of tile indices that block the Ram: closed map toggles only (towers are chewed, not routed around). */
+function ramBlocked(s: RunState): Set<number> {
+  const out = new Set<number>();
+  for (const t of s.toggles) if (!toggleOpenAt(t, s.clock)) out.add(toggleIndex(t));
+  return out;
+}
+
 /** The set of tile indices that block flyer pathing: only Mesh walls (a repairing wall does not). */
 function flyerBlocked(s: RunState): Set<number> {
   const out = new Set<number>();
@@ -580,6 +602,7 @@ function rebuildField(s: RunState): void {
   const exit = exitTile(s);
   s.field = buildField(s.grid, groundBlocked(s), exit);
   s.breacherField = buildField(s.grid, breacherBlocked(s), exit);
+  s.ramField = buildField(s.grid, ramBlocked(s), exit);
   s.flyerField = buildAirField(s.grid.cols, s.grid.rows, flyerBlocked(s), exit);
 }
 
@@ -588,7 +611,7 @@ export function upgradeTower(s: RunState, col: number, row: number): boolean {
   if (noBuildActive(s)) return false;
   const t = towerAt(s, col, row);
   if (!t) return false;
-  if (isOffline(t)) return false; // an offline tower cannot be upgraded, only repaired
+  if (isDown(t, s.clock)) return false; // an offline (or EMP'd) tower cannot be upgraded, only repaired
   if (t.tier === 2 && t.kind !== 'repair') return false; // 2 -> 3 is chooseBranch's job (repair never branches)
   const cost = upgradeCost(t);
   if (cost === null) return false;
@@ -596,7 +619,7 @@ export function upgradeTower(s: RunState, col: number, row: number): boolean {
   t.tier = (t.tier + 1) as Tier;
   t.spent += cost;
   refreshTowerHp(t);
-  recomputeAuras(s.towers);
+  recomputeAuras(s.towers, s.clock);
   return true;
 }
 
@@ -605,7 +628,7 @@ export function chooseBranch(s: RunState, col: number, row: number, branch: Bran
   if (noBuildActive(s)) return false;
   const t = towerAt(s, col, row);
   if (!t || t.tier !== 2 || t.branch !== null) return false;
-  if (isOffline(t)) return false; // an offline tower cannot branch, only be repaired
+  if (isDown(t, s.clock)) return false; // an offline (or EMP'd) tower cannot branch, only be repaired
   const cost = upgradeCost(t);
   if (cost === null) return false;
   if (!spend(s.economy, cost)) return false;
@@ -616,7 +639,7 @@ export function chooseBranch(s: RunState, col: number, row: number, branch: Bran
   t.open = false;
   refreshTowerHp(t);
   rebuildField(s); // a Mesh branch starts blocking flyers
-  recomputeAuras(s.towers);
+  recomputeAuras(s.towers, s.clock);
   return true;
 }
 
@@ -630,7 +653,7 @@ export function sellTower(s: RunState, col: number, row: number): boolean {
   s.economy.salvage += refund;
   if (s.selectedTowerId === t.id) s.selectedTowerId = null;
   rebuildField(s);
-  recomputeAuras(s.towers);
+  recomputeAuras(s.towers, s.clock);
   return true;
 }
 
@@ -659,7 +682,7 @@ export function startRepair(s: RunState, col: number, row: number): boolean {
   // already chewing this wall stops; everything else simply picks a new step on the next tick.
   rebuildField(s);
   for (const e of s.enemies) {
-    if (e.attackWallId === t.id) e.attackWallId = null;
+    if (e.attackTowerId === t.id) e.attackTowerId = null;
     e.targetCol = -1;
     e.targetRow = -1;
   }
@@ -721,12 +744,12 @@ export function toggleGate(s: RunState, col: number, row: number): boolean {
   t.toggleReadyAt = s.clock + TOGGLE_LOCK_TICKS;
   rebuildField(s);
   for (const e of s.enemies) {
-    if (e.attackWallId === t.id) {
-      e.attackWallId = null;
+    if (e.attackTowerId === t.id) {
+      e.attackTowerId = null;
       e.targetCol = -1;
       e.targetRow = -1;
     }
-    if (closing && e.col === col && e.row === row && e.kind !== 'flyer') {
+    if (closing && e.col === col && e.row === row && !isFlyerKind(e.kind)) {
       pushEnemyOffTile(s, e, col, row);
     } else {
       e.targetCol = -1;
@@ -762,7 +785,7 @@ export function startWave(s: RunState): boolean {
   s.autoWaveAtTick = 0; // any start — manual or automatic — cancels a pending countdown
   s.leaksByWave.set(s.wave, 0);
   s.modifiers = waveModifiers(s.wave);
-  recomputeAuras(s.towers);
+  recomputeAuras(s.towers, s.clock);
   s.events.push({ type: 'waveStarted', wave: s.wave });
   const unlocked = TOWER_KINDS.filter((k) => isTowerUnlocked(k, s.wave) && !isTowerUnlocked(k, s.wave - 1));
   if (unlocked.length > 0) s.events.push({ type: 'towerUnlocked', kinds: unlocked });
@@ -890,7 +913,7 @@ function relayPointerBonus(s: RunState, x: number, y: number): { damage: number;
   let slack = 0;
   for (const t of s.towers) {
     if (t.kind !== 'beacon' || t.branch !== 'B') continue;
-    if (isOffline(t)) continue; // an offline Relay beacon buffs nothing
+    if (isDown(t, s.clock)) continue; // an offline (or EMP'd) Relay beacon buffs nothing
     const st = effectiveStats(t);
     const r = st.range;
     if ((x - (t.col + 0.5)) ** 2 + (y - (t.row + 0.5)) ** 2 <= r * r) {
@@ -1002,12 +1025,15 @@ export function tick(s: RunState): void {
   updateToggles(s);
   tickRepairs(s);
   tickRepairAuras(s);
+  tickEmpExpiry(s);
   decayCombo(s);
   tickAds(s);
   checkAchievements(s);
   if (s.phase === 'wave') {
     spawnDue(s);
     moveEnemies(s);
+    applyEmp(s);
+    tickBrood(s);
     fireBreacherTurrets(s);
     tickCursors(s);
     fireTowers(s);
@@ -1068,7 +1094,7 @@ function updateToggles(s: RunState): void {
   }
   for (const t of closedNow) {
     for (const e of s.enemies) {
-      if (e.dead || e.kind === 'flyer' || e.kind === 'breacher') continue;
+      if (e.dead || isFlyerKind(e.kind) || e.kind === 'breacher') continue;
       if (e.col === t.col && e.row === t.row) pushEnemyOffTile(s, e, t.col, t.row);
     }
   }
@@ -1105,14 +1131,14 @@ function tickRepairs(s: RunState): void {
 
   if (finished.length === 0) return;
   rebuildField(s);
-  recomputeAuras(s.towers); // a repaired tower may have come back online (beacon/repair aura resumes)
+  recomputeAuras(s.towers, s.clock); // a repaired tower may have come back online (beacon/repair aura resumes)
   for (const e of s.enemies) {
     e.targetCol = -1;
     e.targetRow = -1;
   }
   for (const t of finished) {
     for (const e of s.enemies) {
-      if (e.dead || e.kind === 'flyer') continue;
+      if (e.dead || isFlyerKind(e.kind)) continue;
       if (e.col === t.col && e.row === t.row) pushEnemyOffTile(s, e, t.col, t.row);
     }
   }
@@ -1127,7 +1153,7 @@ function tickRepairs(s: RunState): void {
 function tickRepairAuras(s: RunState): void {
   let revived = false;
   for (const h of s.towers) {
-    if (h.kind !== 'repair' || h.hp <= 0) continue;
+    if (h.kind !== 'repair' || isDown(h, s.clock)) continue;
     if (isRepairing(h, s.clock)) continue; // a repair tower mid-repair is off the field
     const heal = repairHealRate(h) / TICK_HZ;
     for (const t of repairHealTargets(s.towers, h, s.clock)) {
@@ -1135,7 +1161,51 @@ function tickRepairAuras(s: RunState): void {
       t.hp = Math.min(t.maxHp, t.hp + heal);
     }
   }
-  if (revived) recomputeAuras(s.towers);
+  if (revived) recomputeAuras(s.towers, s.clock);
+}
+
+/**
+ * The Wirecutter's EMP is a time-limited offline state separate from HP: a tower with `empUntilTick`
+ * in the future is knocked out but keeps its hit points. This runs every tick (not just in a wave),
+ * so a tower knocked out as a wave ends still returns after its 3 s. A Beacon or Repair that comes
+ * back re-projects its aura the moment it does.
+ */
+function tickEmpExpiry(s: RunState): void {
+  let recovered = false;
+  for (const t of s.towers) {
+    if (t.empUntilTick !== 0 && s.clock >= t.empUntilTick) {
+      t.empUntilTick = 0;
+      recovered = true;
+    }
+  }
+  if (recovered) recomputeAuras(s.towers, s.clock);
+}
+
+/**
+ * A living Wirecutter knocks every non-wall tower within `WIRECUTTER_EMP_RADIUS` offline for 3 s.
+ * It is a refresh, not a stack: while the Wirecutter stays close the timer keeps pointing at now+3 s,
+ * so the tower returns 3 s after the boss moves on. It never damages the tower.
+ */
+function applyEmp(s: RunState): void {
+  let changed = false;
+  const wirecutters: Enemy[] = [];
+  for (const e of s.enemies) if (!e.dead && e.kind === 'saboteur-boss') wirecutters.push(e);
+  if (wirecutters.length === 0) return;
+
+  const r2 = WIRECUTTER_EMP_RADIUS * WIRECUTTER_EMP_RADIUS;
+  for (const t of s.towers) {
+    if (isWall(t)) continue; // a wall has no firing/aura state to knock out
+    for (const w of wirecutters) {
+      const dx = t.col + 0.5 - w.x;
+      const dy = t.row + 0.5 - w.y;
+      if (dx * dx + dy * dy <= r2) {
+        if (t.empUntilTick <= s.clock) changed = true;
+        t.empUntilTick = Math.max(t.empUntilTick, s.clock + WIRECUTTER_EMP_TICKS);
+        break;
+      }
+    }
+  }
+  if (changed) recomputeAuras(s.towers, s.clock);
 }
 
 /** The combo counts down every tick and expires (back to x1) when it reaches zero. */
@@ -1168,23 +1238,82 @@ function livingPopups(s: RunState): number {
   return n;
 }
 
+/**
+ * The Carrier's brood: every `CARRIER_BROOD_INTERVAL_TICKS` it releases `CARRIER_BROOD_COUNT` flyers
+ * at its own position. The flyers scatter outward for half a second, then home on the exit.
+ */
+function tickBrood(s: RunState): void {
+  for (const e of s.enemies) {
+    if (e.dead || e.kind !== 'flyer-boss') continue;
+    if (e.broodCooldown > 0) {
+      e.broodCooldown--;
+      continue;
+    }
+    releaseBrood(s, e, CARRIER_BROOD_COUNT);
+    e.broodCooldown = CARRIER_BROOD_INTERVAL_TICKS;
+  }
+}
+
+/** Spawn `count` brood flyers at `carrier`'s position, fanned out to scatter then home. */
+function releaseBrood(s: RunState, carrier: Enemy, count: number): void {
+  const spawn = spawnTile(s);
+  const exit = exitTile(s);
+  for (let i = 0; i < count; i++) {
+    const e = createEnemy(s.nextId++, 'flyer', carrier.wave, spawn, exit);
+    e.x = carrier.x;
+    e.y = carrier.y;
+    e.prevX = carrier.x;
+    e.prevY = carrier.y;
+    e.col = Math.floor(carrier.x);
+    e.row = Math.floor(carrier.y);
+    e.dist = carrier.dist;
+    e.heading = carrier.heading + (Math.PI * 2 * i) / count;
+    e.scatterTicks = CARRIER_BROOD_SCATTER_TICKS;
+    e.spawnTick = s.tick;
+    s.enemies.push(e);
+  }
+}
+
 /** The distance field an enemy paths downhill over (breachers and flyers use their own). */
 function fieldFor(s: RunState, e: Enemy): Int32Array {
   if (e.kind === 'breacher') return s.breacherField;
-  if (e.kind === 'flyer') return s.flyerField;
+  if (e.kind === 'breacher-boss') return s.ramField;
+  if (isFlyerKind(e.kind)) return s.flyerField;
   return s.field;
 }
 
-/** Turn a breacher to face the wall it is chewing. */
-function faceWall(e: Enemy, wall: Tower): void {
-  const dx = wall.col + 0.5 - e.x;
-  const dy = wall.row + 0.5 - e.y;
+/** Turn a breacher/Ram to face the tower it is chewing. */
+function faceTower(e: Enemy, tower: Tower): void {
+  const dx = tower.col + 0.5 - e.x;
+  const dy = tower.row + 0.5 - e.y;
   const d = Math.hypot(dx, dy);
   if (d > 0) e.heading = Math.atan2(dy, dx);
 }
 
+/** Whether `e` may chew `tower` right now: a Breacher only chews walls; a Ram chews any tower. */
+function isChewable(s: RunState, e: Enemy, tower: Tower | undefined): tower is Tower {
+  if (!tower || tower.hp <= 0 || isRepairing(tower, s.clock)) return false;
+  if (e.kind === 'breacher') return isWall(tower) && !isGateOpen(tower);
+  if (e.kind === 'breacher-boss') return isWall(tower) ? !isGateOpen(tower) : true;
+  return false;
+}
+
+/** Apply a chew tick: walls take `wallDps`, non-wall towers take the Ram's tower DPS (offline at 0). */
+function chewTower(s: RunState, e: Enemy, tower: Tower): void {
+  if (isWall(tower)) {
+    const dps = ENEMY_STATS[e.kind].wallDps;
+    if (dps > 0) damageWall(s, tower, dps / TICK_HZ);
+  } else if (RAM_TOWER_DPS > 0) {
+    damageTower(s, tower, RAM_TOWER_DPS / TICK_HZ);
+  }
+}
+
+/** Clamp a world coordinate to the board's interior, so a scatter never drives a flyer off-screen. */
+function clampToBoard(v: number, max: number): number {
+  return Math.min(max - 1e-4, Math.max(0, v));
+}
+
 function moveEnemies(s: RunState): void {
-  const globalSlow = s.enemySlowTicks > 0 ? 0.5 : 1;
   const speedMult = s.modifiers.includes('fast') ? 1.15 : 1;
   const exit = exitTile(s);
   // The Pacer's speed floor reads the Pacer's position at the start of the step, so the movement of
@@ -1197,6 +1326,7 @@ function moveEnemies(s: RunState): void {
     e.prevX = e.x;
     e.prevY = e.y;
     if (s.tick < e.stunUntilTick) continue; // stunned: stand still this tick
+    const globalSlow = slowFactorFor(e.kind, s.enemySlowTicks > 0 ? 0.5 : 1);
     const slow = s.tick < e.slowUntilTick ? Math.min(globalSlow, e.slowFactor) : globalSlow;
     // The Pacer's aura is a speed floor: enemies inside 3 tiles move at the Pacer's speed or their
     // own, whichever is faster. Applied to the base speed before Frost, so it composes with slow.
@@ -1212,18 +1342,34 @@ function moveEnemies(s: RunState): void {
       }
     }
     let remaining = baseSpeed * slow * speedMult;
-    const field = fieldFor(s, e);
-    const wallDps = ENEMY_STATS[e.kind].wallDps;
 
-    // A breacher locked onto a wall stands still and chews it for damage per second.
-    if (e.attackWallId !== null) {
-      const wall = s.towers.find((t) => t.id === e.attackWallId);
-      if (wall && isWall(wall) && wall.hp > 0 && !isRepairing(wall, s.clock)) {
-        faceWall(e, wall);
-        if (wallDps > 0) damageWall(s, wall, wallDps / TICK_HZ);
+    // A brood flyer scatters in a straight line for a moment, then re-paths toward the exit.
+    if (e.kind === 'flyer' && e.scatterTicks > 0) {
+      const step = speedPerTick('flyer') * slow * speedMult;
+      e.x = clampToBoard(e.x + Math.cos(e.heading) * step, s.grid.cols);
+      e.y = clampToBoard(e.y + Math.sin(e.heading) * step, s.grid.rows);
+      e.dist += step;
+      e.scatterTicks--;
+      if (e.scatterTicks === 0) {
+        e.col = Math.floor(e.x);
+        e.row = Math.floor(e.y);
+        e.targetCol = -1;
+        e.targetRow = -1;
+      }
+      continue;
+    }
+
+    const field = fieldFor(s, e);
+
+    // Chewing: a breacher chews a wall; the Ram chews any tower in its path, standing still.
+    if (e.attackTowerId !== null) {
+      const target = s.towers.find((t) => t.id === e.attackTowerId);
+      if (isChewable(s, e, target)) {
+        faceTower(e, target);
+        chewTower(s, e, target);
         continue;
       }
-      e.attackWallId = null;
+      e.attackTowerId = null;
       e.targetCol = -1;
       e.targetRow = -1;
     }
@@ -1232,16 +1378,16 @@ function moveEnemies(s: RunState): void {
       if (e.targetCol < 0) {
         const next = stepToward(field, e.col, e.row);
         if (!next) break;
-        // A breacher stops at a wall in its path instead of walking through it — an open gate is
-        // walkable, so it is never attacked.
-        if (e.kind === 'breacher') {
-          const wall = towerAt(s, next.col, next.row);
-          if (wall && isWall(wall) && wall.hp > 0 && !isGateOpen(wall) && !isRepairing(wall, s.clock)) {
-            e.attackWallId = wall.id;
+        // A breacher stops at a wall in its path instead of walking through it; the Ram stops at any
+        // tower. An open gate is walkable, so it is never attacked.
+        if (e.kind === 'breacher' || e.kind === 'breacher-boss') {
+          const tower = towerAt(s, next.col, next.row);
+          if (isChewable(s, e, tower)) {
+            e.attackTowerId = tower.id;
             e.targetCol = next.col;
             e.targetRow = next.row;
-            faceWall(e, wall);
-            if (wallDps > 0) damageWall(s, wall, wallDps / TICK_HZ);
+            faceTower(e, tower);
+            chewTower(s, e, tower);
             remaining = 0;
             break;
           }
@@ -1298,14 +1444,14 @@ function destroyWall(s: RunState, wall: Tower): void {
   s.blocked.delete(wall.row * s.grid.cols + wall.col);
   if (s.selectedTowerId === wall.id) s.selectedTowerId = null;
   for (const e of s.enemies) {
-    if (e.attackWallId === wall.id) {
-      e.attackWallId = null;
+    if (e.attackTowerId === wall.id) {
+      e.attackTowerId = null;
       e.targetCol = -1;
       e.targetRow = -1;
     }
   }
   rebuildField(s);
-  recomputeAuras(s.towers);
+  recomputeAuras(s.towers, s.clock);
   s.events.push({ type: 'wallDestroyed', x: wall.col + 0.5, y: wall.row + 0.5 });
 }
 
@@ -1326,7 +1472,7 @@ function damageTower(s: RunState, tower: Tower, amount: number): void {
   tower.hp -= dealt;
   if (tower.hp <= 1e-9) {
     tower.hp = 0;
-    recomputeAuras(s.towers); // an offline beacon/repair stops buffing/healing immediately
+    recomputeAuras(s.towers, s.clock); // an offline beacon/repair stops buffing/healing immediately
     s.events.push({ type: 'towerOffline', x: tower.col + 0.5, y: tower.row + 0.5, towerId: tower.id });
   }
 }
@@ -1336,8 +1482,8 @@ function damageTower(s: RunState, tower: Tower, amount: number): void {
  * Offline towers (0 HP) and towers mid-repair are skipped. Ties keep tower order, so the choice is
  * deterministic.
  */
-function breacherTurretTarget(s: RunState, e: Enemy): Tower | undefined {
-  const r2 = BREACHER_TURRET_RANGE * BREACHER_TURRET_RANGE;
+function breacherTurretTarget(s: RunState, e: Enemy, range: number): Tower | undefined {
+  const r2 = range * range;
   let best: Tower | undefined;
   let bestD2 = Infinity;
   for (const t of s.towers) {
@@ -1357,20 +1503,22 @@ function breacherTurretTarget(s: RunState, e: Enemy): Tower | undefined {
 }
 
 /**
- * The breacher's mounted turret: while a breacher is walking (not chewing a wall and not stunned) it
- * fires a 2-damage shot at the nearest tower once per second. Chewing a wall disarms it — the nose is
- * busy — and it resumes the moment the wall is gone.
+ * The breacher/Ram's mounted turret: while walking (not chewing a tower and not stunned) it fires a
+ * shot at the nearest non-wall tower once per second. The Breacher's is 2 damage at 2.2 tiles; the
+ * Ram's is 8 at 3. Chewing disarms it — the nose is busy — and it resumes the moment the tower is
+ * gone (or offline).
  */
 function fireBreacherTurrets(s: RunState): void {
   for (const e of s.enemies) {
-    if (e.dead || e.kind !== 'breacher') continue;
-    if (e.attackWallId !== null) continue; // chewing: the nose is busy
+    if (e.dead || (e.kind !== 'breacher' && e.kind !== 'breacher-boss')) continue;
+    if (e.attackTowerId !== null) continue; // chewing: the nose is busy
     if (s.tick < e.stunUntilTick) continue; // stunned: not walking
     if (e.turretCooldown > 0) {
       e.turretCooldown--;
       continue;
     }
-    const target = breacherTurretTarget(s, e);
+    const range = e.kind === 'breacher-boss' ? RAM_TURRET_RANGE : BREACHER_TURRET_RANGE;
+    const target = breacherTurretTarget(s, e, range);
     if (!target) continue; // no target: stay ready, do not burn the clock
     e.turretCooldown = BREACHER_TURRET_INTERVAL_TICKS - 1;
     s.events.push({
@@ -1380,7 +1528,7 @@ function fireBreacherTurrets(s: RunState): void {
       targetX: target.col + 0.5,
       targetY: target.row + 0.5,
     });
-    damageTower(s, target, BREACHER_TURRET_DAMAGE);
+    damageTower(s, target, e.kind === 'breacher-boss' ? RAM_TURRET_DAMAGE : BREACHER_TURRET_DAMAGE);
   }
 }
 
@@ -1529,6 +1677,8 @@ function perEnemyDamage(st: EffectiveStats, e: Enemy, dmg: number): number {
 }
 
 function applySlow(s: RunState, e: Enemy, factor: number, ticks: number): void {
+  // The Dreadnought's plating halves any slow's strength (Frost's 0.3 becomes 0.65, and so on).
+  factor = slowFactorFor(e.kind, factor);
   if (!(s.tick < e.slowUntilTick) || factor < e.slowFactor) e.slowFactor = factor;
   e.slowUntilTick = s.tick + ticks;
 }
@@ -1854,7 +2004,7 @@ function tickMaintenanceCursor(s: RunState, t: Tower): void {
 function tickCursors(s: RunState): void {
   for (const t of s.towers) {
     if (t.kind !== 'cursor') continue;
-    if (isOffline(t)) continue; // an offline cursor stops clicking
+    if (isDown(t, s.clock)) continue; // an offline (or EMP'd) cursor stops clicking
     if (t.cursorCooldown > 0) t.cursorCooldown--;
     if (t.cursorClickFx > 0) t.cursorClickFx--;
 
@@ -1929,7 +2079,7 @@ function fireTowers(s: RunState): void {
   const buff = s.towerDamageBuffTicks > 0 ? 1.4 : 1;
   for (const t of s.towers) {
     if ((s.towerDisabled.get(t.id) ?? 0) > 0) continue; // disabled by Blue Screen
-    if (isOffline(t)) continue; // an offline tower does not fire
+    if (isDown(t, s.clock)) continue; // an offline (or EMP'd) tower does not fire
     const st = effectiveStats(t);
     if (st.damage <= 0 || st.fireInterval <= 0) continue; // beacon never fires
     const range = (st.range + t.auraRange) * towerRangeMult(s);
@@ -2062,7 +2212,9 @@ function damageEnemy(
     s.events.push({ type: 'shieldHit', x: e.x, y: e.y, absorbed, left: e.shield });
   } else if (source === 'tower') {
     if (e.shield > 0) return;
-    if (!ignoresArmour) dmg = Math.max(1, dmg - ENEMY_STATS[e.kind].armour);
+    // Armour and plating are both flat per-hit reductions; a tower that ignores armour ignores both
+    // (the Taser), and the pointer never passes through here at all.
+    if (!ignoresArmour) dmg = Math.max(1, dmg - ENEMY_STATS[e.kind].armour - ENEMY_STATS[e.kind].plating);
   }
   if (dmg <= 0) return;
   e.hp -= dmg;
@@ -2088,6 +2240,8 @@ function damageEnemy(
     e.hp = 0;
     e.dead = true;
     if (e.isBoss && source === 'pointer' && !e.towerDamaged) s.bossKilledByPointer = true;
+    // A Carrier releases twice its brood on death, the one boss that fights on after it falls.
+    if (e.kind === 'flyer-boss') releaseBrood(s, e, CARRIER_DEATH_BROOD_COUNT);
     const value = e.value * (s.modifiers.includes('rush') ? 1.1 : 1);
     const reward =
       source === 'pointer' && weak

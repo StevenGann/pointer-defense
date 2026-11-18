@@ -28,7 +28,8 @@ import {
   type Branch,
   type TowerKind,
 } from '../core/towers.ts';
-import { earlyCallBonus, MODIFIER_NAMES, waveDef, WAVE_COUNT, waveModifiers } from '../core/waves.ts';
+import { earlyCallBonus, MODIFIER_NAMES, typeBossKindForWave, waveDef, WAVE_COUNT, waveModifiers } from '../core/waves.ts';
+import { ENEMY_STATS } from '../core/enemies.ts';
 import {
   SPEC_CAPS,
   SPEC_KINDS,
@@ -401,6 +402,9 @@ export function computeRightPanel(l: Layout, s: RunState): RightPanelLayout {
   const composition = def ? def.groups.map((grp) => `${grp.count} x ${grp.kind}`) : [];
   const mods = waveModifiers(wave);
   if (mods.length > 0) composition.unshift(`mod: ${mods.map((m) => MODIFIER_NAMES[m]).join(' + ')}`);
+  // Name the type boss ahead of time so its first appearance is telegraphed before it spawns.
+  const typeBoss = typeBossKindForWave(wave);
+  if (typeBoss) composition.unshift(`BOSS: ${ENEMY_STATS[typeBoss].name}`);
 
   const nextWave: InfoSection = {
     rect: { x, y, w, h: infoSectionHeight(composition.length) },
