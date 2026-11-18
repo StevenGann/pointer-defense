@@ -272,9 +272,9 @@ export function enemyKillValue(kind: EnemyKind, wave: number): number {
   return Math.round(ENEMY_STATS[kind].value * waveValueScale(wave));
 }
 
-export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Tile, exit: Tile): Enemy {
+export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Tile, exit: Tile, hpMult = 1): Enemy {
   const s = ENEMY_STATS[kind];
-  const hp = Math.round(s.hp * waveHpScale(wave));
+  const hp = Math.round(s.hp * waveHpScale(wave) * hpMult);
   // Shield is a flat pointer-check, not wave-scaled: pointer damage does not scale with wave, so a
   // wave-scaled shield would make the pointer half irrelevant (a wave-100 boss shield would take
   // thousands of seconds to break at 3 damage per click).

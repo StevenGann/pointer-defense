@@ -125,6 +125,8 @@ import {
 import {
   buildSchedule,
   earlyCallBonus,
+  milestoneBossHpMult,
+  milestoneBossKind,
   popupAliveCap,
   WAVE_COUNT,
   waveModifiers,
@@ -1329,7 +1331,8 @@ function spawnDue(s: RunState): void {
       // A pop-up respects the "at most N alive" cap: if one is already walking (e.g. an early
       // call overlapped waves), this wave's pop-up is skipped rather than breaking the cap.
       if (sp.kind === 'popup' && livingPopups(s) >= popupAliveCap(run.wave)) continue;
-      const enemy = createEnemy(s.nextId++, sp.kind, run.wave, spawnTile(s), exitTile(s));
+      const hpMult = milestoneBossKind(run.wave) === sp.kind ? milestoneBossHpMult(run.wave) : 1;
+      const enemy = createEnemy(s.nextId++, sp.kind, run.wave, spawnTile(s), exitTile(s), hpMult);
       enemy.spawnTick = s.tick;
       s.enemies.push(enemy);
       s.events.push({ type: 'enemySpawned', kind: sp.kind });

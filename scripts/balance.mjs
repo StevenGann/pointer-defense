@@ -89,6 +89,11 @@ const clickerMode = hasFlag('--clicker') || hasFlag('--advantage');
 // against the standard tower build. The advantage is the cursor build's integrity over the standard
 // run, so the cursor's own contribution is measured against the tower baseline it sits on.
 const cursorMode = hasFlag('--cursor');
+// --cursor-measure: both legs build the normal tower board and click at the scripted rate, and the
+// cursor leg adds a Cursor tower from its unlock wave (24) so the buy actually happens before the
+// standard build dies. The cursor's clicks are pointer-sourced, so its damage is the pointer-damage
+// delta between the two legs. The point is a number to read, not a pass/fail verdict.
+const cursorMeasure = hasFlag('--cursor-measure');
 // --repair-tower: the repair-tower scenario — the standard build, but the bot also buys a repair
 // tower once a wave is deep enough to have damaged towers to heal. It proves the harness can place
 // and pay for the new kind; the default plan never buys one, so the standard numbers stay put.
@@ -98,6 +103,9 @@ const repairTowerMode = hasFlag('--repair-tower');
 const aaScenario = hasFlag('--aa');
 // Mutable switch flipped between the two --aa legs (gun-only, then AA-swapped).
 let aaSwap = false;
+// Mutable switch flipped between the two --cursor-measure legs: the cursor leg buys one Cursor from
+// its unlock wave (24) so the measurement runs before the standard build dies at ~wave 29-55.
+let cursorMeasureEarly = false;
 // --turret-damage <n>: override the breacher turret's per-shot damage for a balance sweep (0 as the
 // control, then the candidate rates). Absent, the harness plays the committed constant.
 const turretDamageRaw = flag('--turret-damage', null);
@@ -412,6 +420,8 @@ function tileForKind(s, path, kind) {
       return chooseTaserTile(s, path);
     case 'cannon':
       return chooseCoverageTile(s, path);
+    case 'aa':
+      return chooseAirTile(s);
     default:
       return chooseCoverageTile(s, path);
   }
@@ -435,7 +445,9 @@ function cannonTarget(wave) {
 function cursorTarget(wave) {
   // Cursors are a late buy: two of them once the click ladder is strong enough to feed them, at
   // wave 60 when click damage is roughly 20+. This target is only consulted by the --cursor
-  // scenario; the default baseline buys none.
+  // scenario; the default baseline buys none. The --cursor-measure scenario buys a single cursor
+  // from its unlock wave (24) instead, because the standard build dies before wave 60.
+  if (cursorMeasureEarly) return wave >= 24 ? 1 : 0;
   return wave >= 60 ? 2 : 0;
 }
 function repairTowerTarget(wave) {
@@ -444,10 +456,30 @@ function repairTowerTarget(wave) {
   return wave >= 70 ? 2 : wave >= 40 ? 1 : 0;
 }
 function aaTarget(wave) {
-  // AA is a specialist slot, not a full replacement: a handful of coverage Guns turn into AA from
-  // its unlock wave (16), capped so a ground-only wave still has the Guns to answer it. Only the
-  // --aa scenario consults this; the default plan buys none.
-  return wave >= 16 ? Math.min(4, 1 + Math.floor((wave - 16) / 20)) : 0;
+  // AA is part of the default plan from the wave it unlocks: every other tower deals a quarter of its
+  // damage to a flyer, so a board with no AA cannot answer air at all. Capped at four, because beyond
+  // that the ground waves go hungry.
+  return wave >= 5 ? Math.min(4, 1 + Math.floor((wave - 5) / 20)) : 0;
+}
+
+/**
+ * AA covers the air lane, not the maze. Flyers fly the straight line from spawn to exit and ignore
+ * every wall, so a tile chosen for route coverage can sit nowhere near the thing it has to shoot.
+ */
+function chooseAirTile(s) {
+  const a = spawnTile(s);
+  const b = exitTile(s);
+  const lane = [];
+  const steps = 120;
+  for (let i = 0; i <= steps; i++) {
+    lane.push({
+      col: Math.round(a.col + ((b.col - a.col) * i) / steps),
+      row: Math.round(a.row + ((b.row - a.row) * i) / steps),
+    });
+  }
+  const path = currentPath(s);
+  const range = TOWER_STATS.aa.range;
+  return bestTile(allCandidates(s, path), (c, r) => coverCount(lane, c, r, range) * 10 - Math.hypot(c + 0.5 - (a.col + b.col + 1) / 2, r + 0.5 - (a.row + b.row + 1) / 2));
 }
 
 /** Specialist slots still needed to reach wave 100's roster, so extra Guns never crowd them out. */
@@ -458,20 +490,21 @@ function futureSpecialistSlots(counts) {
     Math.max(0, laserTarget(100) - counts.laser) +
     Math.max(0, taserTarget(100) - counts.taser) +
     Math.max(0, cannonTarget(100) - counts.cannon) +
-    (aaSwap ? Math.max(0, aaTarget(100) - counts.aa) : 0)
+    Math.max(0, aaTarget(100) - counts.aa)
   );
 }
 
 /** Pick the tower kind for a coverage placement, per the build policy. A specialist the policy
  *  wants but that has not unlocked yet (e.g. the Cannon the plan asks for as wave 4 opens) is skipped,
  *  so the policy falls back to the always-available Gun instead of failing the placement. */
-function decideKind(s, counts, wave) {
+function decideKind(s, counts, wave, skip) {
+  // Air first: nothing else meaningfully touches a flyer.
+  if (!skip?.has('aa') && counts.aa < aaTarget(wave) && isTowerUnlocked('aa', s.wave)) return 'aa';
   if (counts.frost < frostTarget(wave) && isTowerUnlocked('frost', s.wave)) return 'frost';
   if (counts.beacon < beaconTarget(wave) && isTowerUnlocked('beacon', s.wave)) return 'beacon';
   if (counts.laser < laserTarget(wave) && isTowerUnlocked('laser', s.wave)) return 'laser';
   if (counts.taser < taserTarget(wave) && isTowerUnlocked('taser', s.wave)) return 'taser';
   if (counts.cannon < cannonTarget(wave) && isTowerUnlocked('cannon', s.wave)) return 'cannon';
-  if (aaSwap && counts.aa < aaTarget(wave) && isTowerUnlocked('aa', s.wave)) return 'aa';
   return 'gun';
 }
 
@@ -580,13 +613,19 @@ function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, 
   }
   upgradePass(s);
   const path = currentPath(s);
+  const skip = new Set();
   for (let guard = 0; guard < 400; guard++) {
     if (s.towers.length >= maxTowers) break;
-    const kind = decideKind(s, counts, wave);
+    const kind = decideKind(s, counts, wave, skip);
     // Coverage slots are reserved for the specialists; the maze walls already provide the Guns.
     if (kind === 'gun') break;
     const tile = tileForKind(s, path, kind);
-    if (!tile) break;
+    if (!tile) {
+      // No legal tile for this kind right now; try the next one rather than abandoning the whole
+      // build phase, which used to leave the board half built while the salvage piled up.
+      skip.add(kind);
+      continue;
+    }
     // The control run keeps the policy identical but replaces the two support towers with Guns.
     const placedKind = !useSupport && (kind === 'frost' || kind === 'beacon') ? 'gun' : kind;
     if (s.economy.salvage < TOWER_STATS[placedKind].cost) break;
@@ -1265,6 +1304,46 @@ if (cursorMode) {
   silent = false;
   console.log(`\nmax cursor advantage over standard: +${maxAdvantage} integrity`);
   process.exit(cursorReached ? 0 : 1);
+}
+
+if (cursorMeasure) {
+  // The cursor measurement: both legs build the normal tower board and click at the scripted rate;
+  // the cursor leg adds one Cursor tower from its unlock wave (24) so the buy actually lands before
+  // the standard build dies. The cursor's clicks are pointer-sourced, so its damage is isolated as
+  // the pointer-damage delta between the legs, and its share is that delta over the cursor leg's
+  // total damage. It is a number to read, not a pass/fail verdict.
+  silent = true;
+  console.log('\n=== cursor measure ===');
+  console.log('  map          mode      waves cleared   integrity   salvage   pointer dmg   cursor dmg%');
+  for (const level of activeLevels) {
+    const nocursor = runSession(support, 'no-cursor', level.id, MAP_MAX_TOWERS, true, cps, true, false, false);
+    cursorMeasureEarly = true;
+    const cursor = runSession(support, 'cursor', level.id, MAP_MAX_TOWERS, true, cps, true, false, true);
+    cursorMeasureEarly = false;
+    const f0 = nocursor.final;
+    const f1 = cursor.final;
+    const cursorDmg = f1.state.economy.damage.pointer - f0.state.economy.damage.pointer;
+    const total = f1.state.economy.damage.tower + f1.state.economy.damage.pointer;
+    const share = total > 0 ? (cursorDmg / total) * 100 : 0;
+    for (const [mode, run] of [
+      ['no-cursor', nocursor],
+      ['cursor', cursor],
+    ]) {
+      const f = run.final;
+      const ptr = f.state.economy.damage.pointer;
+      const pct = mode === 'cursor' ? `${share.toFixed(1)}%`.padStart(9) : '-'.padStart(9);
+      console.log(
+        `  ${level.id.padEnd(11)}  ${mode.padEnd(8)}  ${String(f.clearedWaves).padStart(13)}  ` +
+          `${String(f.integrity).padStart(9)}  ${String(f.earned).padStart(7)}  ${String(ptr).padStart(11)}  ${pct}`,
+      );
+    }
+    const cursorCount = cursor.final.state.towers.filter((t) => t.kind === 'cursor').length;
+    console.log(
+      `  ${level.id.padEnd(11)}  cursor share of total damage: ${share.toFixed(1)}%  (cursor ${Math.round(cursorDmg)} / total ${Math.round(total)}, ${cursorCount} cursor)`,
+    );
+  }
+  silent = false;
+  process.exit(0);
 }
 
 if (repairTowerMode) {

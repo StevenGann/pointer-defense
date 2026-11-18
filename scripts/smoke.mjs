@@ -1210,8 +1210,8 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   // 17b. The bonus is a fraction of the called wave's kill value: bounded by it, non-increasing
   // in elapsed ticks, floored at 5, and growing with the wave number at the same elapsed time.
   const start = earlyCallBonus(0, 3);
-  check(start === Math.round(0.25 * waveKillValue(3)),
-    `early call: wave 3 starts at a quarter of its kill value (${start} = ${Math.round(0.25 * waveKillValue(3))})`);
+  check(start === Math.round(0.5 * waveKillValue(3)),
+    `early call: wave 3 starts at half of its kill value (${start} = ${Math.round(0.5 * waveKillValue(3))})`);
   let prev = start;
   let monotone = true;
   for (let t = 0; t <= 5000; t += 10) {

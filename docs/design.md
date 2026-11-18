@@ -780,14 +780,14 @@ value — the salvage that wave would pay if every enemy in it died:
 ```
 span     = last spawn tick of the wave that just started        (min 60 ticks)
 fraction = clamp(1 − elapsedTicks / span, 0, 1)
-bonus    = clamp(round(0.25 × waveKillValue(nextWave) × fraction), 5, waveKillValue(nextWave))
+bonus    = clamp(round(0.5 × waveKillValue(nextWave) × fraction), 5, waveKillValue(nextWave))
 ```
 
 `waveKillValue(wave)` sums each enemy's base value scaled to that wave — the same per-enemy value
 `createEnemy` assigns, so the bonus cannot drift from the economy. `nextWave` is the wave being called,
 not the one currently running; `span` is measured from the wave that just started (the current one,
-`nextWave − 1`). The 0.25 coefficient means a full-early call pays a quarter of the next wave's worth —
-12 at wave 2, 162 at wave 30, 440 at wave 60, 1,272 at wave 100 — and later calls decay to a floor of
+`nextWave − 1`). The 0.5 coefficient means a full-early call pays half of the next wave's worth —
+24 at wave 2, 365 at wave 30, 879 at wave 60, 2,373 at wave 100 — and later calls decay to a floor of
 5. The HUD shows the live value counting down. The formula has no randomness.
 
 **Harness.** `scripts/balance.mjs` runs five scenarios and reports waves cleared, last wave started,
