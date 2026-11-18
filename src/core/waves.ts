@@ -144,6 +144,27 @@ export function milestoneBossKind(wave: number): EnemyKind | null {
   return MILESTONE_BOSS_KINDS[wave] ?? null;
 }
 
+/**
+ * Milestone-only HP multipliers for the boss spawned by `milestoneBossKind`. The generic marker boss
+ * used to carry each milestone's weight by itself; the type bosses are much lighter, so this restores
+ * the milestone's spike without touching the type-boss cadence — the same kind still spawns on its own
+ * wave with its normal numbers. Rounded to 0.1; the Pacer is capped at 8 (an 11x on a 190 HP enemy is
+ * a fragile number that would drift the moment its base stats move, and a ~1500 HP Pacer is still a
+ * milestone).
+ */
+const MILESTONE_BOSS_HP_MULT: Readonly<Record<number, number>> = {
+  10: 3.8,
+  25: 8,
+  50: 3.0,
+  75: 4.7,
+  100: 1.1,
+};
+
+/** The HP multiplier a milestone wave's boss spawns with (1 for non-milestone waves). */
+export function milestoneBossHpMult(wave: number): number {
+  return MILESTONE_BOSS_HP_MULT[wave] ?? 1;
+}
+
 /** Ground enemies available in a band for boss escorts (flyers are the dedicated air group). */
 function escortKinds(wave: number): readonly EnemyKind[] {
   return wave >= 21 ? ['grunt', 'runner', 'shielded', 'armoured'] : ['grunt', 'runner', 'shielded'];
@@ -445,7 +466,7 @@ export function waveKillValue(wave: number): number {
  * The salvage bonus for starting the next wave early (docs/design.md §8.5). `elapsedTicks` is the
  * time since the most recent wave started, and `nextWave` is the wave being called: the span is the
  * last spawn tick of the wave that just started (`nextWave - 1`, min 60 ticks), and the reward is a
- * fraction of the called wave's kill value, so a full-early call pays a quarter of that wave's worth
+ * fraction of the called wave's kill value, so a full-early call pays half of that wave's worth
  * and a late call decays to a floor of 5. Deterministic — no randomness.
  */
 export function earlyCallBonus(elapsedTicks: number, nextWave: number): number {
@@ -454,7 +475,7 @@ export function earlyCallBonus(elapsedTicks: number, nextWave: number): number {
   const span = Math.max(60, last);
   const fraction = Math.min(1, Math.max(0, 1 - elapsedTicks / span));
   const kill = waveKillValue(nextWave);
-  return Math.min(kill, Math.max(5, Math.round(0.25 * kill * fraction)));
+  return Math.min(kill, Math.max(5, Math.round(0.5 * kill * fraction)));
 }
 
 /** Total enemies in a wave, including a boss and its escorts on boss waves. */
