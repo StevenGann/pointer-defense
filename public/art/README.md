@@ -1,5 +1,8 @@
 # Pointer Defense — art handover
 
+Read [`docs/ART-STYLE.md`](../../docs/ART-STYLE.md) first: it explains the Windows 95 motif, the
+limited palette, what the engine draws on top of your files, and what to avoid.
+
 This directory is the source of truth for every **fixed** piece of art. Anything that changes at
 runtime — window chrome, buttons, panels, health bars, range rings, shields, route dots, damage
 numbers, muzzle flashes, sparks, death pops, tooltips, menus, dialogs — is drawn in code from state

@@ -937,7 +937,7 @@ dark — never the dozens of ordinary deaths and hits that happen every wave. Th
 instead. A **Screen shake** toggle in the View menu persists in the profile like sound and volume, and
 defaults **off** for users who prefer reduced motion (`prefers-reduced-motion: reduce`).
 
-### 13.6 Art pipeline
+### 13.6 Art pipeline (see also `docs/ART-STYLE.md`, the visual style guide for artists)
 
 Fixed art — enemy bodies, tower plinths and barrels, branch marks, the board tile, the static obstacle
 and the block — ships as hand-editable SVG files under `public/art/`. Runtime effects stay code:
