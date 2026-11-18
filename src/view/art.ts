@@ -33,7 +33,15 @@ export const ART_VIEWBOX = 32;
 /** The silhouette is meant to fill roughly this many of the 32 viewBox pixels (centred). */
 export const ART_SILHOUETTE = 28;
 
-const ENEMY_KINDS = ['grunt', 'runner', 'shielded', 'flyer', 'armoured', 'saboteur', 'breacher', 'boss'] as const;
+/**
+ * Every enemy asset name. The boss variants are listed separately: each owns a file of its own
+ * (`grunt-boss.svg`) so the artist can add details the base type does not have. The shipped boss files
+ * are copies of their base type, so they render exactly as before until someone edits them.
+ */
+const ENEMY_KINDS = [
+  'grunt', 'runner', 'shielded', 'flyer', 'armoured', 'saboteur', 'breacher', 'boss',
+  'grunt-boss', 'runner-boss', 'shielded-boss', 'flyer-boss', 'armoured-boss', 'saboteur-boss', 'breacher-boss',
+] as const;
 
 /** Towers ship a base plinth (never rotates) and, for those with a barrel, a turret (rotates). */
 const TOWER_BASE_KINDS = ['gun', 'cannon', 'laser', 'taser', 'frost', 'aa', 'beacon', 'cursor', 'repair', 'wall'] as const;
@@ -101,13 +109,25 @@ export function manifestEntry(name: string): ArtEntry | undefined {
 }
 
 /**
- * The asset name for an enemy kind, or null for kinds that stay runtime (the Pop-up). Boss variants
- * resolve to their base type's asset: they are drawn as the base silhouette at a larger scale, with
- * the boss motif added at runtime, so no new art files are needed yet.
+ * The asset name for an enemy kind, or null for kinds that stay runtime (the Pop-up).
+ *
+ * A boss variant owns its own asset (`grunt-boss`), so the artist can give each boss details its base
+ * type does not have. The shipped boss files are copies of their base type — placeholders that render
+ * exactly as before until the artist edits them.
  */
 export function artNameForEnemy(kind: EnemyKind): string | null {
-  const base = baseEnemyKind(kind);
-  return (ENEMY_KINDS as readonly string[]).includes(base) ? base : null;
+  return (ENEMY_KINDS as readonly string[]).includes(kind) ? kind : null;
+}
+
+/**
+ * The art names to try for an enemy, most specific first. A boss resolves its own asset and falls back
+ * to its base type's, so deleting a boss file degrades to the old shared art instead of dropping the
+ * body to the procedural shape.
+ */
+export function enemyArtNames(kind: EnemyKind): readonly string[] {
+  const own = artNameForEnemy(kind);
+  const base = artNameForEnemy(baseEnemyKind(kind));
+  return own !== null && base !== null && own !== base ? [own, base] : own !== null ? [own] : [];
 }
 
 /** The plinth asset for a tower kind (`<kind>-base`). */
@@ -320,6 +340,24 @@ export function frameTexture(
   const anim = animationOf(name);
   const index = anim !== null ? currentAnimFrame(anim, frames.length, clockTicks, phaseSeed, moving) : 0;
   return frames[index] ?? null;
+}
+
+/**
+ * The first texture found among `names`, tried in order. Used where one kind may ship its own art and
+ * borrow another's when it does not: a boss with no file of its own still draws its base type.
+ */
+export function frameTextureFor(
+  names: readonly string[],
+  px: number,
+  clockTicks: number,
+  phaseSeed: number,
+  moving = true,
+): Texture | null {
+  for (const name of names) {
+    const tex = frameTexture(name, px, clockTicks, phaseSeed, moving);
+    if (tex !== null) return tex;
+  }
+  return null;
 }
 
 /**

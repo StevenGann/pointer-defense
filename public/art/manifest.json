@@ -89,6 +89,18 @@
       }
     },
     {
+      "name": "enemies/armoured-boss",
+      "frames": 6,
+      "anim": {
+        "fps": 8,
+        "loop": "loop",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "moving"
+      }
+    },
+    {
       "name": "enemies/boss",
       "frames": 9,
       "anim": {
@@ -113,7 +125,31 @@
       }
     },
     {
+      "name": "enemies/breacher-boss",
+      "frames": 6,
+      "anim": {
+        "fps": 30,
+        "loop": "loop",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "moving"
+      }
+    },
+    {
       "name": "enemies/flyer",
+      "frames": 6,
+      "anim": {
+        "fps": 30,
+        "loop": "pingpong",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "moving"
+      }
+    },
+    {
+      "name": "enemies/flyer-boss",
       "frames": 6,
       "anim": {
         "fps": 30,
@@ -137,7 +173,31 @@
       }
     },
     {
+      "name": "enemies/grunt-boss",
+      "frames": 9,
+      "anim": {
+        "fps": 15,
+        "loop": "loop",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "moving"
+      }
+    },
+    {
       "name": "enemies/runner",
+      "frames": 8,
+      "anim": {
+        "fps": 24,
+        "loop": "loop",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "moving"
+      }
+    },
+    {
+      "name": "enemies/runner-boss",
       "frames": 8,
       "anim": {
         "fps": 24,
@@ -161,7 +221,31 @@
       }
     },
     {
+      "name": "enemies/saboteur-boss",
+      "frames": 6,
+      "anim": {
+        "fps": 30,
+        "loop": "loop",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "moving"
+      }
+    },
+    {
       "name": "enemies/shielded",
+      "frames": 8,
+      "anim": {
+        "fps": 10,
+        "loop": "loop",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "moving"
+      }
+    },
+    {
+      "name": "enemies/shielded-boss",
       "frames": 8,
       "anim": {
         "fps": 10,

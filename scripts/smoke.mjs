@@ -131,6 +131,7 @@ import {
   rasterPixelSize,
   artSpriteSize,
   artNameForEnemy,
+  enemyArtNames,
   artNameForTowerBase,
   artNameForTowerTurret,
   artNameForBranch,
@@ -4328,6 +4329,16 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     check(artNameForEnemy(kind) === kind, `enemy ${kind} resolves an asset name`);
   }
   check(artNameForEnemy('popup') === null, 'the pop-up stays runtime (no asset)');
+  // Every boss variant owns its art and keeps its base type as a fallback, so an artist can give a boss
+  // details a grunt does not have without the enemy disappearing if the file is mid-edit.
+  for (const kind of ['grunt-boss', 'runner-boss', 'shielded-boss', 'flyer-boss', 'armoured-boss', 'saboteur-boss', 'breacher-boss']) {
+    check(artNameForEnemy(kind) === kind, `boss ${kind} resolves its own asset`);
+    check(
+      enemyArtNames(kind)[0] === kind && enemyArtNames(kind)[1] === baseEnemyKind(kind),
+      `boss ${kind} falls back to its base type's art`,
+    );
+  }
+  check(enemyArtNames('grunt').length === 1, 'a base enemy resolves exactly one art name');
   for (const kind of ['gun', 'cannon', 'laser', 'taser', 'frost', 'aa', 'beacon', 'cursor', 'repair', 'wall']) {
     check(artNameForTowerBase(kind) === `${kind}-base`, `tower ${kind} resolves a base`);
   }

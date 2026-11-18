@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <radialGradient id="body" cx="15" cy="13" r="10" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b3c8d6"/>
+      <stop offset="0.55" stop-color="#6b8598"/>
+      <stop offset="1" stop-color="#3a5061"/>
+    </radialGradient>
+    <linearGradient id="wing" x1="3" y1="0" x2="17" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#c9dae5"/>
+      <stop offset="1" stop-color="#7d97a9"/>
+    </linearGradient>
+  </defs>
+  <!-- Two swept wings with ribs. Faces +x. -->
+  <!-- Flap frame 2 of 6: the wings rising, drawn at 79% of their spread. -->
+  <path d="M17 10.89 L3 4.16 Q6.5 8.12 5.5 12.24 L12 12.56 Z" fill="url(#wing)" stroke="#000000" stroke-width="1" stroke-linejoin="round"/>
+  <path d="M17 21.11 L3 27.84 Q6.5 23.88 5.5 19.76 L12 19.44 Z" fill="url(#wing)" stroke="#000000" stroke-width="1" stroke-linejoin="round"/>
+  <g stroke="#2c3e4d" stroke-width="0.8" stroke-linecap="round" opacity="0.6">
+    <line x1="14" y1="11.13" x2="6.2" y2="7.01"/>
+    <line x1="12.5" y1="11.77" x2="6.4" y2="9.7"/>
+    <line x1="14" y1="20.87" x2="6.2" y2="24.99"/>
+    <line x1="12.5" y1="20.23" x2="6.4" y2="22.3"/>
+  </g>
+  <!-- Body, with a short tail. -->
+  <path d="M10.5 14.6 L7 16 L10.5 17.4 Z" fill="#3a5061" stroke="#000000" stroke-width="0.8" stroke-linejoin="round"/>
+  <ellipse cx="17.5" cy="16" rx="7.5" ry="6.2" fill="url(#body)" stroke="#000000" stroke-width="1"/>
+  <path d="M12 13.4 Q14.5 10.9 18 10.8" fill="none" stroke="#e4eef4" stroke-width="0.9" stroke-linecap="round" opacity="0.7"/>
+  <!-- Two eyes on the leading side. -->
+  <circle cx="21.4" cy="13.5" r="1.7" fill="#0e1a24"/>
+  <circle cx="21.4" cy="18.5" r="1.7" fill="#0e1a24"/>
+  <circle cx="21.6" cy="13.5" r="1.15" fill="#e6f4ff"/>
+  <circle cx="21.6" cy="18.5" r="1.15" fill="#e6f4ff"/>
+  <circle cx="22.1" cy="13.6" r="0.55" fill="#000000"/>
+  <circle cx="22.1" cy="18.4" r="0.55" fill="#000000"/>
+</svg>

@@ -47,6 +47,20 @@ what an artist owns; what is not is what the code owns.**
 | `breacher.svg` | rounded square with a jaw-notch cut into the leading edge and three teeth |
 | `boss.svg` | large circle with a segmented outer rim and a crown notch at the top |
 
+**Every boss variant has its own files.** `grunt-boss.svg`, `runner-boss.svg`, `shielded-boss.svg`,
+`flyer-boss.svg`, `armoured-boss.svg`, `saboteur-boss.svg` and `breacher-boss.svg`, each with the same
+frame sequence and `.json` as its base type.
+
+They currently hold **copies of their base type's frames, as placeholders**. They are editable now:
+give each one a silhouette that says what it does — a Sergeant with a heavier chassis, a Carrier with
+a visible brood sac, a Ram with a drill that reads at a glance. Nothing in the engine needs to change;
+the game picks up whatever is in the file. Until a boss file is edited it renders exactly like its base
+type at boss scale, with the runtime crown notch still drawn on top — except `grunt-boss`, whose file is
+the crown-rim design itself, so it already carries its own.
+
+A boss file that is deleted or renamed falls back to its base type's art, so a half-finished edit never
+leaves an invisible enemy.
+
 The **Pop-up** enemy is a Windows window and stays runtime (it is chrome, not art). There is no
 `popup.svg`.
 
