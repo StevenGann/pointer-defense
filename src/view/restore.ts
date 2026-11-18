@@ -29,8 +29,8 @@ import { formatNumber } from '../core/format.ts';
  */
 
 export const RESTORE_W = 560;
-const ROW_H = 18;
-const SECTION_H = 18;
+const ROW_H = 16;
+const SECTION_H = 15;
 const HEADER_H = 20;
 const PAD = 10;
 const BUY_W = 64;
@@ -216,8 +216,13 @@ export class RestoreView {
     let rowIndex = 0;
     for (const tier of rl.tiers) {
       const t = this.rowTextAt(rowIndex++);
-      t.text = `Tier ${tier.tier} — unlocks at level ${TIER_UNLOCK_LEVEL[tier.tier as 1 | 2 | 3 | 4 | 5]}`;
-      t.style.fill = PAL.title;
+      const gate = TIER_UNLOCK_LEVEL[tier.tier as 1 | 2 | 3 | 4 | 5];
+      const tierLocked = profile.rpEarned < gate;
+      t.text = tierLocked
+        ? `Tier ${tier.tier} — locked until level ${gate}`
+        : `Tier ${tier.tier} — unlocked`;
+      // A locked tier reads grey, so the five rows are legible as a progression rather than a list.
+      t.style.fill = tierLocked ? PAL.shadow : PAL.title;
       t.style.fontWeight = 'bold';
       t.position.set(tier.header.x, tier.header.y + Math.floor(tier.header.h / 2));
     }
