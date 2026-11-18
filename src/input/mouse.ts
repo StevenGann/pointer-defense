@@ -95,6 +95,11 @@ export interface MouseContext {
   buySpec: (kind: SpecKind) => void;
   toggleAutoWave: () => void;
   notice: (message: string) => void;
+  helpOpen: () => boolean;
+  helpPointerDown: (x: number, y: number, button: number) => boolean;
+  helpPointerMove: (x: number, y: number) => void;
+  helpPointerUp: () => void;
+  closeHelp: () => void;
 }
 
 /** HUD actions the No-Build modifier disables (placing, upgrading, branching, selling, repairing,
@@ -174,6 +179,8 @@ export class MouseController {
       this.hover.overRestart = false;
       return;
     }
+    if (this.ctx.helpOpen()) this.ctx.helpPointerMove(x, y);
+
     const open = this.ctx.menu();
     this.hover.menuHover = open ? menuEntryAt(l.menu, open, x, y) : null;
     const dialog = this.ctx.dialog();
@@ -189,15 +196,20 @@ export class MouseController {
 
   private onDown = (e: PointerEvent): void => {
     if (this.ctx.screen() !== 'run') return;
-    if (e.button === 2) {
-      cancelSelection(this.ctx.state());
-      return;
-    }
-    if (e.button !== 0) return;
 
     const s = this.ctx.state();
     const l = this.ctx.layout();
     const { x, y } = this.localPoint(e);
+
+    // The help window swallows any click inside it, left or right button, so a click there never
+    // reaches the board, the HUD or the palette behind it.
+    if (this.ctx.helpOpen() && this.ctx.helpPointerDown(x, y, e.button)) return;
+
+    if (e.button === 2) {
+      cancelSelection(s);
+      return;
+    }
+    if (e.button !== 0) return;
 
     // A modal dialog captures all input except its own buttons.
     const dialog = this.ctx.dialog();
@@ -379,6 +391,7 @@ export class MouseController {
 
   private onUp = (e: PointerEvent): void => {
     if (this.ctx.screen() !== 'run') return;
+    if (this.ctx.helpOpen()) this.ctx.helpPointerUp();
     if (e.button !== 0) return;
     pointerUp(this.ctx.state());
   };
@@ -394,11 +407,21 @@ export class MouseController {
 
     if (e.key === 'Escape') {
       const s = this.ctx.state();
-      const hadSomething = this.ctx.menu() !== null || this.ctx.dialog() !== null || s.selected !== null || s.selectedTowerId !== null;
-      this.ctx.openMenu(null);
-      this.ctx.closeDialog();
+      // A modal dialog or open menu closes first, then the help viewer, then the run exits.
+      const modalOpen = this.ctx.menu() !== null || this.ctx.dialog() !== null;
+      if (modalOpen) {
+        this.ctx.openMenu(null);
+        this.ctx.closeDialog();
+        cancelSelection(s);
+        return;
+      }
+      if (this.ctx.helpOpen()) {
+        this.ctx.closeHelp();
+        return;
+      }
+      const hadSelection = s.selected !== null || s.selectedTowerId !== null;
       cancelSelection(s);
-      if (!hadSomething) this.ctx.exitRun();
+      if (!hadSelection) this.ctx.exitRun();
       return;
     }
 
