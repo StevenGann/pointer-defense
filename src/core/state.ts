@@ -8,14 +8,16 @@ import {
   createGrid,
   DEFAULT_LEVEL,
   LEVELS,
+  levelRoutes,
   toggleCombinations,
   toggleIndex,
   toggleOpenAt,
   validateLevel,
   type Level,
   type LevelToggle,
+  type Route,
 } from './levels.ts';
-import { buildAirField, buildField, isSealed, pathTiles, stepToward } from './pathfield.ts';
+import { buildAirField, buildField, buildRouteField, isSealed, pathTiles, stepToward } from './pathfield.ts';
 import {
   BASTION_SHIELD_LAYER_VALUE,
   baseEnemyKind,
@@ -238,6 +240,12 @@ export interface RunState {
   level: Level;
   /** Authored map toggles (shutters); each one's state is a pure function of `clock`. */
   toggles: readonly LevelToggle[];
+  /** Authored map routes (empty when the level is a single implicit route). */
+  routes: readonly Route[];
+  /** One distance field per route; empty when `routes` is empty (the whole board uses `field`). */
+  routeFields: Int32Array[];
+  /** Spawn counter for the seeded alternating route assignment (reset on a map cycle). */
+  routeCursor: number;
   /** Distance-in-tiles to the exit for every walkable, unblocked tile; -1 unreachable. */
   field: Int32Array;
   /** Ground field for breachers: walls are walkable, other towers still block. */
@@ -365,21 +373,26 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
   const grid = createGrid(level);
   const blocked = new Set<number>();
   const toggles = level.toggles ?? [];
+  const routes = levelRoutes(level);
   const specs: SpecLevels = {
     cpu: profile.specs.cpu,
     ram: profile.specs.ram,
     gpu: profile.specs.gpu,
     disk: profile.specs.disk,
   };
+  const exit = level.exits[0];
   return {
     grid,
     levelId: level.id,
     level,
     toggles,
-    field: buildField(grid, initialGroundBlocked(toggles), level.exits[0]),
-    breacherField: buildField(grid, blocked, level.exits[0]),
-    ramField: buildField(grid, initialGroundBlocked(toggles), level.exits[0]),
-    flyerField: buildAirField(grid.cols, grid.rows, blocked, level.exits[0]),
+    routes,
+    routeFields: buildRouteFields(grid, initialGroundBlocked(toggles), exit, routes),
+    routeCursor: 0,
+    field: buildField(grid, initialGroundBlocked(toggles), exit),
+    breacherField: buildField(grid, blocked, exit),
+    ramField: buildField(grid, initialGroundBlocked(toggles), exit),
+    flyerField: buildAirField(grid.cols, grid.rows, blocked, exit),
     blocked,
     phase: 'build',
     wave: 0,
@@ -475,6 +488,8 @@ export function cycleLevel(s: RunState): boolean {
   s.grid = createGrid(next);
   s.blocked = new Set();
   s.toggles = next.toggles ?? [];
+  s.routes = levelRoutes(next);
+  s.routeCursor = 0;
   rebuildField(s);
   return true;
 }
@@ -585,9 +600,16 @@ export function togglePause(s: RunState): void {
   s.paused = !s.paused;
 }
 
-/** The route creeps will take right now, for drawing. */
+/** Every route creeps can take right now, for drawing; a single implicit route is a one-element list. */
+export function currentRoutes(s: RunState): readonly Tile[][] {
+  const spawn = spawnTile(s);
+  if (s.routeFields.length === 0) return [pathTiles(s.field, spawn)];
+  return s.routeFields.map((field) => pathTiles(field, spawn));
+}
+
+/** The primary route creeps take right now, for the HUD and the long-road achievement. */
 export function currentPath(s: RunState): Tile[] {
-  return pathTiles(s.field, spawnTile(s));
+  return currentRoutes(s)[0];
 }
 
 /** The authored toggle on a tile, if any. */
@@ -678,12 +700,18 @@ function flyerBlocked(s: RunState): Set<number> {
   return out;
 }
 
+/** One distance field per authored route, each over that route's tiles alone. */
+function buildRouteFields(grid: Grid, blocked: ReadonlySet<number>, exit: Tile, routes: readonly Route[]): Int32Array[] {
+  return routes.map((route) => buildRouteField(grid, blocked, exit, route));
+}
+
 function rebuildField(s: RunState): void {
   const exit = exitTile(s);
   s.field = buildField(s.grid, groundBlocked(s), exit);
   s.breacherField = buildField(s.grid, breacherBlocked(s), exit);
   s.ramField = buildField(s.grid, ramBlocked(s), exit);
   s.flyerField = buildAirField(s.grid.cols, s.grid.rows, flyerBlocked(s), exit);
+  s.routeFields = buildRouteFields(s.grid, groundBlocked(s), exit, s.routes);
 }
 
 export function upgradeTower(s: RunState, col: number, row: number): boolean {
@@ -1117,6 +1145,7 @@ function cheatSpawnWave(s: RunState): number {
 export function spawnCheatEnemy(s: RunState, kind: EnemyKind): boolean {
   if (!cheatsEnabled()) return false;
   const enemy = createEnemy(s.nextId++, kind, cheatSpawnWave(s), spawnTile(s), exitTile(s));
+  enemy.routeIndex = nextRouteIndex(s);
   enemy.spawnTick = s.tick;
   s.enemies.push(enemy);
   s.cheatsUsed = true;
@@ -1372,11 +1401,25 @@ function spawnDue(s: RunState): void {
       if (sp.kind === 'popup' && livingPopups(s) >= popupAliveCap(run.wave)) continue;
       const hpMult = milestoneBossKind(run.wave) === sp.kind ? milestoneBossHpMult(run.wave) : 1;
       const enemy = createEnemy(s.nextId++, sp.kind, run.wave, spawnTile(s), exitTile(s), hpMult);
+      enemy.routeIndex = nextRouteIndex(s);
       enemy.spawnTick = s.tick;
       s.enemies.push(enemy);
       s.events.push({ type: 'enemySpawned', kind: sp.kind });
     }
   }
+}
+
+/**
+ * The route a newly spawned enemy takes: a deterministic, seeded alternation over the level's routes.
+ * It is round-robin (0, 1, …, n-1, 0, …), so with two routes consecutive spawns always split. The
+ * cursor lives on the run state and only advances when the level authors routes, so a single implicit
+ * route never consumes it and its behaviour is byte-for-byte unchanged.
+ */
+function nextRouteIndex(s: RunState): number {
+  if (s.routes.length === 0) return 0;
+  const idx = s.routeCursor % s.routes.length;
+  s.routeCursor++;
+  return idx;
 }
 
 /** The number of pop-up windows currently walking the board. */
@@ -1428,6 +1471,7 @@ function fieldFor(s: RunState, e: Enemy): Int32Array {
   if (e.kind === 'breacher') return s.breacherField;
   if (e.kind === 'breacher-boss') return s.ramField;
   if (isFlyerKind(e.kind)) return s.flyerField;
+  if (s.routeFields.length > 0) return s.routeFields[e.routeIndex % s.routeFields.length];
   return s.field;
 }
 
