@@ -1,7 +1,8 @@
 # Pointer Defense — art handover
 
 Read [`docs/ART-STYLE.md`](../../docs/ART-STYLE.md) first: it explains the Windows 95 motif, the
-limited palette, what the engine draws on top of your files, and what to avoid.
+limited palette, what the engine draws on top of your files, and what to avoid. Frame-sequence
+animation (walk cycles, chewing, spins) is covered in [`docs/ART-ANIMATION.md`](../../docs/ART-ANIMATION.md).
 
 This directory is the source of truth for every **fixed** piece of art. Anything that changes at
 runtime — window chrome, buttons, panels, health bars, range rings, shields, route dots, damage
@@ -122,20 +123,54 @@ branch mark, and the Repair tower has no branches.
 ## Adding or changing art
 
 1. Drop the file in the right subdirectory with the exact name from the table above.
-2. `src/view/art.ts` already lists it in `ART_MANIFEST`; the game picks it up on the next load.
+2. `npm run art:manifest` regenerates `manifest.json` (also run automatically by `npm run dev` and
+   `npm run build`); the game picks it up on the next load.
 3. `npm run smoke` fails if a file is unreferenced or missing, so the manifest and the directory can
    never drift apart.
+
+## Animating an asset
+
+An animation is just numbered files plus a JSON — no code change. For an asset named `grunt`, add
+`grunt.1.svg`, `grunt.2.svg`, … next to `grunt.svg` (which is frame 0), then optionally a
+`grunt.json`:
+
+```json
+{
+  "fps": 8,
+  "loop": "loop",
+  "hold": 0,
+  "holdAfter": 0,
+  "randomStart": true,
+  "when": "always"
+}
+```
+
+| Key | Type | Default | What it does |
+|---|---|---|---|
+| `fps` | number | `8` | Frames per second, 1–60. |
+| `loop` | string | `"loop"` | `loop`, `pingpong`, `once` (stay on last), or `hold0` (return to frame 0). |
+| `hold` | number | `0` | Seconds to show frame 0 before the sequence starts. |
+| `holdAfter` | number | `0` | Seconds to hold the final frame before restarting (loop modes). |
+| `randomStart` | boolean | `true` | Offset each instance by a deterministic hash so a crowd does not march in lockstep. |
+| `when` | string | `"always"` | `"always"` or `"moving"` (play only while travelling; sit on frame 0 when stopped). |
+
+Frames must number contiguously from 1; a gap is a build error. Two or more frames make an animation;
+a lone `grunt.json` with no numbered frames is ignored with a warning. The full contract — the exact
+error and warning text, the clock, and troubleshooting — is in
+[`docs/ART-ANIMATION.md`](../../docs/ART-ANIMATION.md).
 
 ## Collaborating on art
 
 Art is expected to be edited by more than one person, including someone pushing SVG files directly.
 
-- **Keep filenames stable.** The engine finds a file by its name in the manifest
-  (`src/view/art.ts`), not by scanning the directory. Renaming a file without updating the manifest
-  turns the sprite off and the code silently falls back to the old procedural drawing.
+- **Keep filenames stable.** The manifest is generated from the directory, but the code that maps a
+  kind to its file (`src/view/art.ts`) still names each asset by hand. Renaming a file without
+  updating the code reference turns the sprite off and silently falls back to the old procedural
+  drawing.
 - **Adding a brand-new asset** (a new enemy, a new tower, a new branch) means two edits: the file in
-  `public/art/`, and one line in `ART_MANIFEST`. A new file with no manifest entry is inert, and the
-  smoke run will flag it as unreferenced.
+  `public/art/`, and the code reference in `src/view/art.ts`. A new file with no code reference is
+  inert, and the smoke run will flag it as unreferenced. Adding **frames** to an existing asset is
+  files-only — see "Animating an asset" above.
 - **Iterate freely.** A missing or malformed file degrades to the procedural drawing and logs a
   warning, so art can be pushed in a half-finished state without breaking a build.
 

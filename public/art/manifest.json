@@ -1,0 +1,168 @@
+{
+  "assets": [
+    {
+      "name": "board/block",
+      "frames": 1
+    },
+    {
+      "name": "board/obstacle",
+      "frames": 1
+    },
+    {
+      "name": "board/path-tile",
+      "frames": 1
+    },
+    {
+      "name": "board/tile",
+      "frames": 1
+    },
+    {
+      "name": "branches/beacon-command",
+      "frames": 1
+    },
+    {
+      "name": "branches/beacon-relay",
+      "frames": 1
+    },
+    {
+      "name": "branches/cannon-minesweeper",
+      "frames": 1
+    },
+    {
+      "name": "branches/cannon-mortar",
+      "frames": 1
+    },
+    {
+      "name": "branches/cursor-maintenance",
+      "frames": 1
+    },
+    {
+      "name": "branches/cursor-overclock",
+      "frames": 1
+    },
+    {
+      "name": "branches/cursor-wide-search",
+      "frames": 1
+    },
+    {
+      "name": "branches/frost-deep-freeze",
+      "frames": 1
+    },
+    {
+      "name": "branches/frost-shard",
+      "frames": 1
+    },
+    {
+      "name": "branches/gun-marksman",
+      "frames": 1
+    },
+    {
+      "name": "branches/gun-repeater",
+      "frames": 1
+    },
+    {
+      "name": "branches/laser-focus",
+      "frames": 1
+    },
+    {
+      "name": "branches/laser-prism",
+      "frames": 1
+    },
+    {
+      "name": "branches/taser-arc",
+      "frames": 1
+    },
+    {
+      "name": "branches/taser-overload",
+      "frames": 1
+    },
+    {
+      "name": "enemies/armoured",
+      "frames": 1
+    },
+    {
+      "name": "enemies/boss",
+      "frames": 1
+    },
+    {
+      "name": "enemies/breacher",
+      "frames": 1
+    },
+    {
+      "name": "enemies/flyer",
+      "frames": 1
+    },
+    {
+      "name": "enemies/grunt",
+      "frames": 1
+    },
+    {
+      "name": "enemies/runner",
+      "frames": 1
+    },
+    {
+      "name": "enemies/saboteur",
+      "frames": 1
+    },
+    {
+      "name": "enemies/shielded",
+      "frames": 1
+    },
+    {
+      "name": "towers/beacon-base",
+      "frames": 1
+    },
+    {
+      "name": "towers/cannon-base",
+      "frames": 1
+    },
+    {
+      "name": "towers/cannon-turret",
+      "frames": 1
+    },
+    {
+      "name": "towers/cursor-base",
+      "frames": 1
+    },
+    {
+      "name": "towers/frost-base",
+      "frames": 1
+    },
+    {
+      "name": "towers/frost-turret",
+      "frames": 1
+    },
+    {
+      "name": "towers/gun-base",
+      "frames": 1
+    },
+    {
+      "name": "towers/gun-turret",
+      "frames": 1
+    },
+    {
+      "name": "towers/laser-base",
+      "frames": 1
+    },
+    {
+      "name": "towers/laser-turret",
+      "frames": 1
+    },
+    {
+      "name": "towers/repair-base",
+      "frames": 1
+    },
+    {
+      "name": "towers/taser-base",
+      "frames": 1
+    },
+    {
+      "name": "towers/taser-turret",
+      "frames": 1
+    },
+    {
+      "name": "towers/wall-base",
+      "frames": 1
+    }
+  ]
+}

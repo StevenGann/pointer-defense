@@ -1151,7 +1151,9 @@ function spawnDue(s: RunState): void {
       // A pop-up respects the "at most N alive" cap: if one is already walking (e.g. an early
       // call overlapped waves), this wave's pop-up is skipped rather than breaking the cap.
       if (sp.kind === 'popup' && livingPopups(s) >= popupAliveCap(run.wave)) continue;
-      s.enemies.push(createEnemy(s.nextId++, sp.kind, run.wave, spawnTile(s), exitTile(s)));
+      const enemy = createEnemy(s.nextId++, sp.kind, run.wave, spawnTile(s), exitTile(s));
+      enemy.spawnTick = s.tick;
+      s.enemies.push(enemy);
     }
   }
 }

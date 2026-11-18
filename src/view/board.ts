@@ -1,5 +1,6 @@
 import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
-import { artNameForBranch, artNameForEnemy, artNameForTowerBase, artNameForTowerTurret, artSpriteSize, getArtTexture } from './art.ts';
+import { animationOf, artNameForBranch, artNameForEnemy, artNameForTowerBase, artNameForTowerTurret, artSpriteSize, getArtFrames, getArtTexture } from './art.ts';
+import { currentAnimFrame } from './anim.ts';
 import { bevel, FONT, FONT_SIZE, PAL, type BoardGeometry, type Layout } from './chrome.ts';
 import {
   enemyAt,
@@ -328,7 +329,7 @@ export class BoardView {
     for (const e of layers.others) {
       if (e.dead) continue;
       const kb = knockbackFor ? knockbackFor(e.id, state.tick) : null;
-      drawEnemy(this.enemySprite(spriteIndex), this.enemyBodies, this.enemyFx, e, board, cell, alpha, state.tick < e.slowUntilTick, kb);
+      drawEnemy(this.enemySprite(spriteIndex), this.enemyBodies, this.enemyFx, e, board, cell, alpha, state.tick < e.slowUntilTick, state.tick, kb);
       spriteIndex++;
     }
     for (let i = spriteIndex; i < this.enemySprites.length; i++) {
@@ -1263,6 +1264,7 @@ function drawEnemy(
   cell: number,
   alpha: number,
   slowed: boolean,
+  now: number,
   knockback?: { dx: number; dy: number } | null,
 ): void {
   let ex = (e.prevX + (e.x - e.prevX) * alpha) * cell + board.x;
@@ -1274,13 +1276,18 @@ function drawEnemy(
   const r = radiusOf(e) * cell;
   const color = ENEMY_COLOR[e.kind];
 
-  // Body: the SVG sprite when the asset has loaded, otherwise the procedural shape (the temporary
-  // fallback that keeps a half-finished art pass rendering; deleted once parity is confirmed).
+  // Body: the SVG sprite (one or more frames) when the asset has loaded, otherwise the procedural
+  // shape (the temporary fallback that keeps a half-finished art pass rendering; deleted once parity
+  // is confirmed). A still is a one-frame sequence, so this path is identical to the pre-animation
+  // draw; an animated asset picks its frame from the animator on top of the same texture swap.
   const name = artNameForEnemy(e.kind);
   const bodyPx = artSpriteSize(ENEMY_ART_BODY[e.kind] * r);
-  const texture = name !== null ? getArtTexture(name, bodyPx) : null;
-  if (texture !== null) {
-    sprite.texture = texture;
+  const frames = name !== null ? getArtFrames(name, bodyPx) : [];
+  if (frames.length > 0) {
+    const anim = name !== null ? animationOf(name) : null;
+    const moving = e.attackWallId === null && now >= e.stunUntilTick;
+    const frameIndex = anim !== null ? currentAnimFrame(anim, frames.length, now - e.spawnTick, e.id, moving) : 0;
+    sprite.texture = frames[frameIndex];
     sprite.visible = true;
     sprite.position.set(ex, ey);
     sprite.width = bodyPx;

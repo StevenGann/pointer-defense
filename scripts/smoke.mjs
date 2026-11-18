@@ -106,16 +106,26 @@ import {
   artNameForTowerTurret,
   artNameForBranch,
   getArtTexture,
+  getArtFrames,
+  animationOf,
   hasArt,
   setArtDpr,
   artDpr,
   resetArt,
   injectArtTexture,
+  injectArtFrames,
+  injectArtAnim,
+  seedFrameCache,
+  cachedFrameCount,
   onArtInvalidate,
 } from '../src/view/art.ts';
+import { animFrame, currentAnimFrame, DEFAULT_ANIM, entityOffset } from '../src/view/anim.ts';
+import { scanArt } from './art-manifest.mjs';
 import { Texture } from 'pixi.js';
-import { readdirSync, existsSync } from 'node:fs';
+import { readdirSync, existsSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
 import {
   CameraShake,
   shakeImpulseFor,
@@ -4064,9 +4074,19 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     }
   };
   walk(artDir, '');
+  // A numbered frame (`grunt.1.svg`) belongs to its base asset (`grunt.svg`), so the diff strips
+  // the frame suffix before comparing against the built-in list.
+  const baseOf = (f) => f.replace(/\.\d+\.svg$/, '.svg');
   const referenced = new Set(ART_MANIFEST.map((e) => e.file));
-  const unreferenced = onDisk.filter((f) => !referenced.has(f));
+  const unreferenced = onDisk.filter((f) => !referenced.has(baseOf(f)));
   check(unreferenced.length === 0, `no unreferenced SVG in public/art (${unreferenced.join(', ') || 'none'})`);
+
+  // The generated manifest is the runtime source of truth; the real directory must scan clean and
+  // cover exactly the built-in assets.
+  const scanned = scanArt(artDir);
+  check(scanned.errors.length === 0, 'the generated manifest has no validation errors');
+  check(scanned.assets.length === ART_MANIFEST.length,
+    `the generated manifest covers every built-in asset (${scanned.assets.length} == ${ART_MANIFEST.length})`);
 }
 
 {
@@ -4421,6 +4441,203 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   const at60 = run(TICK_MS);
   check(at60 === run(1000 / 144), 'unlock wave: same result at 60 Hz and 144 Hz frames');
   check(at60 === run(1000 / 23), 'unlock wave: same result at 23 Hz frames');
+}
+
+// --- 39. Manifest generation (scripts/art-manifest.mjs) ---------------------------------------
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'pd-art-'));
+  const write = (rel, content = '<svg xmlns="http://www.w3.org/2000/svg"/>') => {
+    const p = join(tmp, rel);
+    mkdirSync(dirname(p), { recursive: true });
+    writeFileSync(p, content);
+  };
+  try {
+    // 39a. Frames are found in order, and a missing json applies the defaults.
+    write('enemies/grunt.svg');
+    write('enemies/grunt.1.svg');
+    write('enemies/grunt.2.svg');
+    write('enemies/grunt.3.svg');
+    const a = scanArt(tmp);
+    const grunt = a.assets.find((x) => x.name === 'enemies/grunt');
+    check(grunt !== undefined && grunt.frames === 4, 'manifest: four frames found in order');
+    check(
+      grunt.anim.fps === 8 && grunt.anim.loop === 'loop' && grunt.anim.hold === 0 &&
+        grunt.anim.holdAfter === 0 && grunt.anim.randomStart === true && grunt.anim.when === 'always',
+      'manifest: a missing json applies the defaults',
+    );
+
+    // 39b. The json is parsed, and unknown keys are a warning.
+    write('enemies/grunt.json', JSON.stringify({ fps: 12, loop: 'pingpong', note: 'artist note' }));
+    const b = scanArt(tmp);
+    const parsed = b.assets.find((x) => x.name === 'enemies/grunt').anim;
+    check(parsed.fps === 12 && parsed.loop === 'pingpong', 'manifest: json fps and loop are read');
+    check(b.warnings.some((m) => m.includes('unknown key "note"')), 'manifest: unknown keys warn');
+
+    // 39c. A gap in the numbering is a build error.
+    write('enemies/gap.svg');
+    write('enemies/gap.1.svg');
+    write('enemies/gap.3.svg');
+    const c = scanArt(tmp);
+    check(c.errors.some((m) => m.includes('enemies/gap') && m.includes('contiguous')),
+      'manifest: a numbering gap is a build error');
+
+    // 39d. The `.0` spelling is warned and produces no asset.
+    write('enemies/zero.svg');
+    write('enemies/zero.0.svg');
+    const d = scanArt(tmp);
+    check(d.warnings.some((m) => m.includes('enemies/zero.0.svg') && m.includes('rename')),
+      'manifest: a `.0` frame warns to rename');
+    check(!d.assets.some((x) => x.name === 'enemies/zero.0'), 'manifest: a `.0` frame is not an asset');
+
+    // 39e. A still with a json is one frame, and its json is ignored with a warning.
+    write('enemies/still.svg');
+    write('enemies/still.json', JSON.stringify({ fps: 12 }));
+    const e = scanArt(tmp);
+    check(e.assets.find((x) => x.name === 'enemies/still').frames === 1, 'manifest: a still is one frame');
+    check(e.warnings.some((m) => m.includes('enemies/still.json') && m.includes('ignored')),
+      'manifest: a still\'s json is ignored with a warning');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+}
+
+// --- 40. The frame animator is a pure function of sim ticks ------------------------------------
+{
+  const mk = (o = {}) => ({ fps: 10, loop: 'loop', hold: 0, holdAfter: 0, randomStart: false, when: 'always', ...o });
+
+  check(
+    DEFAULT_ANIM.fps === 8 && DEFAULT_ANIM.loop === 'loop' && DEFAULT_ANIM.hold === 0 &&
+      DEFAULT_ANIM.holdAfter === 0 && DEFAULT_ANIM.randomStart === true && DEFAULT_ANIM.when === 'always',
+    'animator: defaults match the contract',
+  );
+
+  // fps 10 = one frame every 6 ticks; a four-frame loop cycles 0,1,2,3,0,...
+  const loop = mk();
+  check(animFrame(loop, 4, 0, 1) === 0 && animFrame(loop, 4, 6, 1) === 1 &&
+    animFrame(loop, 4, 12, 1) === 2 && animFrame(loop, 4, 18, 1) === 3 &&
+    animFrame(loop, 4, 24, 1) === 0, 'animator: loop cycles 0..3 and wraps');
+
+  // pingpong walks 0,1,2,3,2,1,0,...
+  const ping = mk({ loop: 'pingpong' });
+  check(animFrame(ping, 4, 0, 1) === 0 && animFrame(ping, 4, 18, 1) === 3 &&
+    animFrame(ping, 4, 24, 1) === 2 && animFrame(ping, 4, 30, 1) === 1 &&
+    animFrame(ping, 4, 36, 1) === 0, 'animator: pingpong bounces back and forth');
+
+  // once plays to the last frame and stays.
+  const once = mk({ loop: 'once' });
+  check(animFrame(once, 4, 0, 1) === 0 && animFrame(once, 4, 18, 1) === 3 &&
+    animFrame(once, 4, 600, 1) === 3, 'animator: once plays to the end and stays');
+
+  // hold0 plays once then returns to frame 0 and stays.
+  const hold0 = mk({ loop: 'hold0' });
+  check(animFrame(hold0, 4, 18, 1) === 3 && animFrame(hold0, 4, 24, 1) === 0 &&
+    animFrame(hold0, 4, 600, 1) === 0, 'animator: hold0 returns to frame 0 and stays');
+
+  // hold delays the start by whole seconds.
+  const hold = mk({ hold: 1 });
+  check(animFrame(hold, 2, 59, 1) === 0 && animFrame(hold, 2, 60, 1) === 0 &&
+    animFrame(hold, 2, 66, 1) === 1, 'animator: hold sits on frame 0 until the delay elapses');
+
+  // holdAfter holds the final frame before looping.
+  const holdAfter = mk({ holdAfter: 0.5 });
+  check(animFrame(holdAfter, 2, 0, 1) === 0 && animFrame(holdAfter, 2, 6, 1) === 1 &&
+    animFrame(holdAfter, 2, 12, 1) === 1 && animFrame(holdAfter, 2, 30, 1) === 1 &&
+    animFrame(holdAfter, 2, 42, 1) === 0, 'animator: holdAfter holds the last frame before looping');
+
+  // randomStart offsets each id deterministically, so a crowd does not march in lockstep.
+  const rs = mk({ randomStart: true });
+  const offsets = new Set([1, 2, 3, 4, 5, 6, 7, 8].map((id) => animFrame(rs, 4, 0, id)));
+  check(offsets.size > 1, `animator: randomStart spreads a crowd (${offsets.size} starting frames)`);
+  check(entityOffset(7) === entityOffset(7), 'animator: the per-entity offset is deterministic');
+
+  // A still is one frame regardless of metadata.
+  check(animFrame(mk(), 1, 999, 1) === 0, 'animator: a still is always frame 0');
+
+  // when: "moving" holds frame 0 while stopped.
+  const walk = mk({ when: 'moving' });
+  check(currentAnimFrame(walk, 4, 6, 1, false) === 0, 'animator: when moving holds frame 0 while stopped');
+  check(currentAnimFrame(walk, 4, 6, 1, true) === 1, 'animator: when moving plays while travelling');
+}
+
+// --- 41. Animated frames in the view -----------------------------------------------------------
+{
+  // 41a. A still asset behaves exactly as before: same texture, same position.
+  resetArt();
+  const gruntTex = new Texture({ width: 4, height: 4 });
+  injectArtTexture('grunt', gruntTex);
+  const s = stateOnLevel('open-field');
+  const e = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+  e.x = 5.5;
+  e.y = 6.5;
+  e.prevX = 5.5;
+  e.prevY = 6.5;
+  e.spawnTick = s.tick;
+  s.enemies.push(e);
+  const layout = computeLayout(1280, 800);
+  const cell = layout.board.cell;
+  const view = new BoardView();
+  view.draw(s, layout, 0, { col: 0, row: 0, onBoard: false, x: 0, y: 0 });
+  check(view.enemySprites[0].visible, 'still: the enemy sprite is visible');
+  check(view.enemySprites[0].texture === gruntTex, 'still: the sprite uses the single injected texture');
+  check(
+    view.enemySprites[0].position.x === layout.board.x + 5.5 * cell &&
+      view.enemySprites[0].position.y === layout.board.y + 6.5 * cell,
+    'still: the sprite position is unchanged',
+  );
+  check(getArtFrames('grunt', 28)[0] === gruntTex && getArtTexture('grunt', 28) === gruntTex,
+    'still: getArtTexture is frame 0 of getArtFrames');
+  check(animationOf('grunt') === null, 'still: animationOf is null for a still');
+  resetArt();
+}
+
+{
+  // 41b. An animated enemy picks its frame from the animator, and switching frames reuses the sprite.
+  resetArt();
+  const f0 = new Texture({ width: 4, height: 4 });
+  const f1 = new Texture({ width: 5, height: 5 });
+  const f2 = new Texture({ width: 6, height: 6 });
+  const f3 = new Texture({ width: 7, height: 7 });
+  injectArtFrames('grunt', [f0, f1, f2, f3]);
+  injectArtAnim('grunt', { fps: 10, loop: 'loop', hold: 0, holdAfter: 0, randomStart: false, when: 'always' });
+  check(animationOf('grunt') !== null && animationOf('grunt').fps === 10,
+    'animated: animationOf resolves the injected metadata');
+  const s = stateOnLevel('open-field');
+  const e = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+  e.x = 5.5;
+  e.y = 6.5;
+  e.prevX = 5.5;
+  e.prevY = 6.5;
+  e.spawnTick = 0;
+  s.enemies.push(e);
+  const layout = computeLayout(1280, 800);
+  const view = new BoardView();
+
+  s.tick = 6;
+  view.draw(s, layout, 0, { col: 0, row: 0, onBoard: false, x: 0, y: 0 });
+  check(view.enemySprites[0].texture === f1, 'animated: tick 6 selects frame 1');
+
+  s.tick = 18;
+  view.draw(s, layout, 0, { col: 0, row: 0, onBoard: false, x: 0, y: 0 });
+  check(view.enemySprites[0].texture === f3, 'animated: tick 18 selects frame 3');
+
+  const ref = view.enemySprites[0];
+  s.tick = 12;
+  view.draw(s, layout, 0, { col: 0, row: 0, onBoard: false, x: 0, y: 0 });
+  check(view.enemySprites[0] === ref && view.enemySprites[0].texture === f2,
+    'animated: the pooled sprite persists and swaps texture, no allocation');
+  resetArt();
+}
+
+{
+  // 41c. A DPR change drops every cached frame array, so the next draw re-rasterises at the new size.
+  resetArt();
+  seedFrameCache('grunt', 28, [new Texture({ width: 2, height: 2 }), new Texture({ width: 2, height: 2 })]);
+  check(cachedFrameCount() === 1, 'dpr: one frame array is cached');
+  const before = artDpr();
+  setArtDpr(before + 1);
+  check(cachedFrameCount() === 0, 'dpr: setArtDpr drops every cached frame array');
+  setArtDpr(before);
+  resetArt();
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
