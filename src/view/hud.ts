@@ -5,7 +5,7 @@ import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
 import { clickDamage, comboMultiplier, critChance, nextPointerCost, overclockCeiling, pointerInfo } from '../core/pointer.ts';
 import { autoWaveStatus, canCycleLevel, currentPath, cursorMaintenanceStatus, isFinalWave, noBuildActive, NO_BUILD_MESSAGE, pointerDamageMult, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
-import { levelById } from '../core/levels.ts';
+
 import {
   cursorClickDamage,
   cursorClickRate,
@@ -850,7 +850,7 @@ export class HudView {
     }
 
     if (h.map) {
-      const name = levelById(s.levelId).name;
+      const name = s.level.name;
       drawButton(g, h.map.next, true, hoverHud === 'map');
       this.mapNext.text = 'Next';
       this.mapNext.style.fill = PAL.text;

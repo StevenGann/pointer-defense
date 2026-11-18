@@ -1214,6 +1214,105 @@ human would simply repair out of.
 
 ---
 
+## 20. Main menu, the map editor, and the `PD2.` share code
+
+The game is serverless, so the whole exchange between Sydney (authoring maps) and the shipped game
+must fit in a string a person can paste into a chat message. Three pieces, in order: a menu that makes
+the editor reachable, an editor that produces a valid `Level`, and a codec that turns that level into a
+short share code and back.
+
+### 20.1 Main menu
+
+A screen shown on load, before a run starts, in the same Windows 95 chrome as the rest of the game.
+Three raised buttons, with keyboard equivalents:
+
+| Button | Key | What it does |
+|---|---|---|
+| **Play** | `Enter` or `P` | the existing game, exactly as it is today — a fresh run, no behaviour change |
+| **Editor** | `E` | the map editor (§20.2) |
+| **Load code** | `L` | a text field: paste a `PD2.` code, validate it, play it immediately |
+
+The load-code dialog has its own status line. Errors appear there in plain words — *"that code is from
+a newer version"*, *"no route from start to exit"*, *"that code is incomplete"* — never a stack trace
+and never silently nothing. A bad code starts nothing.
+
+The profile remembers the last choice, so a returning player lands where they left off; a fresh
+profile defaults to **Play** (a run starts at once, unchanged from before this feature). `Esc` from a
+run returns to the menu; a run started by the editor's **Test** button returns to the editor instead,
+drawing intact.
+
+### 20.2 The editor
+
+The same 20 × 12 board and the same cell size as play, so what you draw is what you play. A palette on
+the left, the board on the right, a toolbar underneath, and a status line that names the first
+validation problem as you draw — before you press anything.
+
+Palette (single-click select, drag to paint, right-click erases):
+
+| Tool | Paints |
+|---|---|
+| Floor | buildable floor |
+| Wall | terrain wall (`#`), not buildable, not walkable |
+| Shutter | a toggle wall; click it again to edit `periodTicks` / `openTicks` / `phaseTicks` in small numeric steppers |
+| Start | exactly one; painting a second moves it |
+| Exit | exactly one; same rule |
+| Eraser | floor |
+
+Toolbar: **Undo** / **Redo** (at least 50 steps), **Clear**, **Test** (starts a run on the drawing,
+with a way back that keeps it), **Copy code** (writes the share code to the clipboard).
+
+Constraints are enforced while you draw, not after: exactly one start, exactly one exit, at most
+`MAX_TOGGLES` shutters, and **a route must exist from start to exit through floor and open shutter
+tiles**. The editor reuses `validateLevel` and the pathfield code — it does not carry a second answer
+to "is this map legal". If `validateLevel` cannot express a case, it is extended there so the game and
+the editor always agree.
+
+### 20.3 The `PD2.` codec
+
+A share code is `PD2.` followed by the base64url of a byte string, no padding. Every multi-byte field
+is little-endian. This table is the contract the artist and Sydney use, and it matches the code
+exactly:
+
+| Byte(s) | Field | Type |
+|---|---|---|
+| 0 | version | `uint8`, always `2` |
+| 1 | `cols` | `uint8` |
+| 2 | `rows` | `uint8` |
+| 3 … 3 + ⌈cols·rows/4⌉ − 1 | bitfield | 2 bits per tile, 4 tiles per byte, row-major, low 2 bits first; `0` floor, `1` wall, `2` shutter, `3` reserved |
+| next 2 | start `col` | `uint16` |
+| next 2 | start `row` | `uint16` |
+| next 2 | exit `col` | `uint16` |
+| next 2 | exit `row` | `uint16` |
+| next 1 | shutter count | `uint8` |
+| next 10 × count | per shutter: `col`, `row`, `periodTicks`, `openTicks`, `phaseTicks` | each `uint16` |
+| next 1 | name length (bytes) | `uint8` |
+| next length | name | UTF-8, printable characters, at most 24 bytes |
+| last 1 | checksum | `uint8`, `sum of all preceding bytes mod 251` |
+
+Design rules:
+
+- **version** — byte 0 is `2`. A `PD1.` code or a version above `2` fails with a plain message, never
+  a parse error.
+- **dimensions** — `cols`/`rows` are carried so the format is not welded to 20 × 12; the current game
+  only accepts the 20 × 12 board and rejects other sizes as a newer version.
+- **bitfield** — one tile per 2 bits, row-major, 4 tiles per byte, padded at the end. `3` is reserved
+  and rejected as a newer version.
+- **start / exit** — `col, row` pairs, exactly one each.
+- **shutter table** — a count, then per shutter `col, row, periodTicks, openTicks, phaseTicks`, each
+  `uint16`. Durations are whole ticks, matching `LevelToggle`.
+- **name** — length-prefixed UTF-8, capped at 24 bytes and sanitised to printable characters. A name
+  is a convenience, never a reason to reject a map.
+- **checksum** — one byte, the sum of all preceding bytes mod 251, so a truncated paste is rejected
+  with *"that code is incomplete"* rather than producing a corrupted map.
+
+Round-trip is exact: `decode(encode(level))` reproduces every shipped map and a generated fixture, and
+an empty 20 × 12 map codes to under 110 characters. `LEVELS` in `src/core/levels.ts` keeps its four
+maps untouched; the loader accepts a custom `Level` produced by the codec with the rest of the sim
+unchanged. A smoke test decodes a fixed, hand-written code string and asserts the exact level it
+produces, so the format has a frozen example.
+
+---
+
 ## Appendix A — What four games got right
 
 **Desktop Tower Defense** (Paul Preece, March 2007) — the path is not fixed; creeps take the shortest
