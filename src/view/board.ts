@@ -172,24 +172,19 @@ export class BoardView {
   private readonly ghostBase = new Sprite();
   private readonly ghostTurret = new Sprite();
   private readonly overlay = new Graphics();
-  private readonly note = new Text({
-    text: 'Build a maze. Towers block the route.',
-    style: { fontFamily: FONT, fontSize: FONT_SIZE.body, fill: PAL.text },
-  });
   private readonly popupTexts: { title: Text; message: Text }[] = [];
 
   private staticKey = '';
   private pathKey = '';
 
   constructor() {
-    this.note.anchor.set(0, 0.5);
     this.ghostBase.anchor.set(0.5, 0.5);
     this.ghostTurret.anchor.set(0.5, 0.5);
     this.ghostBase.visible = false;
     this.ghostTurret.visible = false;
     this.ghost.addChild(this.ghostBase, this.ghostTurret);
     this.popups.addChild(this.popupGfx);
-    this.root.addChild(this.tileSprites, this.tiles, this.path, this.shutterSprites, this.toggles, this.towerSprites, this.towers, this.wrenches, this.popups, this.enemies, this.enemyBodies, this.enemyFx, this.cursorArrows, this.ghost, this.overlay, this.note);
+    this.root.addChild(this.tileSprites, this.tiles, this.path, this.shutterSprites, this.toggles, this.towerSprites, this.towers, this.wrenches, this.popups, this.enemies, this.enemyBodies, this.enemyFx, this.cursorArrows, this.ghost, this.overlay);
   }
 
   /** The pooled body sprite for the `index`-th living enemy, grown on demand. */
@@ -423,12 +418,6 @@ export class BoardView {
       drawReticle(this.overlay, state, board, cell);
     }
 
-    if (state.onboarding && !state.placedFirstTower) {
-      this.drawFirstRunNote(l);
-      this.note.visible = true;
-    } else {
-      this.note.visible = false;
-    }
   }
 
   /**
@@ -455,20 +444,6 @@ export class BoardView {
     this.ghostTurret.texture = Texture.EMPTY;
     this.ghostBase.visible = false;
     this.ghostTurret.visible = false;
-  }
-
-  private drawFirstRunNote(l: Layout): void {
-    const w = 232;
-    const h = 30;
-    const gap = 6;
-    const rect = {
-      x: l.board.x + Math.floor((l.boardW - w) / 2),
-      y: l.board.y - h - gap,
-      w,
-      h,
-    };
-    bevel(this.overlay, rect, false, PAL.face);
-    this.note.position.set(rect.x + 6, rect.y + Math.floor(rect.h / 2));
   }
 
   private drawStatic(grid: Grid, board: { x: number; y: number; cell: number }, cell: number): void {
