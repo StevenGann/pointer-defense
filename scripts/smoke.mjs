@@ -4115,7 +4115,10 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   };
   walk(artDir, '');
   const referenced = new Set(ART_MANIFEST.map((e) => e.file));
-  const unreferenced = onDisk.filter((f) => !referenced.has(f));
+  // A numbered frame (`grunt.2.svg`) is referenced through its base still (`grunt.svg`): adding frames
+  // is files-only (docs/ART-ANIMATION.md), so it must not need a manifest entry of its own.
+  const baseOf = (f) => f.replace(/\.[1-9]\d*\.svg$/, '.svg');
+  const unreferenced = onDisk.filter((f) => !referenced.has(baseOf(f)));
   check(unreferenced.length === 0, `no unreferenced SVG in public/art (${unreferenced.join(', ') || 'none'})`);
 }
 
