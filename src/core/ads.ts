@@ -3,7 +3,6 @@ import { earn, recordKill } from './economy.ts';
 import { secondsToTicks } from './time.ts';
 import { createTower, recomputeAuras } from './towers.ts';
 import { COLS, ROWS, tileAt } from './grid.ts';
-import { levelById } from './levels.ts';
 import { buildField, isSealed } from './pathfield.ts';
 import { rngNext } from './rng.ts';
 
@@ -234,9 +233,8 @@ function applyEffect(s: RunState, kind: AdKind): void {
 
 /** Freeware: place a free Gun on a random legal tile, respecting the seal rule. */
 function placeFreeGun(s: RunState): void {
-  const level = levelById(s.levelId);
-  const spawn = level.starts[0];
-  const exit = level.exits[0];
+  const spawn = s.level.starts[0];
+  const exit = s.level.exits[0];
   const candidates: { col: number; row: number }[] = [];
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {

@@ -52,6 +52,22 @@ import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
 import { LEVELS, DEFAULT_LEVEL, createGrid, levelById, toggleOpenAt, validateLevel, MAX_TOGGLES } from '../src/core/levels.ts';
+import { encodeLevel, decodeCode, encodeBytes, CODEC_PREFIX } from '../src/core/codec.ts';
+import {
+  createEditor,
+  paintEditor,
+  selectEditorTool,
+  eraseEditor,
+  undoEditor,
+  redoEditor,
+  clearEditor,
+  editorLevel,
+  editorValidation,
+  editorPlayable,
+  editorToggleAt,
+  setEditorToggle,
+  editorTileAt,
+} from '../src/core/editor.ts';
 import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, isBossKind, isBossVariant, isPopupEnemy, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS } from '../src/core/enemies.ts';
 import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS } from '../src/core/ads.ts';
 import {
@@ -433,6 +449,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 
   // A run-start map switch, forced directly because the public cycle refuses once a tower exists.
   s.levelId = LEVELS[1].id;
+  s.level = LEVELS[1];
   s.grid = createGrid(LEVELS[1]);
   s.toggles = LEVELS[1].toggles ?? [];
   view.draw(s, layout, 0, hover);
@@ -5034,6 +5051,167 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(!f.flash, 'with shakeOn off there is no flash');
   check(Math.abs(f.hpRatio - 90 / 120) < 1e-9, 'with shakeOn off the fill is the true value on the first frame');
   check(f.lagRatio === f.hpRatio, 'with shakeOn off there is no drain (lag equals the fill)');
+}
+
+// --- 41. The PD2. share code: round-trip, the frozen example, and every failure mode ----------
+{
+  // Walls are compared as sets (the bitfield is row-major, so the array order is not preserved and a
+  // duplicate coordinate — which the shipped maps carry as harmless redundancy — collapses to one);
+  // toggles keep their exact order, and name / start / exit are exact.
+  const wallKey = (walls) => [...new Set(walls.map((w) => w.join(',')))].sort().join(';');
+  const toggleKey = (toggles) => [...(toggles ?? [])].sort((a, b) => a.col - b.col || a.row - b.row)
+    .map((t) => `${t.col},${t.row},${t.periodTicks},${t.openTicks},${t.phaseTicks}`).join(';');
+  const levelEquals = (a, b) =>
+    a.name === b.name &&
+    wallKey(a.walls) === wallKey(b.walls) &&
+    a.starts[0].col === b.starts[0].col && a.starts[0].row === b.starts[0].row &&
+    a.exits[0].col === b.exits[0].col && a.exits[0].row === b.exits[0].row &&
+    toggleKey(a.toggles) === toggleKey(b.toggles);
+
+  for (const level of LEVELS) {
+    const dec = decodeCode(encodeLevel(level));
+    check(dec.ok, `${level.id}: a shipped map round-trips`);
+    check(levelEquals(dec.level, level), `${level.id}: round-trip preserves the level`);
+  }
+
+  const emptyLevel = { id: '', name: '', walls: [], starts: [{ col: 0, row: 6 }], exits: [{ col: 19, row: 6 }], toggles: [] };
+  const emptyCode = encodeLevel(emptyLevel);
+  check(emptyCode.length < 110, `an empty 20x12 map codes to ${emptyCode.length} characters (< 110)`);
+  check(emptyCode.startsWith(CODEC_PREFIX), 'every code carries the PD2. prefix');
+
+  // A generated fixture with row-major walls round-trips exactly, even the wall order.
+  const fixture = {
+    id: 'fixture', name: 'Fixture', walls: [[3, 2], [4, 2], [10, 9]],
+    starts: [{ col: 0, row: 6 }], exits: [{ col: 19, row: 6 }],
+    toggles: [{ col: 10, row: 6, periodTicks: 600, openTicks: 240, phaseTicks: 300 }],
+  };
+  const fixtureDec = decodeCode(encodeLevel(fixture));
+  check(fixtureDec.ok, 'a generated fixture round-trips');
+  check(JSON.stringify(fixtureDec.level.walls) === JSON.stringify([[3, 2], [4, 2], [10, 9]]),
+    'the fixture walls keep their row-major order');
+
+  // The frozen example: a fixed, hand-written code decodes to an exact level.
+  const FROZEN_CODE = 'PD2.AhQMFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGABMABgABCgAGAIQDpAEAAAZGcm96ZW5A';
+  const frozen = decodeCode(FROZEN_CODE);
+  check(frozen.ok, 'the frozen example decodes');
+  check(frozen.level.name === 'Frozen', 'the frozen example name is "Frozen"');
+  check(wallKey(frozen.level.walls) === '1,0;2,0', `the frozen example walls are (1,0) and (2,0) (${wallKey(frozen.level.walls)})`);
+  check(frozen.level.starts[0].col === 0 && frozen.level.starts[0].row === 6, 'the frozen example start is (0,6)');
+  check(frozen.level.exits[0].col === 19 && frozen.level.exits[0].row === 6, 'the frozen example exit is (19,6)');
+  check(toggleKey(frozen.level.toggles) === '10,6,900,420,0', 'the frozen example shutter is (10,6) 900/420/0');
+
+  // A truncated paste is rejected as incomplete, not parsed into a corrupt map.
+  const truncated = decodeCode(FROZEN_CODE.slice(0, -8));
+  check(!truncated.ok && truncated.reason === 'that code is incomplete', `a truncated code is rejected (${truncated.reason})`);
+
+  // A corrupted body byte leaves the checksum byte unchanged, so the checksum mismatches.
+  const wrongChecksum = decodeCode(FROZEN_CODE.slice(0, -5) + 'B' + FROZEN_CODE.slice(-4));
+  check(!wrongChecksum.ok && wrongChecksum.reason === 'that code is incomplete', `a wrong checksum is rejected (${wrongChecksum.reason})`);
+
+  const pd1 = decodeCode('PD1.' + FROZEN_CODE.slice(4));
+  check(!pd1.ok && pd1.reason === 'that code is from an older version', `a PD1. code is rejected (${pd1.reason})`);
+
+  const notACode = decodeCode('hello world');
+  check(!notACode.ok && notACode.reason === 'that code is not a valid share code', `a non-code string is rejected (${notACode.reason})`);
+
+  // A version byte above 2 fails with a version message, with a valid checksum.
+  const futureBytes = encodeBytes(emptyLevel);
+  futureBytes[0] = 3;
+  let futureSum = 0;
+  for (const b of futureBytes) futureSum += b;
+  futureBytes.push(futureSum % 251);
+  const futureCode = CODEC_PREFIX + Buffer.from(futureBytes).toString('base64url');
+  const future = decodeCode(futureCode);
+  check(!future.ok && future.reason === 'that code is from a newer version', `a future version is rejected (${future.reason})`);
+
+  // A name with non-ASCII characters is sanitised to printable ASCII, never a reason to reject.
+  const nonAscii = { id: '', name: 'café ☕', walls: [], starts: [{ col: 0, row: 6 }], exits: [{ col: 19, row: 6 }], toggles: [] };
+  const nonAsciiDec = decodeCode(encodeLevel(nonAscii));
+  check(nonAsciiDec.ok && nonAsciiDec.level.name === 'caf ', `a non-ASCII name is sanitised to "${nonAsciiDec.level.name}"`);
+}
+
+// --- 42. The map editor model: painting, undo/redo, the single start/exit rule, validation -----
+{
+  const m = createEditor();
+  check(editorTileAt(m, 0, 0) === 'floor', 'a fresh editor board is all floor');
+  check(editorValidation(m) === 'place a start tile', 'an empty editor reports the missing start');
+
+  selectEditorTool(m, 'wall');
+  check(paintEditor(m, 3, 4) === null && editorTileAt(m, 3, 4) === 'wall', 'the Wall tool paints a wall tile');
+  selectEditorTool(m, 'shutter');
+  check(paintEditor(m, 5, 5) === null && editorTileAt(m, 5, 5) === 'shutter', 'the Shutter tool paints a shutter tile');
+  check(editorToggleAt(m, 5, 5) !== undefined, 'a shutter tile carries its toggle');
+  selectEditorTool(m, 'floor');
+  check(paintEditor(m, 5, 5) === null && editorTileAt(m, 5, 5) === 'floor', 'the Floor tool paints buildable floor');
+  selectEditorTool(m, 'eraser');
+  paintEditor(m, 3, 4);
+  check(editorTileAt(m, 3, 4) === 'floor', 'the Eraser paints buildable floor');
+
+  // Start and exit: painting a second moves the first; the exit is independent.
+  selectEditorTool(m, 'start');
+  paintEditor(m, 0, 6);
+  check(editorValidation(m) === 'place an exit tile', 'one start and no exit reports the missing exit');
+  paintEditor(m, 5, 3);
+  check(editorLevel(m).starts[0].col === 5 && editorLevel(m).starts[0].row === 3, 'a second start moves the first');
+
+  selectEditorTool(m, 'exit');
+  paintEditor(m, 19, 6);
+  check(editorValidation(m) === null, 'a start and exit on a clear board validates');
+  paintEditor(m, 10, 0);
+  check(editorLevel(m).exits[0].col === 10 && editorLevel(m).exits[0].row === 0, 'a second exit moves the first');
+  paintEditor(m, 19, 6);
+  check(editorValidation(m) === null, 'moving the exit back restores a clear route');
+
+  // Undo / redo returns the exact prior grid.
+  const before = m.tiles.slice();
+  selectEditorTool(m, 'wall');
+  paintEditor(m, 1, 1);
+  check(m.tiles[1 * m.cols + 1] === 'wall', 'a wall is painted before undo');
+  check(undoEditor(m), 'undo succeeds');
+  check(JSON.stringify(m.tiles) === JSON.stringify(before), 'undo returns the exact prior grid');
+  check(redoEditor(m), 'redo succeeds');
+  check(m.tiles[1 * m.cols + 1] === 'wall', 'redo re-applies the wall');
+
+  // A map with no route from start to exit is reported, in plain words.
+  const sealed = createEditor();
+  selectEditorTool(sealed, 'start');
+  paintEditor(sealed, 0, 6);
+  selectEditorTool(sealed, 'exit');
+  paintEditor(sealed, 19, 6);
+  selectEditorTool(sealed, 'wall');
+  for (let r = 0; r < ROWS; r++) paintEditor(sealed, 9, r);
+  check(editorValidation(sealed) === 'no route from start to exit', `a sealed board reports "no route" (${editorValidation(sealed)})`);
+  check(!editorPlayable(sealed), 'a sealed board is not playable');
+}
+
+// --- 43. A pasted code starts a run on that map; an edited map routes and spawns normally -------
+{
+  // Decoding a share code yields a run on exactly that level.
+  const code = encodeLevel({
+    id: '', name: 'Pasted', walls: [[4, 5]],
+    starts: [{ col: 0, row: 6 }], exits: [{ col: 19, row: 6 }], toggles: [],
+  });
+  const pasted = decodeCode(code);
+  check(pasted.ok, 'the pasted code decodes');
+  const s = createRunState(undefined, pasted.level);
+  check(s.level.name === 'Pasted', 'a pasted code starts a run on that map');
+  check(currentPath(s).length > 0, 'the pasted map produces a route');
+
+  // An edited Open-Field-shaped map behaves exactly like the shipped one.
+  const m = createEditor();
+  selectEditorTool(m, 'start');
+  paintEditor(m, 0, 6);
+  selectEditorTool(m, 'exit');
+  paintEditor(m, 19, 6);
+  selectEditorTool(m, 'wall');
+  for (const [c, r] of LEVELS.find((l) => l.id === 'open-field').walls) paintEditor(m, c, r);
+  check(editorPlayable(m), 'the edited open-field map is playable');
+  const edited = createRunState(undefined, editorLevel(m));
+  const shipped = stateOnLevel('open-field');
+  check(currentPath(edited).length === currentPath(shipped).length,
+    'an edited map with the same geometry has the same route length as the shipped map');
+  check(JSON.stringify(buildSchedule(1)) === JSON.stringify(buildSchedule(1)), 'wave generation is unchanged for an edited map');
+  check(startWave(edited), 'a wave starts on the edited map');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

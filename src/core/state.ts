@@ -8,7 +8,6 @@ import {
   createGrid,
   DEFAULT_LEVEL,
   LEVELS,
-  levelById,
   toggleCombinations,
   toggleIndex,
   toggleOpenAt,
@@ -183,6 +182,8 @@ export interface RunState {
   grid: Grid;
   /** Authored map id (see levels.ts); carried in state so a cycle rebuilds the board. */
   levelId: string;
+  /** The full authored map; custom maps from the codec/editor live here, not in LEVELS. */
+  level: Level;
   /** Authored map toggles (shutters); each one's state is a pure function of `clock`. */
   toggles: readonly LevelToggle[];
   /** Distance-in-tiles to the exit for every walkable, unblocked tile; -1 unreachable. */
@@ -295,6 +296,7 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
   return {
     grid,
     levelId: level.id,
+    level,
     toggles,
     field: buildField(grid, initialGroundBlocked(toggles), level.exits[0]),
     breacherField: buildField(grid, blocked, level.exits[0]),
@@ -357,12 +359,12 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
 
 /** The single spawn tile of the current level; the gate accessor every end-of-route read uses. */
 export function spawnTile(s: RunState): Tile {
-  return levelById(s.levelId).starts[0];
+  return s.level.starts[0];
 }
 
 /** The single exit tile of the current level. */
 export function exitTile(s: RunState): Tile {
-  return levelById(s.levelId).exits[0];
+  return s.level.exits[0];
 }
 
 /** Map selection is only offered before wave 1, with no towers placed. */
@@ -378,6 +380,7 @@ export function cycleLevel(s: RunState): boolean {
   const reason = validateLevel(next);
   if (reason !== null) throw new Error(`Level ${next.id} rejected: ${reason}`);
   s.levelId = next.id;
+  s.level = next;
   s.grid = createGrid(next);
   s.blocked = new Set();
   s.toggles = next.toggles ?? [];

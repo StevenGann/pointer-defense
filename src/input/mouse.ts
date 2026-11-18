@@ -54,7 +54,12 @@ import {
  * Hit testing and gestures against the run state, the menus and the modal dialogs. Tracks the
  * hover state (which the views read) and translates raw mouse events into core reducers and into
  * the wiring callbacks that own the meta-game (specs, profile, menus, dialogs).
+ *
+ * This controller only drives a live run; when the app is on the main menu or the editor, every
+ * event here bails out early and those screens own their input.
  */
+
+export type Screen = 'menu' | 'run' | 'editor';
 
 export interface HoverState {
   x: number;
@@ -76,6 +81,7 @@ export interface MouseContext {
   state: () => RunState;
   menu: () => OpenMenu | null;
   dialog: () => DialogModel | null;
+  screen: () => Screen;
   restart: () => void;
   restartWindows: () => void;
   startEndless: () => void;
@@ -84,6 +90,7 @@ export interface MouseContext {
   menuAction: (id: string) => void;
   dialogAction: (id: string) => void;
   closeDialog: () => void;
+  exitRun: () => void;
   buySpec: (kind: SpecKind) => void;
   toggleAutoWave: () => void;
   notice: (message: string) => void;
@@ -163,6 +170,16 @@ export class MouseController {
     this.hover.worldX = w.x;
     this.hover.worldY = w.y;
     this.hover.menuItem = menuItemAt(l.menu, x, y);
+    if (this.ctx.screen() !== 'run') {
+      this.hover.menuHover = null;
+      this.hover.dialogButton = null;
+      this.hover.hud = null;
+      this.hover.onBoard = false;
+      this.hover.col = -1;
+      this.hover.row = -1;
+      this.hover.overRestart = false;
+      return;
+    }
     const open = this.ctx.menu();
     this.hover.menuHover = open ? menuEntryAt(l.menu, open, x, y) : null;
     const dialog = this.ctx.dialog();
@@ -177,6 +194,7 @@ export class MouseController {
   };
 
   private onDown = (e: PointerEvent): void => {
+    if (this.ctx.screen() !== 'run') return;
     if (e.button === 2) {
       cancelSelection(this.ctx.state());
       return;
@@ -370,6 +388,7 @@ export class MouseController {
   }
 
   private onUp = (e: PointerEvent): void => {
+    if (this.ctx.screen() !== 'run') return;
     if (e.button !== 0) return;
     pointerUp(this.ctx.state());
   };
@@ -381,11 +400,15 @@ export class MouseController {
   private onKey = (e: KeyboardEvent): void => {
     if (e.repeat) return;
     if (this.isTypingTarget(e.target)) return;
+    if (this.ctx.screen() !== 'run') return;
 
     if (e.key === 'Escape') {
+      const s = this.ctx.state();
+      const hadSomething = this.ctx.menu() !== null || this.ctx.dialog() !== null || s.selected !== null || s.selectedTowerId !== null;
       this.ctx.openMenu(null);
       this.ctx.closeDialog();
-      cancelSelection(this.ctx.state());
+      cancelSelection(s);
+      if (!hadSomething) this.ctx.exitRun();
       return;
     }
 

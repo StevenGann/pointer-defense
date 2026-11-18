@@ -19,6 +19,9 @@ export type SpecKind = 'cpu' | 'ram' | 'gpu' | 'disk';
 /** Master volume step, remembered next to the profile (docs/design.md §14). */
 export type VolumeLevel = 'low' | 'med' | 'high';
 
+/** The main-menu choice a returning player lands on (docs/design.md §20.1). */
+export type MenuChoice = 'play' | 'editor' | 'load';
+
 export interface SpecLevels {
   cpu: number;
   ram: number;
@@ -43,6 +46,8 @@ export interface Profile {
   shakeOn: boolean;
   /** Boss kinds already announced (first appearance), so a type's teaching moment fires once. */
   seenBossKinds: EnemyKind[];
+  /** The main-menu button the player last used; the boot lands here, Play for a fresh profile. */
+  lastChoice: MenuChoice;
 }
 
 export const SPEC_KINDS: readonly SpecKind[] = ['cpu', 'ram', 'gpu', 'disk'];
@@ -103,6 +108,7 @@ export function defaultProfile(): Profile {
     autoWave: false,
     shakeOn: !prefersReducedMotion(),
     seenBossKinds: [],
+    lastChoice: 'play',
   };
 }
 
@@ -130,6 +136,7 @@ export function cloneProfile(p: Profile): Profile {
     autoWave: p.autoWave,
     shakeOn: p.shakeOn,
     seenBossKinds: [...p.seenBossKinds],
+    lastChoice: p.lastChoice,
   };
 }
 
@@ -203,8 +210,9 @@ function parseProfile(raw: string): Profile | null {
   const seenBossKinds = Array.isArray(o.seenBossKinds)
     ? [...new Set(o.seenBossKinds.filter((k): k is EnemyKind => typeof k === 'string' && isBossVariant(k as EnemyKind)))]
     : [];
+  const lastChoice: MenuChoice = o.lastChoice === 'editor' || o.lastChoice === 'load' ? o.lastChoice : 'play';
 
-  return { version: SAVE_VERSION, specs, unspentSpecs, achievements, bestWave, reboots, soundOn, volume, autoWave, shakeOn, seenBossKinds };
+  return { version: SAVE_VERSION, specs, unspentSpecs, achievements, bestWave, reboots, soundOn, volume, autoWave, shakeOn, seenBossKinds, lastChoice };
 }
 
 /**

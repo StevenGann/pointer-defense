@@ -141,6 +141,60 @@ export function levelById(id: string): Level {
 /** The most toggles a level may author: 2^4 = 16 combinations to check at load and on placement. */
 export const MAX_TOGGLES = 4;
 
+/**
+ * A deterministic id for a level built from its geometry: walls, toggles, start and exit. The name
+ * and the id itself are not part of the hash, so two levels that differ only by label still collide
+ * — and that is fine, because the id is only used to key the board's static tile layer.
+ */
+export function levelFingerprint(level: Level): string {
+  let h = 0x811c9dc5;
+  const mix = (n: number): void => {
+    for (let i = 0; i < 4; i++) {
+      h ^= n & 0xff;
+      h = Math.imul(h, 0x01000193);
+      n >>>= 8;
+    }
+  };
+  const walls = [...level.walls].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  for (const [c, r] of walls) {
+    mix(c);
+    mix(r);
+  }
+  for (const t of [...(level.toggles ?? [])].sort((a, b) => a.col - b.col || a.row - b.row)) {
+    mix(t.col);
+    mix(t.row);
+    mix(t.periodTicks);
+    mix(t.openTicks);
+    mix(t.phaseTicks);
+  }
+  mix(level.starts[0]?.col ?? -1);
+  mix(level.starts[0]?.row ?? -1);
+  mix(level.exits[0]?.col ?? -1);
+  mix(level.exits[0]?.row ?? -1);
+  return (h >>> 0).toString(16);
+}
+
+/** A plain-language description of a validateLevel reason, for the editor status line and the
+ *  load-code dialog. Reused so the game and the editor never disagree about what is wrong. */
+export function levelProblemMessage(reason: string): string {
+  switch (reason) {
+    case 'too many toggles':
+      return 'too many shutters';
+    case 'toggle out of bounds':
+      return 'a shutter is out of bounds';
+    case 'toggle on a wall tile':
+      return 'a shutter sits on a wall';
+    case 'toggle period must be positive':
+      return 'a shutter period must be positive';
+    case 'toggle open window out of range':
+      return 'a shutter open window is out of range';
+    case 'toggle combination seals the route':
+      return 'no route from start to exit';
+    default:
+      return reason;
+  }
+}
+
 /** The flat tile index of a toggle. */
 export function toggleIndex(t: LevelToggle): number {
   return t.row * COLS + t.col;
