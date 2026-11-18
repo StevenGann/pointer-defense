@@ -494,6 +494,14 @@ touches a wall that was destroyed and removed — but an offline tower is a vali
 wins the choice (see §6.9). The branch's cost is the damage output of the Overclock click it did not
 take, which the tooltip says plainly.
 
+**How this tower is measured.** Its damage share is the wrong statistic and the balance harness was
+wrong to judge it by one. A Cursor's job is to take shields off enemies that nothing else can touch
+and, on Maintenance, to keep the board repaired without a Repair tower — neither of which shows up as
+damage dealt. The metric that matters is **shields removed per salvage spent** and **towers repaired
+per run**; a Cursor that deals 1 % of the damage and breaks every shield in its radius is doing its
+job. It is also the tower that changes the shape of a run: once it is unlocked, a defence can be left
+alone, which is the moment the game turns from tower defence into an idler.
+
 ### 6.8 The Repair tower and its aura
 
 The **Repair** tower is the board's medic. It never fires at enemies; instead every tick it adds hit
@@ -1013,16 +1021,45 @@ is spent, not healed.
 
 ---
 
-## 12. Meta: Restart Windows
+## 12. Meta: Restart Windows and the Restore tree
 
-After wave 50 the player may **Restart Windows**. The run ends, the machine reboots, and progress
-converts into **specs**:
+Prestige is modelled on Cookie Clicker's Heavenly Chips: a currency you earn by ending a run, spent
+on permanent upgrades that make the next run start further along. The point is not a bigger number on
+the same run — it is that wave 40, which was the wall, becomes the opening act.
+
+### 12.1 Restore Points
+
+After wave 50 the player may **Restart Windows**. The run ends and the machine reboots. The reboot
+pays **Restore Points**:
 
 ```
-specs = floor( sqrt( totalSalvageEarned / 500 ) )
+rp = floor(2.2 * sqrt(totalSalvageEarned / 900))
 ```
 
-Specs buy permanent upgrades, stored in `localStorage` next to the achievements:
+| Salvage earned in the run | Restore Points |
+|---|---|
+| 20,000 | 10 |
+| 60,000 | 17 |
+| 150,000 | 28 |
+| 500,000 | 51 |
+
+Two numbers are tracked separately and the difference matters:
+
+- **`rpEarned`** is lifetime and never falls. It is the **prestige level**, and it drives the tree's
+  tier gates and the passive bonus.
+- **`rp`** is the unspent balance. Spending it buys tree nodes and spec levels; spending never
+  reduces the prestige level.
+
+Passive: **+0.5 % tower damage and +0.5 % pointer damage per prestige level**, additive with the
+spec tracks and uncapped. At level 60 that is ×1.3.
+
+### 12.2 Spec tracks
+
+The four original tracks survive, repriced from a flat one point per level to a curve:
+
+```
+cost(level) = ceil(2 * 1.28^level)
+```
 
 | Spec | Effect per point | Cap |
 |---|---|---|
@@ -1031,37 +1068,53 @@ Specs buy permanent upgrades, stored in `localStorage` next to the achievements:
 | **GPU** | +2 % pointer damage | 20 |
 | **Disk** | +1 starting integrity | 10 |
 
-Twenty points is a ×1.4 multiplier. The walls are deliberately low: prestige is about *starting
-better*, not about removing the game. Each reboot unlocks a new desktop wallpaper — a palette variant
-of the same board, for the achievement wall.
+Cost to take CPU from 0 to 20 is 1,000 RP, and the whole tree is priced against that scale: a player
+who reboots regularly should own most of the tree by prestige 70 and finish the spec tracks around
+level 100. If that reads as a grind in human play, cut the exponents rather than raising payouts.
 
-**Achievements** (twenty-four). Each names one thing worth doing and rewards doing it; none require
-cheats or a hundred-wave grind.
+### 12.3 The Restore tree
 
-- **First Blood** — kill any enemy. The first click that proves the loop: towers hold, you finish.
-- **Long Road** — a route of 50+ tiles. Mazing is the game's second weapon, and this is the moment it becomes visible.
-- **Clean Wave** — clear a wave at 40+ with zero leaks. Leaks are the run's real failure; a clean late wave means the defense finally holds by itself.
-- **Sharpshooter** — 100 weak-point hits in one run. The weak point is the pointer's skill ceiling; this is the proof you hit it.
-- **Five Tier Fives** — five tier-5 towers at once. The economy ladder has a top, and this is standing on it.
-- **Beacon Field** — ten beacons at once. Support towers are worth it; a whole field of them is a statement.
-- **Boss by Pointer** — kill a boss with the pointer alone. The hybrid's one question: is your aim a weapon?
-- **Ad Collector** — dismiss ten ads in one run. Ads are income you earn with attention.
-- **Endless** — reach endless wave 150. The hundred-wave win is not the end; this is.
-- **Reboot** — reboot with 50+ specs. Prestige is a ladder too, and this is its milestone.
-- **Deadeye** — kill 50 enemies with weak-point hits. Hitting the weak point is hard; finishing on it is a habit.
-- **Lucky Streak** — land 25 critical hits. Crits are rare by design; a streak of them is luck earned through volume.
-- **Deep Pockets** — hold 1,000 salvage at once. It teaches you to save, not spend the moment you can.
-- **Pack Rat** — reach wave 20 without selling a tower. Selling is a crutch; this is a run that stood on its builds.
-- **One-Trick Pony** — clear a wave with a single tower kind. Commitment has a shape, and it is one button.
-- **Maxed Out** — fully upgrade a branched tower. The branch tree has a summit; this is the climb.
-- **Flak Jacket** — branch an AA tower into Flak. Air defence has a second answer, and this is it.
-- **Speedrunner** — call three waves early in a row. Risk stacks; this is a run that keeps pulling the trigger.
-- **No Leaks** — clear a wave with zero leaks. The earliest, purest version of a perfect wave.
-- **Milestone Hunter** — kill a milestone boss with the pointer. Milestone bosses are the walls; this is knocking one down yourself.
-- **Second Boot** — reboot twice. Prestige is a loop, not a single farewell.
-- **Nest Egg** — start a run with banked specs. The reward for a good run is a better next run.
-- **Cartographer** — clear a wave on a custom map. Your own board is a real board.
-- **Well Read** — unlock every page in the Help viewer. The Help library is a map of the game; this is reading all of it.
+Nodes are permanent once bought: they survive every later reboot and are never spent again. Each
+tier unlocks at a prestige level, so a new player sees five greyed rows and one lit one.
+
+| Tier | Unlocks at level | Node | Cost | Effect |
+|---|---|---|---|---|
+| 1 | 0 | **Loose Change** | 4 | +200 starting salvage |
+| 1 | 0 | **Spare Slot** | 5 | +2 starting integrity |
+| 1 | 0 | **Fast Boot I** | 5 | runs begin at wave 3 |
+| 1 | 0 | **Warm Cache** | 6 | +10 % tower damage |
+| 1 | 0 | **Steady Hand** | 6 | +10 % pointer damage |
+| 2 | 8 | **Auto-login** | 6 | auto-wave is on by default |
+| 2 | 8 | **Preload** | 10 | the run starts with two free Gun towers |
+| 2 | 8 | **Fast Boot II** | 12 | runs begin at wave 8 |
+| 2 | 8 | **Cooling Loop** | 12 | repairs are 25 % faster |
+| 2 | 8 | **Bulk Discount** | 14 | towers cost 8 % less |
+| 3 | 20 | **Safe Mode** | 18 | +5 integrity, but −10 % Restore Points earned |
+| 3 | 20 | **Blue Screen** | 18 | +25 % Restore Points earned, but −5 integrity |
+| 3 | 20 | **Bulk Discount II** | 22 | a further 7 % off (15 % total) |
+| 3 | 20 | **Fast Boot III** | 25 | runs begin at wave 15 |
+| 3 | 20 | **Early Access** | 30 | every tower is unlocked at wave 1 |
+| 4 | 40 | **Hot Swap** | 30 | selling refunds 90 % instead of 70 % |
+| 4 | 40 | **Windows Update** | 35 | each reboot banks one extra spec point |
+| 4 | 40 | **Fast Boot IV** | 45 | runs begin at wave 25 |
+| 5 | 70 | **Restore Point** | 60 | the run starts with 10 % of the last run's salvage |
+| 5 | 70 | **Fast Boot V** | 80 | runs begin at wave 40 |
+| 5 | 70 | **New Game+** | 90 | towers are placed at tier 2 |
+
+**Safe Mode and Blue Screen are mutually exclusive.** The tree is otherwise additive. Every node is
+one boolean in the save and one branch at run creation; a node that cannot be described as a single
+number at `createRunState` does not belong in the tree.
+
+### 12.4 What a fast boot must not break
+
+- **Achievements gated on waves still fire.** Starting at wave 40 must not silently grant "reach wave
+  20" style achievements for waves the player never played. Wave-progress achievements compare
+  `bestWave`, which is only written from waves actually cleared.
+- **The wave hash is untouched.** Starting at wave N is a `state.wave = N` at creation; wave
+  composition for a given number does not depend on how the player got there.
+- **Cheated runs still record nothing,** including Restore Points.
+- **The first run is unchanged.** With no tree and no specs, `rp = 0`, `rpEarned = 0`, and every
+  effect is identity.
 
 ---
 
