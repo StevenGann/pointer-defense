@@ -207,10 +207,10 @@ export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
   cursor: {
     name: 'Cursor',
     blurb: 'Clicks enemies for a share of your click damage',
-    cost: 250,
-    range: 2.5,
+    cost: 200,
+    range: 3.0,
     damage: 0,
-    fireInterval: secondsToTicks(1.0),
+    fireInterval: secondsToTicks(1.5),
     turnRate: 0,
     splash: 0,
     ignoresArmour: true,
@@ -241,9 +241,9 @@ export const CURSOR_CLICK_RANGE = 0.6;
 export const CURSOR_REPAIR_THRESHOLD = 0.8;
 
 /** Radius (tiles) at each tier, before the Wide Search branch multiplier. */
-const CURSOR_RADIUS_BY_TIER: Readonly<Record<Tier, number>> = { 1: 2.5, 2: 3.5, 3: 4.5, 4: 4.5, 5: 4.5 };
+const CURSOR_RADIUS_BY_TIER: Readonly<Record<Tier, number>> = { 1: 3.0, 2: 4.0, 3: 4.75, 4: 4.75, 5: 4.75 };
 /** Clicks per second at each tier, before any branch multiplier. */
-const CURSOR_RATE_BY_TIER: Readonly<Record<Tier, number>> = { 1: 1.0, 2: 1.6, 3: 2.2, 4: 2.2, 5: 2.2 };
+const CURSOR_RATE_BY_TIER: Readonly<Record<Tier, number>> = { 1: 1.5, 2: 2.0, 3: 2.75, 4: 2.75, 5: 2.75 };
 
 /** Branch depth: tiers 4 and 5 re-apply the branch multipliers at 1.5x and 2x strength. */
 function cursorBranchStrength(tier: Tier): number {

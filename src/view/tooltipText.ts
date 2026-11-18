@@ -159,7 +159,7 @@ export function lockedPaletteLine(kind: TowerKind, wave: number): string | null 
 /** Tooltip lines for a build-palette button (the tower's base, un-upgraded stats). */
 export function paletteTooltipLines(kind: TowerKind): string[] {
   if (kind === 'cursor') {
-    return ['Cursor  $250', 'a cursor that clicks for 50% of your click damage, 2.5 tiles'];
+    return ['Cursor  $200', 'a cursor that clicks for 50% of your click damage, 3.0 tiles'];
   }
   if (kind === 'repair') {
     return ['Repair  $220', 'heals 2 HP/s to towers within 4.5 tiles'];

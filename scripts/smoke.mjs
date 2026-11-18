@@ -2407,27 +2407,36 @@ function cursorTower(tier, branch) {
 
 {
   // 25a. The radius, rate and damage-factor accessors match the spec at every tier and branch.
-  check(cursorRadius(cursorTower(1, null)) === 2.5, 'cursor tier-1 radius is 2.5');
-  check(cursorRadius(cursorTower(2, null)) === 3.5, 'cursor tier-2 radius is 3.5');
-  check(cursorRadius(cursorTower(3, null)) === 4.5, 'cursor tier-3 radius is 4.5');
-  check(Math.abs(cursorRadius(cursorTower(3, 'B')) - 4.5 * 1.35) < 1e-9, 'Wide Search radius is 4.5 x1.35');
-  check(Math.abs(cursorClickRate(cursorTower(1, null)) - 1.0) < 1e-9, 'cursor tier-1 rate is 1.0/s');
-  check(Math.abs(cursorClickRate(cursorTower(2, null)) - 1.6) < 1e-9, 'cursor tier-2 rate is 1.6/s');
-  check(Math.abs(cursorClickRate(cursorTower(3, null)) - 2.2) < 1e-9, 'cursor tier-3 rate is 2.2/s');
-  check(Math.abs(cursorClickRate(cursorTower(3, 'A')) - 2.2 * 1.8) < 1e-9, 'Overclock rate is 2.2 x1.8');
-  check(Math.abs(cursorClickRate(cursorTower(3, 'B')) - 2.2 * 0.7) < 1e-9, 'Wide Search rate is 2.2 x0.7');
-  check(cursorClickIntervalTicks(cursorTower(1, null)) === 60, 'tier-1 cursor clicks every 60 ticks');
-  check(cursorClickIntervalTicks(cursorTower(3, 'A')) === 15, 'Overclock cursor clicks every 15 ticks');
+  check(cursorRadius(cursorTower(1, null)) === 3.0, 'cursor tier-1 radius is 3.0');
+  check(cursorRadius(cursorTower(2, null)) === 4.0, 'cursor tier-2 radius is 4.0');
+  check(cursorRadius(cursorTower(3, null)) === 4.75, 'cursor tier-3 radius is 4.75');
+  check(Math.abs(cursorRadius(cursorTower(3, 'B')) - 4.75 * 1.35) < 1e-9, 'Wide Search radius is 4.75 x1.35');
+  check(Math.abs(cursorClickRate(cursorTower(1, null)) - 1.5) < 1e-9, 'cursor tier-1 rate is 1.5/s');
+  check(Math.abs(cursorClickRate(cursorTower(2, null)) - 2.0) < 1e-9, 'cursor tier-2 rate is 2.0/s');
+  check(Math.abs(cursorClickRate(cursorTower(3, null)) - 2.75) < 1e-9, 'cursor tier-3 rate is 2.75/s');
+  check(Math.abs(cursorClickRate(cursorTower(3, 'A')) - 2.75 * 1.8) < 1e-9, 'Overclock rate is 2.75 x1.8');
+  check(Math.abs(cursorClickRate(cursorTower(3, 'B')) - 2.75 * 0.7) < 1e-9, 'Wide Search rate is 2.75 x0.7');
+  check(cursorClickIntervalTicks(cursorTower(1, null)) === 40, 'tier-1 cursor clicks every 40 ticks');
+  check(cursorClickIntervalTicks(cursorTower(3, 'A')) === 12, 'Overclock cursor clicks every 12 ticks');
   check(Math.abs(cursorClickDamageFactor(cursorTower(3, 'A')) - 0.6) < 1e-9, 'Overclock per-click damage is x0.6');
   check(cursorClickDamageFactor(cursorTower(3, 'B')) === 1, 'Wide Search keeps per-click damage at x1');
   check(upgradeCost(cursorTower(1, null)) === 150, 'cursor tier-2 upgrade costs 150');
   check(upgradeCost(cursorTower(2, null)) === 260, 'cursor tier-3 branch costs 260');
+  const tiers = [1, 2, 3, 4, 5];
+  check(
+    tiers.every((t, i) => i === 0 || cursorClickRate(cursorTower(t, null)) >= cursorClickRate(cursorTower(tiers[i - 1], null))),
+    'cursor click-rate table is monotonic across tiers',
+  );
+  check(
+    tiers.every((t, i) => i === 0 || cursorRadius(cursorTower(t, null)) >= cursorRadius(cursorTower(tiers[i - 1], null))),
+    'cursor radius table is monotonic across tiers',
+  );
 }
 
 {
   // 25b. The palette and placed tooltips name the cursor and its ladder-fed click damage.
   check(
-    paletteTooltipLines('cursor').join(' | ') === 'Cursor  $250 | a cursor that clicks for 50% of your click damage, 2.5 tiles',
+    paletteTooltipLines('cursor').join(' | ') === 'Cursor  $200 | a cursor that clicks for 50% of your click damage, 3.0 tiles',
     'palette tooltip reads the cursor spec',
   );
   check(branchName('cursor', 'A') === 'Overclock' && branchName('cursor', 'B') === 'Wide Search',
@@ -2436,9 +2445,9 @@ function cursorTower(tier, branch) {
   const { s, c } = cursorRig(1, null);
   const lines = cursorTooltipLines(c, s.pointer, s.specs);
   check(lines[0] === 'Cursor T1', `placed cursor tooltip names the tower (${lines[0]})`);
-  check(lines[1].includes('Radius 2.5'), `placed cursor tooltip names the radius (${lines[1]})`);
+  check(lines[1].includes('Radius 3.0'), `placed cursor tooltip names the radius (${lines[1]})`);
   check(lines[2].includes('50% of 3'), `placed cursor tooltip shows the ladder feeding it (${lines[2]})`);
-  check(tooltipText(upgradeTooltipLines(c, s.economy.salvage)[0]).includes('rate 1.0'), 'cursor upgrade tooltip previews the rate');
+  check(tooltipText(upgradeTooltipLines(c, s.economy.salvage)[0]).includes('rate 1.5'), 'cursor upgrade tooltip previews the rate');
   check(tooltipText(cursorBranchTooltipLines(c, 'A', s.economy.salvage)[0]).includes('rate'), 'cursor branch tooltip previews the rate');
 }
 
@@ -2479,7 +2488,7 @@ function cursorTower(tier, branch) {
 }
 
 {
-  // 25e. The cursor never leaves its radius, and the Wide Search branch widens it to 4.5 x1.35.
+  // 25e. The cursor never leaves its radius, and the Wide Search branch widens it to 4.75 x1.35.
   const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
@@ -2489,11 +2498,11 @@ function cursorTower(tier, branch) {
     tick(s);
     maxD = Math.max(maxD, Math.hypot(c.cursorX - 5.5, c.cursorY - 5.5));
   }
-  check(maxD <= 2.5 + 1e-9, `cursor never leaves its tier-1 radius (max ${maxD.toFixed(3)} of 2.5)`);
+  check(maxD <= 3.0 + 1e-9, `cursor never leaves its tier-1 radius (max ${maxD.toFixed(3)} of 3.0)`);
   check(maxD > 0.5, `the cursor actually wanders (max distance ${maxD.toFixed(3)})`);
 
   check(upgradeTower(s, 5, 5) && chooseBranch(s, 5, 5, 'B'), 'branch the cursor to Wide Search');
-  const expected = 4.5 * 1.35;
+  const expected = 4.75 * 1.35;
   check(Math.abs(cursorRadius(c) - expected) < 1e-9, `Wide Search radius is ${expected.toFixed(3)}`);
   let maxBranched = 0;
   for (let i = 0; i < 2000; i++) {
