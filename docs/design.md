@@ -1007,6 +1007,12 @@ naming table, the 32×32 viewBox rule, the base/turret layer rule and the turret
 documented in [`public/art/README.md`](../public/art/README.md), which is the handover an artist works
 to.
 
+The load is asynchronous and does not block the first frame: the board draws the procedural fallback
+until the SVGs decode, then the completion signal invalidates its cached art and the next frame
+re-reads the texture lookup, so the SVG art appears without a resize. A device-pixel-ratio change
+re-rasterises through the same invalidation path, dropping the cached textures and redrawing crisp at
+the new density.
+
 ---
 
 ## 14. Audio

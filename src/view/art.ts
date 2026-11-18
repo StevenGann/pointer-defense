@@ -141,6 +141,34 @@ export function setArtDpr(dpr: number): void {
   if (next === currentDpr) return;
   currentDpr = next;
   textureCache.clear();
+  scheduleArtInvalidate();
+}
+
+// --- Invalidation notifications -----------------------------------------------------------------
+// Art loads async (preloadArt) and re-rasterises on a DPR change (setArtDpr); both leave the view's
+// cached sprites and the static tile layer stale. Subscribers run once after each such event so the
+// view can re-read the texture lookup. Several signals in the same tick are coalesced into one
+// callback, so a completed preload and a ratio change never cause two redraws.
+
+type ArtInvalidateListener = () => void;
+const artInvalidateListeners = new Set<ArtInvalidateListener>();
+let artInvalidateQueued = false;
+
+/** Subscribe to art invalidation. Returns an unsubscribe function. */
+export function onArtInvalidate(listener: ArtInvalidateListener): () => void {
+  artInvalidateListeners.add(listener);
+  return () => {
+    artInvalidateListeners.delete(listener);
+  };
+}
+
+function scheduleArtInvalidate(): void {
+  if (artInvalidateQueued) return;
+  artInvalidateQueued = true;
+  queueMicrotask(() => {
+    artInvalidateQueued = false;
+    for (const listener of [...artInvalidateListeners]) listener();
+  });
 }
 
 /** True once an asset's SVG has been decoded and is ready to rasterise. */
@@ -223,4 +251,5 @@ export async function preloadArt(): Promise<void> {
       console.warn(`[art] failed to load ${ART_MANIFEST[i].file}: ${reason}`);
     }
   });
+  scheduleArtInvalidate();
 }

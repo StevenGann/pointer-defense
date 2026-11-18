@@ -40,7 +40,7 @@ import { EffectsView } from './view/effects.ts';
 import { sfx, type SoundName } from './audio/sfx.ts';
 import { CameraShake, shakeImpulseFor } from './view/shake.ts';
 import { backingStorePixelSize, cssViewportSize, liveDevicePixelRatio } from './view/screen.ts';
-import { preloadArt, setArtDpr } from './view/art.ts';
+import { onArtInvalidate, preloadArt, setArtDpr } from './view/art.ts';
 import { repairHealingCount, TOWER_STATS, type Branch, type TowerKind } from './core/towers.ts';
 import pkg from '../package.json';
 
@@ -101,7 +101,6 @@ function watchResolution(): void {
   window.visualViewport?.addEventListener('resize', applyResolution);
 }
 watchResolution();
-void preloadArt();
 
 let profile: Profile = loadProfile();
 let state: RunState = createRunState(profile);
@@ -119,6 +118,11 @@ const numbers = new FloatingNumbersView();
 const menuView = new MenuView();
 const dialogView = new DialogView();
 const tooltip = new TooltipView();
+
+// Art loads without blocking the first frame; when it (or a DPR change) invalidates, the board drops
+// its cached procedural art and re-reads the texture lookup on the next frame.
+onArtInvalidate(() => board.invalidateArt());
+void preloadArt();
 
 const root = new Container();
 app.stage.addChild(root);
