@@ -111,6 +111,7 @@ import {
   artDpr,
   resetArt,
   injectArtTexture,
+  onArtInvalidate,
 } from '../src/view/art.ts';
 import { Texture } from 'pixi.js';
 import { readdirSync, existsSync } from 'node:fs';
@@ -163,6 +164,9 @@ function check(cond, msg) {
   console.log(`${cond ? 'ok  ' : 'FAIL'}  ${msg}`);
   if (!cond) failures++;
 }
+
+/** Flush pending microtasks and one macrotask turn, so queued art-invalidation callbacks run. */
+const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 // --- 1. Towers alone clear wave 1 -------------------------------------------------------------
 {
@@ -4144,6 +4148,94 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     'ghost fallback: no sprites are shown without art');
   check(view.overlay.context.instructions.length > 0,
     'ghost fallback: the procedural ghost drew into the overlay');
+  resetArt();
+}
+
+// --- 37i. Art landing after the first paint invalidates the board without a resize -------------
+{
+  resetArt();
+  const layout = computeLayout(1280, 800);
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 3, 6);
+  const view = new BoardView();
+  const hover = { col: 4, row: 6, onBoard: false, x: 0, y: 0 };
+
+  // First frame, before any texture has decoded: procedural fallback everywhere.
+  view.draw(s, layout, 0, hover);
+  check(!view.towerBaseSprites[0].visible, 'late-load: the gun base draws procedurally before art loads');
+  check(view.tileSprites.children.length === 0, 'late-load: no tile sprites before art loads');
+  check(view.tiles.context.instructions.length > 0, 'late-load: the static layer drew procedural tiles');
+
+  // The async preload resolves; the board is told to invalidate, then the next frame draws.
+  const gunBase = new Texture({ width: 4, height: 4 });
+  const tile = new Texture({ width: 8, height: 8 });
+  injectArtTexture('gun-base', gunBase);
+  injectArtTexture('tile', tile);
+  view.invalidateArt();
+
+  // Same geometry: no resize event, so the static-layer key did not change on its own.
+  view.draw(s, layout, 0, hover);
+  check(view.towerBaseSprites[0].visible, 'late-load: the gun base sprite appears after art loads');
+  check(view.towerBaseSprites[0].texture === gunBase, 'late-load: the gun base is the loaded texture');
+  check(view.tileSprites.children.length > 0, 'late-load: the static tile layer rebuilt as sprites');
+  resetArt();
+}
+
+// --- 37j. Invalidation is coalesced: two same-tick signals cause one rebuild -------------------
+{
+  resetArt();
+  await flushMicrotasks(); // drain any invalidate callback queued by an earlier setArtDpr
+  const before = artDpr();
+  let fires = 0;
+  const off = onArtInvalidate(() => fires++);
+  setArtDpr(before + 1); // ratio drift
+  setArtDpr(before + 2); // a second drift in the same tick
+  await flushMicrotasks();
+  check(fires === 1, `art invalidate coalesces same-tick signals into one callback (${fires})`);
+  off();
+  setArtDpr(before);
+  await flushMicrotasks();
+  resetArt();
+}
+
+// --- 37k. A still-missing texture keeps the fallback and does not throw ------------------------
+{
+  resetArt();
+  const layout = computeLayout(1280, 800);
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 3, 6);
+  const view = new BoardView();
+  const hover = { col: 4, row: 6, onBoard: false, x: 0, y: 0 };
+  view.draw(s, layout, 0, hover);
+  view.invalidateArt(); // a completed load that never produced a gun texture (404)
+  view.draw(s, layout, 0, hover);
+  check(!view.towerBaseSprites[0].visible, 'missing texture: the gun keeps the procedural fallback');
+  check(view.towers.context.instructions.length > 0, 'missing texture: the procedural tower was drawn');
+  resetArt();
+}
+
+// --- 37l. A DPR change invalidates the same caches via the subscription ------------------------
+{
+  resetArt();
+  await flushMicrotasks();
+  const before = artDpr();
+  const view = new BoardView();
+  const s = stateOnLevel('open-field');
+  const layout = computeLayout(1280, 800);
+  const off = onArtInvalidate(() => view.invalidateArt());
+
+  view.draw(s, layout, 0, { col: 0, row: 0, onBoard: false, x: 0, y: 0 });
+  check(view.staticKey !== '', 'dpr: the static layer is keyed before the change');
+
+  setArtDpr(before + 1);
+  await flushMicrotasks();
+  check(view.staticKey === '', 'dpr: setArtDpr invalidates the static-layer key');
+
+  off();
+  setArtDpr(before);
+  await flushMicrotasks();
   resetArt();
 }
 

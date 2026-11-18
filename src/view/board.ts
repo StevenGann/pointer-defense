@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, Text } from 'pixi.js';
+import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { artNameForBranch, artNameForEnemy, artNameForTowerBase, artNameForTowerTurret, artSpriteSize, getArtTexture } from './art.ts';
 import { bevel, FONT, FONT_SIZE, PAL, type BoardGeometry, type Layout } from './chrome.ts';
 import {
@@ -360,6 +360,32 @@ export class BoardView {
     } else {
       this.note.visible = false;
     }
+  }
+
+  /**
+   * Invalidate every art-derived cache so the next frame re-reads the texture lookup. Called once
+   * when the async art preload completes, and again on a DPR change. The static tile layer is keyed
+   * (see {@link staticLayerKey}), so without this it keeps the procedural fallback it drew before the
+   * SVG decoded; the pooled tower, tile and enemy sprites are released so a texture that was null at
+   * draw time is re-pointed at the loaded one, and the placement ghost sprites are re-pointed too.
+   */
+  invalidateArt(): void {
+    this.staticKey = '';
+
+    this.towerSprites.removeChildren();
+    this.towerBaseSprites.length = 0;
+    this.towerTurretSprites.length = 0;
+    this.towerMarkSprites.length = 0;
+
+    this.tileSprites.removeChildren();
+
+    this.enemies.removeChildren();
+    this.enemySprites.length = 0;
+
+    this.ghostBase.texture = Texture.EMPTY;
+    this.ghostTurret.texture = Texture.EMPTY;
+    this.ghostBase.visible = false;
+    this.ghostTurret.visible = false;
   }
 
   private drawFirstRunNote(l: Layout): void {
