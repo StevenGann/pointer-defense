@@ -480,7 +480,11 @@ export class AchievementGridView {
     for (let i = 0; i < model.entries.length; i++) {
       const e = model.entries[i];
       const r = al.cells[i].rect;
-      if (r.y + r.h < al.grid.y || r.y > al.grid.y + al.grid.h) continue;
+      // Only a cell that fits inside the viewport is drawn. A partially scrolled cell used to be
+      // painted in full, which overflowed the grid onto the Close button and the status bar; without
+      // a scissor the cheapest correct answer is to drop the partial row and let `maxScroll` carry
+      // the rest.
+      if (r.y < al.grid.y || r.y + r.h > al.grid.y + al.grid.h) continue;
       const spr = this.iconSprites[visible];
       const text = this.cellTexts[visible];
       if (!spr || !text) break;
@@ -501,7 +505,8 @@ export class AchievementGridView {
       text.style.fill = e.earned ? PAL.text : PAL.shadow;
       text.style.fontSize = FONT_SIZE.board;
       text.position.set(r.x + ACH_CELL / 2, r.y + ACH_CELL + 1);
-      text.visible = true;
+      // The name sits under the tile, so it can outlive the tile's own visibility check.
+      text.visible = r.y + ACH_CELL + 12 <= al.grid.y + al.grid.h;
       visible++;
     }
     for (let i = visible; i < this.iconSprites.length; i++) {
