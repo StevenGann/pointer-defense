@@ -259,8 +259,10 @@ repairing). Leave this file white. A grey or coloured face cannot be tinted corr
 ## 9. Animation
 
 Frame-sequence animation is driven by numbered files, not code — the full contract is in
-[`docs/ART-ANIMATION.md`](ART-ANIMATION.md). This section is the taste part: what is worth animating
-and what will hurt you.
+[`docs/ART-ANIMATION.md`](ART-ANIMATION.md). Before you draw frames, check its **support matrix**:
+only enemies, towers, effects and the shutter leaves animate; branch marks, tiles, the wall face and
+the UI glyphs are static. This section is the taste part: what is worth animating and what will hurt
+you.
 
 **Animate the small motions, keep the silhouette.** A good frame only moves a *part*: a leg, an eye, a
 jaw, a spinning ring. The outline the engine sizes the sprite and the hitbox from must stay put, or a

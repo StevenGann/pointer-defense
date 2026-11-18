@@ -199,9 +199,11 @@ An animation is just numbered files plus a JSON — no code change. For an asset
 | `when` | string | `"always"` | `"always"` or `"moving"` (play only while travelling; sit on frame 0 when stopped). |
 
 Frames must number contiguously from 1; a gap is a build error. Two or more frames make an animation;
-a lone `grunt.json` with no numbered frames is ignored with a warning. The full contract — the exact
-error and warning text, the clock, and troubleshooting — is in
-[`docs/ART-ANIMATION.md`](../../docs/ART-ANIMATION.md).
+a lone `grunt.json` with no numbered frames is ignored with a warning. **Not every asset animates** —
+the support matrix in [`docs/ART-ANIMATION.md`](../../docs/ART-ANIMATION.md) lists what is animated and
+what is static (branch marks, tiles, the wall face and the UI glyphs never play frames, and the build
+warns if you add them). The full contract — the exact error and warning text, the two clock models,
+and troubleshooting — is in that same page.
 
 ## Collaborating on art
 

@@ -1,7 +1,7 @@
 import { Texture } from 'pixi.js';
 import { baseEnemyKind, type EnemyKind } from '../core/enemies.ts';
 import { liveDevicePixelRatio } from './screen.ts';
-import type { AnimMeta } from './anim.ts';
+import { currentAnimFrame, lifetimeFrame, secondsToWholeTicks, type AnimMeta } from './anim.ts';
 
 /**
  * The SVG art pipeline: a manifest of every fixed asset, a rasterising loader, and a texture cache.
@@ -298,6 +298,43 @@ export function getArtFrames(name: string, logicalPx: number): readonly Texture[
   });
   frameCache.set(key, frames);
   return frames;
+}
+
+/**
+ * The one animated-texture resolution path: `getArtFrames` + `currentAnimFrame` in a single call.
+ * A still (one frame) returns frame 0 unchanged; an absent asset returns null so the caller falls
+ * back to its procedural drawing. `clockTicks` is the consumer's own clock (e.g. `now - spawnTick`
+ * for an enemy, `now - placedTick` for a tower), `phaseSeed` is the per-entity offset that spreads
+ * a crowd's `randomStart` phases, and `moving` gates the `when: "moving"` pose (enemies only).
+ */
+export function frameTexture(
+  name: string,
+  px: number,
+  clockTicks: number,
+  phaseSeed: number,
+  moving = true,
+): Texture | null {
+  const frames = getArtFrames(name, px);
+  if (frames.length === 0) return null;
+  if (frames.length === 1) return frames[0];
+  const anim = animationOf(name);
+  const index = anim !== null ? currentAnimFrame(anim, frames.length, clockTicks, phaseSeed, moving) : 0;
+  return frames[index] ?? null;
+}
+
+/**
+ * The lifetime clock model for effects: the sequence is spread across the effect's fixed life rather
+ * than played at `fps` (a muzzle flash outlives several fps frames). `age` is ticks since the effect
+ * spawned and `lifetime` its total life. `loop` and `randomStart` are ignored; `hold` is honoured
+ * only as a delay before the first frame.
+ */
+export function effectFrameTexture(name: string, px: number, age: number, lifetime: number): Texture | null {
+  const frames = getArtFrames(name, px);
+  if (frames.length === 0) return null;
+  if (frames.length === 1) return frames[0];
+  const anim = animationOf(name);
+  const index = anim !== null ? lifetimeFrame(frames.length, age, lifetime, secondsToWholeTicks(anim.hold)) : 0;
+  return frames[index] ?? null;
 }
 
 /** Test-only: force `getArtTexture(name)` to resolve to `texture` (frame 0) without the loader. */

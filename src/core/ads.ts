@@ -250,7 +250,9 @@ function placeFreeGun(s: RunState): void {
   if (candidates.length === 0) return;
   const pick = candidates[Math.floor(nextFloat(s) * candidates.length) % candidates.length];
   s.blocked.add(pick.row * COLS + pick.col);
-  s.towers.push(createTower(s.nextId++, 'gun', pick.col, pick.row));
+  const tower = createTower(s.nextId++, 'gun', pick.col, pick.row);
+  tower.placedTick = s.clock;
+  s.towers.push(tower);
   s.field = buildField(s.grid, s.blocked, exit);
   recomputeAuras(s.towers, s.clock);
 }

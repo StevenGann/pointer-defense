@@ -1,6 +1,6 @@
 import { Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
-import { animationOf, artNameForBranch, artNameForEnemy, artNameForTowerBase, artNameForTowerTurret, artSpriteSize, getArtFrames, getArtTexture } from './art.ts';
-import { currentAnimFrame } from './anim.ts';
+import { artNameForBranch, artNameForEnemy, artNameForTowerBase, artNameForTowerTurret, artSpriteSize, frameTexture, getArtFrames, getArtTexture } from './art.ts';
+import { lifetimeFrame } from './anim.ts';
 import { bevel, FONT, FONT_SIZE, PAL, type BoardGeometry, type Layout } from './chrome.ts';
 import {
   enemyAt,
@@ -23,7 +23,7 @@ import {
 } from '../core/enemies.ts';
 import { cursorRadius, effectiveStats, isEmpDisabled, isFullyUpgraded, isGateLocked, isOffline, isRepairing, repairProgress, repairRadius, TOWER_STATS, type Branch, type Tower, type TowerKind } from '../core/towers.ts';
 import { tileAt, COLS, ROWS, type Grid, type Tile } from '../core/grid.ts';
-import { toggleOpenAt, toggleProgress, type LevelToggle } from '../core/levels.ts';
+import { toggleOpenAt, togglePhase, toggleProgress, type LevelToggle } from '../core/levels.ts';
 import { dashRects, offsetSegment, routeOffset, type RouteSegment } from './route.ts';
 import {
   hatchSegments,
@@ -543,6 +543,16 @@ function drawTile(g: Graphics, kind: 'buildable' | 'blocked', px: number, py: nu
 const SHUTTER_WARM = 0xff6a00;
 const SHUTTER_EDGE = 0x707070;
 
+/** Ticks (0.3 s) a shutter plays its transition sequence once before settling on the end frame. */
+export const TRANSITION_TICKS = 18;
+
+/** The shutter's frame: a one-shot sequence played across `TRANSITION_TICKS` since the last flip. */
+function shutterTexture(name: string, cell: number, transitionAge: number): Texture | null {
+  const frames = getArtFrames(name, cell);
+  if (frames.length === 0) return null;
+  return frames[lifetimeFrame(frames.length, transitionAge, TRANSITION_TICKS)] ?? null;
+}
+
 /** Draw one map toggle: a solid shutter when closed, a faint outline plus countdown bar when open. */
 function drawShutter(
   g: Graphics,
@@ -557,12 +567,15 @@ function drawShutter(
   const open = toggleOpenAt(tg, clock);
   const cycles = tg.openTicks > 0 && tg.openTicks < tg.periodTicks;
   const progress = cycles ? toggleProgress(tg, clock) : 0;
+  // Ticks since the toggle last flipped state. A still or never-cycling shutter stays settled.
+  const phase = togglePhase(tg, clock);
+  const transitionAge = cycles ? (open ? phase : phase - tg.openTicks) : TRANSITION_TICKS;
 
   if (open) {
     // The shutter edge stays as a faint outline so the player can read where it will close, warming
     // as the close approaches. The outline asset is white and tinted to the live colour.
     const color = cycles ? lerpColor(SHUTTER_EDGE, SHUTTER_WARM, progress) : SHUTTER_EDGE;
-    const tex = getArtTexture('shutter-open', cell);
+    const tex = shutterTexture('shutter-open', cell, transitionAge);
     if (tex !== null) {
       tileSprite.texture = tex;
       tileSprite.width = cell;
@@ -577,7 +590,7 @@ function drawShutter(
       g.rect(px + 0.5, py + 0.5, cell - 1, cell - 1).stroke({ width: 1, color, alpha: 0.6 });
     }
   } else {
-    const tex = getArtTexture('shutter-closed', cell);
+    const tex = shutterTexture('shutter-closed', cell, transitionAge);
     if (tex !== null) {
       tileSprite.texture = tex;
       tileSprite.width = cell;
@@ -672,7 +685,7 @@ function drawTower(
       drawBar(g, cx, cy, cell, t.hp / t.maxHp, healthColor(t.hp / t.maxHp));
     }
   } else {
-    drawTowerBody(baseSprite, turretSprite, markSprite, g, t, cx, cy, cell);
+    drawTowerBody(baseSprite, turretSprite, markSprite, g, t, cx, cy, cell, clock);
     if (isRepairing(t, clock)) {
       drawBar(g, cx, cy, cell, repairProgress(t, clock), REPAIR_COLOR);
     } else if (isEmpDisabled(t, clock)) {
@@ -705,8 +718,12 @@ function drawTowerBody(
   cx: number,
   cy: number,
   cell: number,
+  clock: number,
 ): void {
-  const baseTex = getArtTexture(artNameForTowerBase(t.kind), cell);
+  // Base and turret share one clock and seed so a two-part animation stays in step; the clock counts
+  // from placement so a `hold` waits from the moment the tower was placed.
+  const animTicks = clock - t.placedTick;
+  const baseTex = frameTexture(artNameForTowerBase(t.kind), cell, animTicks, t.id);
   if (baseTex !== null) {
     baseSprite.texture = baseTex;
     baseSprite.visible = true;
@@ -721,7 +738,7 @@ function drawTowerBody(
   }
 
   const turretName = artNameForTowerTurret(t.kind);
-  const turretTex = turretName !== null ? getArtTexture(turretName, cell) : null;
+  const turretTex = turretName !== null ? frameTexture(turretName, cell, animTicks, t.id) : null;
   if (turretTex !== null) {
     turretSprite.texture = turretTex;
     turretSprite.visible = true;
@@ -1441,12 +1458,10 @@ function drawEnemy(
   // variant reuses its base type's asset, drawn at the base factor against its scaled radius.
   const name = artNameForEnemy(e.kind);
   const bodyPx = artSpriteSize(ENEMY_ART_BODY[e.kind] * r);
-  const frames = name !== null ? getArtFrames(name, bodyPx) : [];
-  if (frames.length > 0) {
-    const anim = name !== null ? animationOf(name) : null;
-    const moving = e.attackTowerId === null && now >= e.stunUntilTick;
-    const frameIndex = anim !== null ? currentAnimFrame(anim, frames.length, now - e.spawnTick, e.id, moving) : 0;
-    sprite.texture = frames[frameIndex];
+  const moving = e.attackTowerId === null && now >= e.stunUntilTick;
+  const tex = name !== null ? frameTexture(name, bodyPx, now - e.spawnTick, e.id, moving) : null;
+  if (tex !== null) {
+    sprite.texture = tex;
     sprite.visible = true;
     sprite.position.set(ex, ey);
     sprite.width = bodyPx;

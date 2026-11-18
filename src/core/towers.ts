@@ -522,6 +522,8 @@ export interface Tower {
   readonly kind: TowerKind;
   readonly col: number;
   readonly row: number;
+  /** Run-clock tick this tower was placed; the view's animation clock counts from here (not spawn). */
+  placedTick: number;
   tier: Tier;
   branch: Branch | null;
   /** Total salvage spent on this tower, including the purchase price. */
@@ -588,6 +590,7 @@ export function createTower(id: number, kind: TowerKind, col: number, row: numbe
     kind,
     col,
     row,
+    placedTick: 0,
     tier: 1,
     branch: null,
     spent: TOWER_STATS[kind].cost,

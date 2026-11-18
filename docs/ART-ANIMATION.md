@@ -11,6 +11,57 @@ that.
 
 ---
 
+## The support matrix — what animates, and what stays static
+
+Not every asset can animate. The table is the whole story: if a row says *static*, numbered frames
+are ignored, and the build warns you (see §7), so a dropped `x.1.svg` is never a silent no-op.
+
+| Asset | Animated? | Clock | Phase seed | Notes |
+|---|---|---|---|---|
+| Enemy body | **yes** — fps | `now − spawnTick` | enemy id | `when: "moving"` works here (see §6) |
+| Tower base | **yes** — fps | `now − placedTick` | tower id | counts from placement, so `hold` waits from the moment it is built |
+| Tower turret | **yes** — fps | `now − placedTick` | tower id | same clock as the base so a two-part animation stays in step |
+| Muzzle flash | **yes** — lifetime | effect age | — | frames map across the flash's whole life |
+| Hit spark | **yes** — lifetime | effect age | — | same |
+| Death ring | **yes** — lifetime | effect age | — | same |
+| Shield arc | **yes** — lifetime | effect age | — | a one- or two-frame pulse is enough |
+| Shutter (toggle wall) | **yes** — lifetime | ticks since the flip | — | plays once across 18 ticks, then holds (see §4) |
+| Branch marks | **static** | — | — | a permanent badge, not motion |
+| Board tiles | **static** | — | — | chrome that already changes with state |
+| Wall face | **static** | — | — | tinted/bevelled per state by code |
+| UI glyphs (cursor arrow, wrench, window glyphs, check, menu arrows) | **static** | — | — | movement there is noise |
+| Placement ghost | **static** | — | — | a preview of a still asset |
+
+The two shutter leaves (`ui/shutter-open`, `ui/shutter-closed`) are the *only* UI assets that animate;
+everything else under `ui/` is static. The placement ghost reuses the tower's base/turret art at 50 %
+alpha and is always drawn still, so animating a tower never doubles the ghost's sprite pool.
+
+---
+
+## The two clock models
+
+An animation advances on one of two clocks. Both are **simulation ticks**, never wall-clock time, so
+pausing freezes them and a ×2/×3 speed plays them faster with no view involvement.
+
+**1. fps** (enemies, towers). A frame is chosen from `ticks × fps`, with `loop`, `hold`, `holdAfter`,
+`randomStart` and `when` all honoured exactly as §2 describes. This is the walk-cycle / spin model.
+
+**2. lifetime** (effects and shutters). An effect already has a fixed life — a muzzle flash lives a
+few ticks, a death ring a few more — so an 8 fps sequence would need 7.5 ticks *per frame* and would
+vanish before it moved. Instead the sequence is spread across the effect's whole life:
+
+```
+frame = min(frames − 1, floor(age / lifetime × frames))
+```
+
+`fps`, `loop` and `randomStart` are ignored; `hold` is respected only as a delay before the first
+frame. A four-frame explosion lands on its last frame exactly as the effect expires, and it never
+wraps. Shutters use the same model with a fixed `lifetime` of 18 ticks: when a toggle flips, the
+target leaf plays its frames once across that beat, then holds the matching end frame. A map with no
+shutter frames behaves exactly as today — the cut stays.
+
+---
+
 ## 1. The filename convention
 
 An asset named `grunt` animates by adding **numbered siblings** next to its existing still:
@@ -100,27 +151,31 @@ Use this for an enemy that walks. `when: "moving"` keeps it on the base pose whi
 
 ```json
 {
-  "fps": 20,
+  "fps": 8,
   "loop": "once",
   "randomStart": false,
   "when": "always"
 }
 ```
 
-Use this for something that happens once — a muzzle pop, a death burst, a beacon pulse. `loop: "once"`
-plays to the last frame and stays there; `fps` is high because an effect is short. If you want it to
-play once and snap back to the base pose, use `"hold0"` instead of `"once"`.
+Use this for something that happens once — a muzzle pop, a death burst, a beacon pulse. Effects are
+**lifetime-driven** (see the two clock models): their frames are spread across the effect's whole life,
+so `fps` and `loop` are ignored and you do not need to set them; `hold` is honoured only as a delay
+before the first frame. The JSON above is still accepted, but for an effect the engine ignores
+everything except `hold`.
 
 ---
 
 ## 4. How the clock works
 
 An animation's frame is chosen from **simulation ticks, not wall-clock time**. The game advances in
-fixed 1/60 s ticks regardless of the monitor's refresh rate, and the animator is a pure function of
-*(ticks since the entity spawned, fps, loop mode, holds, and a per-entity offset)*. That means pausing
-the game freezes the walk cycle exactly, and running at ×2 or ×3 speed plays it faster, without the
-view needing to know about either. A still asset is a one-frame sequence, so it goes through the same
-path and costs nothing extra.
+fixed 1/60 s ticks regardless of the monitor's refresh rate, so pausing the game freezes the walk
+cycle exactly and running at ×2 or ×3 speed plays it faster, without the view knowing about either.
+
+There are two clock models — **fps** and **lifetime** — explained in the section above; the support
+matrix tells you which asset uses which. This section describes the fps model: the animator is a pure
+function of *(ticks since the entity spawned, fps, loop mode, holds, and a per-entity offset)*. A still
+asset is a one-frame sequence, so it goes through the same path and costs nothing extra.
 
 ---
 
@@ -136,10 +191,14 @@ offset, and it never touches the simulation's own RNG stream, so a run's numbers
 
 ## 6. `when: "moving"`
 
-Set `"when": "moving"` on any asset that should only animate while the thing is travelling. Today this
-applies to **enemies**: a Breacher chewing through a wall sits on frame 0 rather than looking like it
-is still walking, and a stunned enemy does the same. Anything else (towers, effects) plays regardless
-— the clock is available everywhere, but the "moving" signal is only wired for enemies.
+Set `"when": "moving"` on any asset that should only animate while the thing is travelling. This
+applies to **enemies only**: a Breacher chewing through a wall sits on frame 0 rather than looking
+like it is still walking, and a stunned enemy does the same.
+
+Towers and effects animate while alive, so the "moving" idea has no meaning for them — a tower is
+placed once and never moves, and an effect only exists for its short life. The `when` field is kept in
+the metadata for every asset, but the engine only reads it for enemies; everywhere else it is ignored
+(and the support matrix says so).
 
 ---
 
@@ -162,7 +221,9 @@ What it validates:
 - frames number **contiguously from 1** (a gap is an error),
 - a numbered frame always has its base `*.svg` (frame 0) present,
 - the `.json` parses and every key is a legal value from the table in §2,
-- a still's `.json` is ignored (warned), a `.0` frame is warned and dropped.
+- a still's `.json` is ignored (warned), a `.0` frame is warned and dropped,
+- a numbered frame on a **static** asset (see the support matrix) is ignored and warned — it would
+  otherwise be a silent no-op, which is exactly the bug this contract exists to prevent.
 
 ### Exact output
 
@@ -190,12 +251,16 @@ Warnings (printed, then the build continues):
 [art] warning: enemies/grunt.0.svg: ".0" frames are not used — rename to enemies/grunt.svg
 [art] warning: enemies/grunt.json: unknown key "note" ignored
 [art] warning: enemies/grunt.json: animation metadata ignored (enemies/grunt.svg has no numbered frames)
+[art] warning: ui/glyph-close.1.svg will never play: ui glyphs are static
+[art] warning: branches/gun-marksman.1.svg will never play: branch marks are static
+[art] warning: towers/wall-base.1.svg will never play: the wall face is static
+[art] warning: board/tile.1.svg will never play: board tiles are static
 ```
 
 Success:
 
 ```
-[art] wrote manifest.json (41 assets)
+[art] wrote manifest.json (61 assets)
 ```
 
 ---

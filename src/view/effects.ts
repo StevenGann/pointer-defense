@@ -4,7 +4,7 @@ import { ENEMY_STATS, isBossVariant, type EnemyKind } from '../core/enemies.ts';
 import type { Tower, TowerKind } from '../core/towers.ts';
 import type { RunState } from '../core/state.ts';
 import { ENEMY_COLOR, SHIELD_COLOR, TOWER_COLOR } from './board.ts';
-import { getArtTexture } from './art.ts';
+import { effectFrameTexture } from './art.ts';
 
 /**
  * Short-lived combat effects, timed in fixed ticks so a 30 fps and a 60 fps frame show the same
@@ -248,7 +248,7 @@ export class EffectsView {
       const ox = p.x + Math.cos(m.angle) * cell * 0.25;
       const oy = p.y + Math.sin(m.angle) * cell * 0.25;
       const name = MUZZLE_ASSET[m.kind];
-      const tex = name !== undefined ? getArtTexture(name, cell) : null;
+      const tex = name !== undefined ? effectFrameTexture(name, cell, age, MUZZLE_TICKS) : null;
       const spr = this.pooledSprite(this.muzzleSprites, this.muzzleLayer, i);
       if (tex !== null) {
         spr.texture = tex;
@@ -271,7 +271,7 @@ export class EffectsView {
       const age = now - s.born;
       const a = 1 - age / HIT_TICKS;
       const p = worldToPixel(layout, s.x, s.y);
-      const tex = getArtTexture('spark-hit', cell);
+      const tex = effectFrameTexture('spark-hit', cell, age, HIT_TICKS);
       const spr = this.pooledSprite(this.sparkSprites, this.sparkLayer, i);
       if (tex !== null) {
         spr.texture = tex;
@@ -300,7 +300,7 @@ export class EffectsView {
       const age = now - s.born;
       const a = 1 - age / SHIELD_ARC_TICKS;
       const p = worldToPixel(layout, s.x, s.y);
-      const tex = getArtTexture('shield-arc', cell);
+      const tex = effectFrameTexture('shield-arc', cell, age, SHIELD_ARC_TICKS);
       const spr = this.pooledSprite(this.shieldSprites, this.shieldLayer, i);
       if (tex !== null) {
         spr.texture = tex;
@@ -330,7 +330,7 @@ export class EffectsView {
       const color = ENEMY_COLOR[d.kind];
       const r0 = cell * ENEMY_STATS[d.kind].radius;
       const a = 1 - t;
-      const tex = getArtTexture('death-ring', cell);
+      const tex = effectFrameTexture('death-ring', cell, age, DEATH_TICKS);
       const spr = this.pooledSprite(this.deathSprites, this.deathLayer, i);
       if (tex !== null) {
         spr.texture = tex;

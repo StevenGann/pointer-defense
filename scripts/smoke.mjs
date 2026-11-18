@@ -106,7 +106,7 @@ import {
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
 import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName } from '../src/view/tooltipText.ts';
-import { BoardView, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR } from '../src/view/board.ts';
+import { BoardView, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE } from '../src/view/chrome.ts';
 import { computeHud, computeRightPanel, hudControlAt, textWidth } from '../src/view/hud.ts';
@@ -137,6 +137,8 @@ import {
   getArtTexture,
   getArtFrames,
   animationOf,
+  frameTexture,
+  effectFrameTexture,
   injectArtFrames,
   injectArtAnim,
   seedFrameCache,
@@ -4973,6 +4975,31 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     check(e.assets.find((x) => x.name === 'enemies/still').frames === 1, 'manifest: a still is one frame');
     check(e.warnings.some((m) => m.includes('enemies/still.json') && m.includes('ignored')),
       'manifest: a still\'s json is ignored with a warning');
+
+    // 39f. A numbered frame on a static category is ignored and warned: it will never play.
+    write('ui/glyph-close.svg');
+    write('ui/glyph-close.1.svg');
+    write('ui/glyph-close.2.svg');
+    write('branches/gun-marksman.svg');
+    write('branches/gun-marksman.1.svg');
+    write('towers/wall-base.svg');
+    write('towers/wall-base.1.svg');
+    const f = scanArt(tmp);
+    check(f.warnings.some((m) => m.includes('ui/glyph-close.1.svg') && m.includes('will never play') && m.includes('ui glyphs are static')),
+      'manifest: a numbered frame on a ui glyph warns it will never play');
+    check(f.warnings.some((m) => m.includes('branches/gun-marksman.1.svg') && m.includes('branch marks are static')),
+      'manifest: a numbered frame on a branch mark warns it is static');
+    check(f.warnings.some((m) => m.includes('towers/wall-base.1.svg') && m.includes('the wall face is static')),
+      'manifest: a numbered frame on the wall face warns it is static');
+    check(f.assets.find((x) => x.name === 'ui/glyph-close').frames === 1, 'manifest: a static asset stays one frame');
+
+    // 39g. The two shutter leaves are the ui assets that may animate (their transition is lifetime-driven).
+    write('ui/shutter-open.svg');
+    write('ui/shutter-open.1.svg');
+    const g = scanArt(tmp);
+    check(!g.warnings.some((m) => m.includes('shutter-open') && m.includes('will never play')),
+      'manifest: a shutter leaf is not warned as static');
+    check(g.assets.find((x) => x.name === 'ui/shutter-open').frames === 2, 'manifest: a shutter transition is a two-frame asset');
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -5114,6 +5141,144 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   setArtDpr(before + 1);
   check(cachedFrameCount() === 0, 'dpr: setArtDpr drops every cached frame array');
   setArtDpr(before);
+  resetArt();
+}
+
+{
+  // 41d. frameTexture is the single resolution path: still -> frame 0, absent -> null, animated -> fps.
+  resetArt();
+  check(frameTexture('no-such-asset', 28, 0, 1) === null, 'frameTexture: an absent asset resolves to null');
+  const still = new Texture({ width: 4, height: 4 });
+  injectArtTexture('grunt', still);
+  check(frameTexture('grunt', 28, 999, 1) === still, 'frameTexture: a still is frame 0 on every clock');
+  const f0 = new Texture({ width: 5, height: 5 });
+  const f1 = new Texture({ width: 6, height: 6 });
+  injectArtFrames('grunt', [f0, f1]);
+  injectArtAnim('grunt', { fps: 10, loop: 'loop', hold: 0, holdAfter: 0, randomStart: false, when: 'always' });
+  check(frameTexture('grunt', 28, 6, 1) === f1, 'frameTexture: an animated asset picks its frame from the fps clock');
+  resetArt();
+}
+
+// --- 41e. A tower animates on the sim clock and is out of phase with a later placement --------
+{
+  resetArt();
+  const base = new Texture({ width: 4, height: 4 });
+  const t0 = new Texture({ width: 5, height: 5 });
+  const t1 = new Texture({ width: 6, height: 6 });
+  injectArtTexture('gun-base', base);
+  injectArtFrames('gun-turret', [t0, t1]);
+  injectArtAnim('gun-turret', { fps: 10, loop: 'loop', hold: 0, holdAfter: 0, randomStart: false, when: 'always' });
+
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  check(placeTower(s, 'gun', 3, 6), 'tower anim: place the first gun at clock 0');
+  const layout = computeLayout(1280, 800);
+  const view = new BoardView();
+  const hover = { col: 0, row: 0, onBoard: false, x: 0, y: 0 };
+
+  // fps 10 = one frame every 6 ticks; a two-frame turret cycles 0,1,0 on the sim clock.
+  s.clock = 0;
+  view.draw(s, layout, 0, hover);
+  check(view.towerTurretSprites[0].texture === t0, 'tower anim: clock 0 selects frame 0');
+  s.clock = 6;
+  view.draw(s, layout, 0, hover);
+  check(view.towerTurretSprites[0].texture === t1, 'tower anim: clock 6 selects frame 1');
+  s.clock = 12;
+  view.draw(s, layout, 0, hover);
+  check(view.towerTurretSprites[0].texture === t0, 'tower anim: clock 12 wraps back to frame 0');
+
+  // A second tower placed 30 ticks later is out of phase with the first.
+  s.clock = 30;
+  check(placeTower(s, 'gun', 5, 6), 'tower anim: place the second gun at clock 30');
+  s.clock = 36;
+  view.draw(s, layout, 0, hover);
+  check(view.towerTurretSprites[0].texture === t0 && view.towerTurretSprites[1].texture === t1,
+    'tower anim: towers placed 30 ticks apart are out of phase');
+  resetArt();
+}
+
+{
+  // 41f. A still tower (frames: 1) draws frame 0 on every clock tick, byte-identical to today.
+  resetArt();
+  const base = new Texture({ width: 4, height: 4 });
+  const turret = new Texture({ width: 5, height: 5 });
+  injectArtTexture('gun-base', base);
+  injectArtTexture('gun-turret', turret);
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 3, 6);
+  const layout = computeLayout(1280, 800);
+  const view = new BoardView();
+  const hover = { col: 0, row: 0, onBoard: false, x: 0, y: 0 };
+  for (const c of [0, 5, 60, 999]) {
+    s.clock = c;
+    view.draw(s, layout, 0, hover);
+    check(view.towerBaseSprites[0].texture === base && view.towerTurretSprites[0].texture === turret,
+      `tower still: frame 0 on every clock (${c})`);
+  }
+  resetArt();
+}
+
+// --- 41g. Effects are lifetime-driven, not fps-driven ------------------------------------------
+{
+  resetArt();
+  const e0 = new Texture({ width: 4, height: 4 });
+  const e1 = new Texture({ width: 5, height: 5 });
+  const e2 = new Texture({ width: 6, height: 6 });
+  const e3 = new Texture({ width: 7, height: 7 });
+  injectArtFrames('death-ring', [e0, e1, e2, e3]);
+  injectArtAnim('death-ring', { fps: 8, loop: 'loop', hold: 0, holdAfter: 0, randomStart: false, when: 'always' });
+
+  check(effectFrameTexture('death-ring', 28, 0, 6) === e0, 'effect: age 0 shows frame 0');
+  check(effectFrameTexture('death-ring', 28, 5, 6) === e3,
+    'effect: a four-frame effect lands on its last frame as it expires');
+  check(effectFrameTexture('death-ring', 28, 6, 6) === e3, 'effect: past its life it never wraps');
+  check(effectFrameTexture('death-ring', 28, 99, 6) === e3, 'effect: stays on the last frame forever');
+
+  // hold (0.1 s = 6 ticks) delays the first frame; the sequence then maps across the remaining life.
+  injectArtAnim('death-ring', { fps: 8, loop: 'loop', hold: 0.1, holdAfter: 0, randomStart: false, when: 'always' });
+  check(effectFrameTexture('death-ring', 28, 5, 20) === e0, 'effect: hold sits on frame 0 until the delay elapses');
+  check(effectFrameTexture('death-ring', 28, 11, 20) === e1, 'effect: after hold the sequence maps across the remaining life');
+  resetArt();
+}
+
+// --- 41h. A shutter transition plays once and settles on the correct end frame -----------------
+{
+  resetArt();
+  const o0 = new Texture({ width: 4, height: 4 });
+  const o1 = new Texture({ width: 5, height: 5 });
+  const c0 = new Texture({ width: 6, height: 6 });
+  const c1 = new Texture({ width: 7, height: 7 });
+  injectArtFrames('shutter-open', [o0, o1]);
+  injectArtFrames('shutter-closed', [c0, c1]);
+
+  check(TRANSITION_TICKS === 18, 'shutter: the transition is 18 ticks (0.3 s)');
+
+  const s = stateOnLevel('turnstile');
+  const layout = computeLayout(1280, 800);
+  const view = new BoardView();
+  const hover = { col: 0, row: 0, onBoard: false, x: 0, y: 0 };
+
+  // Toggle 0 (10,6) is period 900, open 420, phase 0: it starts open at clock 0 and closes at 420.
+  s.clock = 0;
+  view.draw(s, layout, 0, hover);
+  check(view.shutterSpritePool[0].texture === o0, 'shutter: the open transition starts on frame 0');
+  s.clock = 9;
+  view.draw(s, layout, 0, hover);
+  check(view.shutterSpritePool[0].texture === o1, 'shutter: the open transition reaches its end frame');
+  s.clock = 18;
+  view.draw(s, layout, 0, hover);
+  check(view.shutterSpritePool[0].texture === o1, 'shutter: the open shutter settles on the end frame');
+
+  s.clock = 420;
+  view.draw(s, layout, 0, hover);
+  check(view.shutterSpritePool[0].texture === c0, 'shutter: the close transition starts on frame 0');
+  s.clock = 429;
+  view.draw(s, layout, 0, hover);
+  check(view.shutterSpritePool[0].texture === c1, 'shutter: the close transition reaches its end frame');
+  s.clock = 438;
+  view.draw(s, layout, 0, hover);
+  check(view.shutterSpritePool[0].texture === c1, 'shutter: the closed shutter settles on the end frame');
   resetArt();
 }
 

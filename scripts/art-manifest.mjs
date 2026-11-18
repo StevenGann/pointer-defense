@@ -38,6 +38,22 @@ function baseName(rel) {
   return rel.replace(/\.svg$/, '');
 }
 
+/**
+ * The reason a category is drawn static (never frame-animated), or null when the asset may animate.
+ * Branch marks are a permanent badge, board tiles and the wall face are chrome that already changes
+ * with state, and every UI glyph except the two shutter leaves is an affordance where motion is noise.
+ */
+function staticReason(base) {
+  if (base.startsWith('branches/')) return 'branch marks are static';
+  if (base.startsWith('board/')) return 'board tiles are static';
+  if (base === 'towers/wall-base') return 'the wall face is static';
+  if (base.startsWith('ui/')) {
+    if (base === 'ui/shutter-open' || base === 'ui/shutter-closed') return null;
+    return 'ui glyphs are static';
+  }
+  return null;
+}
+
 /** Recursively list every file under `dir`, as slash-separated paths relative to `dir`. */
 function walk(dir) {
   const out = [];
@@ -172,6 +188,17 @@ export function scanArt(artDir = ART_DIR) {
     // A numbered frame with no base file is a dangling sibling, not an animation.
     if (!frames.has(0)) {
       errors.push(`${base}: numbered frames present but ${base}.svg (frame 0) is missing`);
+      continue;
+    }
+
+    // A numbered frame on a static category is ignored and warned: the consumer never reads frames,
+    // so a silent no-op would read as the game being broken (see docs/ART-ANIMATION.md).
+    const reason = staticReason(base);
+    if (reason !== null && max >= 1) {
+      for (let i = 1; i <= max; i++) {
+        warnings.push(`${base}.${i}.svg will never play: ${reason}`);
+      }
+      assets.push({ name: base, frames: 1 });
       continue;
     }
 

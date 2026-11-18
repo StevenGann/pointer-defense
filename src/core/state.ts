@@ -491,6 +491,7 @@ export function placeTower(s: RunState, kind: TowerKind, col: number, row: numbe
   spend(s.economy, TOWER_STATS[kind].cost);
   s.blocked.add(row * s.grid.cols + col);
   const tower = createTower(s.nextId++, kind, col, row);
+  tower.placedTick = s.clock;
   if (kind === 'cursor') {
     // The cursor's wander is a deterministic path seeded from the run's PRNG stream and the tower
     // id: the same seed reproduces the same wander, and a different seed drifts differently.

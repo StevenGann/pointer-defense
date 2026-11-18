@@ -54,8 +54,24 @@ export function entityOffset(entityId: number): number {
 }
 
 /** Whole ticks for a duration in seconds (0 stays 0 — a hold of zero is not a one-tick pause). */
-function secondsToWholeTicks(seconds: number): number {
+export function secondsToWholeTicks(seconds: number): number {
   return Math.round(seconds * TICK_HZ);
+}
+
+/**
+ * The "lifetime" clock model: a sequence spread across a fixed life, not played at `fps`. Used by
+ * effects (a muzzle flash, a death ring) and shutter transitions, whose whole life is shorter than a
+ * couple of `fps` frames would be. `frame = min(frames-1, floor((age - holdTicks) / lifetime * frames))`.
+ * `holdTicks` delays the start (frame 0 until it elapses); there is no loop and no wrap — a four-frame
+ * effect lands on its last frame exactly as it expires. `randomStart` and `when` do not apply here.
+ */
+export function lifetimeFrame(frameCount: number, age: number, lifetime: number, holdTicks = 0): number {
+  const n = Math.max(1, Math.floor(frameCount));
+  if (n <= 1) return 0;
+  const elapsed = age - holdTicks;
+  if (elapsed < 0) return 0;
+  const k = Math.floor((elapsed / Math.max(1, lifetime)) * n);
+  return Math.min(k, n - 1);
 }
 
 /**
