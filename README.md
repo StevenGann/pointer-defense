@@ -35,6 +35,11 @@ into every future run.
 | `P` | Pause / resume |
 | `Space` | Cycle the simulation speed |
 
+Towers unlock as the run progresses, so the palette starts small. Gun and Wall are available from the
+start; Cannon unlocks at wave 4, Frost at 6, Beacon at 8, Laser at 11, Taser at 14, Repair at 18 and
+Cursor at 24. A locked tower stays visible in the palette, greyed out, and its tooltip (or a keypress
+on its number) tells you which wave it arrives in.
+
 ## Development
 
 Requires Node 22.18 or later (TypeScript types are stripped natively, no build step for the scripts).

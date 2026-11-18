@@ -12,6 +12,8 @@ import {
   gateLockRemainingSeconds,
   isGateLocked,
   isToggleGate,
+  isTowerUnlocked,
+  towerUnlockWave,
   TOWER_KINDS,
   TOWER_STATS,
   type TowerKind,
@@ -239,10 +241,15 @@ export class MouseController {
       this.dispatch(hud, s);
       return;
     }
-    if (noBuildActive(s)) {
-      const control = hudControlAt(l, s, x, y);
-      if (control && !control.enabled && NO_BUILD_HUD_ACTIONS.has(control.action)) {
+    const control = hudControlAt(l, s, x, y);
+    if (control && !control.enabled) {
+      if (noBuildActive(s) && NO_BUILD_HUD_ACTIONS.has(control.action)) {
         this.ctx.notice(NO_BUILD_MESSAGE);
+        return;
+      }
+      const kind = control.action as TowerKind;
+      if (TOWER_KINDS.includes(kind) && !isTowerUnlocked(kind, s.wave)) {
+        this.ctx.notice(`${TOWER_STATS[kind].name} unlocks at wave ${towerUnlockWave(kind)}`);
         return;
       }
     }
@@ -416,7 +423,12 @@ export class MouseController {
     }
     const n = Number(e.key);
     if (Number.isInteger(n) && n >= 1 && n <= TOWER_KINDS.length) {
-      selectTower(s, TOWER_KINDS[n - 1]);
+      const kind = TOWER_KINDS[n - 1];
+      if (!isTowerUnlocked(kind, s.wave)) {
+        this.ctx.notice(`${TOWER_STATS[kind].name} unlocks at wave ${towerUnlockWave(kind)}`);
+        return;
+      }
+      selectTower(s, kind);
     }
   };
 

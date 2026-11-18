@@ -29,6 +29,7 @@ import {
   closePopupEnemy,
   toggleGate,
   selectPlacedTower,
+  selectTower,
   cancelSelection,
   placementSealsUnderToggles,
   toggleAtTile,
@@ -43,7 +44,7 @@ import {
   NO_BUILD_MESSAGE,
   AUTO_WAVE_DELAY_TICKS,
 } from '../src/core/state.ts';
-import { TOWER_STATS, TOWER_KINDS, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
+import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { buildSchedule, earlyCallBonus, isBossWave, MODIFIER_POOL, popupCountForWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
@@ -86,7 +87,7 @@ import {
   WALL_FACE_DISABLED,
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
-import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName } from '../src/view/tooltipText.ts';
+import { towerTooltipLines, upgradeTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName } from '../src/view/tooltipText.ts';
 import { BoardView, staticLayerKey } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE } from '../src/view/chrome.ts';
@@ -129,6 +130,13 @@ const EXIT = DEFAULT_LEVEL.exits[0];
 function stateOnLevel(id) {
   const s = createRunState();
   while (s.levelId !== id) cycleLevel(s);
+  return s;
+}
+
+/** A fresh state with every tower kind unlocked, for tests that exercise a non-starting kind. */
+function allUnlocked(id = 'open-field') {
+  const s = stateOnLevel(id);
+  s.wave = 24;
   return s;
 }
 
@@ -478,7 +486,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(towerAt(s, 5, 5).maxHp === 180, 'the tooltip after-value matches the wall after buying');
 
   // A non-wall upgrade reads from effectiveStats, so a beacon aura is part of the shown delta.
-  const s2 = createRunState();
+  const s2 = allUnlocked();
   s2.economy.salvage = 10000;
   placeTower(s2, 'gun', 5, 5);
   placeTower(s2, 'beacon', 6, 5);
@@ -490,7 +498,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 // --- 7. Frost slows a grunt ------------------------------------------------------------------
 {
   const travel = (withFrost) => {
-    const s = createRunState();
+    const s = allUnlocked();
     if (withFrost) {
       s.economy.salvage = 10000;
       placeTower(s, 'frost', 3, 5);
@@ -508,7 +516,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 
 // --- 8. Beacon raises a neighbouring gun's damage by 60% -------------------------------------
 {
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 10000;
   placeTower(s, 'gun', 5, 5);
   placeTower(s, 'beacon', 6, 5);
@@ -519,7 +527,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 
 // --- 9. Laser damages more than one enemy in a line ------------------------------------------
 {
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 10000;
   placeTower(s, 'laser', 5, 5);
   s.phase = 'wave';
@@ -548,7 +556,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 {
   // A cannon facing south must swing 180° north before firing. At 90°/s that is ~115 ticks, so it
   // must hold fire early and land a shot inside the expected window.
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 10000;
   placeTower(s, 'cannon', 5, 5);
   const cannon = towerAt(s, 5, 5);
@@ -577,7 +585,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(firedAt >= 100 && firedAt <= 130, `cannon fires within the expected window (tick ${firedAt})`);
 
   // An instant-turn tower (turnRate 0) ignores facing entirely and fires on the first tick.
-  const s2 = createRunState();
+  const s2 = allUnlocked();
   s2.economy.salvage = 10000;
   placeTower(s2, 'taser', 5, 5);
   const taser = towerAt(s2, 5, 5);
@@ -1520,7 +1528,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 
 {
   // 20b. Flak (cannon splash) reaches an unshielded enemy but not an enemy inside the window.
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 10000;
   placeTower(s, 'cannon', 5, 6);
   s.phase = 'wave';
@@ -1895,7 +1903,7 @@ function chokeWalls(gaps) {
 // --- 23. Targeting locks: Taser & Frost (close), Laser (first), Cannon (strong), Gun (player's choice) --
 {
   // A Taser locked to 'close' ignores a stored 'strong' preference and fires at the nearest enemy.
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 10000;
   placeTower(s, 'taser', 5, 5);
   const taser = towerAt(s, 5, 5);
@@ -1913,7 +1921,7 @@ function chokeWalls(gaps) {
 
 {
   // A Frost locked to 'close' slows the nearest enemy, ignoring a stored 'strong' preference.
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 10000;
   placeTower(s, 'frost', 5, 5);
   const frost = towerAt(s, 5, 5);
@@ -1933,7 +1941,7 @@ function chokeWalls(gaps) {
 {
   // Manual Override still beats Frost's lock: while the marked enemy is in range, the frost fires at
   // it even though a closer enemy would normally be chosen.
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 10000;
   placeTower(s, 'frost', 5, 5);
   s.phase = 'wave';
@@ -1952,7 +1960,7 @@ function chokeWalls(gaps) {
 
 {
   // A Laser locked to 'first' fires at the furthest-along enemy, ignoring a stored 'strong' choice.
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 10000;
   placeTower(s, 'laser', 5, 5);
   const laser = towerAt(s, 5, 5);
@@ -1972,7 +1980,7 @@ function chokeWalls(gaps) {
 
 {
   // A Cannon locked to 'strong' swings at the biggest enemy, not the furthest along.
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 10000;
   placeTower(s, 'cannon', 5, 5);
   const cannon = towerAt(s, 5, 5);
@@ -2035,7 +2043,7 @@ function chokeWalls(gaps) {
   check(targetLockReason('laser') !== null && targetLockReason('cannon') !== null, 'laser and cannon tooltips each explain their lock');
   check(targetLockReason('gun') === null, 'the configurable gun has no lock reason');
 
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 10000;
   placeTower(s, 'taser', 5, 5);
   placeTower(s, 'frost', 6, 5);
@@ -2228,7 +2236,7 @@ function chokeWalls(gaps) {
 {
   // 24d. Manual Override: a strong-mode tower fires at the marked weak enemy while on, and returns
   // to strong once the marked enemy dies.
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 10000;
   placeTower(s, 'cannon', 5, 5); // locked to 'strong'
   s.phase = 'wave';
@@ -2301,7 +2309,7 @@ function chokeWalls(gaps) {
 
 /** A cursor tower on open-field with a huge-HP grunt pinned at its home tile (an easy click target). */
 function cursorRig(tier = 1, branch = null) {
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   const c = s.towers.find((t) => t.kind === 'cursor');
@@ -2406,7 +2414,7 @@ function cursorTower(tier, branch) {
 
 {
   // 25e. The cursor never leaves its radius, and the Wide Search branch widens it to 4.5 x1.35.
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   const c = s.towers.find((t) => t.kind === 'cursor');
@@ -2432,7 +2440,7 @@ function cursorTower(tier, branch) {
 {
   // 25f. The cursor's targeting is fixed, not configurable: shielded enemies first (nearest to the
   // home tile), otherwise the nearest enemy to the home tile. Its stored target mode is ignored.
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   const c = s.towers.find((t) => t.kind === 'cursor');
@@ -2450,7 +2458,7 @@ function cursorTower(tier, branch) {
 
 {
   // 25f2. Two shielded enemies in radius: the cursor takes the one nearer its home tile.
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   s.phase = 'wave';
@@ -2466,7 +2474,7 @@ function cursorTower(tier, branch) {
 
 {
   // 25f3. No shielded enemy in radius: the cursor takes the nearest enemy to its home tile.
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   s.phase = 'wave';
@@ -2481,7 +2489,7 @@ function cursorTower(tier, branch) {
 
 {
   // 25f4. A shielded enemy hidden under a Pop Up is not a candidate, even though it has shield.
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   s.phase = 'wave';
@@ -2497,7 +2505,7 @@ function cursorTower(tier, branch) {
 {
   // 25f5. Manual Override still wins over the fixed rule: while the marked enemy is in range and
   // targetable, the cursor clicks it instead of the shielded enemy the rule would have chosen.
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   s.phase = 'wave';
@@ -2522,7 +2530,7 @@ function cursorTower(tier, branch) {
   check(targetLockReason('cursor') === 'Shielded enemies first, then the nearest; this cannot be changed. The marked enemy overrides it.',
     'cursor tooltip explains the fixed rule and that it cannot be changed');
 
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   const cursor = towerAt(s, 5, 5);
@@ -2534,7 +2542,7 @@ function cursorTower(tier, branch) {
 {
   // 25f7. A shield-absorbed cursor click emits a shieldHit with the absorbed and remaining amounts,
   // and still emits no hp-damage event.
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   s.phase = 'wave';
@@ -2553,7 +2561,7 @@ function cursorTower(tier, branch) {
 
 {
   // 25g. A cursor ignores an enemy hidden under a Pop Up, and never closes the window.
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   s.phase = 'wave';
@@ -2578,7 +2586,7 @@ function cursorTower(tier, branch) {
 {
   // 25i. The wander is deterministic for one seed and differs for another.
   const wander = (seed) => {
-    const s = stateOnLevel('open-field');
+    const s = allUnlocked();
     s.rng = seed;
     s.economy.salvage = 100000;
     placeTower(s, 'cursor', 5, 5);
@@ -3142,7 +3150,7 @@ function cursorTower(tier, branch) {
 {
   // 33c. The repair tower heals only within radius, heals several towers at once, and never heals
   // an enemy.
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   check(placeTower(s, 'repair', 5, 5), 'repair tower placed');
   check(placeTower(s, 'gun', 6, 5), 'in-radius gun placed');
@@ -3167,7 +3175,7 @@ function cursorTower(tier, branch) {
 
 {
   // 33d. A full-health tower is not a target, and the aura reports 0 towers healed.
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'repair', 5, 5);
   placeTower(s, 'gun', 6, 5);
@@ -3178,7 +3186,7 @@ function cursorTower(tier, branch) {
 
 {
   // 33e. A zero-HP (offline) tower is a heal target: the aura revives it, never leaves it dead.
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'repair', 5, 5);
   placeTower(s, 'gun', 6, 5);
@@ -3197,7 +3205,7 @@ function cursorTower(tier, branch) {
   check(r.hp < r.maxHp, 'the repair tower itself can be damaged');
   check(pipUsesBottomCorner(r, 0) === true, 'a damaged repair tower routes its pip for a health bar');
 
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'repair', 5, 5);
   const solo = towerAt(s, 5, 5);
@@ -3230,7 +3238,7 @@ function cursorTower(tier, branch) {
     paletteTooltipLines('repair').join(' | ') === 'Repair  $220 | heals 2 HP/s to towers within 4.5 tiles',
     'palette tooltip reads the repair spec',
   );
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'repair', 5, 5);
   placeTower(s, 'gun', 6, 5);
@@ -3262,7 +3270,7 @@ function cursorTower(tier, branch) {
 
 {
   // 33j. A tower being repaired by hand is off the field, so the aura skips it.
-  const s = createRunState();
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'repair', 5, 5);
   placeTower(s, 'gun', 6, 5);
@@ -3276,7 +3284,7 @@ function cursorTower(tier, branch) {
 
 /** A Maintenance cursor on open-field at (5,5) with a gun at (6,5) at the given HP (build phase). */
 function maintenanceRig(gunHp) {
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   const c = s.towers.find((t) => t.kind === 'cursor');
@@ -3290,7 +3298,7 @@ function maintenanceRig(gunHp) {
 
 {
   // 34a. With an enemy in radius, a Maintenance cursor fights normally and never starts a repair.
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   const c = s.towers.find((t) => t.kind === 'cursor');
@@ -3352,7 +3360,7 @@ function maintenanceRig(gunHp) {
 {
   // 34d. The lowest health fraction is chosen when two towers are damaged (equal distance, so the
   // fraction is the only difference), and the nearest wins on an equal fraction.
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   const c = s.towers.find((t) => t.kind === 'cursor');
@@ -3374,7 +3382,7 @@ function maintenanceRig(gunHp) {
   }
   check(first === 'b', `maintenance: the 20% tower repairs before the 40% one (got ${first})`);
 
-  const tie = stateOnLevel('open-field');
+  const tie = allUnlocked();
   tie.economy.salvage = 100000;
   placeTower(tie, 'cursor', 5, 5);
   const tc = tie.towers.find((t) => t.kind === 'cursor');
@@ -3401,7 +3409,7 @@ function maintenanceRig(gunHp) {
 {
   // 34f. A destroyed wall is removed from the board, so maintenance never targets it. (An offline
   // non-wall tower is a valid target — covered in 36f — so "destroyed" now means a wall alone.)
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   const c = s.towers.find((t) => t.kind === 'cursor');
@@ -3417,7 +3425,7 @@ function maintenanceRig(gunHp) {
 
 {
   // 34g. A non-Maintenance cursor never repairs.
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   const c = s.towers.find((t) => t.kind === 'cursor');
@@ -3445,7 +3453,7 @@ function maintenanceRig(gunHp) {
   check(at60 === run(1000 / 23), 'maintenance: same result at 23 Hz frames');
 
   const targetChoice = () => {
-    const s = stateOnLevel('open-field');
+    const s = allUnlocked();
     s.rng = 0x12345678;
     s.economy.salvage = 100000;
     placeTower(s, 'cursor', 5, 5);
@@ -3483,7 +3491,7 @@ function maintenanceRig(gunHp) {
     `maintenance branch tooltip reads the behaviour (${branchTip})`);
   check(branchTip.includes('no Overclock damage boost'), 'maintenance branch tooltip states the lost Overclock damage');
 
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   const c = towerAt(s, 5, 5);
@@ -3580,7 +3588,7 @@ function maintenanceRig(gunHp) {
 
 {
   // 35d. The Repair tower's aura still heals during a no-build wave.
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'repair', 5, 5);
   placeTower(s, 'gun', 6, 5);
@@ -3720,7 +3728,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
 }
 
 {
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'gun', 5, 5);
   placeTower(s, 'beacon', 6, 5);
@@ -3751,7 +3759,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
 
 // 36e. The Repair tower's aura heals an offline tower back above 0 (the point of owning one).
 {
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'repair', 5, 5);
   placeTower(s, 'gun', 6, 5);
@@ -3765,7 +3773,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
 
 // 36f. A Maintenance cursor treats an offline tower as a valid target and picks it over a 40% one.
 {
-  const s = stateOnLevel('open-field');
+  const s = allUnlocked();
   s.economy.salvage = 100000;
   placeTower(s, 'cursor', 5, 5);
   const c = s.towers.find((t) => t.kind === 'cursor');
@@ -3974,6 +3982,114 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(manifestEntry('grunt') !== undefined, 'manifestEntry resolves a known name');
   check(manifestEntry('no-such-asset') === undefined, 'manifestEntry rejects an unknown name');
   resetArt();
+}
+
+// --- 38. Tower unlocks -------------------------------------------------------------------------
+
+{
+  // 38a. The starting pair is available from the initial build phase; every later kind unlocks on
+  // exactly its wave and not one earlier, and never re-locks.
+  check(TOWER_UNLOCK_WAVE.gun === 0 && TOWER_UNLOCK_WAVE.wall === 0, 'Gun and Wall are the starting pair (unlock wave 0)');
+  check(isTowerUnlocked('gun', 0) && isTowerUnlocked('wall', 0), 'Gun and Wall are unlocked at wave 0');
+  for (const [kind, wave] of Object.entries(TOWER_UNLOCK_WAVE)) {
+    if (kind === 'gun' || kind === 'wall') continue;
+    check(!isTowerUnlocked(kind, wave - 1), `${kind} is locked at wave ${wave - 1}`);
+    check(isTowerUnlocked(kind, wave), `${kind} unlocks at wave ${wave}`);
+    check(isTowerUnlocked(kind, wave + 1), `${kind} stays unlocked at wave ${wave + 1}`);
+    check(towerUnlockWave(kind) === wave, `towerUnlockWave(${kind}) reports ${wave}`);
+  }
+}
+
+{
+  // 38b. A locked kind cannot be placed, cannot be selected, and its palette tooltip reads the
+  // unlock wave. An unlocked kind places and selects normally.
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  check(!isTowerUnlocked('cannon', s.wave), 'cannon is locked on a fresh run');
+  check(!canPlace(s, 'cannon', 4, 4), 'a locked cannon cannot be placed');
+  check(!placeTower(s, 'cannon', 4, 4), 'placeTower refuses a locked cannon');
+  selectTower(s, 'cannon');
+  check(s.selected === null, 'selectTower refuses a locked cannon (nothing selected)');
+  check(lockedPaletteLine('cannon', s.wave) === 'Unlocks at wave 4',
+    `locked palette line reads the unlock wave (${lockedPaletteLine('cannon', s.wave)})`);
+  check(lockedPaletteLine('gun', s.wave) === null, 'an unlocked tower has no unlock line');
+
+  check(canPlace(s, 'gun', 4, 4), 'the starting Gun still places');
+  check(placeTower(s, 'gun', 4, 4), 'placeTower places the starting Gun');
+  selectTower(s, 'gun');
+  check(s.selected === 'gun', 'selectTower arms the unlocked Gun');
+  cancelSelection(s);
+
+  // A stale armed selection cannot dodge the lock: once the wave advances to the cannon's wave the
+  // kind is unlocked, but before that canPlace keeps refusing regardless of `selected`.
+  selectTower(s, 'cannon');
+  check(s.selected === null, 're-selecting a locked kind is refused even after other selection');
+}
+
+{
+  // 38c. The unlock message fires exactly once, on the wave the kind unlocks, and names only it.
+  const s = stateOnLevel('open-field');
+  s.wave = 5;
+  s.phase = 'build';
+  s.events = [];
+  check(startWave(s), 'wave 6 starts');
+  const unlocks = s.events.filter((e) => e.type === 'towerUnlocked');
+  check(unlocks.length === 1, `wave 6 fires one unlock event (${unlocks.length})`);
+  check(unlocks[0].kinds.length === 1 && unlocks[0].kinds[0] === 'frost',
+    `wave 6 unlocks frost alone (${unlocks[0].kinds.join(',')})`);
+  check(s.events.filter((e) => e.type === 'waveStarted').length === 1, 'wave 6 still fires its normal waveStarted event');
+
+  // Wave 7 unlocks nothing, so no unlock event fires.
+  const s2 = stateOnLevel('open-field');
+  s2.wave = 6;
+  s2.phase = 'build';
+  s2.events = [];
+  startWave(s2);
+  check(s2.events.filter((e) => e.type === 'towerUnlocked').length === 0, 'wave 7 fires no unlock event');
+}
+
+{
+  // 38d. Unlocks persist into endless and across a profile save/load round trip (a fresh run restores
+  // the same starting schedule).
+  const s = createRunState();
+  s.wave = 24;
+  for (const kind of TOWER_KINDS) check(isTowerUnlocked(kind, s.wave), `${kind} unlocked by wave 24`);
+  s.wave = 150; // endless
+  for (const kind of TOWER_KINDS) check(isTowerUnlocked(kind, s.wave), `${kind} stays unlocked in endless (wave 150)`);
+
+  const store = { value: null, getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
+  const p = defaultProfile();
+  p.bestWave = 40;
+  saveProfile(p, store);
+  const loaded = loadProfile(store);
+  const fresh = createRunState(loaded);
+  check(isTowerUnlocked('gun', fresh.wave) && isTowerUnlocked('wall', fresh.wave), 'a fresh run after load has the starters unlocked');
+  check(!isTowerUnlocked('cannon', fresh.wave) && !isTowerUnlocked('cursor', fresh.wave), 'a fresh run after load locks the later kinds');
+}
+
+{
+  // 38e. Fixed-timestep equivalence holds across an unlock wave.
+  const run = (frameMs) => {
+    const s = stateOnLevel('open-field');
+    s.economy.salvage = 100000;
+    placeTower(s, 'gun', 3, 6);
+    s.wave = 5;
+    s.phase = 'build';
+    startWave(s); // wave 6: frost unlocks
+    for (let t = 0; t < 900 * TICK_MS - frameMs; t += frameMs) step(s, frameMs);
+    while (s.tick < 1000) tick(s);
+    return JSON.stringify([
+      s.wave,
+      s.economy,
+      s.integrity,
+      s.enemies.map((e) => [e.id, e.hp, e.dist]),
+      s.rng,
+      s.clock,
+    ]);
+  };
+  const at60 = run(TICK_MS);
+  check(at60 === run(1000 / 144), 'unlock wave: same result at 60 Hz and 144 Hz frames');
+  check(at60 === run(1000 / 23), 'unlock wave: same result at 23 Hz frames');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

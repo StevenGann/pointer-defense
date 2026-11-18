@@ -39,6 +39,33 @@ export interface TowerStats {
 
 export const TOWER_KINDS: readonly TowerKind[] = ['gun', 'cannon', 'taser', 'frost', 'laser', 'beacon', 'repair', 'wall', 'cursor'];
 
+/**
+ * The run wave at which each tower kind becomes available. Gun and Wall are the starting pair,
+ * available from the initial build phase (wave 0); every other kind unlocks at the listed wave and
+ * never re-locks for the rest of the run (endless included). See docs/design.md §6.10.
+ */
+export const TOWER_UNLOCK_WAVE: Readonly<Record<TowerKind, number>> = {
+  gun: 0,
+  cannon: 4,
+  taser: 14,
+  frost: 6,
+  laser: 11,
+  beacon: 8,
+  repair: 18,
+  wall: 0,
+  cursor: 24,
+};
+
+/** The wave a tower kind unlocks at (0 for the starting pair). */
+export function towerUnlockWave(kind: TowerKind): number {
+  return TOWER_UNLOCK_WAVE[kind];
+}
+
+/** True when a tower kind is unlocked at the given run wave. Unlocks are permanent: wave only grows. */
+export function isTowerUnlocked(kind: TowerKind, wave: number): boolean {
+  return wave >= TOWER_UNLOCK_WAVE[kind];
+}
+
 /** Data, not code: balance lives here. */
 export const TOWER_STATS: Readonly<Record<TowerKind, TowerStats>> = {
   gun: {
