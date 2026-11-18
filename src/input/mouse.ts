@@ -12,7 +12,6 @@ import {
   gateLockRemainingSeconds,
   isGateLocked,
   isToggleGate,
-  isTowerUnlocked,
   towerUnlockWave,
   TOWER_KINDS,
   TOWER_STATS,
@@ -46,6 +45,8 @@ import {
   togglePause,
   toggleSpeed,
   towerAt,
+  towerCost,
+  towerUnlocked,
   upgradePointer,
   upgradeTower,
   killAllEnemies,
@@ -103,6 +104,9 @@ export interface MouseContext {
   helpPointerMove: (x: number, y: number) => void;
   helpPointerUp: () => void;
   closeHelp: () => void;
+  restoreOpen: () => boolean;
+  restorePointerDown: (x: number, y: number, button: number) => boolean;
+  openRestore: () => void;
 }
 
 /** HUD actions the No-Build modifier disables (placing, upgrading, branching, selling, repairing,
@@ -123,7 +127,7 @@ function refusalReason(s: RunState, kind: TowerKind, col: number, row: number): 
   if (tileAt(s.grid, col, row) !== 'buildable') return 'That tile is blocked.';
   if (toggleAtTile(s, col, row)) return 'That tile is a shutter and cannot be built on.';
   if (towerAt(s, col, row)) return 'There is already a tower there.';
-  if (!canAfford(s.economy, TOWER_STATS[kind].cost)) return 'Not enough salvage for that tower.';
+  if (!canAfford(s.economy, towerCost(s, kind))) return 'Not enough salvage for that tower.';
   if (placementSealsUnderToggles(s, col, row)) return 'That would seal the route when a shutter closes.';
   return 'That would seal the route.';
 }
@@ -208,6 +212,9 @@ export class MouseController {
     // reaches the board, the HUD or the palette behind it.
     if (this.ctx.helpOpen() && this.ctx.helpPointerDown(x, y, e.button)) return;
 
+    // The Restore window swallows clicks inside it the same way the help window does.
+    if (this.ctx.restoreOpen() && this.ctx.restorePointerDown(x, y, e.button)) return;
+
     if (e.button === 2) {
       cancelSelection(s);
       return;
@@ -267,7 +274,7 @@ export class MouseController {
         return;
       }
       const kind = control.action as TowerKind;
-      if (TOWER_KINDS.includes(kind) && !isTowerUnlocked(kind, s.wave)) {
+      if (TOWER_KINDS.includes(kind) && !towerUnlocked(s, kind)) {
         this.ctx.notice(`${TOWER_STATS[kind].name} unlocks at wave ${towerUnlockWave(kind)}`);
         return;
       }
@@ -369,17 +376,8 @@ export class MouseController {
         if (tower) cycleTargetMode(s, tower.col, tower.row);
         break;
       }
-      case 'buyCpu':
-        this.ctx.buySpec('cpu');
-        break;
-      case 'buyRam':
-        this.ctx.buySpec('ram');
-        break;
-      case 'buyGpu':
-        this.ctx.buySpec('gpu');
-        break;
-      case 'buyDisk':
-        this.ctx.buySpec('disk');
+      case 'restore':
+        this.ctx.openRestore();
         break;
     }
   }
@@ -470,7 +468,7 @@ export class MouseController {
     const n = Number(e.key);
     if (Number.isInteger(n) && n >= 1 && n <= TOWER_KINDS.length) {
       const kind = TOWER_KINDS[n - 1];
-      if (!isTowerUnlocked(kind, s.wave)) {
+      if (!towerUnlocked(s, kind)) {
         this.ctx.notice(`${TOWER_STATS[kind].name} unlocks at wave ${towerUnlockWave(kind)}`);
         return;
       }

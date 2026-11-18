@@ -44,8 +44,6 @@ import {
   type PointerState,
   type PointerStage,
 } from '../core/pointer.ts';
-import { SPEC_CAPS, SPEC_NAMES, specEffectText, type SpecKind, type SpecLevels } from '../core/save.ts';
-import { pointerDamageMult } from '../core/state.ts';
 import { TICK_HZ } from '../core/time.ts';
 import { ENEMY_STATS, type Enemy } from '../core/enemies.ts';
 
@@ -191,13 +189,15 @@ export function towerTooltipLines(
   tower: Tower,
   clock: number,
   pointer?: PointerState,
-  specs?: SpecLevels,
+  specMult?: number,
   healedCount = 0,
   maintenanceStatus: string | null = null,
 ): string[] {
   if (tower.kind === 'cursor') {
     const lines =
-      pointer && specs ? cursorTooltipLines(tower, pointer, specs, maintenanceStatus) : [`Cursor T${tower.tier}`];
+      pointer !== undefined && specMult !== undefined
+        ? cursorTooltipLines(tower, pointer, specMult, maintenanceStatus)
+        : [`Cursor T${tower.tier}`];
     if (isFullyUpgraded(tower)) lines.push('Fully upgraded');
     return lines;
   }
@@ -294,7 +294,7 @@ export function towerTooltipLines(
 export function cursorTooltipLines(
   tower: Tower,
   pointer: PointerState,
-  specs: SpecLevels,
+  specMult: number,
   maintenanceStatus: string | null = null,
 ): string[] {
   const branch = tower.branch === null ? '' : ` — ${branchName('cursor', tower.branch)}`;
@@ -314,7 +314,7 @@ export function cursorTooltipLines(
   const rate = cursorClickRate(tower);
   const radius = cursorRadius(tower);
   const player = clickDamage(pointer);
-  const dmg = cursorClickDamage(tower, player, pointerDamageMult(specs));
+  const dmg = cursorClickDamage(tower, player, specMult);
   return [
     name,
     `Rate ${rate.toFixed(1)}/s · Radius ${radius.toFixed(1)}`,
@@ -575,15 +575,16 @@ export function pointerTooltipLines(p: PointerState, salvage: number, wave: numb
   ]];
 }
 
-/** Tooltip for the Sell button: the refund and the 70% rule, or the wall's nothing-refunded rule. */
-export function sellTooltipLines(tower: Tower): TooltipLine[] {
-  const value = sellValue(tower);
+/** Tooltip for the Sell button: the refund and the refund rule, or the wall's nothing-refunded rule. */
+export function sellTooltipLines(tower: Tower, refund = 0.7): TooltipLine[] {
+  const value = sellValue(tower, refund);
   if (tower.kind === 'wall') return ['Sell for $0 (walls refund nothing)'];
-  return [`Sell for $${formatNumber(value)} (70% of $${formatNumber(tower.spent)} spent)`];
+  const pct = Math.round(refund * 100);
+  return [`Sell for $${formatNumber(value)} (${pct}% of $${formatNumber(tower.spent)} spent)`];
 }
 
 /** Tooltip for the Repair button: the amount restored, its price, and how long the job takes. */
-export function repairTooltipLines(tower: Tower, clock: number, salvage: number): TooltipLine[] {
+export function repairTooltipLines(tower: Tower, clock: number, salvage: number, repairSpeedMult = 1): TooltipLine[] {
   if (isRepairing(tower, clock)) {
     return [`Repairing — ${repairRemainingSeconds(tower, clock).toFixed(1)} s`];
   }
@@ -591,18 +592,6 @@ export function repairTooltipLines(tower: Tower, clock: number, salvage: number)
   if (hp <= 0) return ['No damage to repair'];
   const cost = repairCost(tower);
   if (salvage < cost) return [cannotAffordText(salvage, cost)];
-  const duration = repairDurationTicks(tower) / TICK_HZ;
+  const duration = repairDurationTicks(tower, repairSpeedMult) / TICK_HZ;
   return [`Repair ${Math.ceil(hp)} HP — $${formatNumber(cost)}, ${duration.toFixed(1)} s`];
-}
-
-/** Tooltip for a spec shop row: the effect the game actually applies at the next level. */
-export function specTooltipLines(kind: SpecKind, level: number, banked: number): TooltipLine[] {
-  const cap = SPEC_CAPS[kind];
-  if (level >= cap) return [`${SPEC_NAMES[kind]} maxed at ${cap}`];
-  if (banked <= 0) return ['Needs 1 spec'];
-  return [[
-    { text: `${SPEC_NAMES[kind]} ${level} → ${level + 1} (${specEffectText(kind, level)} → ` },
-    good(specEffectText(kind, level + 1)),
-    { text: '), 1 spec' },
-  ]];
 }

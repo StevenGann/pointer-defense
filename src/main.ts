@@ -10,6 +10,8 @@ import {
   killAllEnemies,
   noBuildActive,
   NO_BUILD_MESSAGE,
+  pointerDamageMult,
+  restartPointsGained,
   restartWindows,
   selectedTower,
   spawnCheatEnemy,
@@ -21,7 +23,8 @@ import {
 } from './core/state.ts';
 import { SPAWN_KINDS, spawnKindLabel } from './core/cheats.ts';
 import { DEFAULT_LEVEL, type Level } from './core/levels.ts';
-import { addSeenEnemies, checkProfileAchievements, loadProfile, saveProfile, specGain, type Profile, type SpecKind } from './core/save.ts';
+import { addSeenEnemies, checkProfileAchievements, loadProfile, saveProfile, type Profile, type SpecKind } from './core/save.ts';
+import { buyNode, effectsFor, treeNodeById } from './core/tree.ts';
 import { achievementName, ACHIEVEMENTS } from './core/achievements.ts';
 import { unlockAchievement } from './steam.ts';
 import { ChromeView, computeLayout, PAL, pixelToWorld, pointInRect, type Layout, type MenuName } from './view/chrome.ts';
@@ -35,7 +38,6 @@ import {
   pointerTooltipLines,
   repairTooltipLines,
   sellTooltipLines,
-  specTooltipLines,
   targetLockReason,
   upgradeTooltipLines,
   type TooltipLine,
@@ -45,6 +47,7 @@ import { FloatingNumbersView } from './view/numbers.ts';
 import { MenuView, type OpenMenu } from './view/menu.ts';
 import { DialogView, type DialogModel } from './view/dialog.ts';
 import { HelpSession, HelpView, computeHelpLayout, helpHitAt, helpRows } from './view/help.ts';
+import { RestoreView, computeRestoreLayout, restoreHitAt } from './view/restore.ts';
 import { MouseController, type Screen } from './input/mouse.ts';
 import { EffectsView } from './view/effects.ts';
 import { BossBarView } from './view/bossBars.ts';
@@ -157,6 +160,7 @@ const loadDialogView = new LoadDialogView();
 const editorView = new EditorView();
 const helpSession = new HelpSession();
 const helpView = new HelpView();
+const restoreView = new RestoreView();
 
 // Art loads without blocking the first frame; when it (or a DPR change) invalidates, the board drops
 // its cached procedural art and re-reads the texture lookup on the next frame.
@@ -168,7 +172,7 @@ void preloadArt().then(() => drawCursorArrow());
 
 const root = new Container();
 app.stage.addChild(root);
-root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, helpView.root, ad.root, menuView.root, dialogView.root, tooltip.root, menuScreenView.root, loadDialogView.root, editorView.root);
+root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, helpView.root, restoreView.root, ad.root, menuView.root, dialogView.root, tooltip.root, menuScreenView.root, loadDialogView.root, editorView.root);
 
 sfx.setEnabled(profile.soundOn);
 sfx.setVolume(profile.volume);
@@ -179,6 +183,7 @@ window.addEventListener('keydown', () => sfx.ensure());
 let menu: OpenMenu | null = null;
 let dialog: DialogModel | null = null;
 let cheatNotified: RunState | null = null;
+let restoreOpen = false;
 
 // --- Screens ---------------------------------------------------------------------------------
 // The app is one of three screens: the main menu, a live run, or the map editor. `runOrigin` says
@@ -242,8 +247,16 @@ drawCursorArrow();
 
 function syncProfileMeta(): void {
   profile.specs = { ...state.specs };
-  profile.unspentSpecs = state.unspentSpecs;
+  profile.rp = state.rp;
   profile.achievements = Array.from(state.achievements);
+}
+
+function buyTreeNode(id: string): void {
+  const node = treeNodeById(id);
+  if (!node || !buyNode(profile, node)) return;
+  state.rp = profile.rp;
+  state.treeEffects = effectsFor(profile);
+  saveProfile(profile);
 }
 
 function toastAchievement(id: string): void {
@@ -363,7 +376,7 @@ function menuAction(id: string): void {
     case 'restart':
       dialog = {
         title: 'Restart Windows',
-        rows: [{ text: `This closes the run and banks ${specGain(state.economy.earned)} specs.` }],
+        rows: [{ text: `This closes the run and banks ${restartPointsGained(state, profile)} Restore Points.` }],
         buttons: [
           { id: 'restart', label: 'Restart' },
           { id: 'cancel', label: 'Cancel' },
@@ -607,6 +620,26 @@ const mouse = new MouseController(app, {
   helpPointerMove: (x: number, y: number) => helpSession.dragTo(layout, x, y),
   helpPointerUp: () => helpSession.endDrag(),
   closeHelp: () => helpSession.hide(),
+  restoreOpen: () => restoreOpen,
+  openRestore: () => {
+    restoreOpen = true;
+  },
+  restorePointerDown: (x: number, y: number, button: number): boolean => {
+    const rl = computeRestoreLayout(layout, profile);
+    if (!pointInRect(rl.window, x, y)) return false;
+    if (button !== 0) return true;
+    const hit = restoreHitAt(rl, x, y);
+    if (hit === null) return true;
+    if (hit.type === 'close') restoreOpen = false;
+    else if (hit.type === 'node') buyTreeNode(hit.id);
+    else if (hit.type === 'spec') {
+      if (buySpec(state, hit.kind)) {
+        syncProfileMeta();
+        saveProfile(profile);
+      }
+    }
+    return true;
+  },
 });
 
 // --- Menu and editor input --------------------------------------------------------------------
@@ -950,6 +983,7 @@ app.ticker.add((ticker) => {
     hud.draw(state, layout, mouse.hover.hud);
     ad.draw(state);
     helpView.draw(helpSession, profile, mouse.hover.x, mouse.hover.y);
+    restoreView.draw(restoreOpen, profile, layout);
     dialogView.draw(dialog, layout);
     updateTooltip();
     const shakeOffset = shake.offset(state.tick);
@@ -968,6 +1002,7 @@ app.ticker.add((ticker) => {
   bossBars.root.visible = running;
   hud.root.visible = running;
   helpView.root.visible = running && helpSession.open;
+  restoreView.root.visible = running && restoreOpen;
   ad.root.visible = running;
   menuView.root.visible = running;
   dialogView.root.visible = running;
@@ -1029,23 +1064,18 @@ function hudTooltipLines(action: HudAction, s: RunState): TooltipLine[] {
     }
     case 'sell':
       if (noBuildActive(s)) return [NO_BUILD_MESSAGE];
-      return tower ? sellTooltipLines(tower) : [];
+      return tower ? sellTooltipLines(tower, s.treeEffects.sellRefund) : [];
     case 'repairTower':
       if (noBuildActive(s)) return [NO_BUILD_MESSAGE];
-      return tower ? repairTooltipLines(tower, s.clock, s.economy.salvage) : [];
+      return tower ? repairTooltipLines(tower, s.clock, s.economy.salvage, s.treeEffects.repairSpeedMult) : [];
     case 'target': {
       if (noBuildActive(s)) return [NO_BUILD_MESSAGE];
       if (!tower) return [];
       const reason = targetLockReason(tower.kind);
       return reason === null ? [] : [reason];
     }
-    case 'buyCpu':
-    case 'buyRam':
-    case 'buyGpu':
-    case 'buyDisk': {
-      const kind: SpecKind = action === 'buyCpu' ? 'cpu' : action === 'buyRam' ? 'ram' : action === 'buyGpu' ? 'gpu' : 'disk';
-      return specTooltipLines(kind, s.specs[kind], s.unspentSpecs);
-    }
+    case 'restore':
+      return ['Open the Restore tree and spec shop.'];
     default:
       return [];
   }
@@ -1096,7 +1126,7 @@ function updateTooltip(): void {
       const healed = tower.kind === 'repair' ? repairHealingCount(state.towers, tower, state.clock) : 0;
       const maintenance = tower.kind === 'cursor' ? cursorMaintenanceStatus(state, tower) : null;
       tooltip.update(
-        { key: `tower:${tower.id}`, lines: towerTooltipLines(tower, state.clock, state.pointer, state.specs, healed, maintenance) },
+        { key: `tower:${tower.id}`, lines: towerTooltipLines(tower, state.clock, state.pointer, pointerDamageMult(state), healed, maintenance) },
         h.x,
         h.y,
         viewportW,

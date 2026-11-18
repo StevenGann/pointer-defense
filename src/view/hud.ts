@@ -4,7 +4,7 @@ import { getArtTexture } from './art.ts';
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
 import { clickDamage, comboMultiplier, critChance, nextPointerCost, overclockCeiling, pointerInfo } from '../core/pointer.ts';
-import { autoWaveStatus, canCycleLevel, currentPath, cursorMaintenanceStatus, isFinalWave, noBuildActive, NO_BUILD_MESSAGE, pointerDamageMult, selectedTower, STARTING_INTEGRITY, type RunState } from '../core/state.ts';
+import { autoWaveStatus, canCycleLevel, currentPath, cursorMaintenanceStatus, isFinalWave, noBuildActive, NO_BUILD_MESSAGE, pointerDamageMult, selectedTower, STARTING_INTEGRITY, towerCost, towerUnlocked, type RunState } from '../core/state.ts';
 
 import {
   cursorClickDamage,
@@ -14,7 +14,6 @@ import {
   hasBranches,
   isOffline,
   isRepairing,
-  isTowerUnlocked,
   repairCost,
   repairHealRate,
   repairHealingCount,
@@ -30,14 +29,6 @@ import {
 } from '../core/towers.ts';
 import { earlyCallBonus, MODIFIER_NAMES, typeBossKindForWave, waveDef, WAVE_COUNT, waveModifiers } from '../core/waves.ts';
 import { ENEMY_STATS } from '../core/enemies.ts';
-import {
-  SPEC_CAPS,
-  SPEC_KINDS,
-  SPEC_NAMES,
-  specEffectCompactText,
-  specEffectText,
-  type SpecKind,
-} from '../core/save.ts';
 import { branchName, fmtClickDamage, targetModeDisplay } from './tooltipText.ts';
 
 /**
@@ -60,26 +51,13 @@ export type HudAction =
   | 'branchA'
   | 'branchB'
   | 'branchC'
-  | 'buyCpu'
-  | 'buyRam'
-  | 'buyGpu'
-  | 'buyDisk';
-
-const SPEC_ACTION: Readonly<Record<SpecKind, HudAction>> = {
-  cpu: 'buyCpu',
-  ram: 'buyRam',
-  gpu: 'buyGpu',
-  disk: 'buyDisk',
-};
+  | 'restore';
 
 const NOTICE_TICKS = 150;
 
 const SPEC_FONT_SIZE = FONT_SIZE.small;
 const SPEC_BUTTON_PAD = 12;
-const SPEC_BUTTON_MIN = 48;
 const SPEC_BUTTON_MAX = 64;
-const SPEC_LABEL_GAP = 6;
-const SPEC_LABEL_MIN = 44;
 
 let metricsText: Text | null = null;
 
@@ -138,23 +116,6 @@ function branchButtonLabel(kind: TowerKind, branch: Branch, maxWidth: number): s
   return fallback === undefined ? preferred : fitButtonText(preferred, [fallback], maxWidth);
 }
 
-function truncateText(text: string, maxWidth: number): string {
-  if (Math.ceil(textWidth(text, SPEC_FONT_SIZE)) <= maxWidth) return text;
-  const chars = Array.from(text);
-  while (chars.length > 0) {
-    chars.pop();
-    const candidate = `${chars.join('')}…`;
-    if (Math.ceil(textWidth(candidate, SPEC_FONT_SIZE)) <= maxWidth) return candidate;
-  }
-  return '…';
-}
-
-function fitSpecLabel(verbose: string, compact: string, width: number): string {
-  if (Math.ceil(textWidth(verbose, SPEC_FONT_SIZE)) <= width) return verbose;
-  if (Math.ceil(textWidth(compact, SPEC_FONT_SIZE)) <= width) return compact;
-  return truncateText(compact, Math.max(SPEC_LABEL_MIN, width));
-}
-
 interface BranchButton {
   branch: Branch;
   label: string;
@@ -173,19 +134,6 @@ interface TowerDetailLayout {
   sell: Rect;
 }
 
-interface SpecRow {
-  kind: SpecKind;
-  label: Rect;
-  button: Rect;
-  labelText: string;
-  buttonText: string;
-}
-
-interface SpecShopLayout {
-  header: Rect;
-  rows: SpecRow[];
-}
-
 interface MapRow {
   row: Rect;
   next: Rect;
@@ -199,7 +147,6 @@ interface HudLayout {
   wave: Rect;
   autoWave: Rect;
   map: MapRow | null;
-  specs: SpecShopLayout | null;
 }
 
 /** One framed info section in the right panel (title bar plus 13 px rows). */
@@ -328,45 +275,7 @@ export function computeHud(l: Layout, s: RunState): HudLayout {
   const autoWave: Rect = { x: x + 4, y: cy, w: w - 8, h: 22 };
   cy += 22 + 6;
 
-  let specs: SpecShopLayout | null = null;
-  if (s.phase === 'build') {
-    const header: Rect = { x, y: cy, w, h: 18 };
-    cy += 18 + 4;
-    const rows = SPEC_KINDS.map((kind) => {
-      const row: Rect = { x, y: cy, w, h: 22 };
-      cy += 22 + 3;
-
-      const level = s.specs[kind];
-      const cap = SPEC_CAPS[kind];
-      const capped = level >= cap;
-
-      const buttonText = capped
-        ? fitButtonText('FULL', [])
-        : fitButtonText('Buy (1 spec)', ['Buy 1', 'BUY']);
-      const buttonW = Math.min(
-        SPEC_BUTTON_MAX,
-        Math.max(SPEC_BUTTON_MIN, Math.ceil(textWidth(buttonText, SPEC_FONT_SIZE)) + SPEC_BUTTON_PAD),
-      );
-      const button: Rect = { x: row.x + row.w - buttonW, y: row.y + 1, w: buttonW, h: 20 };
-
-      const labelX = row.x + 2;
-      const label: Rect = {
-        x: labelX,
-        y: row.y,
-        w: Math.max(0, button.x - labelX - SPEC_LABEL_GAP),
-        h: row.h,
-      };
-
-      const verbose = `${SPEC_NAMES[kind]} ${level}/${cap}  ${specEffectText(kind, level)}`;
-      const compact = `${SPEC_NAMES[kind]} ${level}/${cap} ${specEffectCompactText(kind, level)}`;
-      const labelText = fitSpecLabel(verbose, compact, label.w);
-
-      return { kind, label, button, labelText, buttonText };
-    });
-    specs = { header, rows };
-  }
-
-  return { integrity, route, detail, towers, wave, autoWave, map, specs };
+  return { integrity, route, detail, towers, wave, autoWave, map };
 }
 
 const SECTION_TITLE_H = 18;
@@ -430,7 +339,7 @@ export function computeRightPanel(l: Layout, s: RunState): RightPanelLayout {
   const globalUpgrades: InfoSection = {
     rect: { x, y, w, h: infoSectionHeight(1) },
     title: 'GLOBAL UPGRADES',
-    rows: ['No upgrades yet'],
+    rows: [`${s.rp} RP · level ${s.rpEarned}`],
   };
 
   return { nextWave, kills, pointer, globalUpgrades };
@@ -529,7 +438,7 @@ export function hudControlAt(l: Layout, s: RunState, px: number, py: number): Hu
   } else {
     for (const t of h.towers) {
       if (pointInRect(t.rect, px, py)) {
-        return { action: t.kind, enabled: !frozen && isTowerUnlocked(t.kind, s.wave) && canAfford(s.economy, TOWER_STATS[t.kind].cost) };
+        return { action: t.kind, enabled: !frozen && towerUnlocked(s, t.kind) && canAfford(s.economy, towerCost(s, t.kind)) };
       }
     }
   }
@@ -541,14 +450,7 @@ export function hudControlAt(l: Layout, s: RunState, px: number, py: number): Hu
     if (pointInRect(h.autoWave, px, py)) return { action: 'auto', enabled: true };
   }
 
-  if (h.specs) {
-    for (const row of h.specs.rows) {
-      if (pointInRect(row.button, px, py)) {
-        const capped = s.specs[row.kind] >= SPEC_CAPS[row.kind];
-        return { action: SPEC_ACTION[row.kind], enabled: !capped && s.unspentSpecs > 0 };
-      }
-    }
-  }
+  if (pointInRect(right.globalUpgrades.rect, px, py)) return { action: 'restore', enabled: true };
 
   return null;
 }
@@ -690,9 +592,6 @@ export class HudView {
   private readonly pointerRows: Text[] = [makeText(''), makeText(''), makeText(''), makeText('')];
   private readonly globalTitle = makeText('GLOBAL UPGRADES', true);
   private readonly globalRows: Text[] = [makeText('')];
-  private readonly specHeader = makeText('SPECS', true);
-  private readonly specLabels: Text[] = SPEC_KINDS.map(() => makeText(''));
-  private readonly specButtons: Text[] = SPEC_KINDS.map(() => makeText(''));
 
   constructor() {
     this.towerButtons = TOWER_KINDS.map(() => makeText(''));
@@ -731,9 +630,6 @@ export class HudView {
       this.globalTitle,
       ...this.globalRows,
       this.comboText,
-      this.specHeader,
-      ...this.specLabels,
-      ...this.specButtons,
     ]) {
       t.anchor.set(0, 0.5);
       this.root.addChild(t);
@@ -741,11 +637,6 @@ export class HudView {
     for (const t of this.branchButtons) t.anchor.set(0.5, 0.5);
     this.targetValue.anchor.set(1, 0.5);
     this.mapNext.anchor.set(0.5, 0.5);
-    for (const t of this.specLabels) t.style.fontSize = FONT_SIZE.small;
-    for (const t of this.specButtons) {
-      t.style.fontSize = FONT_SIZE.small;
-      t.anchor.set(0.5, 0.5);
-    }
     this.root.addChild(this.modalG);
     for (const t of [this.modalTitle, this.modalMessage, this.modalRestart, this.modalButton2]) {
       t.anchor.set(0, 0.5);
@@ -894,8 +785,6 @@ export class HudView {
       this.autoWaveButton.text = '';
     }
 
-    this.drawSpecShop(s, h);
-
     this.drawRightPanel(s, l, hoverHud);
 
     // End-of-run modal.
@@ -946,7 +835,7 @@ export class HudView {
         } else {
           const rate = cursorClickRate(tower);
           const radius = cursorRadius(tower);
-          const dmg = cursorClickDamage(tower, clickDamage(s.pointer), pointerDamageMult(s.specs));
+          const dmg = cursorClickDamage(tower, clickDamage(s.pointer), pointerDamageMult(s));
           this.towerStats.text = `${rate.toFixed(1)}/s  dmg ${fmtClickDamage(dmg)}  rng ${radius.toFixed(1)}`;
         }
       } else if (tower.kind === 'repair') {
@@ -1027,7 +916,7 @@ export class HudView {
       }
 
       drawButton(g, d.sell, !frozen, hoverHud === 'sell');
-      this.sellButton.text = `Sell $${formatNumber(sellValue(tower))}`;
+      this.sellButton.text = `Sell $${formatNumber(sellValue(tower, s.treeEffects.sellRefund))}`;
       this.sellButton.style.fill = frozen ? PAL.shadow : PAL.text;
       this.sellButton.position.set(d.sell.x + 6, d.sell.y + Math.floor(d.sell.h / 2));
       return;
@@ -1057,7 +946,7 @@ export class HudView {
     for (let i = 0; i < h.towers.length; i++) {
       this.towerButtons[i].visible = true;
       const { kind, rect } = h.towers[i];
-      const enabled = !frozen && isTowerUnlocked(kind, s.wave) && canAfford(s.economy, TOWER_STATS[kind].cost);
+      const enabled = !frozen && towerUnlocked(s, kind) && canAfford(s.economy, towerCost(s, kind));
       const armed = s.selected === kind;
       // Onboarding: on a fresh profile the Gun button pulses every 2 s until the first placement.
       const pulse =
@@ -1067,42 +956,9 @@ export class HudView {
         g.rect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2).stroke({ width: 2, color: PAL.title });
       }
       const t = this.towerButtons[i];
-      t.text = `${TOWER_STATS[kind].name}  $${formatNumber(TOWER_STATS[kind].cost)}`;
+      t.text = `${TOWER_STATS[kind].name}  $${formatNumber(towerCost(s, kind))}`;
       t.style.fill = enabled ? (armed ? PAL.title : PAL.text) : PAL.shadow;
       t.position.set(rect.x + 6, rect.y + Math.floor(rect.h / 2));
-    }
-  }
-
-  private drawSpecShop(s: RunState, h: HudLayout): void {
-    const g = this.g;
-    if (!h.specs) {
-      this.specHeader.text = '';
-      for (const t of this.specLabels) t.text = '';
-      for (const t of this.specButtons) t.text = '';
-      return;
-    }
-
-    const banked = s.unspentSpecs;
-    this.specHeader.text = `SPECS  banked ${banked}`;
-    this.specHeader.position.set(h.specs.header.x + 2, h.specs.header.y + Math.floor(h.specs.header.h / 2));
-
-    for (let i = 0; i < h.specs.rows.length; i++) {
-      const row = h.specs.rows[i];
-      const level = s.specs[row.kind];
-      const cap = SPEC_CAPS[row.kind];
-      const capped = level >= cap;
-      const enabled = !capped && banked > 0;
-
-      this.specLabels[i].text = row.labelText;
-      this.specLabels[i].position.set(row.label.x, row.label.y + Math.floor(row.label.h / 2));
-
-      drawButton(g, row.button, enabled, false);
-      this.specButtons[i].text = row.buttonText;
-      this.specButtons[i].style.fill = enabled ? PAL.text : PAL.shadow;
-      this.specButtons[i].position.set(
-        row.button.x + Math.floor(row.button.w / 2),
-        row.button.y + Math.floor(row.button.h / 2),
-      );
     }
   }
 
