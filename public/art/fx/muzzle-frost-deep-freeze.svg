@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Placeholder fire effect for frost-deep-freeze. Drawn pointing up; the renderer rotates it to the shot's
+       heading. Replace with the tower's identity colour and silhouette — the artist's file wins. -->
+  <path d="M16 2 L18.5 13 L27 16 L18.5 19 L16 30 L13.5 19 L5 16 L13.5 13 Z" fill="#bfe9ff" stroke="#ffffff" stroke-width="1"/>
+</svg>

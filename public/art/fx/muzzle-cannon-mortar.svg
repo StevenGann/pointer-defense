@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Placeholder fire effect for cannon-mortar. Drawn pointing up; the renderer rotates it to the shot's
+       heading. Replace with the tower's identity colour and silhouette — the artist's file wins. -->
+  <path d="M16 2 L24 22 L16 18 L8 22 Z" fill="#ffb347" stroke="#ffffff" stroke-width="1.5"/>
+</svg>

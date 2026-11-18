@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Placeholder fire effect for laser-prism. Drawn pointing up; the renderer rotates it to the shot's
+       heading. Replace with the tower's identity colour and silhouette — the artist's file wins. -->
+  <path d="M16 4 L26 26 L6 26 Z" fill="none" stroke="#ff9a9a" stroke-width="2"/>
+  <path d="M16 12 L20 20 L12 20 Z" fill="#ffffff"/>
+</svg>

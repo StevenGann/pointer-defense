@@ -173,7 +173,8 @@ import { tmpdir } from 'node:os';
 import { animFrame, currentAnimFrame, DEFAULT_ANIM, entityOffset } from '../src/view/anim.ts';
 import { scanArt } from './art-manifest.mjs';
 import { runAchArt } from './ach-art.mjs';
-import { EffectsView } from '../src/view/effects.ts';
+import { EffectsView, muzzleAssetFor, muzzleLife, FIRE_KINDS } from '../src/view/effects.ts';
+
 import { fileURLToPath } from 'node:url';
 import {
   CameraShake,
@@ -5976,6 +5977,35 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(!f.flash, 'with shakeOn off there is no flash');
   check(Math.abs(f.hpRatio - 90 / 120) < 1e-9, 'with shakeOn off the fill is the true value on the first frame');
   check(f.lagRatio === f.hpRatio, 'with shakeOn off there is no drain (lag equals the fill)');
+}
+
+
+// --- 41z. Fire effects: one asset per kind, one more per branch --------------------------------
+{
+  // Every attacking kind has a base fire effect, and every branch has its own file rather than
+  // borrowing the kind's flash.
+  for (const kind of FIRE_KINDS) {
+    check(manifestEntry(`muzzle-${kind}`) !== undefined, `${kind} has a fire-effect asset`);
+  }
+  for (const kind of FIRE_KINDS) {
+    for (const branch of ['A', 'B', 'C']) {
+      const mark = artNameForBranch(kind, branch);
+      if (mark === null) continue;
+      check(manifestEntry(`muzzle-${mark}`) !== undefined, `branch ${mark} has its own fire effect`);
+    }
+  }
+  check(muzzleAssetFor('gun', null) === 'muzzle-gun', 'an unbranched Gun uses the gun flash');
+  check(muzzleAssetFor('gun', 'A') === 'muzzle-gun-marksman', 'a Marksman uses its own flash');
+  check(muzzleAssetFor('aa', 'B') === 'muzzle-aa-missile', 'a Missile AA uses its own flash');
+  check(muzzleAssetFor('beacon', null) === null, 'the Beacon has no fire effect');
+  check(muzzleAssetFor('wall', null) === null, 'a wall has no fire effect');
+  // A framed effect plays its whole animation; a still flashes for two ticks.
+  check(muzzleLife('muzzle-gun', 32) >= 2, 'a still fire effect lasts at least the flash window');
+  check(muzzleLife(null, 32) === 2, 'a kind with no file keeps the two-tick flash');
+  // A file with numbered frames plays its whole animation instead of flashing for two ticks.
+  injectArtFrames('muzzle-gun', [undefined, undefined, undefined, undefined]);
+  check(muzzleLife('muzzle-gun', 32) > 2, 'a framed fire effect lives for its animation');
+  injectArtFrames('muzzle-gun', []);
 }
 
 // --- 42. Boss variants (pass 2: Carrier, Dreadnought, Wirecutter, Ram) -------------------------

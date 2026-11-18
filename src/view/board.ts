@@ -187,6 +187,7 @@ export class BoardView {
   private readonly enemySprites: Sprite[] = [];
   private readonly cursorArrows = new Container();
   private readonly cursorArrowSprites: Sprite[] = [];
+  private readonly cursorFxSprites: Sprite[] = [];
   private readonly ghost = new Container();
   private readonly ghostBase = new Sprite();
   private readonly ghostTurret = new Sprite();
@@ -218,6 +219,19 @@ export class BoardView {
       s.anchor.set(0.5, 0.5);
       this.enemySprites.push(s);
       this.enemies.addChild(s);
+    }
+    s.visible = true;
+    return s;
+  }
+
+  /** The pooled fire-effect sprite for the `index`-th cursor, drawn where its click landed. */
+  private cursorFxSprite(index: number): Sprite {
+    let s = this.cursorFxSprites[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0.5, 0.5);
+      this.cursorFxSprites.push(s);
+      this.cursorArrows.addChild(s);
     }
     s.visible = true;
     return s;
@@ -497,11 +511,22 @@ export class BoardView {
     let arrowIndex = 0;
     for (const t of state.towers) {
       if (t.kind === 'cursor') {
-        drawFlyingCursor(this.overlay, this.cursorArrowSprite(arrowIndex), t, board);
+        const fx = drawFlyingCursor(this.overlay, this.cursorArrowSprite(arrowIndex), t, board, cell);
+        const fxSpr = this.cursorFxSprite(arrowIndex);
+        if (fx === null) {
+          fxSpr.visible = false;
+        } else {
+          fxSpr.texture = fx.texture;
+          fxSpr.width = fx.size;
+          fxSpr.height = fx.size;
+          fxSpr.position.set(fx.x, fx.y);
+          fxSpr.alpha = fx.alpha;
+        }
         arrowIndex++;
       }
     }
     for (let i = arrowIndex; i < this.cursorArrowSprites.length; i++) this.cursorArrowSprites[i].visible = false;
+    for (let i = arrowIndex; i < this.cursorFxSprites.length; i++) this.cursorFxSprites[i].visible = false;
 
     if (state.selected && hover.onBoard && canPlace(state, state.selected, hover.col, hover.row)) {
       const cx = board.x + (hover.col + 0.5) * cell;
@@ -1160,7 +1185,8 @@ function drawFlyingCursor(
   arrowSprite: Sprite,
   t: Tower,
   board: { x: number; y: number; cell: number },
-): void {
+  cell: number,
+): { texture: Texture; x: number; y: number; size: number; alpha: number } | null {
   const px = board.x + t.cursorX * board.cell;
   const py = board.y + t.cursorY * board.cell;
   const dip = t.cursorClickFx === 8 ? 2 : 0;
@@ -1178,11 +1204,25 @@ function drawFlyingCursor(
     arrowSprite.visible = false;
     drawCursorArrow(g, px, py + dip, 12);
   }
+  // The click's fire effect: the cursor's own file when it exists, the old white ring otherwise.
   if (t.cursorClickFx > 0) {
     const rx = board.x + t.cursorClickX * board.cell;
     const ry = board.y + t.cursorClickY * board.cell;
+    const mark = artNameForBranch('cursor', t.branch);
+    const name = mark === null ? 'muzzle-cursor' : `muzzle-${mark}`;
+    const tex = getArtTexture(name, Math.round(cell * 0.5)) ?? getArtTexture('muzzle-cursor', Math.round(cell * 0.5));
+    if (tex !== null) {
+      return {
+        texture: tex,
+        x: rx,
+        y: ry,
+        size: cell * 0.5,
+        alpha: Math.max(0, t.cursorClickFx / 8),
+      };
+    }
     g.circle(rx, ry, 6).stroke({ width: 1, color: PAL.highlight });
   }
+  return null;
 }
 
 /** Draw in-flight projectiles as vector shapes: a shell is a small square, a missile a tapered dart. */

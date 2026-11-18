@@ -1,5 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- The same puff in the frost colour: white outer, ice-blue core. -->
-  <circle cx="16" cy="16" r="8.3" fill="#ffffff"/>
-  <circle cx="16" cy="16" r="3.7" fill="#3399cc"/>
+  <!-- Placeholder fire effect for frost. Drawn pointing up; the renderer rotates it to the shot's
+       heading. Replace with the tower's identity colour and silhouette — the artist's file wins. -->
+  <line x1="16" y1="12" x2="16" y2="4" stroke="#bfe9ff" stroke-width="2" stroke-linecap="round" transform="rotate(22.0 16 16)"/>
+  <line x1="16" y1="12" x2="16" y2="4" stroke="#bfe9ff" stroke-width="2" stroke-linecap="round" transform="rotate(67.0 16 16)"/>
+  <line x1="16" y1="12" x2="16" y2="4" stroke="#bfe9ff" stroke-width="2" stroke-linecap="round" transform="rotate(112.0 16 16)"/>
+  <line x1="16" y1="12" x2="16" y2="4" stroke="#bfe9ff" stroke-width="2" stroke-linecap="round" transform="rotate(157.0 16 16)"/>
+  <line x1="16" y1="12" x2="16" y2="4" stroke="#bfe9ff" stroke-width="2" stroke-linecap="round" transform="rotate(202.0 16 16)"/>
+  <line x1="16" y1="12" x2="16" y2="4" stroke="#bfe9ff" stroke-width="2" stroke-linecap="round" transform="rotate(247.0 16 16)"/>
+  <line x1="16" y1="12" x2="16" y2="4" stroke="#bfe9ff" stroke-width="2" stroke-linecap="round" transform="rotate(292.0 16 16)"/>
+  <line x1="16" y1="12" x2="16" y2="4" stroke="#bfe9ff" stroke-width="2" stroke-linecap="round" transform="rotate(337.0 16 16)"/>
+  <circle cx="16" cy="16" r="3.5" fill="#ffffff"/>
 </svg>

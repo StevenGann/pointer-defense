@@ -1,10 +1,11 @@
 import { Container, Graphics, Sprite } from 'pixi.js';
 import { PAL, worldToPixel, type Layout } from './chrome.ts';
 import { ENEMY_STATS, isBossVariant, type EnemyKind } from '../core/enemies.ts';
-import type { Tower, TowerKind } from '../core/towers.ts';
+import type { Branch, Tower, TowerKind } from '../core/towers.ts';
 import type { RunState } from '../core/state.ts';
 import { ENEMY_COLOR, SHIELD_COLOR, TOWER_COLOR } from './board.ts';
-import { effectFrameTexture } from './art.ts';
+import { animationOf, artNameForBranch, effectFrameTexture, getArtFrames } from './art.ts';
+import { secondsToWholeTicks } from './anim.ts';
 
 /**
  * Short-lived combat effects, timed in fixed ticks so a 30 fps and a 60 fps frame show the same
@@ -27,17 +28,33 @@ const CAP_SHIELD = 96;
 const CAP_DEATH = 96;
 
 /**
- * The asset for each weapon's muzzle flash. The beacon (and any kind without a file) has none. The
- * colours are baked into each file — the gun, laser and taser flashes are always white, and the
- * cannon/frost puffs carry their own identity colour — so no runtime tint is needed here.
+ * The fire-effect asset for a tower. A branched tower resolves its own file first
+ * (`muzzle-gun-marksman`), then the kind's (`muzzle-gun`); a kind with no file at all — the Beacon,
+ * the Repair tower, the Wall — falls back to the procedural flash. Files may ship numbered frames
+ * (`muzzle-gun.1.svg`, ...) with an optional `.json` animation, in which case the effect plays the
+ * animation for its duration instead of the two-tick flash.
  */
-const MUZZLE_ASSET: Readonly<Partial<Record<TowerKind, string>>> = {
-  gun: 'muzzle-gun',
-  cannon: 'muzzle-cannon',
-  frost: 'muzzle-frost',
-  laser: 'muzzle-laser',
-  taser: 'muzzle-taser',
+/**
+ * Branches whose fire effect exists even though the tower draws its branch on the base art rather
+ * than a separate branch mark. The AA is the case today: Flak and Missile change the turret, so
+ * `artNameForBranch` has no answer for it, but each still gets its own muzzle.
+ */
+const EXTRA_FIRE_MARKS: Readonly<Partial<Record<TowerKind, Readonly<Partial<Record<Branch, string>>>>>> = {
+  aa: { A: 'aa-flak', B: 'aa-missile' },
 };
+
+export function muzzleAssetFor(kind: TowerKind, branch: Branch | null): string | null {
+  if (branch !== null) {
+    const extra = EXTRA_FIRE_MARKS[kind]?.[branch];
+    if (extra !== undefined) return `muzzle-${extra}`;
+    const mark = artNameForBranch(kind, branch);
+    if (mark !== null) return `muzzle-${mark}`;
+  }
+  return FIRE_KINDS.has(kind) ? `muzzle-${kind}` : null;
+}
+
+/** Towers that fire something. The Beacon buffs, the Repair tower heals, walls do neither. */
+export const FIRE_KINDS: ReadonlySet<TowerKind> = new Set<TowerKind>(['gun', 'cannon', 'laser', 'taser', 'frost', 'aa', 'cursor']);
 
 /** The death-ring ring radius in viewBox units; the sprite is scaled so this maps to the live radius. */
 const DEATH_RING_SVG_RADIUS = 12;
@@ -47,8 +64,21 @@ interface Muzzle {
   y: number;
   angle: number;
   kind: TowerKind;
+  /** Resolved asset name, or null when the kind has no file (then the procedural flash draws). */
+  asset: string | null;
+  /** Lifetime in ticks: two for a still, the animation's duration when the file has frames. */
+  life: number;
   color: number;
   born: number;
+}
+
+/** How long a fire effect lives. A framed file plays its whole animation; a still flashes briefly. */
+export function muzzleLife(asset: string | null, px: number): number {
+  if (asset === null) return MUZZLE_TICKS;
+  const frames = getArtFrames(asset, px).length;
+  if (frames <= 1) return MUZZLE_TICKS;
+  const fps = animationOf(asset)?.fps ?? 30;
+  return Math.max(MUZZLE_TICKS, secondsToWholeTicks(frames / fps));
 }
 
 interface Tracer {
@@ -99,6 +129,15 @@ function compact(arr: { born: number }[], now: number, life: number): void {
   arr.length = w;
 }
 
+/** The same compaction for a pool whose entries carry their own lifetime (fire effects do). */
+function compactByLife<T extends { born: number; life: number }>(arr: T[], now: number): void {
+  let w = 0;
+  for (let i = 0; i < arr.length; i++) {
+    if (now - arr[i].born < arr[i].life) arr[w++] = arr[i];
+  }
+  arr.length = w;
+}
+
 export class EffectsView {
   readonly root = new Container();
   private readonly g = new Graphics();
@@ -142,11 +181,14 @@ export class EffectsView {
     if (!tower || tower.kind === 'beacon') return;
     const ox = tower.col + 0.5;
     const oy = tower.row + 0.5;
+    const asset = muzzleAssetFor(tower.kind, tower.branch);
     pushCap(this.muzzles, CAP_MUZZLE, {
       x: ox,
       y: oy,
       angle: Math.atan2(y - oy, x - ox),
       kind: tower.kind,
+      asset,
+      life: muzzleLife(asset, 32),
       color: TOWER_COLOR[tower.kind],
       born: 0,
     });
@@ -171,6 +213,8 @@ export class EffectsView {
       y,
       angle: Math.atan2(ty - y, tx - x),
       kind: 'gun',
+      asset: 'muzzle-gun',
+      life: muzzleLife('muzzle-gun', 32),
       color: ENEMY_COLOR.breacher,
       born: 0,
     });
@@ -219,7 +263,7 @@ export class EffectsView {
     for (const s of this.shieldArcs) if (s.born === 0) s.born = now;
     for (const d of this.deaths) if (d.born === 0) d.born = now;
 
-    compact(this.muzzles, now, MUZZLE_TICKS);
+    compactByLife(this.muzzles, now);
     compact(this.tracers, now, TRACER_TICKS);
     compact(this.sparks, now, HIT_TICKS);
     compact(this.shieldArcs, now, SHIELD_ARC_TICKS);
@@ -243,12 +287,11 @@ export class EffectsView {
     for (let i = 0; i < this.muzzles.length; i++) {
       const m = this.muzzles[i];
       const age = now - m.born;
-      const a = 1 - age / MUZZLE_TICKS;
+      const a = 1 - age / Math.max(1, m.life);
       const p = worldToPixel(layout, m.x, m.y);
       const ox = p.x + Math.cos(m.angle) * cell * 0.25;
       const oy = p.y + Math.sin(m.angle) * cell * 0.25;
-      const name = MUZZLE_ASSET[m.kind];
-      const tex = name !== undefined ? effectFrameTexture(name, cell, age, MUZZLE_TICKS) : null;
+      const tex = m.asset !== null ? effectFrameTexture(m.asset, cell, age, m.life) : null;
       const spr = this.pooledSprite(this.muzzleSprites, this.muzzleLayer, i);
       if (tex !== null) {
         spr.texture = tex;

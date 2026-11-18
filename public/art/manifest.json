@@ -725,7 +725,43 @@
       "frames": 1
     },
     {
+      "name": "fx/muzzle-aa",
+      "frames": 1
+    },
+    {
+      "name": "fx/muzzle-aa-flak",
+      "frames": 1
+    },
+    {
+      "name": "fx/muzzle-aa-missile",
+      "frames": 1
+    },
+    {
       "name": "fx/muzzle-cannon",
+      "frames": 1
+    },
+    {
+      "name": "fx/muzzle-cannon-minesweeper",
+      "frames": 1
+    },
+    {
+      "name": "fx/muzzle-cannon-mortar",
+      "frames": 1
+    },
+    {
+      "name": "fx/muzzle-cursor",
+      "frames": 1
+    },
+    {
+      "name": "fx/muzzle-cursor-maintenance",
+      "frames": 1
+    },
+    {
+      "name": "fx/muzzle-cursor-overclock",
+      "frames": 1
+    },
+    {
+      "name": "fx/muzzle-cursor-wide-search",
       "frames": 1
     },
     {
@@ -733,7 +769,23 @@
       "frames": 1
     },
     {
+      "name": "fx/muzzle-frost-deep-freeze",
+      "frames": 1
+    },
+    {
+      "name": "fx/muzzle-frost-shard",
+      "frames": 1
+    },
+    {
       "name": "fx/muzzle-gun",
+      "frames": 1
+    },
+    {
+      "name": "fx/muzzle-gun-marksman",
+      "frames": 1
+    },
+    {
+      "name": "fx/muzzle-gun-repeater",
       "frames": 1
     },
     {
@@ -741,7 +793,23 @@
       "frames": 1
     },
     {
+      "name": "fx/muzzle-laser-focus",
+      "frames": 1
+    },
+    {
+      "name": "fx/muzzle-laser-prism",
+      "frames": 1
+    },
+    {
       "name": "fx/muzzle-taser",
+      "frames": 1
+    },
+    {
+      "name": "fx/muzzle-taser-arc",
+      "frames": 1
+    },
+    {
+      "name": "fx/muzzle-taser-overload",
       "frames": 1
     },
     {

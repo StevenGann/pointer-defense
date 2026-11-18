@@ -206,6 +206,33 @@ are tinted to the live colour, and the tint is noted per asset.
 The Cursor tower's own plinth is `towers/cursor-base.svg`; `cursor-arrow.svg` here is the flying
 cursor and the OS pointer.
 
+
+## Fire effects, mines and projectiles
+
+Every tower that fires something has a fire-effect file: the muzzle flash at the moment of the shot.
+
+- `fx/muzzle-<kind>.svg` — the base flash for a tower kind: `gun`, `cannon`, `laser`, `taser`,
+  `frost`, `aa`, `cursor`.
+- `fx/muzzle-<branch-mark>.svg` — a branch overrides its kind's flash: `muzzle-gun-marksman`,
+  `muzzle-gun-repeater`, `muzzle-cannon-mortar`, `muzzle-cannon-minesweeper`, `muzzle-laser-focus`,
+  `muzzle-laser-prism`, `muzzle-taser-arc`, `muzzle-taser-overload`, `muzzle-frost-deep-freeze`,
+  `muzzle-frost-shard`, `muzzle-aa-flak`, `muzzle-aa-missile`, `muzzle-cursor-overclock`,
+  `muzzle-cursor-wide-search`, `muzzle-cursor-maintenance`.
+- **Resolution order**: branch file, then kind file, then the old procedural flash. Deleting a branch
+  file falls back to the kind's; deleting the kind's falls back to code.
+- **Drawing convention**: the file is drawn **pointing up**; the renderer rotates it to the shot's
+  heading. Keep the bright core at the centre so it reads at every angle.
+- **Timing**: a single-frame file flashes for two simulation ticks. Give the asset numbered frames
+  (`muzzle-gun.1.svg`, `muzzle-gun.2.svg`, …) and it plays the whole sequence instead — see
+  "Animating an asset" for the `.json` fps/hold rules. A 4-frame, 30 fps flash lives about 133 ms.
+
+Ordnance and mines have their own files, rotated or not by the renderer:
+
+- `projectiles/shell.svg` — drawn pointing up, rotated to its velocity.
+- `projectiles/missile.svg` — drawn pointing up, rotated to its velocity.
+- `mines/mine-armed.svg` and `mines/mine-unarmed.svg` — not rotated. The armed file's lamp should read
+  as live; the unarmed one is drawn at half alpha by the renderer, so do not bake the dimness in.
+
 ## The runtime effects that recolour art
 
 - **Damage flash** — not currently applied; when it is, it will be a white tint on the sprite.

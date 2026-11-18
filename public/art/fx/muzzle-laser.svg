@@ -1,4 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- The laser's cross spark: two perpendicular white lines through the centre. -->
-  <path d="M4.4 16 L27.6 16 M16 4.4 L16 27.6" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+  <!-- Placeholder fire effect for laser. Drawn pointing up; the renderer rotates it to the shot's
+       heading. Replace with the tower's identity colour and silhouette — the artist's file wins. -->
+  <rect x="15" y="1" width="2" height="14" fill="#ff9a9a"/>
+  <rect x="14" y="13" width="4" height="6" fill="#ffffff"/>
 </svg>

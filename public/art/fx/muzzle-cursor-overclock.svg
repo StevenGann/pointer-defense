@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Placeholder fire effect for cursor-overclock. Drawn pointing up; the renderer rotates it to the shot's
+       heading. Replace with the tower's identity colour and silhouette — the artist's file wins. -->
+  <line x1="16" y1="12" x2="16" y2="4" stroke="#ffffff" stroke-width="2" stroke-linecap="round" transform="rotate(45.0 16 16)"/>
+  <line x1="16" y1="12" x2="16" y2="4" stroke="#ffffff" stroke-width="2" stroke-linecap="round" transform="rotate(135.0 16 16)"/>
+  <line x1="16" y1="12" x2="16" y2="4" stroke="#ffffff" stroke-width="2" stroke-linecap="round" transform="rotate(225.0 16 16)"/>
+  <line x1="16" y1="12" x2="16" y2="4" stroke="#ffffff" stroke-width="2" stroke-linecap="round" transform="rotate(315.0 16 16)"/>
+  <rect x="13" y="13" width="6" height="6" fill="#ffffff"/>
+</svg>
