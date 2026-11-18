@@ -75,6 +75,7 @@ export const BRANCH_NAMES: Readonly<Record<TowerKind, Readonly<Partial<Record<Br
   taser: { A: 'Arc', B: 'Overload' },
   frost: { A: 'Deep Freeze', B: 'Shard' },
   laser: { A: 'Focus', B: 'Prism' },
+  aa: { A: 'Flak', B: 'Missile' },
   beacon: { A: 'Command', B: 'Relay' },
   repair: {},
   wall: { A: 'Bulwark', B: 'Mesh', C: 'Toggle' },
@@ -164,6 +165,9 @@ export function paletteTooltipLines(kind: TowerKind): string[] {
   if (kind === 'repair') {
     return ['Repair  $220', 'heals 2 HP/s to towers within 4.5 tiles'];
   }
+  if (kind === 'aa') {
+    return ['AA  $40', 'anti-air: flyers only, 2x damage to flyers', 'Range 3.4 · Damage 2.6 · 1.8/s', 'Holds fire on ground-only waves'];
+  }
   const b = TOWER_STATS[kind];
   const name = `${b.name}  $${formatNumber(b.cost)}`;
   if (kind === 'wall') {
@@ -222,6 +226,31 @@ export function towerTooltipLines(
               : 'Closed — blocks ground'
             : 'Blocks ground only';
     const lines = [name, hp, blocks, `Sell $${formatNumber(sellValue(tower))}`];
+    if (isFullyUpgraded(tower)) lines.push('Fully upgraded');
+    return lines;
+  }
+
+  if (tower.kind === 'aa') {
+    const st = effectiveStats(tower);
+    const damage = st.damage * tower.auraDamage;
+    const range = st.range + tower.auraRange;
+    const rate = st.fireInterval > 0 ? TICK_HZ / st.fireInterval : 0;
+    const dps = damage * rate * 2; // 2x against flyers
+    const behaviour =
+      tower.branch === 'A'
+        ? 'Flak: shells burst, full to flyers, half to ground'
+        : tower.branch === 'B'
+          ? 'Missile: 4 homing missiles per salvo'
+          : 'Flyers only — never shoots ground';
+    const lines = [
+      name,
+      `Damage ${damage.toFixed(1)} (2x vs flyers) · Range ${range.toFixed(1)}`,
+      `Rate ${rate.toFixed(1)}/s · DPS ${dps.toFixed(1)} (vs flyers)`,
+      behaviour,
+      `Target: ${targetModeDisplay(tower)}`,
+      turnText(st.turnRate),
+      `Sell $${formatNumber(sellValue(tower))}`,
+    ];
     if (isFullyUpgraded(tower)) lines.push('Fully upgraded');
     return lines;
   }
@@ -404,6 +433,7 @@ export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[
 /** Behaviour words for branches that change what the tower does rather than just how hard it hits. */
 const BRANCH_BEHAVIOUR: Readonly<Partial<Record<TowerKind, Readonly<Partial<Record<Branch, string>>>>>> = {
   cannon: { B: 'air only' },
+  aa: { A: 'shells burst, half damage to ground', B: '4 homing missiles per salvo' },
   taser: { A: 'chains to 3' },
   frost: { B: 'no slow' },
   laser: { B: 'splits into 3' },
@@ -458,8 +488,8 @@ export function branchTooltipLines(tower: Tower, branch: Branch, salvage: number
   }
 
   const behaviour = BRANCH_BEHAVIOUR[tower.kind]?.[branch];
-  if (behaviour) segments.push({ text: `, ${behaviour}` });
-  segments.push({ text: `, $${formatNumber(cost)}` });
+  if (behaviour) segments.push({ text: `${segments.length > 1 ? ', ' : ''}${behaviour}` });
+  segments.push({ text: `${segments.length > 1 ? ', ' : ''}$${formatNumber(cost)}` });
   return [segments];
 }
 

@@ -112,6 +112,19 @@ import {
   type Spawn,
 } from './waves.ts';
 import { tickAds, type Ad, type AdKind } from './ads.ts';
+import {
+  AA_SALVO_COUNT,
+  MISSILE_ACCEL,
+  MISSILE_HIT_RANGE,
+  MISSILE_INITIAL_SPEED,
+  MISSILE_LIFETIME_TICKS,
+  MISSILE_MAX_SPEED,
+  MISSILE_RETARGET_RANGE,
+  MISSILE_TURN_RATE,
+  missileSeed,
+  SHELL_SPEED,
+  type Projectile,
+} from './projectiles.ts';
 import { rngNext } from './rng.ts';
 import { secondsToTicks, TICK_HZ, TICK_MS } from './time.ts';
 import {
@@ -203,6 +216,8 @@ export interface RunState {
   pointer: PointerState;
   towers: Tower[];
   enemies: Enemy[];
+  /** In-flight projectiles (AA shells and missiles), ticked with the fixed timestep. */
+  projectiles: Projectile[];
   /** Tower kind armed for placement, or null. UI selection, but kept here so the sim validates it. */
   selected: TowerKind | null;
   /** Placed tower selected for inspection, or null. Mutually exclusive with `selected`. */
@@ -258,6 +273,8 @@ export interface RunState {
   adsDismissed: number;
   /** Leaks counted per wave number, so an early call cannot poison or rescue another wave's record. */
   leaksByWave: Map<number, number>;
+  /** Flyer leaks per wave number (a subset of leaksByWave), for the balance harness. */
+  flyerLeaksByWave: Map<number, number>;
   /** True once the player has called a wave early this run. */
   calledEarly: boolean;
   /** True once a wave at 40+ has been cleared with zero leaks this run. */
@@ -308,6 +325,7 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     pointer: createPointer(),
     towers: [],
     enemies: [],
+    projectiles: [],
     selected: null,
     selectedTowerId: null,
     runs: [],
@@ -339,6 +357,7 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     weakPointHits: 0,
     adsDismissed: 0,
     leaksByWave: new Map(),
+    flyerLeaksByWave: new Map(),
     calledEarly: false,
     clearedWaveNoLeaks: false,
     bossKilledByPointer: false,
@@ -1010,6 +1029,7 @@ export function tick(s: RunState): void {
     moveEnemies(s);
     fireBreacherTurrets(s);
     tickCursors(s);
+    tickProjectiles(s); // move in-flight shells/missiles, resolve hits and expiries
     fireTowers(s);
     applyReticle(s);
     s.enemies = s.enemies.filter((e) => !e.dead);
@@ -1020,6 +1040,7 @@ export function tick(s: RunState): void {
     }
   } else if (s.phase === 'build') {
     tickCursors(s); // idle: the cursor drifts around its tile between waves
+    tickProjectiles(s); // let a lingering missile expire after a wave clears
   }
   s.clock++;
   tickAutoWave(s);
@@ -1387,6 +1408,7 @@ function fireBreacherTurrets(s: RunState): void {
 function leak(s: RunState, e: Enemy): void {
   e.dead = true;
   s.leaksByWave.set(e.wave, (s.leaksByWave.get(e.wave) ?? 0) + 1);
+  if (baseEnemyKind(e.kind) === 'flyer') s.flyerLeaksByWave.set(e.wave, (s.flyerLeaksByWave.get(e.wave) ?? 0) + 1);
   s.integrity = Math.max(0, s.integrity - ENEMY_STATS[e.kind].integrity);
   s.events.push({ type: 'leak', x: e.x, y: e.y });
   if (s.pointer.targetId === e.id) s.pointer.targetId = null;
@@ -1984,6 +2006,19 @@ function fireTowers(s: RunState): void {
 
     const target = targets[0];
     t.cooldown = intervalTicks(st.fireInterval) - 1;
+
+    // The AA's tier-3 branches fire projectiles rather than hitscan. Its base form (no branch) falls
+    // through to the ordinary single-target hit below, which already applies the flyer-only targeting
+    // and the 2x flyer multiplier from the kind's stats.
+    if (t.kind === 'aa' && t.branch === 'A') {
+      fireFlakShell(s, t, st, target, dmg);
+      continue;
+    }
+    if (t.kind === 'aa' && t.branch === 'B') {
+      fireMissileSalvo(s, t, st, target, dmg);
+      continue;
+    }
+
     s.events.push({ type: 'shot', towerId: t.id, x: target.x, y: target.y, splash: st.splash });
 
     if (st.pierce > 1) fireBeam(s, t, st, target, dmg);
@@ -1991,6 +2026,168 @@ function fireTowers(s: RunState): void {
     else if (st.splash > 0) fireSplash(s, t, st, target, dmg);
     else hitEnemy(s, t, st, target, dmg);
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// AA projectiles
+
+/** A flyer's instantaneous velocity in tiles per second, from its heading and nominal speed. */
+function flyerVelocity(e: Enemy): { vx: number; vy: number } {
+  const speed = speedPerTick(e.kind) * TICK_HZ;
+  return { vx: Math.cos(e.heading) * speed, vy: Math.sin(e.heading) * speed };
+}
+
+/** Launch a Flak shell toward the target's predicted position; it bursts when its flight elapses. */
+function fireFlakShell(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg: number): void {
+  const ox = t.col + 0.5;
+  const oy = t.row + 0.5;
+  const dist = Math.hypot(target.x - ox, target.y - oy);
+  const flightTicks = Math.max(1, Math.ceil(dist / (SHELL_SPEED / TICK_HZ)));
+  const flightSec = flightTicks / TICK_HZ;
+  const vel = flyerVelocity(target);
+  const px = target.x + vel.vx * flightSec;
+  const py = target.y + vel.vy * flightSec;
+  s.projectiles.push({
+    id: s.nextId++,
+    kind: 'shell',
+    x: ox,
+    y: oy,
+    vx: (px - ox) / flightSec,
+    vy: (py - oy) / flightSec,
+    targetId: target.id,
+    towerId: t.id,
+    damage: dmg,
+    lifetime: flightTicks,
+  });
+  s.events.push({ type: 'shot', towerId: t.id, x: target.x, y: target.y, splash: st.splash });
+}
+
+/** Launch a four-missile salvo; each missile picks a seeded direction, then homes onto the target. */
+function fireMissileSalvo(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg: number): void {
+  const ox = t.col + 0.5;
+  const oy = t.row + 0.5;
+  const perMissile = dmg / AA_SALVO_COUNT;
+  let rng = missileSeed(s.tick, t.id, t.salvoCount);
+  t.salvoCount++;
+  for (let i = 0; i < AA_SALVO_COUNT; i++) {
+    const r = rngNext(rng);
+    rng = r.next;
+    const angle = r.value * Math.PI * 2;
+    s.projectiles.push({
+      id: s.nextId++,
+      kind: 'missile',
+      x: ox,
+      y: oy,
+      vx: Math.cos(angle) * MISSILE_INITIAL_SPEED,
+      vy: Math.sin(angle) * MISSILE_INITIAL_SPEED,
+      targetId: target.id,
+      towerId: t.id,
+      damage: perMissile,
+      lifetime: MISSILE_LIFETIME_TICKS,
+    });
+  }
+  s.events.push({ type: 'shot', towerId: t.id, x: target.x, y: target.y, splash: st.splash });
+}
+
+/** The nearest flyer within `range` tiles of (x, y) that towers can currently hurt. */
+function nearestFlyer(s: RunState, x: number, y: number, range: number): Enemy | undefined {
+  let best: Enemy | undefined;
+  let bestD2 = range * range;
+  for (const e of s.enemies) {
+    if (e.dead || baseEnemyKind(e.kind) !== 'flyer') continue;
+    if (!towerCanHurt(s, e)) continue;
+    const d2 = (e.x - x) ** 2 + (e.y - y) ** 2;
+    if (d2 <= bestD2) {
+      bestD2 = d2;
+      best = e;
+    }
+  }
+  return best;
+}
+
+/** Turn a missile's velocity toward its target by at most the turn rate, then accelerate. */
+function steerMissile(p: Projectile, target: Enemy, dt: number): void {
+  const dx = target.x - p.x;
+  const dy = target.y - p.y;
+  const d = Math.hypot(dx, dy);
+  if (d <= 0) return;
+  const desired = Math.atan2(dy, dx);
+  const current = Math.atan2(p.vy, p.vx);
+  let diff = normalizeAngle(desired - current);
+  const maxTurn = MISSILE_TURN_RATE * dt;
+  if (Math.abs(diff) > maxTurn) diff = Math.sign(diff) * maxTurn;
+  const angle = current + diff;
+  const speed = Math.min(MISSILE_MAX_SPEED, Math.hypot(p.vx, p.vy) + MISSILE_ACCEL * dt);
+  p.vx = Math.cos(angle) * speed;
+  p.vy = Math.sin(angle) * speed;
+}
+
+/** A missile detonates when it closes to its target's radius plus a small arming distance. */
+function missileReached(p: Projectile, target: Enemy): boolean {
+  const r = radiusOf(target) + MISSILE_HIT_RANGE;
+  return (target.x - p.x) ** 2 + (target.y - p.y) ** 2 <= r * r;
+}
+
+/** A Flak shell bursts: full damage to flyers in radius, half to ground, both only inside it. */
+function burstShell(s: RunState, p: Projectile): void {
+  const tower = s.towers.find((t) => t.id === p.towerId);
+  if (!tower) return; // the tower was sold mid-flight: the shell fizzles without damage
+  const st = effectiveStats(tower);
+  const r = st.splash;
+  const cx = p.x;
+  const cy = p.y;
+  for (const e of s.enemies) {
+    if (!towerCanHurt(s, e)) continue;
+    const rr = r + radiusOf(e);
+    if ((e.x - cx) ** 2 + (e.y - cy) ** 2 > rr * rr) continue;
+    if (baseEnemyKind(e.kind) === 'flyer') hitEnemy(s, tower, st, e, p.damage);
+    else hitEnemy(s, tower, st, e, p.damage * 0.5);
+  }
+}
+
+/** Advance every projectile one tick: shells fly and burst, missiles home and detonate. */
+function tickProjectiles(s: RunState): void {
+  if (s.projectiles.length === 0) return;
+  const dt = 1 / TICK_HZ;
+  const next: Projectile[] = [];
+  for (const p of s.projectiles) {
+    p.lifetime--;
+    if (p.kind === 'shell') {
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (p.lifetime <= 0) burstShell(s, p);
+      else next.push(p);
+      continue;
+    }
+
+    // Missile: hold the designated target while it lives; otherwise retarget the nearest flyer each
+    // tick. A missile never acquires (or hurts) a ground unit.
+    let target: Enemy | undefined;
+    if (p.targetId !== null) {
+      target = s.enemies.find((e) => e.id === p.targetId && !e.dead && baseEnemyKind(e.kind) === 'flyer');
+    }
+    if (!target) {
+      target = nearestFlyer(s, p.x, p.y, MISSILE_RETARGET_RANGE);
+      p.targetId = target ? target.id : null;
+    }
+    if (target) steerMissile(p, target, dt);
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+
+    if (target && missileReached(p, target)) {
+      const tower = s.towers.find((t) => t.id === p.towerId);
+      if (tower && towerCanHurt(s, target)) {
+        const st = effectiveStats(tower);
+        hitEnemy(s, tower, st, target, p.damage);
+      }
+      // Otherwise the missile is spent on a pop-up-shielded target: it lands, but nothing is hurt.
+    } else if (p.lifetime <= 0) {
+      // expired: dropped.
+    } else {
+      next.push(p);
+    }
+  }
+  s.projectiles = next;
 }
 
 /** Stage 2+: while the button is held, the reticle burns whatever it is held on. */

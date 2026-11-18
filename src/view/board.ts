@@ -70,6 +70,7 @@ export const TOWER_COLOR: Record<TowerKind, number> = {
   taser: PAL.olive,
   frost: 0x3399cc,
   laser: 0xff3300,
+  aa: 0x5a7d9a,
   beacon: 0xffcc00,
   repair: 0x00a000,
   wall: 0x8a8a8a,
@@ -393,6 +394,10 @@ export class BoardView {
     for (let i = spriteIndex; i < this.enemySprites.length; i++) {
       this.enemySprites[i].visible = false;
     }
+
+    // In-flight projectiles draw above enemies: a small square for a Flak shell, a tapered dart with
+    // a fading trail for a missile.
+    drawProjectiles(this.overlay, state, board);
 
     // The flying cursor arrows live above the enemy layer so they are always visible.
     let arrowIndex = 0;
@@ -949,6 +954,43 @@ function drawFlyingCursor(
   }
 }
 
+/** Draw in-flight projectiles as vector shapes: a shell is a small square, a missile a tapered dart. */
+function drawProjectiles(
+  g: Graphics,
+  state: RunState,
+  board: { x: number; y: number; cell: number },
+): void {
+  if (state.projectiles.length === 0) return;
+  const cell = board.cell;
+  for (const p of state.projectiles) {
+    const px = board.x + p.x * cell;
+    const py = board.y + p.y * cell;
+    const heading = Math.atan2(p.vy, p.vx);
+    const cos = Math.cos(heading);
+    const sin = Math.sin(heading);
+    if (p.kind === 'shell') {
+      const s = Math.max(2, Math.round(cell * 0.12));
+      g.rect(Math.round(px - s / 2), Math.round(py - s / 2), s, s).fill(0x2a2a2a).stroke({ width: 1, color: 0x0a0a0a });
+    } else {
+      const len = Math.max(4, Math.round(cell * 0.3));
+      const half = Math.max(2, Math.round(cell * 0.08));
+      const tipX = px + cos * len;
+      const tipY = py + sin * len;
+      const bx = px - cos * len * 0.4;
+      const by = py - sin * len * 0.4;
+      g.poly([
+        tipX, tipY,
+        bx + (-sin) * half, by + (cos) * half,
+        bx - (-sin) * half, by - (cos) * half,
+      ]).fill(0x2a2a2a).stroke({ width: 1, color: 0x0a0a0a });
+      // A short fading trail behind the dart.
+      const tx = px - cos * len * 0.6;
+      const ty = py - sin * len * 0.6;
+      g.moveTo(tx, ty).lineTo(px, py).stroke({ width: 1, color: 0x0a0a0a, alpha: 0.6 });
+    }
+  }
+}
+
 function drawTowerShape(
   g: Graphics,
   kind: TowerKind,
@@ -995,6 +1037,17 @@ function drawTowerShape(
     g.rect(x, y, s, s).fill({ color: 0x9a9a9a, alpha }).stroke({ width: 1, color: PAL.dark, alpha });
     const arrowLen = Math.max(4, Math.round(cell * 0.3));
     drawCursorArrow(g, Math.round(cx - arrowLen / 2), Math.round(cy - arrowLen / 2), arrowLen, alpha);
+  } else if (kind === 'aa') {
+    // Anti-air: a square plinth with two thin barrels side by side, tracking the target together.
+    const s = Math.round(cell * 0.44);
+    const bx = Math.round(cx - s / 2);
+    const by = Math.round(cy - s / 2);
+    g.rect(bx, by, s, s).fill(fill).stroke(outline);
+    const bw = Math.max(2, Math.round(cell * 0.1));
+    const bl = Math.round(cell * 0.34);
+    const gap = Math.max(1, Math.round(cell * 0.08));
+    drawBarrel(g, cx, cy, angle, Math.round(cx - gap - bw), by - bl, bw, bl, fill, outline);
+    drawBarrel(g, cx, cy, angle, Math.round(cx + gap), by - bl, bw, bl, fill, outline);
   } else {
     const r = Math.round(cell * 0.38);
     g.poly([cx, cy - r, cx + r, cy, cx, cy + r, cx - r, cy]).fill(fill).stroke(outline);

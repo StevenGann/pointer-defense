@@ -119,6 +119,20 @@ const MARK_PRIMITIVES: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch
       { type: 'poly', pts: [0, -0.44, -0.06, -0.36, 0.06, -0.36] },
     ],
   },
+  aa: {
+    // Flak: a shell burst — a small ring with four short radiating ticks.
+    A: [
+      { type: 'ring', x: 0, y: 0, r: 0.12 },
+      { type: 'line', x1: 0, y1: -0.2, x2: 0, y2: -0.3 },
+      { type: 'line', x1: 0, y1: 0.2, x2: 0, y2: 0.3 },
+      { type: 'line', x1: -0.2, y1: 0, x2: -0.3, y2: 0 },
+      { type: 'line', x1: 0.2, y1: 0, x2: 0.3, y2: 0 },
+    ],
+    // Missile: a small tapered dart.
+    B: [
+      { type: 'poly', pts: [0, -0.28, 0.09, -0.12, 0, -0.06, -0.09, -0.12] },
+    ],
+  },
   beacon: {
     // Command: a four-point star on the cap.
     A: [

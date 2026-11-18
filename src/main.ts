@@ -409,6 +409,8 @@ function towerSound(kind: TowerKind): SoundName {
       return 'laser';
     case 'frost':
       return 'frost';
+    case 'aa':
+      return 'cannon';
     case 'beacon':
       return 'cannon';
     case 'repair':

@@ -36,8 +36,8 @@ export const ART_SILHOUETTE = 28;
 const ENEMY_KINDS = ['grunt', 'runner', 'shielded', 'flyer', 'armoured', 'saboteur', 'breacher', 'boss'] as const;
 
 /** Towers ship a base plinth (never rotates) and, for those with a barrel, a turret (rotates). */
-const TOWER_BASE_KINDS = ['gun', 'cannon', 'laser', 'taser', 'frost', 'beacon', 'cursor', 'repair', 'wall'] as const;
-const TOWER_TURRET_KINDS = ['gun', 'cannon', 'laser', 'taser', 'frost'] as const;
+const TOWER_BASE_KINDS = ['gun', 'cannon', 'laser', 'taser', 'frost', 'aa', 'beacon', 'cursor', 'repair', 'wall'] as const;
+const TOWER_TURRET_KINDS = ['gun', 'cannon', 'laser', 'taser', 'frost', 'aa'] as const;
 
 /** Branch marks, one file each. Wall and repair branches carry their identity in the base, not here. */
 const BRANCH_NAMES: Readonly<Record<string, Readonly<Partial<Record<string, string>>>>> = {

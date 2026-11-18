@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <defs>
+    <linearGradient id="barrel" x1="11" y1="0" x2="13" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#bcd2e6"/>
+      <stop offset="0.45" stop-color="#7da3c2"/>
+      <stop offset="1" stop-color="#2f4a5e"/>
+    </linearGradient>
+    <radialGradient id="hub" cx="14.4" cy="14.4" r="6" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#c8dcee"/>
+      <stop offset="0.6" stop-color="#5a7d9a"/>
+      <stop offset="1" stop-color="#2f4a5e"/>
+    </radialGradient>
+  </defs>
+  <!-- Points north. Two thin barrels side by side; the pivot is the centre of the box. -->
+  <rect x="11" y="4" width="3" height="12" fill="url(#barrel)" stroke="#000000" stroke-width="1"/>
+  <rect x="18" y="4" width="3" height="12" fill="url(#barrel)" stroke="#000000" stroke-width="1"/>
+  <rect x="10.6" y="2.8" width="10.8" height="2.4" fill="#1c2a2a" stroke="#000000" stroke-width="0.8"/>
+  <line x1="11" y1="9.5" x2="14" y2="9.5" stroke="#274154" stroke-width="0.8"/>
+  <line x1="18" y1="9.5" x2="21" y2="9.5" stroke="#274154" stroke-width="0.8"/>
+  <circle cx="16" cy="16" r="4.6" fill="url(#hub)" stroke="#000000" stroke-width="1"/>
+  <circle cx="16" cy="16" r="1.5" fill="#274154"/>
+</svg>
