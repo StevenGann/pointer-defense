@@ -88,6 +88,23 @@ export class MenuView {
     }
   }
 
+  /**
+   * The pooled text object for row `index`, grown on demand. The pool used to be a fixed eight, which
+   * was fine until the Help menu grew past it: the ninth row threw inside the render tick and killed the
+   * frame, so the dropdown never appeared and the game looked frozen. A menu is data; its row pool grows
+   * with it.
+   */
+  private textAt(index: number): Text {
+    let t = this.texts[index];
+    if (!t) {
+      t = makeText('');
+      t.anchor.set(0, 0.5);
+      this.texts.push(t);
+      this.root.addChild(t);
+    }
+    return t;
+  }
+
   /** The pooled tick sprite for the `index`-th checked entry, grown on demand. */
   private checkSprite(index: number): Sprite {
     let s = this.checkSprites[index];
@@ -134,7 +151,7 @@ export class MenuView {
 
     for (let i = 0; i < m.items.length; i++) {
       const item = m.items[i];
-      const t = this.texts[i];
+      const t = this.textAt(i);
       if (item.separator) {
         g.moveTo(item.rect.x + 2, item.rect.y + Math.floor(item.rect.h / 2))
           .lineTo(item.rect.x + item.rect.w - 2, item.rect.y + Math.floor(item.rect.h / 2))

@@ -461,11 +461,39 @@ export class HelpView {
     text.position.set(r.x + r.w / 2, r.y + r.h / 2);
   }
 
+  /**
+   * The tree text for row `index`, grown on demand. The pool is a render-time cache, not a limit on the
+   * content: expanding a chapter adds rows, and a fixed pool threw inside the render tick the moment a
+   * chapter held more pages than the pool had slots - the window froze with the tree half drawn.
+   */
+  private treeTextAt(index: number): Text {
+    let t = this.treeTexts[index];
+    if (!t) {
+      t = makeText('', FONT_SIZE.small, false, PAL.text);
+      t.anchor.set(0, 0.5);
+      this.treeTexts.push(t);
+      this.root.addChild(t);
+    }
+    return t;
+  }
+
+  /** The body line for `index`, grown on demand for the same reason as the tree rows. */
+  private bodyTextAt(index: number): Text {
+    let t = this.bodyTexts[index];
+    if (!t) {
+      t = makeText('', FONT_SIZE.small, false, PAL.text);
+      t.anchor.set(0, 0);
+      this.bodyTexts.push(t);
+      this.root.addChild(t);
+    }
+    return t;
+  }
+
   private drawTree(g: Graphics, hl: HelpLayout, rows: readonly HelpRow[], session: HelpSession, hover: HelpHit): void {
     const hoverRow = hover?.type === 'tree' ? hover.row : -1;
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
-      const text = this.treeTexts[i];
+      const text = this.treeTextAt(i);
       const y = hl.treePanel.y + HELP_TREE_PAD + i * HELP_TREE_ROW_H;
       const selected = row.kind === 'page' && !row.locked && session.pageId === row.page.id;
       const rowHovered = i === hoverRow;
@@ -515,7 +543,7 @@ export class HelpView {
       const width = bullet ? hl.pageText.w - HELP_INDENT : hl.pageText.w;
       const lines = wrapText(text, width);
       lines.forEach((ln, i) => {
-        const t = this.bodyTexts[lineIndex++];
+        const t = this.bodyTextAt(lineIndex++);
         t.text = (bullet && i === 0 ? '• ' : '') + ln;
         t.style.fill = PAL.text;
         t.position.set(hl.pageText.x + (bullet ? HELP_INDENT : 0), y);
