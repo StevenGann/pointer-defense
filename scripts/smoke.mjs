@@ -1894,6 +1894,18 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 }
 
 {
+  // 20e2. Inside the upper layer: regulars first, then bosses, then flyers. Bosses must never be hidden
+  // behind their own escort, and a flyer is above the board whatever rank it holds.
+  const mk = (id, kind) => createEnemy(id, kind, 15, SPAWN, EXIT);
+  const order = enemyDrawOrder([
+    mk(1, 'flyer'), mk(2, 'grunt-boss'), mk(3, 'grunt'), mk(4, 'flyer-boss'), mk(5, 'runner'),
+  ]);
+  const kinds = order.others.map((e) => e.kind).join(',');
+  check(kinds === 'grunt,runner,grunt-boss,flyer,flyer-boss',
+    `regulars, then bosses, then flyers (got ${kinds})`);
+}
+
+{
   // 20f. Rarity: none before wave 15, never two before 60, never on a boss wave, at most two after.
   let noneBefore15 = true;
   for (let w = 1; w < 15; w++) if (popupCountForWave(w) !== 0) noneBefore15 = false;
