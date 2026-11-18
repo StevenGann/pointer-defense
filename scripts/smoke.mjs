@@ -92,6 +92,17 @@ import { BoardView, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR } from '../src/vie
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE } from '../src/view/chrome.ts';
 import { computeHud, computeRightPanel, hudControlAt, textWidth } from '../src/view/hud.ts';
+import {
+  advanceBossBars,
+  barFillPx,
+  bossBarFrame,
+  bossBarRect,
+  bossGimmick,
+  bossName,
+  bossShield,
+  livingBosses,
+  visibleBossBars,
+} from '../src/view/bossBars.ts';
 import { backingStorePixelSize } from '../src/view/screen.ts';
 import {
   ART_MANIFEST,
@@ -4903,6 +4914,126 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(cachedFrameCount() === 0, 'dpr: setArtDpr drops every cached frame array');
   setArtDpr(before);
   resetArt();
+}
+
+// --- 40. Boss bars ---------------------------------------------------------------------------
+{
+  // 40a. A boss on the field produces exactly one bar; a non-boss produces none.
+  const grunt = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+  const boss = createEnemy(2, 'grunt-boss', 12, SPAWN, EXIT);
+  const bosses = livingBosses([grunt, boss]);
+  check(bosses.length === 1 && bosses[0].id === 2, 'a boss on the field produces exactly one bar');
+  check(livingBosses([grunt]).length === 0, 'a non-boss produces no bar');
+  check(bossName('grunt-boss') === 'SERGEANT' && bossName('shielded-boss') === 'BASTION',
+    'boss names are uppercased for the bar');
+  check(bossGimmick('grunt-boss') === 'shrugs off damage', 'the Sergeant subtitle names the gimmick');
+  check(bossGimmick('runner-boss') === 'anything near it keeps pace', 'the Pacer subtitle names the gimmick');
+  check(bossGimmick('shielded-boss') === 'three layers of shielding', 'the Bastion subtitle names the gimmick');
+  check(bossGimmick('boss') === null, 'the marker boss has no teaching subtitle');
+}
+
+{
+  // 40b. The health fill matches hp/maxHp within a pixel, and the lag segment is ahead of or equal.
+  const innerW = 318;
+  const ratio = 60 / 120;
+  const fillW = barFillPx(innerW, ratio);
+  check(Math.abs(fillW - innerW * ratio) <= 1, `health fill matches hp/maxHp within a pixel (${fillW} of ${innerW * ratio})`);
+
+  const tracks = [];
+  const seen = new Set();
+  const e = createEnemy(1, 'grunt-boss', 12, SPAWN, EXIT);
+  e.hp = 120;
+  e.maxHp = 120;
+  advanceBossBars(tracks, [e], 0, seen, true);
+  e.hp = 60;
+  advanceBossBars(tracks, [e], 1, seen, true);
+  const f = bossBarFrame(tracks[0], 1, true);
+  check(f.lagRatio >= f.hpRatio, `the lag segment is ahead of or equal to the fill (${f.lagRatio} >= ${f.hpRatio})`);
+}
+
+{
+  // 40c. A Bastion shows three shield segments and the count falls as layers strip; a Sergeant none.
+  const bastion = createEnemy(1, 'shielded-boss', 24, SPAWN, EXIT);
+  const s0 = bossShield(bastion);
+  check(s0.segments === 3 && s0.filled === 3, `a Bastion shows three shield segments (${s0.segments}, filled ${s0.filled})`);
+  bastion.shieldsRemaining = 2;
+  bastion.shield = 30;
+  const s1 = bossShield(bastion);
+  check(s1.segments === 3 && s1.filled === 2, `the shield segment count falls as layers strip (filled ${s1.filled})`);
+  check(bossShield(createEnemy(2, 'grunt-boss', 12, SPAWN, EXIT)).segments === 0, 'a Sergeant shows no shield bar');
+  const marker = createEnemy(3, 'boss', 10, SPAWN, EXIT);
+  const markerShield = bossShield(marker);
+  check(markerShield.segments === 1 && markerShield.ratio === 1, 'the marker boss shows a single shield fill');
+}
+
+{
+  // 40d. Four bosses produce three bars, oldest dropped.
+  const tracks = [];
+  const seen = new Set();
+  const enemies = [1, 2, 3, 4].map((id) => createEnemy(id, 'grunt-boss', 12, SPAWN, EXIT));
+  advanceBossBars(tracks, enemies, 0, seen, true);
+  const visible = visibleBossBars(tracks, 0);
+  check(visible.length === 3, `four bosses produce three bars (${visible.length})`);
+  check(!visible.some((t) => t.enemyId === 1), 'the oldest boss is dropped');
+  check(visible.some((t) => t.enemyId === 4), 'the newest boss is kept');
+}
+
+{
+  // 40e. The NEW tag appears only on a type's first appearance per profile, never again after save.
+  const seen = new Set();
+  const tracks = [];
+  const first = createEnemy(1, 'grunt-boss', 12, SPAWN, EXIT);
+  const newly = advanceBossBars(tracks, [first], 0, seen, true);
+  check(newly.includes('grunt-boss'), 'the first appearance records the seen kind');
+  check(bossBarFrame(tracks[0], 0, true).showNew, 'the NEW tag appears on a type\'s first appearance');
+
+  const seen2 = new Set(seen);
+  const tracks2 = [];
+  const again = createEnemy(50, 'grunt-boss', 12, SPAWN, EXIT);
+  const newly2 = advanceBossBars(tracks2, [again], 1000, seen2, true);
+  check(newly2.length === 0, 'an already-seen type does not record again');
+  check(!bossBarFrame(tracks2[0], 1000, true).showNew, 'the NEW tag never appears again after the first time');
+
+  const store = { value: null, getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
+  const p = defaultProfile();
+  p.seenBossKinds = ['grunt-boss'];
+  saveProfile(p, store);
+  check(loadProfile(store).seenBossKinds.includes('grunt-boss'), 'the seen set survives a save/reload');
+
+  const p2 = defaultProfile();
+  p2.seenBossKinds = ['grunt-boss', 'grunt', 'not-a-kind', 'grunt-boss'];
+  saveProfile(p2, store);
+  const capped = loadProfile(store).seenBossKinds;
+  check(capped.length === 1 && capped[0] === 'grunt-boss', 'the seen set is capped at the boss kinds that exist');
+}
+
+{
+  // 40f. The bar never intersects a side panel or the field's top edge at two common resolutions.
+  for (const [vw, vh] of [[1280, 720], [1600, 900]]) {
+    const l = computeLayout(vw, vh);
+    const r = bossBarRect(l, 0);
+    const intersects = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+    check(!intersects(r, l.leftPanel), `${vw}x${vh}: the bar never intersects the left panel`);
+    check(!intersects(r, l.rightPanel), `${vw}x${vh}: the bar never intersects the right panel`);
+    check(r.y >= l.board.y, `${vw}x${vh}: the bar sits below the field's top edge (and any wave banner)`);
+    check(r.w <= l.boardW - 48, `${vw}x${vh}: the bar width clears the board edges (${r.w})`);
+    const cx = l.board.x + l.boardW / 2;
+    check(Math.abs(r.x + r.w / 2 - cx) <= 1, `${vw}x${vh}: the bar is centred over the board field`);
+  }
+}
+
+{
+  // 40g. With shakeOn off (reduced motion) there is no flash and the fill is the true value at once.
+  const seen = new Set();
+  const tracks = [];
+  const e = createEnemy(1, 'grunt-boss', 12, SPAWN, EXIT);
+  e.hp = 90;
+  e.maxHp = 120;
+  advanceBossBars(tracks, [e], 0, seen, false);
+  const f = bossBarFrame(tracks[0], 0, false);
+  check(!f.flash, 'with shakeOn off there is no flash');
+  check(Math.abs(f.hpRatio - 90 / 120) < 1e-9, 'with shakeOn off the fill is the true value on the first frame');
+  check(f.lagRatio === f.hpRatio, 'with shakeOn off there is no drain (lag equals the fill)');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
