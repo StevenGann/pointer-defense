@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- An open gate leaf: a white outline the engine tints (grey to warm) as the close nears. -->
+  <rect x="0.5" y="0.5" width="31" height="31" fill="none" stroke="#ffffff" stroke-width="1"/>
+</svg>

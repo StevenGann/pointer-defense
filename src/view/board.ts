@@ -134,8 +134,12 @@ export class BoardView {
   readonly root = new Container();
   private readonly tiles = new Graphics();
   private readonly path = new Graphics();
+  private readonly shutterSprites = new Container();
+  private readonly shutterSpritePool: Sprite[] = [];
   private readonly toggles = new Graphics();
   private readonly towers = new Graphics();
+  private readonly wrenches = new Container();
+  private readonly wrenchSprites: Sprite[] = [];
   private readonly towerSprites = new Container();
   private readonly towerBaseSprites: Sprite[] = [];
   private readonly towerTurretSprites: Sprite[] = [];
@@ -147,6 +151,8 @@ export class BoardView {
   private readonly enemyBodies = new Graphics();
   private readonly enemyFx = new Graphics();
   private readonly enemySprites: Sprite[] = [];
+  private readonly cursorArrows = new Container();
+  private readonly cursorArrowSprites: Sprite[] = [];
   private readonly ghost = new Container();
   private readonly ghostBase = new Sprite();
   private readonly ghostTurret = new Sprite();
@@ -168,7 +174,7 @@ export class BoardView {
     this.ghostTurret.visible = false;
     this.ghost.addChild(this.ghostBase, this.ghostTurret);
     this.popups.addChild(this.popupGfx);
-    this.root.addChild(this.tileSprites, this.tiles, this.path, this.toggles, this.towerSprites, this.towers, this.popups, this.enemies, this.enemyBodies, this.enemyFx, this.ghost, this.overlay, this.note);
+    this.root.addChild(this.tileSprites, this.tiles, this.path, this.shutterSprites, this.toggles, this.towerSprites, this.towers, this.wrenches, this.popups, this.enemies, this.enemyBodies, this.enemyFx, this.cursorArrows, this.ghost, this.overlay, this.note);
   }
 
   /** The pooled body sprite for the `index`-th living enemy, grown on demand. */
@@ -179,6 +185,45 @@ export class BoardView {
       s.anchor.set(0.5, 0.5);
       this.enemySprites.push(s);
       this.enemies.addChild(s);
+    }
+    s.visible = true;
+    return s;
+  }
+
+  /** The pooled arrow sprite for the `index`-th flying cursor, grown on demand. */
+  private cursorArrowSprite(index: number): Sprite {
+    let s = this.cursorArrowSprites[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0, 0);
+      this.cursorArrowSprites.push(s);
+      this.cursorArrows.addChild(s);
+    }
+    s.visible = true;
+    return s;
+  }
+
+  /** The pooled sprite for the `index`-th shutter tile, grown on demand. */
+  private shutterSprite(index: number): Sprite {
+    let s = this.shutterSpritePool[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0.5, 0.5);
+      this.shutterSpritePool.push(s);
+      this.shutterSprites.addChild(s);
+    }
+    s.visible = true;
+    return s;
+  }
+
+  /** The pooled sprite for the `index`-th offline-tower wrench mark, grown on demand. */
+  private wrenchSprite(index: number): Sprite {
+    let s = this.wrenchSprites[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0.5, 0.5);
+      this.wrenchSprites.push(s);
+      this.wrenches.addChild(s);
     }
     s.visible = true;
     return s;
@@ -268,18 +313,22 @@ export class BoardView {
     this.overlay.clear();
 
     this.toggles.clear();
+    let shutterIndex = 0;
     for (const tg of state.toggles) {
-      drawShutter(this.toggles, tg, board, cell, state.clock);
+      drawShutter(this.toggles, this.shutterSprite(shutterIndex), tg, board, cell, state.clock);
+      shutterIndex++;
     }
+    for (let i = shutterIndex; i < this.shutterSpritePool.length; i++) this.shutterSpritePool[i].visible = false;
 
     let towerIndex = 0;
     for (const t of state.towers) {
-      drawTower(this.towerBaseSprite(towerIndex), this.towerTurretSprite(towerIndex), this.towerMarkSprite(towerIndex), this.towers, t, board, cell, state.clock);
+      drawTower(this.towerBaseSprite(towerIndex), this.towerTurretSprite(towerIndex), this.towerMarkSprite(towerIndex), this.wrenchSprite(towerIndex), this.towers, t, board, cell, state.clock);
       towerIndex++;
     }
     for (let i = towerIndex; i < this.towerBaseSprites.length; i++) this.towerBaseSprites[i].visible = false;
     for (let i = towerIndex; i < this.towerTurretSprites.length; i++) this.towerTurretSprites[i].visible = false;
     for (let i = towerIndex; i < this.towerMarkSprites.length; i++) this.towerMarkSprites[i].visible = false;
+    for (let i = towerIndex; i < this.wrenchSprites.length; i++) this.wrenchSprites[i].visible = false;
 
     const rangeMult = towerRangeMult(state);
     const hoveredTower = hover.onBoard ? towerAt(state, hover.col, hover.row) : undefined;
@@ -336,9 +385,14 @@ export class BoardView {
     }
 
     // The flying cursor arrows live above the enemy layer so they are always visible.
+    let arrowIndex = 0;
     for (const t of state.towers) {
-      if (t.kind === 'cursor') drawFlyingCursor(this.overlay, t, board);
+      if (t.kind === 'cursor') {
+        drawFlyingCursor(this.overlay, this.cursorArrowSprite(arrowIndex), t, board);
+        arrowIndex++;
+      }
     }
+    for (let i = arrowIndex; i < this.cursorArrowSprites.length; i++) this.cursorArrowSprites[i].visible = false;
 
     if (state.selected && hover.onBoard && canPlace(state, state.selected, hover.col, hover.row)) {
       const cx = board.x + (hover.col + 0.5) * cell;
@@ -460,6 +514,7 @@ const SHUTTER_EDGE = 0x707070;
 /** Draw one map toggle: a solid shutter when closed, a faint outline plus countdown bar when open. */
 function drawShutter(
   g: Graphics,
+  tileSprite: Sprite,
   tg: LevelToggle,
   board: { x: number; y: number; cell: number },
   cell: number,
@@ -473,12 +528,38 @@ function drawShutter(
 
   if (open) {
     // The shutter edge stays as a faint outline so the player can read where it will close, warming
-    // as the close approaches.
+    // as the close approaches. The outline asset is white and tinted to the live colour.
     const color = cycles ? lerpColor(SHUTTER_EDGE, SHUTTER_WARM, progress) : SHUTTER_EDGE;
-    g.rect(px + 0.5, py + 0.5, cell - 1, cell - 1).stroke({ width: 1, color, alpha: 0.6 });
+    const tex = getArtTexture('shutter-open', cell);
+    if (tex !== null) {
+      tileSprite.texture = tex;
+      tileSprite.width = cell;
+      tileSprite.height = cell;
+      tileSprite.position.set(px + cell / 2, py + cell / 2);
+      tileSprite.rotation = 0;
+      tileSprite.alpha = 0.6;
+      tileSprite.tint = color;
+      tileSprite.visible = true;
+    } else {
+      tileSprite.visible = false;
+      g.rect(px + 0.5, py + 0.5, cell - 1, cell - 1).stroke({ width: 1, color, alpha: 0.6 });
+    }
   } else {
-    g.rect(px, py, cell, cell).fill(0xa0a0a0);
-    edgeRect(g, px, py, cell, 0x707070);
+    const tex = getArtTexture('shutter-closed', cell);
+    if (tex !== null) {
+      tileSprite.texture = tex;
+      tileSprite.width = cell;
+      tileSprite.height = cell;
+      tileSprite.position.set(px + cell / 2, py + cell / 2);
+      tileSprite.rotation = 0;
+      tileSprite.alpha = 1;
+      tileSprite.tint = 0xffffff;
+      tileSprite.visible = true;
+    } else {
+      tileSprite.visible = false;
+      g.rect(px, py, cell, cell).fill(0xa0a0a0);
+      edgeRect(g, px, py, cell, 0x707070);
+    }
   }
 
   if (cycles) {
@@ -540,6 +621,7 @@ function drawTower(
   baseSprite: Sprite,
   turretSprite: Sprite,
   markSprite: Sprite,
+  wrenchSprite: Sprite,
   g: Graphics,
   t: Tower,
   board: { x: number; y: number; cell: number },
@@ -564,7 +646,7 @@ function drawTower(
     } else if (isOffline(t)) {
       // Broken-but-fixable, not gone: an empty health bar, a desaturating wash, and a red tag.
       drawBar(g, cx, cy, cell, 0, healthColor(0));
-      drawOfflineTag(g, cx, cy, cell);
+      drawOfflineTag(g, wrenchSprite, cx, cy, cell);
     } else if (t.maxHp > 0 && t.hp < t.maxHp) {
       drawBar(g, cx, cy, cell, t.hp / t.maxHp, healthColor(t.hp / t.maxHp));
     }
@@ -821,11 +903,29 @@ function drawCursorArrow(g: Graphics, x: number, y: number, length: number, alph
 }
 
 /** Draw a flying cursor tower's arrow, its click ring, and the 2px dip on the click frame. */
-function drawFlyingCursor(g: Graphics, t: Tower, board: { x: number; y: number; cell: number }): void {
+function drawFlyingCursor(
+  g: Graphics,
+  arrowSprite: Sprite,
+  t: Tower,
+  board: { x: number; y: number; cell: number },
+): void {
   const px = board.x + t.cursorX * board.cell;
   const py = board.y + t.cursorY * board.cell;
   const dip = t.cursorClickFx === 8 ? 2 : 0;
-  drawCursorArrow(g, px, py + dip, 12);
+  const tex = getArtTexture('cursor-arrow', 12);
+  if (tex !== null) {
+    arrowSprite.texture = tex;
+    arrowSprite.width = 12;
+    arrowSprite.height = 12;
+    arrowSprite.position.set(px, py + dip);
+    arrowSprite.rotation = 0;
+    arrowSprite.alpha = 1;
+    arrowSprite.tint = 0xffffff;
+    arrowSprite.visible = true;
+  } else {
+    arrowSprite.visible = false;
+    drawCursorArrow(g, px, py + dip, 12);
+  }
   if (t.cursorClickFx > 0) {
     const rx = board.x + t.cursorClickX * board.cell;
     const ry = board.y + t.cursorClickY * board.cell;
@@ -1335,15 +1435,28 @@ function drawBar(g: Graphics, cx: number, cy: number, cell: number, ratio: numbe
 }
 
 /** An offline tower's marking: a desaturating wash over the body plus a small red crossed wrench. */
-function drawOfflineTag(g: Graphics, cx: number, cy: number, cell: number): void {
+function drawOfflineTag(g: Graphics, wrenchSprite: Sprite, cx: number, cy: number, cell: number): void {
   const half = cell / 2;
   g.rect(cx - half, cy - half, cell, cell).fill({ color: 0x808080, alpha: 0.35 });
   const s = Math.max(3, Math.round(cell * 0.16));
   const x0 = Math.round(cx - half + 3);
   const y0 = Math.round(cy - half + 3);
-  g.moveTo(x0, y0).lineTo(x0 + s, y0 + s);
-  g.moveTo(x0 + s, y0).lineTo(x0, y0 + s);
-  g.stroke({ width: 2, color: 0xd00000 });
+  const tex = getArtTexture('offline-wrench', s);
+  if (tex !== null) {
+    wrenchSprite.texture = tex;
+    wrenchSprite.width = s;
+    wrenchSprite.height = s;
+    wrenchSprite.position.set(x0 + s / 2, y0 + s / 2);
+    wrenchSprite.rotation = 0;
+    wrenchSprite.alpha = 1;
+    wrenchSprite.tint = 0xffffff;
+    wrenchSprite.visible = true;
+  } else {
+    wrenchSprite.visible = false;
+    g.moveTo(x0, y0).lineTo(x0 + s, y0 + s);
+    g.moveTo(x0 + s, y0).lineTo(x0, y0 + s);
+    g.stroke({ width: 2, color: 0xd00000 });
+  }
 }
 
 function drawReticle(g: Graphics, state: RunState, board: { x: number; y: number; cell: number }, cell: number): void {

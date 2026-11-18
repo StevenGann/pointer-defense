@@ -16,7 +16,7 @@ import { liveDevicePixelRatio } from './screen.ts';
  * `scripts/smoke.mjs`, so an unreferenced SVG or a listed-but-absent one fails the smoke run.
  */
 
-export type ArtCategory = 'enemies' | 'towers' | 'branches' | 'board';
+export type ArtCategory = 'enemies' | 'towers' | 'branches' | 'board' | 'fx' | 'ui';
 
 export interface ArtEntry {
   /** The unique asset name, e.g. `grunt`, `gun-base`, `gun-marksman`, `tile`. */
@@ -50,6 +50,32 @@ const BRANCH_NAMES: Readonly<Record<string, Readonly<Partial<Record<string, stri
 
 const BOARD_NAMES = ['tile', 'path-tile', 'obstacle', 'block'] as const;
 
+/** Effect sprites: fixed shapes whose only runtime variation is position/scale/rotation/alpha/tint. */
+const FX_NAMES = [
+  'muzzle-gun',
+  'muzzle-cannon',
+  'muzzle-frost',
+  'muzzle-laser',
+  'muzzle-taser',
+  'spark-hit',
+  'shield-arc',
+  'death-ring',
+] as const;
+
+/** UI glyphs: fixed chrome marks. `arrow-right` is reserved (its mirror ships first). */
+const UI_NAMES = [
+  'cursor-arrow',
+  'offline-wrench',
+  'shutter-open',
+  'shutter-closed',
+  'check',
+  'glyph-minimize',
+  'glyph-maximize',
+  'glyph-close',
+  'arrow-left',
+  'arrow-right',
+] as const;
+
 function entries(category: ArtCategory, dir: string, names: readonly string[]): ArtEntry[] {
   return names.map((name) => ({ name, category, file: `${dir}/${name}.svg` }));
 }
@@ -61,6 +87,8 @@ export const ART_MANIFEST: readonly ArtEntry[] = [
   ...entries('towers', 'towers', TOWER_TURRET_KINDS.map((k) => `${k}-turret`)),
   ...entries('branches', 'branches', Object.values(BRANCH_NAMES).flatMap((m) => Object.values(m)) as string[]),
   ...entries('board', 'board', BOARD_NAMES),
+  ...entries('fx', 'fx', FX_NAMES),
+  ...entries('ui', 'ui', UI_NAMES),
 ];
 
 const MANIFEST_BY_NAME: ReadonlyMap<string, ArtEntry> = new Map(ART_MANIFEST.map((e) => [e.name, e]));

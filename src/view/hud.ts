@@ -1,5 +1,6 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
+import { getArtTexture } from './art.ts';
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
 import { clickDamage, comboMultiplier, critChance, nextPointerCost, overclockCeiling, pointerInfo } from '../core/pointer.ts';
@@ -641,6 +642,9 @@ export class HudView {
   readonly root = new Container();
   private readonly g = new Graphics();
   private readonly modalG = new Graphics();
+  private readonly checks = new Container();
+  readonly checkSprites: Sprite[] = [];
+  private checkIndex = 0;
 
   private readonly statusHint = makeText('');
   private readonly statusWave = makeText('');
@@ -687,7 +691,7 @@ export class HudView {
 
   constructor() {
     this.towerButtons = TOWER_KINDS.map(() => makeText(''));
-    this.root.addChild(this.g);
+    this.root.addChild(this.g, this.checks);
     for (const t of [
       this.statusHint,
       this.statusWave,
@@ -754,9 +758,45 @@ export class HudView {
     this.noticeUntilTick = this.lastTick + ticks;
   }
 
+  /** The pooled tick sprite for the `index`-th checkbox, grown on demand. */
+  private checkSprite(index: number): Sprite {
+    let s = this.checkSprites[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0.5, 0.5);
+      this.checkSprites.push(s);
+      this.checks.addChild(s);
+    }
+    s.visible = true;
+    return s;
+  }
+
+  /** A Windows checkbox: a white sunken box with the standard tick glyph when checked. */
+  private drawCheckbox(g: Graphics, r: Rect, checked: boolean): void {
+    const box: Rect = { x: r.x, y: r.y + Math.floor((r.h - 12) / 2), w: 12, h: 12 };
+    bevel(g, box, false, PAL.highlight);
+    if (checked) {
+      const spr = this.checkSprite(this.checkIndex++);
+      const tex = getArtTexture('check', 12);
+      if (tex !== null) {
+        spr.texture = tex;
+        spr.width = 12;
+        spr.height = 12;
+        spr.position.set(box.x + 6, box.y + 6);
+        spr.rotation = 0;
+        spr.alpha = 1;
+        spr.tint = PAL.text;
+      } else {
+        spr.visible = false;
+        g.moveTo(box.x + 2, box.y + 6).lineTo(box.x + 5, box.y + 9).lineTo(box.x + 10, box.y + 3).stroke({ width: 1, color: PAL.text });
+      }
+    }
+  }
+
   draw(s: RunState, l: Layout, hoverHud: HudAction | null): void {
     const g = this.g;
     g.clear();
+    this.checkIndex = 0;
 
     // Status bar text.
     const sp = l.statusPanes;
@@ -828,7 +868,7 @@ export class HudView {
       this.waveButton.style.fill = enabled ? PAL.text : PAL.shadow;
       this.waveButton.position.set(h.wave.x + 6, h.wave.y + Math.floor(h.wave.h / 2));
 
-      drawCheckbox(g, h.autoWave, s.autoWave);
+      this.drawCheckbox(g, h.autoWave, s.autoWave);
       this.autoWaveButton.text = 'Auto';
       this.autoWaveButton.style.fill = PAL.text;
       this.autoWaveButton.position.set(h.autoWave.x + 20, h.autoWave.y + Math.floor(h.autoWave.h / 2));
@@ -851,6 +891,8 @@ export class HudView {
       this.modalRestart.text = '';
       this.modalButton2.text = '';
     }
+
+    for (let i = this.checkIndex; i < this.checkSprites.length; i++) this.checkSprites[i].visible = false;
   }
 
   private drawTowerControls(s: RunState, h: HudLayout, hoverHud: HudAction | null): void {
@@ -1090,7 +1132,7 @@ export class HudView {
       rp.pointer.upgrade.y + Math.floor(rp.pointer.upgrade.h / 2),
     );
     if (rp.pointer.override) {
-      drawCheckbox(g, rp.pointer.override, s.pointer.manualOverride);
+      this.drawCheckbox(g, rp.pointer.override, s.pointer.manualOverride);
       this.pointerOverrideButton.text = 'Override';
       this.pointerOverrideButton.style.fill = PAL.text;
       this.pointerOverrideButton.position.set(
@@ -1169,15 +1211,6 @@ export class HudView {
     bevel(g, b.restart, true, PAL.face);
     this.modalRestart.text = 'Restart Windows';
     this.modalRestart.position.set(b.restart.x + b.restart.w / 2, b.restart.y + b.restart.h / 2);
-  }
-}
-
-/** A Windows checkbox: a white sunken box with the standard tick glyph when checked. */
-function drawCheckbox(g: Graphics, r: Rect, checked: boolean): void {
-  const box: Rect = { x: r.x, y: r.y + Math.floor((r.h - 12) / 2), w: 12, h: 12 };
-  bevel(g, box, false, PAL.highlight);
-  if (checked) {
-    g.moveTo(box.x + 2, box.y + 6).lineTo(box.x + 5, box.y + 9).lineTo(box.x + 10, box.y + 3).stroke({ width: 1, color: PAL.text });
   }
 }
 

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Three short radiating lines from a hit, 120 degrees apart, matching the old procedural
+       spark's 0.4 rad twist. -->
+  <g stroke="#ffffff" stroke-width="1" stroke-linecap="round" transform="rotate(22.918 16 16)">
+    <line x1="18.8" y1="16" x2="23" y2="16"/>
+    <line x1="18.8" y1="16" x2="23" y2="16" transform="rotate(120 16 16)"/>
+    <line x1="18.8" y1="16" x2="23" y2="16" transform="rotate(240 16 16)"/>
+  </g>
+</svg>

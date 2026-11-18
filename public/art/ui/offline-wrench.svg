@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- The red crossed mark on an offline tower. -->
+  <g stroke="#d00000" stroke-width="10" stroke-linecap="round">
+    <line x1="2" y1="2" x2="30" y2="30"/>
+    <line x1="30" y1="2" x2="2" y2="30"/>
+  </g>
+</svg>
