@@ -1,4 +1,5 @@
 import { TICK_MS } from '../core/time.ts';
+import { isBossKind } from '../core/enemies.ts';
 import type { GameEvent } from '../core/state.ts';
 
 /**
@@ -39,7 +40,7 @@ export interface ShakeImpulse {
 export function shakeImpulseFor(ev: GameEvent): ShakeImpulse | null {
   switch (ev.type) {
     case 'kill':
-      return ev.kind === 'boss'
+      return isBossKind(ev.kind)
         ? { amplitude: SHAKE_AMPLITUDE.bossDeath, freezeMs: 0 }
         : null; // an ordinary death pops; it does not shake
     case 'wallDamaged':

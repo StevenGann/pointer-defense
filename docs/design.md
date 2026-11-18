@@ -547,6 +547,35 @@ not a leak, it does not shake or flash or play the damage sound, and it shows a 
 
 If an enemy could be answered equally well by either half, it is not doing its job.
 
+### 7.1 Boss variants (pass 1)
+
+Every enemy type has a bigger, nastier version of itself. Each is a **separate enemy kind** (not a flag
+on the base kind), keeps the base type's identity, and counts as its base type for tower rules (an
+Overload Taser reads a Bastion as shielded). Killing one pays **6×** the base type's kill value and
+shows a distinct death pop; a boss variant that leaks costs its own integrity, not the marker boss's 3.
+
+| Kind | Name | Scale | HP | Speed | Integrity | Gimmick |
+|---|---|---|---|---|---|---|
+| `grunt-boss` | **Sergeant** | 1.6 | 6× | 0.55 | 4 | none — a wall of hit points, the baseline every other boss is read against |
+| `runner-boss` | **Pacer** | 1.5 | 4× | 0.85 | 3 | **Aura of pace**: a 3-tile speed floor that makes every enemy inside move at the Pacer's speed or its own, whichever is faster |
+| `shielded-boss` | **Bastion** | 1.6 | 5× | 0.45 | 4 | **Three shield layers** (each worth the base 15-point shield), stripped one per pointer/cursor hit |
+
+The radius is the base type's radius × scale, so hit-testing and the drawn silhouette agree. Bosses are
+drawn with the **base enemy SVG at the stated scale** plus a runtime crown/notch motif, so the art
+pipeline needs no new files yet; the Pacer aura draws as a faint ring.
+
+Type bosses unlock at **wave 12 (Sergeant), 18 (Pacer) and 24 (Bastion)** — each boss's first
+appearance is its unlock wave, never before it — and then one boss rides every eighth wave after that
+(wave 24 + 8k), chosen from the unlocked set by a seeded roll that favours the newest type. They never
+replace the marker bosses at 10/25/50/75/100.
+
+The Bastion's **Warden aura** — an area shield grant to nearby enemies — is **deferred to boss pass 3**.
+Pass 1 shipped it and it read as a wall on the two open maps: shields only fall to pointer damage, so
+while the Bastion stood a tower-only board could not damage anything inside the aura's radius, which
+contradicted idling being viable. When it returns it must be capped — a small radius plus a hard cap on
+the number of affected enemies, or a short-lived shield that decays — so it cannot neutralise a
+tower-only board again.
+
 ---
 
 ## 8. Waves

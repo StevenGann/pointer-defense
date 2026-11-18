@@ -1,7 +1,9 @@
 import type { Tile } from './grid.ts';
 import { TICK_HZ } from './time.ts';
 
-export type EnemyKind = 'grunt' | 'runner' | 'shielded' | 'flyer' | 'armoured' | 'saboteur' | 'boss' | 'breacher' | 'popup';
+export type EnemyKind =
+  | 'grunt' | 'runner' | 'shielded' | 'flyer' | 'armoured' | 'saboteur' | 'boss' | 'breacher' | 'popup'
+  | 'grunt-boss' | 'runner-boss' | 'shielded-boss';
 
 export interface EnemyStats {
   readonly name: string;
@@ -19,9 +21,44 @@ export interface EnemyStats {
   readonly value: number;
   /** Damage per second dealt to a wall while stopped at it (0 for non-breachers). */
   readonly wallDps: number;
+  /** Integrity lost when the enemy leaks. */
+  readonly integrity: number;
+  /** Draw multiplier on the base silhouette (1.0 = the base type's size). */
+  readonly scale: number;
 }
 
 const GRUNT_SPEED = 1.6;
+
+/**
+ * Boss variants (docs/design.md, boss-variants passes). Each is a separate kind so waves, harness
+ * and tests can name it, but it counts as its base type for tower rules (an Overload Taser sees a
+ * Bastion as shielded; an AA tower will see a Carrier as a flyer in a later pass). The three pass-1
+ * bosses keep one gimmick each: the Sergeant is a wall of HP, the Pacer sets a speed floor, and the
+ * Bastion wears shield layers.
+ */
+export const BASTION_SHIELD_LAYERS = 3;
+/** Each Bastion layer is worth the base Shielded shield (15 points). */
+export const BASTION_SHIELD_LAYER_VALUE = 15;
+/** The Pacer's aura radius: enemies inside move at the Pacer's speed or their own, whichever is faster. */
+export const PACER_AURA_RADIUS = 3;
+
+/** The base enemy type a boss variant counts as for tower rules (and art). */
+export function baseEnemyKind(kind: EnemyKind): EnemyKind {
+  if (kind === 'grunt-boss') return 'grunt';
+  if (kind === 'runner-boss') return 'runner';
+  if (kind === 'shielded-boss') return 'shielded';
+  return kind;
+}
+
+/** Whether the kind is one of the boss variants (not the wave-marker boss). */
+export function isBossVariant(kind: EnemyKind): boolean {
+  return kind === 'grunt-boss' || kind === 'runner-boss' || kind === 'shielded-boss';
+}
+
+/** Whether the kind is any boss (the wave-marker boss or a boss variant). */
+export function isBossKind(kind: EnemyKind): boolean {
+  return kind === 'boss' || isBossVariant(kind);
+}
 
 /**
  * Data, not code: balance lives here.
@@ -34,15 +71,18 @@ const GRUNT_SPEED = 1.6;
  * so it is a check on raw coverage rather than on the player's wall-building.
  */
 export const ENEMY_STATS: Readonly<Record<EnemyKind, EnemyStats>> = {
-  grunt: { name: 'Grunt', hp: 20, speed: GRUNT_SPEED, radius: 0.3, armour: 0, shield: 0, value: 4, wallDps: 0 },
-  runner: { name: 'Runner', hp: 10, speed: GRUNT_SPEED * 2.2, radius: 0.18, armour: 0, shield: 0, value: 6, wallDps: 0 },
-  shielded: { name: 'Shielded', hp: 30, speed: 1.2, radius: 0.36, armour: 2, shield: 15, value: 10, wallDps: 0 },
-  flyer: { name: 'Flyer', hp: 8, speed: GRUNT_SPEED * 1.5, radius: 0.22, armour: 0, shield: 0, value: 5, wallDps: 0 },
-  armoured: { name: 'Armoured', hp: 45, speed: 1.0, radius: 0.34, armour: 8, shield: 0, value: 12, wallDps: 0 },
-  saboteur: { name: 'Saboteur', hp: 25, speed: 1.5, radius: 0.28, armour: 0, shield: 0, value: 11, wallDps: 0 },
-  boss: { name: 'Boss', hp: 450, speed: 0.8, radius: 0.55, armour: 6, shield: 120, value: 120, wallDps: 0 },
-  breacher: { name: 'Breacher', hp: 55, speed: 0.6, radius: 0.42, armour: 0, shield: 0, value: 14, wallDps: 12 },
-  popup: { name: 'Pop-up', hp: 60, speed: 0.7, radius: 0.4, armour: 0, shield: 0, value: 18, wallDps: 0 },
+  grunt: { name: 'Grunt', hp: 20, speed: GRUNT_SPEED, radius: 0.3, armour: 0, shield: 0, value: 4, wallDps: 0, integrity: 1, scale: 1 },
+  runner: { name: 'Runner', hp: 10, speed: GRUNT_SPEED * 2.2, radius: 0.18, armour: 0, shield: 0, value: 6, wallDps: 0, integrity: 1, scale: 1 },
+  shielded: { name: 'Shielded', hp: 30, speed: 1.2, radius: 0.36, armour: 2, shield: 15, value: 10, wallDps: 0, integrity: 1, scale: 1 },
+  flyer: { name: 'Flyer', hp: 8, speed: GRUNT_SPEED * 1.5, radius: 0.22, armour: 0, shield: 0, value: 5, wallDps: 0, integrity: 1, scale: 1 },
+  armoured: { name: 'Armoured', hp: 45, speed: 1.0, radius: 0.34, armour: 8, shield: 0, value: 12, wallDps: 0, integrity: 1, scale: 1 },
+  saboteur: { name: 'Saboteur', hp: 25, speed: 1.5, radius: 0.28, armour: 0, shield: 0, value: 11, wallDps: 0, integrity: 1, scale: 1 },
+  boss: { name: 'Boss', hp: 450, speed: 0.8, radius: 0.55, armour: 6, shield: 120, value: 120, wallDps: 0, integrity: 3, scale: 1 },
+  breacher: { name: 'Breacher', hp: 55, speed: 0.6, radius: 0.42, armour: 0, shield: 0, value: 14, wallDps: 12, integrity: 1, scale: 1 },
+  popup: { name: 'Pop-up', hp: 60, speed: 0.7, radius: 0.4, armour: 0, shield: 0, value: 18, wallDps: 0, integrity: 0, scale: 1 },
+  'grunt-boss': { name: 'Sergeant', hp: 120, speed: 0.55, radius: 0.48, armour: 0, shield: 0, value: 24, wallDps: 0, integrity: 4, scale: 1.6 },
+  'runner-boss': { name: 'Pacer', hp: 40, speed: 0.85, radius: 0.27, armour: 0, shield: 0, value: 36, wallDps: 0, integrity: 3, scale: 1.5 },
+  'shielded-boss': { name: 'Bastion', hp: 150, speed: 0.45, radius: 0.576, armour: 2, shield: BASTION_SHIELD_LAYERS * BASTION_SHIELD_LAYER_VALUE, value: 60, wallDps: 0, integrity: 4, scale: 1.6 },
 };
 
 /**
@@ -91,7 +131,9 @@ export interface Enemy {
   hp: number;
   readonly maxHp: number;
   shield: number;
-  readonly maxShield: number;
+  maxShield: number;
+  /** Bastion only: shield layers remaining, each worth the base shield (0 for every other kind). */
+  shieldsRemaining: number;
   /** Distance travelled this run, in tiles. */
   dist: number;
   x: number;
@@ -177,12 +219,13 @@ export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Ti
     id,
     kind,
     wave,
-    isBoss: kind === 'boss',
+    isBoss: isBossKind(kind),
     towerDamaged: false,
     hp,
     maxHp: hp,
     shield,
     maxShield: shield,
+    shieldsRemaining: kind === 'shielded-boss' ? BASTION_SHIELD_LAYERS : 0,
     dist: 0,
     x,
     y,

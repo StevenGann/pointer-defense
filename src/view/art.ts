@@ -1,4 +1,5 @@
 import { Texture } from 'pixi.js';
+import { baseEnemyKind, type EnemyKind } from '../core/enemies.ts';
 import { liveDevicePixelRatio } from './screen.ts';
 
 /**
@@ -70,9 +71,14 @@ export function manifestEntry(name: string): ArtEntry | undefined {
   return MANIFEST_BY_NAME.get(name);
 }
 
-/** The asset name for an enemy kind, or null for kinds that stay runtime (the Pop-up). */
-export function artNameForEnemy(kind: string): string | null {
-  return (ENEMY_KINDS as readonly string[]).includes(kind) ? kind : null;
+/**
+ * The asset name for an enemy kind, or null for kinds that stay runtime (the Pop-up). Boss variants
+ * resolve to their base type's asset: they are drawn as the base silhouette at a larger scale, with
+ * the boss motif added at runtime, so no new art files are needed yet.
+ */
+export function artNameForEnemy(kind: EnemyKind): string | null {
+  const base = baseEnemyKind(kind);
+  return (ENEMY_KINDS as readonly string[]).includes(base) ? base : null;
 }
 
 /** The plinth asset for a tower kind (`<kind>-base`). */

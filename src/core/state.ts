@@ -18,6 +18,8 @@ import {
 } from './levels.ts';
 import { buildAirField, buildField, isSealed, pathTiles, stepToward } from './pathfield.ts';
 import {
+  BASTION_SHIELD_LAYER_VALUE,
+  baseEnemyKind,
   BREACHER_TURRET_DAMAGE,
   BREACHER_TURRET_INTERVAL_TICKS,
   BREACHER_TURRET_RANGE,
@@ -25,6 +27,7 @@ import {
   ENEMY_STATS,
   isPopupEnemy,
   isWeakPointHit,
+  PACER_AURA_RADIUS,
   popupCovers,
   radiusOf,
   speedPerTick,
@@ -1182,13 +1185,31 @@ function moveEnemies(s: RunState): void {
   const globalSlow = s.enemySlowTicks > 0 ? 0.5 : 1;
   const speedMult = s.modifiers.includes('fast') ? 1.15 : 1;
   const exit = exitTile(s);
+  // The Pacer's speed floor reads the Pacer's position at the start of the step, so the movement of
+  // enemies earlier in the array cannot shift the aura mid-tick.
+  const pacerPositions: { x: number; y: number }[] = [];
+  for (const p of s.enemies) if (!p.dead && p.kind === 'runner-boss') pacerPositions.push({ x: p.x, y: p.y });
+  const pacerSpeed = speedPerTick('runner-boss');
   for (const e of s.enemies) {
     if (e.dead) continue;
     e.prevX = e.x;
     e.prevY = e.y;
     if (s.tick < e.stunUntilTick) continue; // stunned: stand still this tick
     const slow = s.tick < e.slowUntilTick ? Math.min(globalSlow, e.slowFactor) : globalSlow;
-    let remaining = speedPerTick(e.kind) * slow * speedMult;
+    // The Pacer's aura is a speed floor: enemies inside 3 tiles move at the Pacer's speed or their
+    // own, whichever is faster. Applied to the base speed before Frost, so it composes with slow.
+    let baseSpeed = speedPerTick(e.kind);
+    if (pacerPositions.length > 0) {
+      for (const p of pacerPositions) {
+        const dx = e.x - p.x;
+        const dy = e.y - p.y;
+        if (dx * dx + dy * dy <= PACER_AURA_RADIUS * PACER_AURA_RADIUS) {
+          if (pacerSpeed > baseSpeed) baseSpeed = pacerSpeed;
+          break;
+        }
+      }
+    }
+    let remaining = baseSpeed * slow * speedMult;
     const field = fieldFor(s, e);
     const wallDps = ENEMY_STATS[e.kind].wallDps;
 
@@ -1364,7 +1385,7 @@ function fireBreacherTurrets(s: RunState): void {
 function leak(s: RunState, e: Enemy): void {
   e.dead = true;
   s.leaksByWave.set(e.wave, (s.leaksByWave.get(e.wave) ?? 0) + 1);
-  s.integrity = Math.max(0, s.integrity - (e.isBoss ? 3 : 1));
+  s.integrity = Math.max(0, s.integrity - ENEMY_STATS[e.kind].integrity);
   s.events.push({ type: 'leak', x: e.x, y: e.y });
   if (s.pointer.targetId === e.id) s.pointer.targetId = null;
   if (s.integrity === 0) {
@@ -1428,7 +1449,7 @@ function towerCandidates(s: RunState, t: Tower, st: EffectiveStats, range: numbe
   const out: Enemy[] = [];
   for (const e of s.enemies) {
     if (!towerCanHurt(s, e)) continue;
-    if (st.targetsFlyersOnly && e.kind !== 'flyer') continue;
+    if (st.targetsFlyersOnly && baseEnemyKind(e.kind) !== 'flyer') continue;
     if (!inRange(t, e, range)) continue;
     out.push(e);
   }
@@ -1500,8 +1521,8 @@ function acquireTargets(s: RunState, t: Tower, st: EffectiveStats, range: number
 
 function perEnemyDamage(st: EffectiveStats, e: Enemy, dmg: number): number {
   let d = dmg;
-  if (e.kind === 'flyer') d *= st.flyerDamageMult;
-  if (e.kind === 'shielded') d *= st.shieldedDamageMult;
+  if (baseEnemyKind(e.kind) === 'flyer') d *= st.flyerDamageMult;
+  if (baseEnemyKind(e.kind) === 'shielded') d *= st.shieldedDamageMult;
   return d;
 }
 
@@ -1520,7 +1541,7 @@ function fireSplash(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dm
   const cy = target.y;
   for (const e of s.enemies) {
     if (!towerCanHurt(s, e)) continue;
-    if (st.targetsFlyersOnly && e.kind !== 'flyer') continue;
+    if (st.targetsFlyersOnly && baseEnemyKind(e.kind) !== 'flyer') continue;
     const r = st.splash + radiusOf(e);
     if ((e.x - cx) ** 2 + (e.y - cy) ** 2 <= r * r) hitEnemy(s, t, st, e, dmg);
   }
@@ -1535,7 +1556,7 @@ function fireChain(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg
     let best = Infinity;
     for (const e of s.enemies) {
       if (!towerCanHurt(s, e) || hitIds.has(e.id)) continue;
-      if (st.targetsFlyersOnly && e.kind !== 'flyer') continue;
+      if (st.targetsFlyersOnly && baseEnemyKind(e.kind) !== 'flyer') continue;
       const d2 = (e.x - prev.x) ** 2 + (e.y - prev.y) ** 2;
       if (d2 <= 1.5 * 1.5 && d2 < best) {
         best = d2;
@@ -1555,7 +1576,7 @@ function fireBeam(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg:
   const hits: Enemy[] = [];
   for (const e of s.enemies) {
     if (!towerCanHurt(s, e)) continue;
-    if (st.targetsFlyersOnly && e.kind !== 'flyer') continue;
+    if (st.targetsFlyersOnly && baseEnemyKind(e.kind) !== 'flyer') continue;
     if (distanceToSegment(e.x, e.y, ox, oy, target.x, target.y) > 0.35) continue;
     hits.push(e);
   }
@@ -1920,7 +1941,7 @@ function fireTowers(s: RunState): void {
       if (
         marked &&
         towerCanHurt(s, marked) &&
-        (!st.targetsFlyersOnly || marked.kind === 'flyer') &&
+        (!st.targetsFlyersOnly || baseEnemyKind(marked.kind) === 'flyer') &&
         inRange(t, marked, range)
       ) {
         overrideTarget = marked;
@@ -2023,6 +2044,13 @@ function damageEnemy(
   if (e.dead || amount <= 0) return;
   if (source === 'tower') e.towerDamaged = true;
   let dmg = amount;
+  if (source === 'pointer' && e.shieldsRemaining > 0) {
+    // Bastion layers: one layer per hit, worth the base shield, never overflowing into hit points.
+    e.shieldsRemaining -= 1;
+    e.shield = e.shieldsRemaining * BASTION_SHIELD_LAYER_VALUE;
+    s.events.push({ type: 'shieldHit', x: e.x, y: e.y, absorbed: BASTION_SHIELD_LAYER_VALUE, left: e.shield });
+    return;
+  }
   if (source === 'pointer' && e.shield > 0) {
     const absorbed = Math.min(e.shield, dmg);
     e.shield -= absorbed;

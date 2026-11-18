@@ -10,7 +10,15 @@ import {
   towerRangeMult,
   type RunState,
 } from '../core/state.ts';
-import { radiusOf, type Enemy, type EnemyKind } from '../core/enemies.ts';
+import {
+  baseEnemyKind,
+  isBossKind,
+  isBossVariant,
+  PACER_AURA_RADIUS,
+  radiusOf,
+  type Enemy,
+  type EnemyKind,
+} from '../core/enemies.ts';
 import { cursorRadius, effectiveStats, isFullyUpgraded, isGateLocked, isOffline, isRepairing, repairProgress, repairRadius, TOWER_STATS, type Branch, type Tower, type TowerKind } from '../core/towers.ts';
 import { tileAt, COLS, ROWS, type Grid, type Tile } from '../core/grid.ts';
 import { toggleOpenAt, toggleProgress, type LevelToggle } from '../core/levels.ts';
@@ -94,6 +102,9 @@ export const ENEMY_COLOR: Record<EnemyKind, number> = {
   boss: 0x27495d,
   breacher: 0x5a7183,
   popup: 0x000080,
+  'grunt-boss': 0x35506a,
+  'runner-boss': 0x577489,
+  'shielded-boss': 0x2f4b62,
 };
 
 /** The single cyan for shield visuals: the shield ring, the impact arc and the `SHD` floater. */
@@ -114,10 +125,13 @@ export const ENEMY_ART_BODY: Record<EnemyKind, number> = {
   boss: 2.6,
   breacher: 2.2,
   popup: 2.0,
+  'grunt-boss': 2.0,
+  'runner-boss': 2.2,
+  'shielded-boss': 2.7,
 };
 
 /** Kinds whose silhouette is oriented: they rotate with the enemy's heading. The rest are symmetric. */
-export const ENEMY_ART_ROTATES: ReadonlySet<EnemyKind> = new Set(['runner', 'flyer', 'saboteur', 'breacher']);
+export const ENEMY_ART_ROTATES: ReadonlySet<EnemyKind> = new Set(['runner', 'flyer', 'saboteur', 'breacher', 'runner-boss']);
 
 const AURA_COLOR = 0x6699ff;
 const SLOW_COLOR = 0x00d0ff;
@@ -1275,7 +1289,8 @@ function drawEnemy(
   const color = ENEMY_COLOR[e.kind];
 
   // Body: the SVG sprite when the asset has loaded, otherwise the procedural shape (the temporary
-  // fallback that keeps a half-finished art pass rendering; deleted once parity is confirmed).
+  // fallback that keeps a half-finished art pass rendering; deleted once parity is confirmed). A
+  // boss variant reuses its base type's asset, drawn at the base factor against its scaled radius.
   const name = artNameForEnemy(e.kind);
   const bodyPx = artSpriteSize(ENEMY_ART_BODY[e.kind] * r);
   const texture = name !== null ? getArtTexture(name, bodyPx) : null;
@@ -1290,12 +1305,20 @@ function drawEnemy(
     if (e.kind === 'flyer') drawFlyerShadow(bodies, ex, ey, r, 1);
   } else {
     sprite.visible = false;
-    drawEnemyShape(bodies, e.kind, ex, ey, r, color, e.heading);
+    drawEnemyShape(bodies, baseEnemyKind(e.kind), ex, ey, r, color, e.heading);
   }
 
-  // The shield ring is on whenever a shield remains, and its alpha tracks the fraction left, so a
-  // Boss entering at full shield reads as heavily protected and a nearly-stripped one is faint.
-  if (e.shield > 0) {
+  // Boss variants get the runtime crown/notch motif that reads as "boss" without colour. The art
+  // team can replace this with a proper per-boss asset later.
+  if (isBossVariant(e.kind)) drawBossCrown(fx, ex, ey, r);
+
+  // The shield ring: a Bastion draws one ring per remaining layer; everything else draws the single
+  // shield ring whose alpha tracks the fraction left.
+  if (e.shieldsRemaining > 0) {
+    for (let i = 0; i < e.shieldsRemaining; i++) {
+      fx.circle(ex, ey, r + 3 + i * 3).stroke({ width: 2, color: SHIELD_COLOR, alpha: 0.85 });
+    }
+  } else if (e.shield > 0) {
     const frac = e.maxShield > 0 ? Math.max(0, Math.min(1, e.shield / e.maxShield)) : 0;
     fx.circle(ex, ey, r + (e.kind === 'boss' ? 7 : 3)).stroke({
       width: 2,
@@ -1303,6 +1326,9 @@ function drawEnemy(
       alpha: 0.25 + 0.75 * frac,
     });
   }
+
+  // The Pacer aura reads as a faint ring, drawn beneath the enemy's own markings.
+  if (e.kind === 'runner-boss') drawPacerAura(fx, ex, ey, cell);
 
   // Weak-point notch: a short tick on the leading edge where a precision click pays double.
   {
@@ -1324,7 +1350,7 @@ function drawEnemy(
   }
 
   const ratio = e.maxHp > 0 ? e.hp / e.maxHp : 0;
-  if (e.kind === 'boss') {
+  if (isBossKind(e.kind)) {
     // A boss always shows a health bar, even at full health, so its durability reads at a glance.
     const bw = r * 2.2;
     const by0 = ey - r - 8;
@@ -1340,6 +1366,24 @@ function drawEnemy(
         width: 2,
         color: healthColor(ratio),
       });
+  }
+}
+
+/** A crown/notch tick at the top of a boss-variant silhouette, mirroring the marker boss's crown. */
+function drawBossCrown(g: Graphics, x: number, y: number, r: number): void {
+  const nw = r * 0.32;
+  g.moveTo(x - nw, y - r).lineTo(x, y - r - r * 0.18).lineTo(x + nw, y - r).stroke({ width: 1, color: PAL.dark });
+}
+
+/** The Pacer's aura: a faint ring with short radial speed ticks, drawn at its 3-tile radius. */
+function drawPacerAura(g: Graphics, x: number, y: number, cell: number): void {
+  const radius = PACER_AURA_RADIUS * cell;
+  g.circle(x, y, radius).stroke({ width: 1, color: AURA_COLOR, alpha: 0.35 });
+  for (let i = 0; i < 8; i++) {
+    const a = (Math.PI * 2 * i) / 8;
+    g.moveTo(x + Math.cos(a) * radius, y + Math.sin(a) * radius)
+      .lineTo(x + Math.cos(a) * (radius - 4), y + Math.sin(a) * (radius - 4))
+      .stroke({ width: 1, color: AURA_COLOR, alpha: 0.35 });
   }
 }
 
