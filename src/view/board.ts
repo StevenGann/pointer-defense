@@ -16,7 +16,6 @@ import {
   isBossVariant,
   PACER_AURA_RADIUS,
   radiusOf,
-  WARDEN_RADIUS,
   type Enemy,
   type EnemyKind,
 } from '../core/enemies.ts';
@@ -1225,9 +1224,8 @@ function drawEnemy(
     });
   }
 
-  // The Pacer and Bastion auras read as faint rings, drawn beneath the enemy's own markings.
+  // The Pacer aura reads as a faint ring, drawn beneath the enemy's own markings.
   if (e.kind === 'runner-boss') drawPacerAura(fx, ex, ey, cell);
-  if (e.kind === 'shielded-boss') drawWardenAura(fx, ex, ey, cell);
 
   // Weak-point notch: a short tick on the leading edge where a precision click pays double.
   {
@@ -1284,11 +1282,6 @@ function drawPacerAura(g: Graphics, x: number, y: number, cell: number): void {
       .lineTo(x + Math.cos(a) * (radius - 4), y + Math.sin(a) * (radius - 4))
       .stroke({ width: 1, color: AURA_COLOR, alpha: 0.35 });
   }
-}
-
-/** The Warden's aura: a faint ring at its 3.5-tile radius. */
-function drawWardenAura(g: Graphics, x: number, y: number, cell: number): void {
-  g.circle(x, y, WARDEN_RADIUS * cell).stroke({ width: 1, color: AURA_COLOR, alpha: 0.3 });
 }
 
 function healthColor(ratio: number): number {

@@ -34,15 +34,11 @@ const GRUNT_SPEED = 1.6;
  * and tests can name it, but it counts as its base type for tower rules (an Overload Taser sees a
  * Bastion as shielded; an AA tower will see a Carrier as a flyer in a later pass). The three pass-1
  * bosses keep one gimmick each: the Sergeant is a wall of HP, the Pacer sets a speed floor, and the
- * Bastion wears shield layers while its Warden aura hands flat shields to nearby enemies.
+ * Bastion wears shield layers.
  */
 export const BASTION_SHIELD_LAYERS = 3;
 /** Each Bastion layer is worth the base Shielded shield (15 points). */
 export const BASTION_SHIELD_LAYER_VALUE = 15;
-/** The Warden aura's flat shield grant, radius and 3 s clock. */
-export const WARDEN_SHIELD = 8;
-export const WARDEN_RADIUS = 3.0;
-export const WARDEN_INTERVAL_TICKS = TICK_HZ * 3;
 /** The Pacer's aura radius: enemies inside move at the Pacer's speed or their own, whichever is faster. */
 export const PACER_AURA_RADIUS = 3;
 
@@ -138,8 +134,6 @@ export interface Enemy {
   maxShield: number;
   /** Bastion only: shield layers remaining, each worth the base shield (0 for every other kind). */
   shieldsRemaining: number;
-  /** Bastion only: ticks until the Warden aura may grant shields again (0 for other kinds). */
-  wardenCooldownTicks: number;
   /** Distance travelled this run, in tiles. */
   dist: number;
   x: number;
@@ -232,7 +226,6 @@ export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Ti
     shield,
     maxShield: shield,
     shieldsRemaining: kind === 'shielded-boss' ? BASTION_SHIELD_LAYERS : 0,
-    wardenCooldownTicks: kind === 'shielded-boss' ? WARDEN_INTERVAL_TICKS : 0,
     dist: 0,
     x,
     y,

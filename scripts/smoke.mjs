@@ -52,7 +52,7 @@ import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
 import { LEVELS, DEFAULT_LEVEL, createGrid, levelById, toggleOpenAt, validateLevel, MAX_TOGGLES } from '../src/core/levels.ts';
-import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, isBossKind, isBossVariant, isPopupEnemy, PACER_AURA_RADIUS, WARDEN_INTERVAL_TICKS, WARDEN_RADIUS, WARDEN_SHIELD, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS } from '../src/core/enemies.ts';
+import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, isBossKind, isBossVariant, isPopupEnemy, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS } from '../src/core/enemies.ts';
 import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS } from '../src/core/ads.ts';
 import {
   comboMultiplier,
@@ -4239,24 +4239,18 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
 }
 
 {
-  // 39e. The Warden grant never stacks and never refreshes an enemy that already has shield.
+  // 39e. The Warden aura is removed: a Bastion grants no shield to nearby enemies, no matter how
+  // long it stands next to them, so a tower-only board can always damage the wave around it.
   const s = createRunState();
   s.phase = 'wave';
   s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
   const bastion = stationary(1, 'shielded-boss', 24, 5.5, 5.5);
-  const grunt = stationary(2, 'grunt', 24, 5.5, 6.5); // 1 tile from the Bastion, inside 3.0
+  const grunt = stationary(2, 'grunt', 24, 5.5, 6.5); // 1 tile from the Bastion, inside the old 3.0
   s.enemies.push(bastion, grunt);
 
-  for (let i = 0; i < WARDEN_INTERVAL_TICKS; i++) tick(s);
-  check(grunt.shield === WARDEN_SHIELD, `the Warden grants a ${WARDEN_SHIELD}-point shield (${grunt.shield})`);
-
-  for (let i = 0; i < WARDEN_INTERVAL_TICKS; i++) tick(s);
-  check(grunt.shield === WARDEN_SHIELD, `the Warden grant never stacks (${grunt.shield})`);
-
-  grunt.shield = 5;
-  for (let i = 0; i < WARDEN_INTERVAL_TICKS; i++) tick(s);
-  check(grunt.shield === 5, 'the Warden never refreshes an enemy that already has shield');
-  check(WARDEN_RADIUS === 3.0, `the Warden radius is 3.0 tiles (${WARDEN_RADIUS})`);
+  for (let i = 0; i < TICK_HZ * 6; i++) tick(s);
+  check(grunt.shield === 0, `a Bastion grants no shield to a nearby enemy (shield ${grunt.shield})`);
+  check(grunt.maxShield === 0, `the nearby enemy keeps its max shield (${grunt.maxShield})`);
 }
 
 {

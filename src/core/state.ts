@@ -31,9 +31,6 @@ import {
   popupCovers,
   radiusOf,
   speedPerTick,
-  WARDEN_INTERVAL_TICKS,
-  WARDEN_RADIUS,
-  WARDEN_SHIELD,
   type Enemy,
   type EnemyKind,
 } from './enemies.ts';
@@ -1011,7 +1008,6 @@ export function tick(s: RunState): void {
   if (s.phase === 'wave') {
     spawnDue(s);
     moveEnemies(s);
-    tickWardenAuras(s);
     fireBreacherTurrets(s);
     tickCursors(s);
     fireTowers(s);
@@ -1278,30 +1274,6 @@ function moveEnemies(s: RunState): void {
         remaining = 0;
       }
     }
-  }
-}
-
-/**
- * The Bastion's Warden aura: every 2 s it grants a 15-point shield to each enemy within 3.5 tiles.
- * A grant never stacks and never refreshes — an enemy with any shield is left alone — so the flat
- * shield is a one-shot guard until the pointer wears it down.
- */
-function tickWardenAuras(s: RunState): void {
-  for (const b of s.enemies) {
-    if (b.dead || b.kind !== 'shielded-boss') continue;
-    if (b.wardenCooldownTicks > 0) {
-      b.wardenCooldownTicks--;
-      if (b.wardenCooldownTicks > 0) continue;
-    }
-    for (const e of s.enemies) {
-      if (e.dead || e.shield > 0) continue;
-      const dx = e.x - b.x;
-      const dy = e.y - b.y;
-      if (dx * dx + dy * dy > WARDEN_RADIUS * WARDEN_RADIUS) continue;
-      e.shield = WARDEN_SHIELD;
-      if (e.maxShield < WARDEN_SHIELD) e.maxShield = WARDEN_SHIELD;
-    }
-    b.wardenCooldownTicks = WARDEN_INTERVAL_TICKS;
   }
 }
 
