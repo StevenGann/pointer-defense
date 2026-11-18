@@ -26,6 +26,14 @@ export interface LevelToggle {
   readonly phaseTicks: number;
 }
 
+/**
+ * A route is a corridor of tiles from the spawn to the exit. When a level authors routes, every
+ * spawned enemy is assigned one and paths only across that corridor's tiles, so a wall on one route
+ * never re-routes the other. The order is only meaningful for drawing; pathing treats the route as
+ * a set of walkable tiles.
+ */
+export type Route = readonly Tile[];
+
 export interface Level {
   readonly id: string;
   /** Shown in the panel, e.g. 'The Corridor'. */
@@ -38,6 +46,11 @@ export interface Level {
   readonly exits: readonly Tile[];
   /** Optional map toggles (shutters); at most MAX_TOGGLES. */
   readonly toggles?: readonly LevelToggle[];
+  /**
+   * Optional authored corridors. Absent (or empty) means today's single implicit route over the whole
+   * board, unchanged. When present, routes must be tile-disjoint except at the spawn and exit tiles.
+   */
+  readonly routes?: readonly Route[];
 }
 
 function vertical(col: number, r0: number, r1: number): readonly (readonly [number, number])[] {
@@ -98,6 +111,66 @@ const TURNSTILE_TOGGLES: readonly LevelToggle[] = [
   { col: 9, row: 1, periodTicks: 600, openTicks: 240, phaseTicks: 300 },
 ];
 
+/** A solid rectangle of wall tiles, for filling the inside of a carved corridor. */
+function box(c0: number, c1: number, r0: number, r1: number): readonly (readonly [number, number])[] {
+  const out: [number, number][] = [];
+  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) out.push([c, r]);
+  return out;
+}
+
+/** A solid rectangle of corridor tiles, for a route's walkable set. */
+function band(c0: number, c1: number, r0: number, r1: number): Route {
+  const out: Tile[] = [];
+  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) out.push({ col: c, row: r });
+  return out;
+}
+
+/** A vertical run of corridor tiles. */
+function column(col: number, r0: number, r1: number): Route {
+  const out: Tile[] = [];
+  for (let r = r0; r <= r1; r++) out.push({ col, row: r });
+  return out;
+}
+
+/** A horizontal run of corridor tiles. */
+function rowRun(row: number, c0: number, c1: number): Route {
+  const out: Tile[] = [];
+  for (let c = c0; c <= c1; c++) out.push({ col: c, row });
+  return out;
+}
+
+/**
+ * The Fork: one spawn splits into an upper and a lower corridor of equal length that rejoin at the
+ * exit. A full wall across row 1 seals the top, row 11 seals the bottom, and a row-6 divider with
+ * gaps only at the spawn and exit columns forces every path through one corridor or the other.
+ */
+const FORK_WALLS: readonly (readonly [number, number])[] = [
+  ...horizontal(1, 0, 19),
+  ...horizontal(6, 1, 18),
+  ...horizontal(11, 0, 19),
+];
+
+const FORK_UPPER: Route = [{ col: 0, row: 6 }, ...band(0, 19, 2, 5), { col: 19, row: 6 }];
+const FORK_LOWER: Route = [{ col: 0, row: 6 }, ...band(0, 19, 7, 10), { col: 19, row: 6 }];
+
+/**
+ * The Ladder: two vertical corridors (the rails) joined by two horizontal cross-links (the rungs),
+ * forming a hollow rectangle. Route A walks the left rail and the bottom rung; route B walks the top
+ * rung and the right rail. The two share only the spawn corner (0,2) and the exit corner (17,9).
+ */
+const LADDER_WALLS: readonly (readonly [number, number])[] = [
+  ...horizontal(0, 0, 19),
+  ...horizontal(1, 0, 19),
+  ...horizontal(10, 0, 19),
+  ...horizontal(11, 0, 19),
+  ...vertical(18, 2, 9),
+  ...vertical(19, 2, 9),
+  ...box(1, 16, 3, 8),
+];
+
+const LADDER_LEFT: Route = [{ col: 0, row: 2 }, ...column(0, 3, 9), ...rowRun(9, 1, 17)];
+const LADDER_RIGHT: Route = [{ col: 0, row: 2 }, ...rowRun(2, 1, 17), ...column(17, 3, 9)];
+
 export const LEVELS: readonly Level[] = [
   {
     id: 'corridor',
@@ -127,6 +200,22 @@ export const LEVELS: readonly Level[] = [
     starts: [{ col: 0, row: 6 }],
     exits: [{ col: COLS - 1, row: 6 }],
     toggles: TURNSTILE_TOGGLES,
+  },
+  {
+    id: 'fork',
+    name: 'The Fork',
+    walls: FORK_WALLS,
+    starts: [{ col: 0, row: 6 }],
+    exits: [{ col: COLS - 1, row: 6 }],
+    routes: [FORK_UPPER, FORK_LOWER],
+  },
+  {
+    id: 'ladder',
+    name: 'The Ladder',
+    walls: LADDER_WALLS,
+    starts: [{ col: 0, row: 2 }],
+    exits: [{ col: 17, row: 9 }],
+    routes: [LADDER_LEFT, LADDER_RIGHT],
   },
 ];
 
@@ -190,6 +279,8 @@ export function levelProblemMessage(reason: string): string {
       return 'a shutter open window is out of range';
     case 'toggle combination seals the route':
       return 'no route from start to exit';
+    case 'routes overlap':
+      return 'routes overlap outside the spawn and exit';
     default:
       return reason;
   }
@@ -223,6 +314,11 @@ export function toggleProgress(t: LevelToggle, clock: number): number {
 /** The authored toggles of a level (empty when it has none). */
 export function levelToggles(level: Level): readonly LevelToggle[] {
   return level.toggles ?? [];
+}
+
+/** The authored routes of a level (empty means today's single implicit route). */
+export function levelRoutes(level: Level): readonly Route[] {
+  return level.routes ?? [];
 }
 
 /**
@@ -262,10 +358,39 @@ export function validateLevel(level: Level): string | null {
     if (!(t.periodTicks > 0)) return 'toggle period must be positive';
     if (!(t.openTicks >= 0 && t.openTicks <= t.periodTicks)) return 'toggle open window out of range';
   }
+  const reason = routeProblem(level);
+  if (reason !== null) return reason;
   const spawn = level.starts[0];
   const exit = level.exits[0];
   for (const closed of toggleCombinations(toggles)) {
     if (isSealed(grid, closed, spawn, exit)) return 'toggle combination seals the route';
+  }
+  return null;
+}
+
+/** A tile is shared between routes legitimately only if it is a spawn or an exit tile. */
+function isStartOrExit(level: Level, idx: number): boolean {
+  for (const t of level.starts) if (t.row * COLS + t.col === idx) return true;
+  for (const t of level.exits) if (t.row * COLS + t.col === idx) return true;
+  return false;
+}
+
+/**
+ * Routes must be tile-disjoint except at the spawn and exit: a tile that appears in two routes (and is
+ * not one of those shared endpoints) would let one route's walls re-route the other, breaking the
+ * isolation the mechanic depends on.
+ */
+function routeProblem(level: Level): string | null {
+  const routes = levelRoutes(level);
+  for (let i = 0; i < routes.length; i++) {
+    const a = new Set<number>();
+    for (const t of routes[i]) a.add(t.row * COLS + t.col);
+    for (let j = i + 1; j < routes.length; j++) {
+      for (const t of routes[j]) {
+        const idx = t.row * COLS + t.col;
+        if (a.has(idx) && !isStartOrExit(level, idx)) return 'routes overlap';
+      }
+    }
   }
   return null;
 }
