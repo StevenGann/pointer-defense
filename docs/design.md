@@ -576,6 +576,47 @@ contradicted idling being viable. When it returns it must be capped — a small 
 the number of affected enemies, or a short-lived shield that decays — so it cannot neutralise a
 tower-only board again.
 
+### 7.2 Boss variants (pass 2)
+
+Pass 2 adds the next four type bosses, each keeping its base type's identity and adding exactly one
+gimmick. They are separate kinds (naming them in waves, harness and tests), count as their base type
+for tower rules (a Flak cannon reads the Carrier as a flyer; walls block the Ram and the Sergeant but
+not the Carrier), pay 6× their base kill value, and pop like a boss on death.
+
+| Kind | Name | Scale | HP | Speed | Integrity | Gimmick |
+|---|---|---|---|---|---|---|
+| `flyer-boss` | **Carrier** | 2.0 | 12× | 0.35 | 5 | **Brood**: every 4 s it releases three flyers at its position that scatter outward and then home on the exit; on death it releases six |
+| `armoured-boss` | **Dreadnought** | 1.7 | 9× | 0.40 | 4 | **Plating**: flat 6 damage reduction per hit on top of its 8 armour, and slow effects on it are halved |
+| `saboteur-boss` | **Wirecutter** | 1.5 | 5× | 0.60 | 4 | **EMP**: every non-wall tower within 2.5 tiles is knocked offline for 3 s as it passes, then returns on its own — the tower keeps its hit points, so it is not the repair flow |
+| `breacher-boss` | **Ram** | 1.8 | 8× | 0.40 | 5 | **Breaches towers**: it chews any tower in its path — 40 wall DPS, 40 tower DPS — driving a non-wall tower offline at 0 HP rather than destroying it (repairable), and mounts an 8-damage turret at 3 tiles. It prefers a wall it is touching over a tower, and a tower over walking, so a maze buys time one tile at a time |
+
+The radius is still the base type's radius × scale. Each gimmick is a first-cut number, not a tuned one:
+
+- **Brood** flies for half a second outward, then homes; the released flyers are ordinary flyers of the
+  Carrier's wave, so they leak for 1 each if the board does not catch them.
+- **Plating** is additive with armour (a tower hit loses armour + plating before the 1-damage floor),
+  and both are ignored by armour-ignoring towers. "Slow halved" is the slow *strength* halved — Frost's
+  0.3× becomes 0.65× — applied to tower slows and the Time Zone global slow alike.
+- **EMP** is a refresh, not a stack: while the Wirecutter stays in range the timer keeps pointing at
+  now + 3 s, so the tower returns 3 s after the boss moves on. It never damages, and it never touches a
+  wall (a wall has no firing/aura state to knock out). The EMP'd tower is drawn with an amber bolt, not
+  the red offline wrench.
+- The **Ram** paths over a field that treats towers as walkable, so it does not route around the
+  defence — it chews straight through it. It prefers a wall over a non-wall tower, and either over
+  walking on, so a wall maze is eaten one tile at a time; the counter is a spread board with a Repair
+  tower (or Maintenance cursor) behind the line to bring the offline towers back.
+
+The pass-2 schedule extends pass 1's: unlocks at **12 (Sergeant), 18 (Pacer), 24 (Bastion), 30
+(Carrier), 36 (Dreadnought), 42 (Wirecutter) and 48 (Ram)**, then one boss rides every eighth wave
+after 48 (56 + 8k), chosen from the unlocked set by a seeded roll that favours the newest type. Marker
+bosses at 10/25/50/75/100 are never replaced; multi-boss waves are pass 3.
+
+The **Ram is the scare**: every other boss asks the player to shoot it better; the Ram asks whether the
+line can survive being eaten. It is telegraphed in the draw (a drill nose) and named in the NEXT WAVE
+preview before it spawns. Balance is not a gate here — the first-cut numbers above drop the standard
+run below 6 integrity on every map, recorded in the commit message rather than tuned (see pass-1 for
+the tuning precedent).
+
 ---
 
 ## 8. Waves

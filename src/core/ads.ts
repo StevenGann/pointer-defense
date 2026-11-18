@@ -254,7 +254,7 @@ function placeFreeGun(s: RunState): void {
   s.blocked.add(pick.row * COLS + pick.col);
   s.towers.push(createTower(s.nextId++, 'gun', pick.col, pick.row));
   s.field = buildField(s.grid, s.blocked, exit);
-  recomputeAuras(s.towers);
+  recomputeAuras(s.towers, s.clock);
 }
 
 /** Screensaver: every enemy takes 25 flat damage and is stunned for half a second. */

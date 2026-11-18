@@ -3,7 +3,7 @@ import { TICK_HZ } from './time.ts';
 
 export type EnemyKind =
   | 'grunt' | 'runner' | 'shielded' | 'flyer' | 'armoured' | 'saboteur' | 'boss' | 'breacher' | 'popup'
-  | 'grunt-boss' | 'runner-boss' | 'shielded-boss';
+  | 'grunt-boss' | 'runner-boss' | 'shielded-boss' | 'flyer-boss' | 'armoured-boss' | 'saboteur-boss' | 'breacher-boss';
 
 export interface EnemyStats {
   readonly name: string;
@@ -19,6 +19,8 @@ export interface EnemyStats {
   readonly shield: number;
   /** Base salvage for a kill at wave 1. */
   readonly value: number;
+  /** Flat reduction added to `armour` for tower hits (the Dreadnought's plating; 0 elsewhere). */
+  readonly plating: number;
   /** Damage per second dealt to a wall while stopped at it (0 for non-breachers). */
   readonly wallDps: number;
   /** Integrity lost when the enemy leaks. */
@@ -42,17 +44,56 @@ export const BASTION_SHIELD_LAYER_VALUE = 15;
 /** The Pacer's aura radius: enemies inside move at the Pacer's speed or their own, whichever is faster. */
 export const PACER_AURA_RADIUS = 3;
 
+/** The Carrier releases a brood of flyers this many ticks apart while it walks. */
+export const CARRIER_BROOD_INTERVAL_TICKS = TICK_HZ * 4;
+/** Flyers the Carrier releases per brood; it releases twice as many on death. */
+export const CARRIER_BROOD_COUNT = 3;
+export const CARRIER_DEATH_BROOD_COUNT = 6;
+/** Brood flyers scatter outward for half a second before homing on the exit. */
+export const CARRIER_BROOD_SCATTER_TICKS = Math.round(TICK_HZ * 0.5);
+
+/** The Dreadnought's plating: flat reduction added to its base armour on every tower hit. */
+export const DREADNOUGHT_PLATING = 6;
+
+/** The Wirecutter's EMP: towers this close are knocked offline for this long as it passes. */
+export const WIRECUTTER_EMP_RADIUS = 2.5;
+export const WIRECUTTER_EMP_TICKS = TICK_HZ * 3;
+
+/** The Ram chews non-wall towers at this many damage per second (walls use its `wallDps`). */
+export const RAM_TOWER_DPS = 40;
+/** The Ram's mounted turret: 8 damage at 3 tiles (the Breacher's is 2 at 2.2). */
+export const RAM_TURRET_DAMAGE = 8;
+export const RAM_TURRET_RANGE = 3;
+
 /** The base enemy type a boss variant counts as for tower rules (and art). */
 export function baseEnemyKind(kind: EnemyKind): EnemyKind {
   if (kind === 'grunt-boss') return 'grunt';
   if (kind === 'runner-boss') return 'runner';
   if (kind === 'shielded-boss') return 'shielded';
+  if (kind === 'flyer-boss') return 'flyer';
+  if (kind === 'armoured-boss') return 'armoured';
+  if (kind === 'saboteur-boss') return 'saboteur';
+  if (kind === 'breacher-boss') return 'breacher';
   return kind;
 }
 
 /** Whether the kind is one of the boss variants (not the wave-marker boss). */
 export function isBossVariant(kind: EnemyKind): boolean {
-  return kind === 'grunt-boss' || kind === 'runner-boss' || kind === 'shielded-boss';
+  return (
+    kind === 'grunt-boss' || kind === 'runner-boss' || kind === 'shielded-boss' ||
+    kind === 'flyer-boss' || kind === 'armoured-boss' || kind === 'saboteur-boss' || kind === 'breacher-boss'
+  );
+}
+
+/** Whether the kind flies: it ignores the ground maze and only a Mesh wall blocks it. */
+export function isFlyerKind(kind: EnemyKind): boolean {
+  return kind === 'flyer' || kind === 'flyer-boss';
+}
+
+/** Halve a slow's strength for the Dreadnought (armoured-boss), whose plating resists slows. */
+export function slowFactorFor(kind: EnemyKind, factor: number): number {
+  if (kind === 'armoured-boss' && factor < 1) return 1 - (1 - factor) / 2;
+  return factor;
 }
 
 /** Whether the kind is any boss (the wave-marker boss or a boss variant). */
@@ -71,18 +112,22 @@ export function isBossKind(kind: EnemyKind): boolean {
  * so it is a check on raw coverage rather than on the player's wall-building.
  */
 export const ENEMY_STATS: Readonly<Record<EnemyKind, EnemyStats>> = {
-  grunt: { name: 'Grunt', hp: 20, speed: GRUNT_SPEED, radius: 0.3, armour: 0, shield: 0, value: 4, wallDps: 0, integrity: 1, scale: 1 },
-  runner: { name: 'Runner', hp: 10, speed: GRUNT_SPEED * 2.2, radius: 0.18, armour: 0, shield: 0, value: 6, wallDps: 0, integrity: 1, scale: 1 },
-  shielded: { name: 'Shielded', hp: 30, speed: 1.2, radius: 0.36, armour: 2, shield: 15, value: 10, wallDps: 0, integrity: 1, scale: 1 },
-  flyer: { name: 'Flyer', hp: 8, speed: GRUNT_SPEED * 1.5, radius: 0.22, armour: 0, shield: 0, value: 5, wallDps: 0, integrity: 1, scale: 1 },
-  armoured: { name: 'Armoured', hp: 45, speed: 1.0, radius: 0.34, armour: 8, shield: 0, value: 12, wallDps: 0, integrity: 1, scale: 1 },
-  saboteur: { name: 'Saboteur', hp: 25, speed: 1.5, radius: 0.28, armour: 0, shield: 0, value: 11, wallDps: 0, integrity: 1, scale: 1 },
-  boss: { name: 'Boss', hp: 450, speed: 0.8, radius: 0.55, armour: 6, shield: 120, value: 120, wallDps: 0, integrity: 3, scale: 1 },
-  breacher: { name: 'Breacher', hp: 55, speed: 0.6, radius: 0.42, armour: 0, shield: 0, value: 14, wallDps: 12, integrity: 1, scale: 1 },
-  popup: { name: 'Pop-up', hp: 60, speed: 0.7, radius: 0.4, armour: 0, shield: 0, value: 18, wallDps: 0, integrity: 0, scale: 1 },
-  'grunt-boss': { name: 'Sergeant', hp: 120, speed: 0.55, radius: 0.48, armour: 0, shield: 0, value: 24, wallDps: 0, integrity: 4, scale: 1.6 },
-  'runner-boss': { name: 'Pacer', hp: 40, speed: 0.85, radius: 0.27, armour: 0, shield: 0, value: 36, wallDps: 0, integrity: 3, scale: 1.5 },
-  'shielded-boss': { name: 'Bastion', hp: 150, speed: 0.45, radius: 0.576, armour: 2, shield: BASTION_SHIELD_LAYERS * BASTION_SHIELD_LAYER_VALUE, value: 60, wallDps: 0, integrity: 4, scale: 1.6 },
+  grunt: { name: 'Grunt', hp: 20, speed: GRUNT_SPEED, radius: 0.3, armour: 0, plating: 0, shield: 0, value: 4, wallDps: 0, integrity: 1, scale: 1 },
+  runner: { name: 'Runner', hp: 10, speed: GRUNT_SPEED * 2.2, radius: 0.18, armour: 0, plating: 0, shield: 0, value: 6, wallDps: 0, integrity: 1, scale: 1 },
+  shielded: { name: 'Shielded', hp: 30, speed: 1.2, radius: 0.36, armour: 2, plating: 0, shield: 15, value: 10, wallDps: 0, integrity: 1, scale: 1 },
+  flyer: { name: 'Flyer', hp: 8, speed: GRUNT_SPEED * 1.5, radius: 0.22, armour: 0, plating: 0, shield: 0, value: 5, wallDps: 0, integrity: 1, scale: 1 },
+  armoured: { name: 'Armoured', hp: 45, speed: 1.0, radius: 0.34, armour: 8, plating: 0, shield: 0, value: 12, wallDps: 0, integrity: 1, scale: 1 },
+  saboteur: { name: 'Saboteur', hp: 25, speed: 1.5, radius: 0.28, armour: 0, plating: 0, shield: 0, value: 11, wallDps: 0, integrity: 1, scale: 1 },
+  boss: { name: 'Boss', hp: 450, speed: 0.8, radius: 0.55, armour: 6, plating: 0, shield: 120, value: 120, wallDps: 0, integrity: 3, scale: 1 },
+  breacher: { name: 'Breacher', hp: 55, speed: 0.6, radius: 0.42, armour: 0, plating: 0, shield: 0, value: 14, wallDps: 12, integrity: 1, scale: 1 },
+  popup: { name: 'Pop-up', hp: 60, speed: 0.7, radius: 0.4, armour: 0, plating: 0, shield: 0, value: 18, wallDps: 0, integrity: 0, scale: 1 },
+  'grunt-boss': { name: 'Sergeant', hp: 120, speed: 0.55, radius: 0.48, armour: 0, plating: 0, shield: 0, value: 24, wallDps: 0, integrity: 4, scale: 1.6 },
+  'runner-boss': { name: 'Pacer', hp: 40, speed: 0.85, radius: 0.27, armour: 0, plating: 0, shield: 0, value: 36, wallDps: 0, integrity: 3, scale: 1.5 },
+  'shielded-boss': { name: 'Bastion', hp: 150, speed: 0.45, radius: 0.576, armour: 2, plating: 0, shield: BASTION_SHIELD_LAYERS * BASTION_SHIELD_LAYER_VALUE, value: 60, wallDps: 0, integrity: 4, scale: 1.6 },
+  'flyer-boss': { name: 'Carrier', hp: 96, speed: 0.35, radius: 0.44, armour: 0, plating: 0, shield: 0, value: 30, wallDps: 0, integrity: 5, scale: 2.0 },
+  'armoured-boss': { name: 'Dreadnought', hp: 405, speed: 0.4, radius: 0.578, armour: 8, plating: DREADNOUGHT_PLATING, shield: 0, value: 72, wallDps: 0, integrity: 4, scale: 1.7 },
+  'saboteur-boss': { name: 'Wirecutter', hp: 125, speed: 0.6, radius: 0.42, armour: 0, plating: 0, shield: 0, value: 66, wallDps: 0, integrity: 4, scale: 1.5 },
+  'breacher-boss': { name: 'Ram', hp: 440, speed: 0.4, radius: 0.756, armour: 0, plating: 0, shield: 0, value: 84, wallDps: 40, integrity: 5, scale: 1.8 },
 };
 
 /**
@@ -159,10 +204,14 @@ export interface Enemy {
   stunUntilTick: number;
   /** Direction of travel in radians; the leading edge (and weak point) faces this way. */
   heading: number;
-  /** Wall tower id this breacher is currently chewing through, or null. */
-  attackWallId: number | null;
-  /** Breacher only: ticks until the mounted turret may fire again (0 = ready). */
+  /** Tower id this enemy is currently chewing through (a wall for a Breacher, any tower for a Ram). */
+  attackTowerId: number | null;
+  /** Breacher/Ram only: ticks until the mounted turret may fire again (0 = ready). */
   turretCooldown: number;
+  /** Flyer only: ticks remaining it moves straight in `heading` before homing (brood scatter). */
+  scatterTicks: number;
+  /** Carrier only: ticks until the next brood release (0 = release this tick). */
+  broodCooldown: number;
   dead: boolean;
 }
 
@@ -215,7 +264,7 @@ export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Ti
   const shield = s.shield;
   const x = spawn.col + 0.5;
   const y = spawn.row + 0.5;
-  const isFlyer = kind === 'flyer';
+  const isFlyer = isFlyerKind(kind);
   const heading = isFlyer ? Math.atan2(exit.row - spawn.row, exit.col - spawn.col) : 0;
   return {
     id,
@@ -243,8 +292,10 @@ export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Ti
     slowUntilTick: 0,
     stunUntilTick: 0,
     heading,
-    attackWallId: null,
+    attackTowerId: null,
     turretCooldown: 0,
+    scatterTicks: 0,
+    broodCooldown: kind === 'flyer-boss' ? CARRIER_BROOD_INTERVAL_TICKS : 0,
     dead: false,
   };
 }
