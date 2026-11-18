@@ -22,8 +22,8 @@
   <path d="M7.14 13.63 A9.2 9.2 0 0 1 13.63 7.14" fill="none" stroke="#a9c4d6" stroke-width="1" stroke-linecap="round" opacity="0.7"/>
   <!-- A visor with two eyes behind it. -->
   <rect x="9.2" y="13.2" width="13.6" height="5" rx="2.2" fill="#0a141c" stroke="#000000" stroke-width="0.6"/>
-  <!-- Walk frame 2: back to centre, the same pose as frame 0. -->
-  <circle cx="13" cy="15.7" r="1.35" fill="#bfe6ff"/>
-  <circle cx="19" cy="15.7" r="1.35" fill="#bfe6ff"/>
+  <!-- Walk frame 2 of 8: the eyes have swept fully left along the visor. -->
+  <circle cx="11.2" cy="15.7" r="1.35" fill="#bfe6ff"/>
+  <circle cx="17.2" cy="15.7" r="1.35" fill="#bfe6ff"/>
   <line x1="10.6" y1="14.2" x2="15" y2="14.2" stroke="#ffffff" stroke-width="0.6" opacity="0.35" stroke-linecap="round"/>
 </svg>

@@ -78,9 +78,9 @@
     },
     {
       "name": "enemies/armoured",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 4,
+        "fps": 8,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
@@ -90,9 +90,9 @@
     },
     {
       "name": "enemies/boss",
-      "frames": 3,
+      "frames": 9,
       "anim": {
-        "fps": 5,
+        "fps": 15,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
@@ -102,9 +102,9 @@
     },
     {
       "name": "enemies/breacher",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 15,
+        "fps": 30,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
@@ -114,9 +114,9 @@
     },
     {
       "name": "enemies/flyer",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 12,
+        "fps": 30,
         "loop": "pingpong",
         "hold": 0,
         "holdAfter": 0,
@@ -126,19 +126,7 @@
     },
     {
       "name": "enemies/grunt",
-      "frames": 4,
-      "anim": {
-        "fps": 6,
-        "loop": "loop",
-        "hold": 0,
-        "holdAfter": 0,
-        "randomStart": true,
-        "when": "moving"
-      }
-    },
-    {
-      "name": "enemies/runner",
-      "frames": 4,
+      "frames": 8,
       "anim": {
         "fps": 12,
         "loop": "loop",
@@ -149,10 +137,22 @@
       }
     },
     {
-      "name": "enemies/saboteur",
-      "frames": 3,
+      "name": "enemies/runner",
+      "frames": 8,
       "anim": {
-        "fps": 15,
+        "fps": 24,
+        "loop": "loop",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "moving"
+      }
+    },
+    {
+      "name": "enemies/saboteur",
+      "frames": 6,
+      "anim": {
+        "fps": 30,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
@@ -162,9 +162,9 @@
     },
     {
       "name": "enemies/shielded",
-      "frames": 4,
+      "frames": 8,
       "anim": {
-        "fps": 5,
+        "fps": 10,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
