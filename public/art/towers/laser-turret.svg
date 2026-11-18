@@ -1,3 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect x="14" y="3" width="4" height="13" fill="#ff3300" stroke="#000000" stroke-width="1"/>
+  <defs>
+    <linearGradient id="emitter" x1="14" y1="0" x2="18" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ff9a7a"/>
+      <stop offset="0.5" stop-color="#ff3300"/>
+      <stop offset="1" stop-color="#8a1c00"/>
+    </linearGradient>
+    <radialGradient id="hub" cx="14.6" cy="14.6" r="5" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffb499"/>
+      <stop offset="0.6" stop-color="#e02c00"/>
+      <stop offset="1" stop-color="#7a1800"/>
+    </radialGradient>
+    <linearGradient id="crystal" x1="14" y1="2" x2="18" y2="7" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#ff9070"/>
+    </linearGradient>
+  </defs>
+  <!-- Points north. A slim emitter with a hot core and a crystal tip. -->
+  <rect x="14" y="5.5" width="4" height="10.5" fill="url(#emitter)" stroke="#000000" stroke-width="1"/>
+  <line x1="16" y1="7.5" x2="16" y2="13" stroke="#fff4c8" stroke-width="1" stroke-linecap="round"/>
+  <polygon points="16,2.2 18.4,4.8 16,7.4 13.6,4.8" fill="url(#crystal)" stroke="#000000" stroke-width="0.8" stroke-linejoin="round"/>
+  <circle cx="16" cy="16" r="4" fill="url(#hub)" stroke="#000000" stroke-width="1"/>
+  <circle cx="16" cy="16" r="1.4" fill="#fff4c8"/>
 </svg>

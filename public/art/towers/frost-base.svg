@@ -1,3 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <polygon points="16,3 28.5,9.5 28.5,22.5 16,29 3.5,22.5 3.5,9.5" fill="#3399cc" stroke="#000000" stroke-width="1"/>
+  <!-- A hexagon plinth cut like an ice crystal: six facets, lit from the top-left. -->
+  <polygon points="16,16 3.5,9.5 16,3" fill="#a6dcf4"/>
+  <polygon points="16,16 16,3 28.5,9.5" fill="#6cbde4"/>
+  <polygon points="16,16 28.5,9.5 28.5,22.5" fill="#3399cc"/>
+  <polygon points="16,16 28.5,22.5 16,29" fill="#1c6a94"/>
+  <polygon points="16,16 16,29 3.5,22.5" fill="#2884b4"/>
+  <polygon points="16,16 3.5,22.5 3.5,9.5" fill="#58b0dc"/>
+  <polygon points="16,3 28.5,9.5 28.5,22.5 16,29 3.5,22.5 3.5,9.5" fill="none" stroke="#000000" stroke-width="1" stroke-linejoin="round"/>
+  <polygon points="16,6 25.8,11 25.8,21 16,26 6.2,21 6.2,11" fill="none" stroke="#ffffff" stroke-width="0.7" opacity="0.4"/>
 </svg>

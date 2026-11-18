@@ -1,5 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect x="0" y="0" width="32" height="32" fill="#c0c0c0"/>
+  <defs>
+    <linearGradient id="face" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#c8c8c8"/>
+      <stop offset="1" stop-color="#b8b8b8"/>
+    </linearGradient>
+  </defs>
+  <!-- Reserved and unused: the route is drawn by code. Kept the same as tile.svg. -->
+  <rect x="0" y="0" width="32" height="32" fill="url(#face)"/>
   <line x1="0" y1="0.5" x2="32" y2="0.5" stroke="#ffffff" stroke-width="1"/>
   <line x1="0.5" y1="0" x2="0.5" y2="32" stroke="#ffffff" stroke-width="1"/>
   <line x1="0" y1="31.5" x2="32" y2="31.5" stroke="#808080" stroke-width="1"/>

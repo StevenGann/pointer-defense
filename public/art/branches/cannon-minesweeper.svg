@@ -1,3 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <polygon points="15.36,15.36 16.64,10.24 20.48,15.36 19.2,20.48" fill="#800000" stroke="#000000" stroke-width="1"/>
+  <!-- The classic mine: a black ball with eight spikes and a glint. -->
+  <circle cx="16" cy="16" r="5.6" fill="#f0d8d8" stroke="#000000" stroke-width="1"/>
+  <g stroke="#000000" stroke-width="1.1" stroke-linecap="round">
+    <line x1="16" y1="11.6" x2="16" y2="20.4"/>
+    <line x1="11.6" y1="16" x2="20.4" y2="16"/>
+    <line x1="12.9" y1="12.9" x2="19.1" y2="19.1"/>
+    <line x1="19.1" y1="12.9" x2="12.9" y2="19.1"/>
+  </g>
+  <circle cx="16" cy="16" r="2.7" fill="#000000"/>
+  <rect x="14.6" y="14.6" width="1.2" height="1.2" fill="#ffffff"/>
 </svg>

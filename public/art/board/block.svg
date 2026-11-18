@@ -1,4 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect x="0" y="0" width="32" height="32" fill="#707070"/>
-  <rect x="0.5" y="0.5" width="31" height="31" fill="none" stroke="#505050" stroke-width="1"/>
+  <defs>
+    <linearGradient id="slab" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#868686"/>
+      <stop offset="1" stop-color="#5c5c5c"/>
+    </linearGradient>
+  </defs>
+  <!-- A static block: a dark raised slab with a cross brace. -->
+  <rect x="0" y="0" width="32" height="32" fill="url(#slab)"/>
+  <path d="M0.5 32 V0.5 H32" fill="none" stroke="#a8a8a8" stroke-width="1"/>
+  <path d="M31.5 0 V31.5 H0" fill="none" stroke="#404040" stroke-width="1"/>
+  <rect x="4.5" y="4.5" width="23" height="23" fill="none" stroke="#505050" stroke-width="1"/>
+  <g stroke="#505050" stroke-width="1" opacity="0.7">
+    <line x1="5" y1="5" x2="27" y2="27"/>
+    <line x1="27" y1="5" x2="5" y2="27"/>
+  </g>
+  <rect x="13" y="13" width="6" height="6" fill="#707070" stroke="#404040" stroke-width="0.8"/>
 </svg>

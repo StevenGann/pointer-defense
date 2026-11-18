@@ -1,160 +1,150 @@
-# Pointer Defense — visual style guide
+# Pointer Defense: visual style guide
 
-This is the document to read before drawing anything for `public/art/`. It explains what the game is
-trying to look like, which colours are allowed, what the engine draws on top of your files, and the
-mistakes that break the illusion.
+Read this before you draw anything for `public/art/`. It explains the look, the colours, what the
+engine draws on top of your files, and the mistakes that cost the most.
 
-The contract for file size, naming and layers is in [`README.md`](./README.md). This file is about
-intent.
+The technical contract (file names, the 32×32 viewBox, layers, facing) is in
+[`public/art/README.md`](../public/art/README.md). The engine depends on that contract. This file is
+about intent, and **it is a guide, not a rule book**. Break it when the art is better for it, and say
+why in the pull request.
 
 ---
 
 ## 1. The motif
 
-Pointer Defense looks like a **Windows 95 application that happens to be a tower defense**. Not a game
-with a retro skin — an actual period program: grey beveled panels, a navy title bar, a teal desktop,
-and a 16-colour discipline that assumes the artwork had to fit on a floppy.
+Pointer Defense looks like a **Windows 95 application that happens to be a tower defense**. The
+window, the panels and the buttons are plain period chrome: grey bevels, a navy title bar, a teal
+desktop.
 
-Two references, in order:
+The art on the board is the **icon art** of that era, not the chrome. Think of a good 32×32 desktop
+icon: a hard black outline, a clear silhouette, and shading that makes the object look solid. The
+towers are hardware bolted to the desktop. The enemies are small things that live on it, and they are
+**alive**: they have eyes, they look where they go, and each kind has a character.
 
-1. **Windows 95 / 98 / 2000 Classic** — the chamfered 2px bevels, `#c0c0c0` button faces, the navy
-   active title bar, the teal desktop behind the window.
-2. **Windows XP Classic theme** — the same language with slightly softer greys and the Luna-era blue
-   still absent from the working surfaces. If XP Classic and 95 disagree, follow 95.
+Two tests for every drawing:
 
-The joke the art has to support: this is a program the player installed from a CD, and the enemies are
-things that live on a desktop. Everything should feel *manufactured*, flat, and drawn by someone with a
-16-colour palette and no anti-aliasing.
+1. **Does it read at 20 px?** The silhouette must still identify the thing.
+2. **Does it reward a close look?** At 64 px there must be something more to see: a seam, a rivet, a
+   glint.
 
 ---
 
-## 2. Palette
+## 2. Colour
 
-These are the only colours in the game. Values come from the live code (`src/view/chrome.ts`,
-`board.ts`, `wallAppearance.ts`); if you need a new one, add it here first and say what it is for.
+Each kind has one **identity colour**. Use it as the mid-tone. Shade up and down from it to build
+volume. Small accents in other colours are fine when they carry meaning (an eye, a spark, a crown).
 
-### System surfaces — the Windows 95 sixteen
+### Chrome, drawn by code
 
 | Hex | Name | Used for |
 |---|---|---|
 | `#008080` | Desktop teal | The desktop behind the window |
-| `#c0c0c0` | Button face | Panels, buttons, buildable tiles, wall faces |
-| `#dfdfdf` | Light | The second bevel pixel on raised surfaces |
-| `#ffffff` | Highlight | Top/left bevel edge, text on navy |
-| `#808080` | Shadow | Bottom/right bevel edge, wall outline |
-| `#000000` | Dark | 1px outlines, text |
-| `#000080` | Navy | Active title bar, Pop-up window chrome |
-| `#800000` | Maroon | Cannon identity, dark red accents |
-| `#808000` | Olive | Taser identity |
-| `#800080` | Purple | Reserved; spikes and rare accents |
-| `#806000` | Amber | Reserved; warm accents |
-| `#c0c0c0` | — | Wall face (same as button face; walls *are* disabled buttons) |
+| `#c0c0c0` | Button face | Panels, buttons, buildable tiles |
+| `#dfdfdf` | Light | The second bevel pixel, the route line |
+| `#ffffff` | Highlight | Top and left bevel edge, text on navy |
+| `#808080` | Shadow | Bottom and right bevel edge, wall outline |
+| `#000000` | Dark | 1 px outlines, text |
+| `#000080` | Navy | Title bar, range ring, Pop-up window |
 
-### Board
+### Towers: identity colours
 
-| Hex | Name | Used for |
+| Hex | Tower | Shape of the base |
 |---|---|---|
-| `#c0c0c0` | Buildable tile | With a `#ffffff` top/left and `#808080` bottom/right edge |
-| `#a0a0a0` | Blocked tile | With a `#707070` edge |
-| `#707070` | Structure edge | Shutters, blocked tiles |
-| `#ff6a00` | Shutter warning | Only as a shutter is about to close |
-| `#cccccc` | Wall, disabled state | |
-| `#b0b0b0` | Wall, pressed state | |
-| `#e8e8e8` / `#909090` | Disabled bevel light / dark | |
-| `#ffffff` / `#dfdfdf` | Raised bevel light pair | |
-| `#404040` / `#808080` | Raised bevel dark pair | |
+| `#008080` | Gun (teal) | Square |
+| `#800000` | Cannon (maroon) | Circle |
+| `#ff3300` | Laser (orange-red) | Long bar |
+| `#808000` | Taser (olive, with yellow `#ffff00` for electricity) | Diamond |
+| `#3399cc` | Frost (ice blue) | Hexagon |
+| `#ffcc00` | Beacon (gold) | Ring with a lamp |
+| `#00a000` | Repair (green) | Ring with a white cross |
+| `#9a9a9a` | Cursor (grey) | Square with the arrow cursor |
+| white | Wall | See section 5 |
 
-### Towers — identity colours
+### Enemies: one blue-grey family
 
-| Hex | Tower |
-|---|---|
-| `#008080` | Gun (teal) |
-| `#800000` | Cannon (maroon) |
-| `#808000` | Taser (olive) |
-| `#3399cc` | Frost (cold blue) |
-| `#ff3300` | Laser (hot orange-red) |
-| `#ffcc00` | Beacon (amber yellow) |
-| `#00a000` | Repair (green) |
-| `#8a8a8a` | Wall (grey — it is a button) |
-| `#9a9a9a` | Cursor (pointer grey) |
+Enemies are **not** colour-coded by hue. Shape carries identity, so a mixed wave reads as one force.
 
-### Enemies — one blue-grey family
+| Hex | Enemy | Shape |
+|---|---|---|
+| `#35506a` | Grunt | Round dome, one eye |
+| `#577489` | Runner | Narrow dart |
+| `#2f4b62` | Shielded | Round body inside a hexagon frame |
+| `#6b8598` | Flyer | Winged |
+| `#406080` | Armoured | Square plate with four rivets and a 2 px outline |
+| `#4a637a` | Saboteur | Diamond with a fuse spark at the rear |
+| `#5a7183` | Breacher | Rounded square with a toothed jaw |
+| `#27495d` | Boss | Round, with a segmented rim and a crown |
 
-Enemies are **not** colour-coded. Shape carries identity; colour only shades it, so a mixed wave reads
-as one coherent force rather than a bag of sweets.
+Accent colours in use on enemies:
 
-| Hex | Enemy |
-|---|---|
-| `#35506a` | Grunt |
-| `#577489` | Runner |
-| `#2f4b62` | Shielded |
-| `#6b8598` | Flyer |
-| `#406080` | Armoured |
-| `#4a637a` | Saboteur |
-| `#5a7183` | Breacher |
-| `#27495d` | Boss |
-| `#000080` | Pop-up (a window, so it is navy) |
+- **Eyes:** pale ice blue, `#e6f4ff` to `#bfe6ff`, with a black pupil.
+- **Saboteur:** amber, `#806000` to `#ffcf5a`, for the fuse, the charge and the eyes.
+- **Boss:** an orange eye (`#ff8a1e`) and a gold crown. The Boss is the only enemy with warm colour
+  on its body, so it stands out.
 
-### Runtime-only colours — do not draw these
+### Colours the engine owns
 
-The engine paints all of these over your art. Drawing them yourself causes double lines and
-flicker.
+The engine draws these over your art. Do not use them for the same job, or the player sees the effect
+twice.
 
 | Hex | Meaning |
 |---|---|
 | `#00d0d0` | Shield ring, shield impact arc, `SHD` number |
-| `#6699ff` | Friendly aura (Beacon, Repair) |
+| `#6699ff` | Beacon aura ring |
 | `#00d0ff` | Frost slow arc |
-| `#ff3300` | Crit number, crit spark |
+| `#0080c0` | Repair progress bar |
+| `#d00000` | Offline tower mark |
+| red to green | Health bar |
 
 ---
 
 ## 3. Rules of form
 
-- **Flat fills.** No gradients, no soft shading, no ambient occlusion, no glow. If something needs
-  depth, it gets a 1–2px bevel: light on top and left, dark on bottom and right. That is the whole
-  lighting model.
-- **Hard edges.** No anti-aliased curves at large scale, no feathered strokes, no opacity below 1.0 on
-  a fill. A 1px outline at 32×32 becomes a 2px outline at boss scale — which is exactly right.
-- **Corners are square.** The only exceptions are the shapes that are circles by nature (the Grunt, the
-  Shielded, the Flyer body) and the 2px inner rounds on beveled buttons.
-- **Diagonals are 1:1** where they imply a chamfer. Windows 95 had no 30-degree angle.
-- **Every silhouette must read at 14px.** Zoom out until it is the size of a fingernail: if you can't
-  tell what it is, it is too detailed. Detail is for the 32×32 inspection, identity is for the
-  silhouette.
-- **Draw inside the 28px circle of the 32px viewBox.** The 2px margin is the engine's; overflow is
-  clipped by neighbouring tiles.
+- **Light comes from the top-left.** This matches every bevel in the chrome. Highlights go on the top
+  and left, shadows on the bottom and right. Art that rotates (turrets, four of the enemies) carries
+  its light with it. That is accepted.
+- **Gradients are for volume.** Use a radial gradient for a dome and a linear gradient for a plate or
+  a barrel. Three stops are enough: light, identity colour, dark.
+- **Keep the black outline.** A 1 px black outline around the silhouette holds the icon look together
+  and separates the art from the grey tile. The Armoured uses 2 px on purpose.
+- **Facets are an alternative to gradients.** The Saboteur, the Taser base and the Frost base are cut
+  into flat facets, each a different shade. Use this for hard, crystalline things.
+- **Opacity is fine for glass, glow and soft shadow.** Do not use it for the main body, because the
+  tile shows through.
+- **No stroke under 0.5 px.** Thin lines vanish at 20 px.
+- **Stay in the 32×32 box.** Nothing clips your art, so overflow draws over the next tile. Aim for a
+  28 px silhouette, centred. Board tiles are the exception: they fill all 32 px.
+- **Do not change the outer size of a silhouette.** The engine sizes the sprite and the click area
+  from the old bounds.
 
 ---
 
 ## 4. What the engine draws on top of you
 
-Coordinate with these. Baking any of them into an SVG means the player sees two of them, or one that
-does not update.
+Do not bake any of these into a file.
 
 | Runtime element | Where it lands | What it means |
 |---|---|---|
-| Health bar | A thin bar above the entity's box | Damage state; empty means offline/dying |
-| Range ring | A 1px **dashed navy** circle at the tower's radius | Shows on hover and while placing |
-| Placement preview | Ghosted tower plus the dashed range circle | Where the next tower would go |
-| Hover highlight | 1px lighter box | Cursor is over a placeable tile |
-| Shield ring | Concentric cyan ring | Shield strength; drawn outside the body |
-| Weak-point arc | 25% arc on the leading edge | Aimed shot is worth double |
-| Slow arc | Pale blue arc | Frost is on this enemy |
-| Route dots | White 2px dashed line | The live path, redrawn whenever the maze changes |
-| Damage flash | White tint over the sprite | Hit feedback |
-| Offline desaturation | Grey tint + crossed wrench | Tower at 0 HP, repairable |
-| Repair hatch | Diagonal lines | Repair in progress |
-| Branch mark | Small shape at the tower's corner | Which branch was chosen |
-| Fully-upgraded pip | 4×4 green square | Nothing left to buy |
-| Muzzle flash / tracers | Between tower and target | Firing |
-| Countdown bar | Under a shutter | Time until it toggles |
+| Health bar | A thin bar at the top of the tile | Damage state |
+| Range ring | A 1 px dashed navy circle | Shown on hover and while placing |
+| Placement preview | A ghost of the tower plus the range ring | Where the next tower would go. The ghost is drawn by code and does not use your file |
+| Shield ring | A cyan ring outside the body | Shield strength |
+| Weak-point notch | A short white tick on the leading edge | An aimed click pays double |
+| Slow arc | A pale blue arc | Frost is on this enemy |
+| Route | A light grey dashed line, 3 px | The live path |
+| Offline mark | A grey wash and a red cross | Tower at 0 HP |
+| Repair hatch | Diagonal lines on a wall | Repair in progress |
+| Fully-upgraded pip | A 4×4 green square in the top-right corner (bottom-right when a health bar shows) | Nothing left to buy |
+| Flyer shadow | A dark ellipse under the Flyer | Height |
+| Muzzle flash, tracers, sparks | Between tower and target | Firing |
+| Wall bevel | The whole button edge of a wall | See section 5 |
 
-**Layer order, back to front:** tiles → route → walls and shutters → tower bases → enemies → tower
-turrets → allies' effects → runtime overlays (health, shields, rings) → cursor.
+**Layer order, back to front:** tiles → route → shutters → tower base → tower turret → branch mark →
+tower overlays (wall bevel, bars, pip) → Pop-up windows → enemies → enemy effects → range rings,
+placement ghost and the pointer.
 
-Because turrets draw *above* enemies, a tower's barrel must not be tall enough to hide the tile behind
-it — keep the barrel inside the 28px box.
+Enemies draw **above** towers. Keep the top-right and bottom-right corners of a tower quiet, because
+the pip lands there.
 
 ---
 
@@ -162,75 +152,90 @@ it — keep the barrel inside the 28px box.
 
 ### Enemies
 
-- **Silhouette first.** Grunt = round. Runner = pointed and narrow. Shielded = round inside a ring.
-  Flyer = winged. Armoured = square, riveted. Saboteur = diamond. Breacher = blunt nose with teeth.
-  Boss = round with a segmented rim. None of these may be confused at a glance.
-- **Face right.** Runner, Flyer, Saboteur and Breacher are rotated by their heading; everything else is
-  symmetric and never rotates. Draw the asymmetric ones pointing along **+x**.
-- **No faces, no eyes, no pupils.** The charm is that these are anonymous desktop objects.
-- **Bosses reuse the same file at up to 2× scale.** Anything thinner than 1px at 32×32 will vanish or
-  turn into a moiré at 2×.
+- **Silhouette first.** Use the shapes in the table in section 2. No two kinds may be confused at
+  20 px.
+- **Give them eyes.** One eye or two, pale with a black pupil. Eyes are what make the enemies read as
+  alive.
+- **Rotating kinds face right.** Runner, Flyer, Saboteur and Breacher turn with their heading. Draw
+  them pointing along **+x**, with the eyes looking forward.
+- **Fixed kinds have no front.** Grunt, Shielded, Armoured and Boss never rotate. Draw them so they
+  look out of the screen at the player. A face that points sideways will look wrong on every turn.
+- **The Boss is drawn large.** `boss.svg` appears at about twice the size of the other enemies, so
+  its detail gets a close look.
 
 ### Towers
 
-- **Base and turret are separate files.** The base never rotates; the turret pivots at the tile centre
-  and is drawn **pointing north (up)**. The engine rotates it to the aim angle, where 0 = north and
-  angles increase clockwise.
-- **Bases sit on the tile floor.** Do not draw a shadow that spills onto the neighbouring tile, and do
-  not draw the tile itself — the board draws that.
-- **The barrel is the character.** Gun: single long barrel. Cannon: short fat tube. Laser: emitter
-  ring. Taser: twin prongs. Frost: nozzle with a frost cap. Beacon, Cursor and Repair have no turret
-  file at all.
-- **The wall is a raised, disabled Windows button.** That is the joke and the read: `#c0c0c0` face,
-  `#ffffff`/`#dfdfdf` top-left bevel, `#404040`/`#808080` bottom-right, `#808080` outline, flat centre.
-  A wall that has been upgraded to toggle looks like a *normal* (enabled) button instead.
+- **Base and turret are separate files.** The base never rotates. The turret is drawn **pointing
+  north (up)** and rotates about the centre of the box, where 0 is north and angles increase
+  clockwise.
+- **Put a hub on the pivot.** Each rotating turret has a round head at (16,16). It hides the join
+  when the barrel turns.
+- **The barrel is the character.** Gun: a slim barrel with a dark muzzle. Cannon: a short thick tube
+  with a muzzle ring. Laser: a slim emitter with a crystal tip.
+- **Taser and Frost turrets never turn.** Draw them with no front: the Taser is a coil seen from
+  above, the Frost is a six-arm snowflake.
+- **Beacon, Cursor, Repair and Wall have no turret file.**
+- **Do not draw the tile** under a tower. The board draws it.
+
+### The wall
+
+`wall-base.svg` is a plain white square. The engine tints it and draws the whole button bevel in
+code, because the wall changes look with its state (plain, branched, open gate, locked, damaged,
+repairing). Leave this file white. A grey or coloured face cannot be tinted correctly.
 
 ### Branch marks
 
-- One small shape per branch, drawn in the corner of the tower at ~10px. Marks are read at speed; a
-  clean glyph beats a detailed icon. Colour follows the tower, not the branch.
+- A branch mark is a full 32×32 file drawn over the tower. The engine does **not** rotate it.
+- For Gun, Cannon and Laser, **centre the mark on the hub at (16,16)**. A mark placed on the barrel
+  stays where it is when the barrel turns away.
+- For Cursor, put the mark in the **bottom-left corner**, clear of the arrow and of the pip.
+- Keep a mark to about 10 px. Use a dark or light disc behind the glyph when the glyph needs contrast.
+
+### Board tiles
+
+- `tile.svg` appears 240 times. Keep it quiet: a soft gradient and a bevel, nothing else.
+- `obstacle.svg` must look lower or heavier than a tile, so the player sees at once that nothing can
+  be built there.
 
 ---
 
 ## 6. Things to avoid
 
-- **Gradients, glows, drop shadows** — the engine has no lighting; anything shaded will look pasted on.
-- **Transparency as a design element.** Opacity is reserved for runtime overlays.
-- **Isometric or 3D perspective.** The board is orthographic and top-down.
-- **Rounded, "modern flat" shapes** — pills, 8px radii, Material-style icons.
-- **Emoji or pictograms as tower art.** Use the geometric vocabulary.
-- **Thin hairlines** (0.5px) and any stroke that only exists at one scale.
-- **Baking in runtime state** — health bars, rings, selection boxes, damage flashes, the pip.
-- **Baking in the tile** under a tower or enemy.
-- **Colour-only differentiation.** If two enemies differ only by hue, they are the same enemy to a
-  colour-blind player, and to everyone at 14px.
-- **Anti-aliased soft curves** at 32×32 that turn into mush at 2×.
-- **Text inside SVGs.** All text is drawn by the engine with Tahoma at 13/11/10px.
+- **Baked-in runtime state:** health bars, range rings, shield rings, selection boxes, the pip.
+- **Colour-only differences.** If two things differ only by hue, they are the same thing to a
+  colour-blind player.
+- **Text inside SVGs.** The engine draws all text.
+- **Isometric or 3D perspective.** The board is seen from straight above.
+- **Soft, modern shapes:** pills, large corner radii, thin-line icon sets. They do not belong to the
+  period.
+- **Heavy blur and drop-shadow filters.** A small offset shadow drawn as a shape is fine. SVG filter
+  effects are slow to rasterise and look out of period.
+- **Animation.** The engine rasterises each file once, so SVG animation does not play.
 
 ---
 
 ## 7. Things to coordinate
 
 - **Adding an asset** needs the file *and* one line in `ART_MANIFEST` (`src/view/art.ts`). A file with
-  no manifest entry is inert.
-- **Renaming a file** silently falls back to the old procedural drawing. Rename the manifest entry in
-  the same commit.
-- **Changing a silhouette's size** breaks placement feel — the engine sizes sprites to the old bounds.
-  If a shape must grow, say so in the pull request so the bounds can be updated deliberately.
-- **New kinds** (a new tower, a new enemy) need the manifest, the `ENEMY_ART_BODY` factor for enemies,
-  and a turret flag for towers.
-- **Conflicts:** the more complex file wins (see `README.md`), because the more elaborate drawing is
-  closer to final art. `node scripts/art-merge.mjs --apply` does it.
+  no manifest entry does nothing.
+- **Renaming a file** makes the game fall back to the old code-drawn shape with no error. Rename the
+  manifest entry in the same commit.
+- **A new enemy** also needs a size factor in `ENEMY_ART_BODY` and, if it must face its heading, an
+  entry in `ENEMY_ART_ROTATES` (both in `src/view/board.ts`).
+- **A new tower with a turret** needs an entry in `TOWER_TURRET_KINDS` (`src/view/art.ts`).
+- **Conflicts:** the more complex file wins, see
+  [`public/art/README.md`](../public/art/README.md). `node scripts/art-merge.mjs --apply` does it.
 
 ---
 
 ## 8. Checklist before you push
 
-- [ ] `viewBox="0 0 32 32"`, silhouette inside a centred 28px box.
-- [ ] Flat fills, 1–2px bevels, no gradients or transparency.
-- [ ] Colours come from the palette above; anything new is added to this document.
-- [ ] Reads at 14px and survives 2× without hatching.
-- [ ] Turret points north; asymmetric enemies point right.
-- [ ] No runtime state baked in (bars, rings, flashes, tiles).
-- [ ] Filename matches the manifest; new assets have an entry.
-- [ ] `npm run smoke` passes — it asserts the manifest/reality diff.
+- [ ] `viewBox="0 0 32 32"`, silhouette centred, outer size unchanged.
+- [ ] Reads at 20 px. Has something more to see at 64 px.
+- [ ] Light from the top-left. Black outline kept.
+- [ ] Identity colour is the mid-tone.
+- [ ] Turret points north. Rotating enemies point right. Fixed enemies have no front.
+- [ ] Branch mark does not depend on the barrel angle.
+- [ ] No runtime state baked in.
+- [ ] File name matches the manifest.
+- [ ] `npm run smoke` passes.

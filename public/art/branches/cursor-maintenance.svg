@@ -1,3 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <path d="M13.12 14.08 L13.12 19.84 L18.88 19.84 L18.88 14.08 M13.12 14.08 L15.04 14.08 M16.96 14.08 L18.88 14.08 M16 19.84 L16 23.68" fill="none" stroke="#9a9a9a" stroke-width="1.5"/>
+  <!-- Maintenance: an open-end wrench badge in the bottom-left corner, clear of the arrow. -->
+  <circle cx="9.4" cy="22.6" r="4.3" fill="#0080c0" stroke="#000000" stroke-width="0.9"/>
+  <line x1="7.4" y1="24.6" x2="10" y2="22" stroke="#ffffff" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="10.6" cy="21.4" r="1.8" fill="#ffffff"/>
+  <polygon points="10.6,21.4 13,20.7 11.3,19" fill="#0080c0"/>
 </svg>
