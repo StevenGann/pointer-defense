@@ -47,7 +47,7 @@ import {
 import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
-import { buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, isBossWave, isTypeBossWave, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
+import { buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
@@ -1032,11 +1032,24 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(d100 !== null && d100.groups.length > 0, 'wave 100 exists');
   check(buildSchedule(100).length > 0, 'wave 100 produces a spawn schedule');
 
+  const MILESTONE_KIND = { 10: 'grunt-boss', 25: 'runner-boss', 50: 'shielded-boss', 75: 'flyer-boss', 100: 'armoured-boss' };
   for (const w of [10, 25, 50, 75, 100]) {
-    const bosses = buildSchedule(w).filter((sp) => sp.kind === 'boss');
-    check(bosses.length === 1, `wave ${w} has exactly one boss (${bosses.length})`);
+    check(milestoneBossKind(w) === MILESTONE_KIND[w], `wave ${w} maps to ${MILESTONE_KIND[w]}`);
+    const bosses = buildSchedule(w).filter((sp) => sp.kind === MILESTONE_KIND[w]);
+    check(bosses.length === 1, `wave ${w} has exactly one ${MILESTONE_KIND[w]} (${bosses.length})`);
+    check(buildSchedule(w).filter((sp) => sp.kind.endsWith('-boss')).length === 1,
+      `wave ${w} spawns exactly one boss total`);
+    const defTotal = waveDef(w).groups.reduce((sum, grp) => sum + grp.count, 0);
+    const escortCount = waveEnemyCount(w) - defTotal - 1;
+    check(escortCount >= 6 && escortCount <= 12, `wave ${w} keeps a 6..12 enemy escort (${escortCount})`);
     check(isBossWave(w), `wave ${w} is marked a boss wave`);
   }
+  check(milestoneBossKind(11) === null && milestoneBossKind(9) === null, 'non-milestone waves have no milestone boss');
+
+  // The boss bar names the milestone boss: a Sergeant on wave 10, a Bastion on wave 50.
+  check(bossName(milestoneBossKind(10)) === 'SERGEANT', 'wave 10 milestone boss is named SERGEANT');
+  check(bossName(milestoneBossKind(50)) === 'BASTION', 'wave 50 milestone boss is named BASTION');
+  check(bossName(milestoneBossKind(100)) === 'DREADNOUGHT', 'wave 100 milestone boss is named DREADNOUGHT');
 
   check(waveModifiers(50).length === 0, 'no modifier before wave 51');
   const m51a = waveModifiers(51);
@@ -1079,7 +1092,8 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 // --- 16b. Endless curve: 1-100 unchanged, HP bands, count/interval, modifier stacking ---------
 {
   // Waves 1..100 must be byte-identical: hash the full balance table (HP scale, value scale,
-  // enemy count and kill value per wave) and compare against the committed pre-curve hash.
+  // enemy count and kill value per wave) and compare against the committed hash. The hash changed
+  // when the milestone waves swapped the generic boss for their mapped type boss (v0.41).
   let table = '';
   for (let w = 1; w <= 100; w++) {
     table += `${waveHpScale(w)}|${waveValueScale(w)}|${waveEnemyCount(w)}|${waveKillValue(w)}\n`;
@@ -1089,7 +1103,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     h ^= table.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
-  check((h >>> 0).toString(16) === '17bb1397', `waves 1..100 balance table unchanged (hash ${(h >>> 0).toString(16)})`);
+  check((h >>> 0).toString(16) === '5b6e087d', `waves 1..100 balance table unchanged (hash ${(h >>> 0).toString(16)})`);
 }
 
 {
@@ -1967,8 +1981,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 }
 
 {
-  // 20j. Every other enemy kind still costs integrity exactly as it does today: a boss costs 3,
-  // every non-boss costs 1.
+  // 20j. Every non-boss enemy kind costs integrity exactly as it does today: 1 each.
   const leakCost = (kind) => {
     const s = stateOnLevel('open-field');
     s.phase = 'wave';
@@ -1983,7 +1996,6 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     }
     return start - s.integrity;
   };
-  check(leakCost('boss') === 3, 'a boss still costs 3 integrity');
   check(leakCost('grunt') === 1, 'a grunt still costs 1 integrity');
   for (const kind of ['runner', 'shielded', 'flyer', 'armoured', 'saboteur', 'breacher']) {
     check(leakCost(kind) === 1, `a ${kind} still costs 1 integrity`);
@@ -3063,7 +3075,7 @@ function cursorTower(tier, branch) {
   // 28a. Amplitude per event, and the events that shake nothing.
   check(shakeImpulseFor({ type: 'kill', kind: 'grunt' }) === null,
     'an ordinary enemy death shakes nothing');
-  check(shakeImpulseFor({ type: 'kill', kind: 'boss' }).amplitude === SHAKE_AMPLITUDE.bossDeath,
+  check(shakeImpulseFor({ type: 'kill', kind: 'grunt-boss' }).amplitude === SHAKE_AMPLITUDE.bossDeath,
     'a boss death shakes 4 px');
   check(shakeImpulseFor({ type: 'wallDamaged' }) === null,
     'an ordinary tower hit shakes nothing');
@@ -4325,7 +4337,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
 
 {
   // 37c. Every enemy and tower kind resolves an asset name, and the naming helpers agree.
-  for (const kind of ['grunt', 'runner', 'shielded', 'flyer', 'armoured', 'saboteur', 'breacher', 'boss']) {
+  for (const kind of ['grunt', 'runner', 'shielded', 'flyer', 'armoured', 'saboteur', 'breacher']) {
     check(artNameForEnemy(kind) === kind, `enemy ${kind} resolves an asset name`);
   }
   check(artNameForEnemy('popup') === null, 'the pop-up stays runtime (no asset)');
@@ -4721,8 +4733,8 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(baseEnemyKind('grunt') === 'grunt', 'an ordinary grunt maps to itself');
   check(isBossVariant('grunt-boss') && isBossVariant('runner-boss') && isBossVariant('shielded-boss'),
     'the three pass-1 kinds are boss variants');
-  check(!isBossVariant('boss') && !isBossVariant('grunt'), 'the marker boss and ordinary enemies are not variants');
-  check(isBossKind('boss') && isBossKind('shielded-boss'), 'boss variants and the marker boss are all bosses');
+  check(!isBossVariant('grunt') && !isBossVariant('shielded'), 'ordinary enemies are not boss variants');
+  check(isBossKind('shielded-boss') && !isBossKind('grunt'), 'boss variants are bosses and ordinary enemies are not');
 }
 
 {
@@ -4771,6 +4783,23 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   pointerUp(s);
   check(b.shieldsRemaining === 0 && b.shield === 0, 'three hits strip all three layers');
   check(b.hp === b.maxHp, 'no hit points were lost while stripping layers');
+}
+
+{
+  // 39d2. A cursor's shield-first targeting counts a Bastion as shielded: it takes the Bastion over
+  // a nearer plain grunt.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  s.phase = 'wave';
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const closer = stationary(1, 'grunt', 1, 5.5, 5.3); // unshielded, nearer the home tile
+  const bastion = stationary(2, 'shielded-boss', 24, 5.5, 4.5); // shielded, farther away
+  s.enemies.push(closer, bastion);
+  for (let i = 0; i < 120; i++) tick(s);
+  check(bastion.shield < bastion.maxShield,
+    `cursor takes the Bastion over the closer unshielded grunt (shield ${bastion.shield})`);
+  check(closer.hp === closer.maxHp, `the closer unshielded grunt is untouched (hp ${closer.hp})`);
 }
 
 {
@@ -4827,7 +4856,8 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
 
 {
   // 39g. The spawn schedule: first appearance at the unlock wave, never before, every eighth wave
-  // after the last unlock, favouring the newest type, and never replacing a marker boss.
+  // after the last unlock, favouring the newest type. The milestone waves each carry their mapped
+  // type boss, distinct from this type-boss schedule.
   check(typeBossUnlockWave('grunt-boss') === 12, 'Sergeant unlocks at wave 12');
   check(typeBossUnlockWave('runner-boss') === 18, 'Pacer unlocks at wave 18');
   check(typeBossUnlockWave('shielded-boss') === 24, 'Bastion unlocks at wave 24');
@@ -4843,8 +4873,9 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     check(buildSchedule(w).filter((sp) => sp.kind.endsWith('-boss')).length === 1, `wave ${w} carries one type boss`);
   }
   for (const w of [10, 25, 50, 75, 100]) {
-    check(buildSchedule(w).filter((sp) => sp.kind.endsWith('-boss')).length === 0,
-      `a type boss never replaces the marker boss on wave ${w}`);
+    check(!isTypeBossWave(w), `milestone wave ${w} is not a type-boss wave`);
+    check(buildSchedule(w).filter((sp) => sp.kind.endsWith('-boss')).length === 1,
+      `milestone wave ${w} carries exactly its mapped type boss`);
   }
   check(typeBossKindForWave(56) === typeBossKindForWave(56), 'type-boss selection is deterministic');
   check(isTypeBossWave(56) && !isTypeBossWave(55) && !isTypeBossWave(100), 'the eighth-wave cadence holds after wave 48');
@@ -5306,7 +5337,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(bossGimmick('grunt-boss') === 'shrugs off damage', 'the Sergeant subtitle names the gimmick');
   check(bossGimmick('runner-boss') === 'anything near it keeps pace', 'the Pacer subtitle names the gimmick');
   check(bossGimmick('shielded-boss') === 'three layers of shielding', 'the Bastion subtitle names the gimmick');
-  check(bossGimmick('boss') === null, 'the marker boss has no teaching subtitle');
+  check(bossGimmick('grunt') === null, 'an ordinary enemy has no teaching subtitle');
 }
 
 {
@@ -5338,9 +5369,6 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   const s1 = bossShield(bastion);
   check(s1.segments === 3 && s1.filled === 2, `the shield segment count falls as layers strip (filled ${s1.filled})`);
   check(bossShield(createEnemy(2, 'grunt-boss', 12, SPAWN, EXIT)).segments === 0, 'a Sergeant shows no shield bar');
-  const marker = createEnemy(3, 'boss', 10, SPAWN, EXIT);
-  const markerShield = bossShield(marker);
-  check(markerShield.segments === 1 && markerShield.ratio === 1, 'the marker boss shows a single shield fill');
 }
 
 {

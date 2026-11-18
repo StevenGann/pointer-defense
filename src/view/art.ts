@@ -39,7 +39,7 @@ export const ART_SILHOUETTE = 28;
  * are copies of their base type, so they render exactly as before until someone edits them.
  */
 const ENEMY_KINDS = [
-  'grunt', 'runner', 'shielded', 'flyer', 'armoured', 'saboteur', 'breacher', 'boss',
+  'grunt', 'runner', 'shielded', 'flyer', 'armoured', 'saboteur', 'breacher',
   'grunt-boss', 'runner-boss', 'shielded-boss', 'flyer-boss', 'armoured-boss', 'saboteur-boss', 'breacher-boss',
 ] as const;
 

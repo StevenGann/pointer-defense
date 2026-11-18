@@ -757,9 +757,9 @@ function drainEvents(): void {
         break;
       }
       case 'damage': {
-        // A shielded or boss enemy shows a shield arc instead of a hit spark.
+        // A shielded enemy (or a Bastion) shows a shield arc instead of a hit spark.
         const target = state.enemies.find((e) => e.id === ev.id);
-        if (target && (target.kind === 'shielded' || target.kind === 'boss')) {
+        if (target && (target.kind === 'shielded' || target.kind === 'shielded-boss')) {
           effects.addShieldHit(ev.x, ev.y);
         } else {
           effects.addHitSpark(ev.x, ev.y);

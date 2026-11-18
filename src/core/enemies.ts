@@ -2,7 +2,7 @@ import type { Tile } from './grid.ts';
 import { TICK_HZ } from './time.ts';
 
 export type EnemyKind =
-  | 'grunt' | 'runner' | 'shielded' | 'flyer' | 'armoured' | 'saboteur' | 'boss' | 'breacher' | 'popup'
+  | 'grunt' | 'runner' | 'shielded' | 'flyer' | 'armoured' | 'saboteur' | 'breacher' | 'popup'
   | 'grunt-boss' | 'runner-boss' | 'shielded-boss' | 'flyer-boss' | 'armoured-boss' | 'saboteur-boss' | 'breacher-boss';
 
 export interface EnemyStats {
@@ -77,7 +77,7 @@ export function baseEnemyKind(kind: EnemyKind): EnemyKind {
   return kind;
 }
 
-/** Whether the kind is one of the boss variants (not the wave-marker boss). */
+/** Whether the kind is one of the boss variants. */
 export function isBossVariant(kind: EnemyKind): boolean {
   return (
     kind === 'grunt-boss' || kind === 'runner-boss' || kind === 'shielded-boss' ||
@@ -96,9 +96,9 @@ export function slowFactorFor(kind: EnemyKind, factor: number): number {
   return factor;
 }
 
-/** Whether the kind is any boss (the wave-marker boss or a boss variant). */
+/** Whether the kind is a boss (a boss variant). */
 export function isBossKind(kind: EnemyKind): boolean {
-  return kind === 'boss' || isBossVariant(kind);
+  return isBossVariant(kind);
 }
 
 /**
@@ -118,7 +118,6 @@ export const ENEMY_STATS: Readonly<Record<EnemyKind, EnemyStats>> = {
   flyer: { name: 'Flyer', hp: 8, speed: GRUNT_SPEED * 1.5, radius: 0.22, armour: 0, plating: 0, shield: 0, value: 5, wallDps: 0, integrity: 1, scale: 1 },
   armoured: { name: 'Armoured', hp: 45, speed: 1.0, radius: 0.34, armour: 8, plating: 0, shield: 0, value: 12, wallDps: 0, integrity: 1, scale: 1 },
   saboteur: { name: 'Saboteur', hp: 25, speed: 1.5, radius: 0.28, armour: 0, plating: 0, shield: 0, value: 11, wallDps: 0, integrity: 1, scale: 1 },
-  boss: { name: 'Boss', hp: 450, speed: 0.8, radius: 0.55, armour: 6, plating: 0, shield: 120, value: 120, wallDps: 0, integrity: 3, scale: 1 },
   breacher: { name: 'Breacher', hp: 55, speed: 0.6, radius: 0.42, armour: 0, plating: 0, shield: 0, value: 14, wallDps: 12, integrity: 1, scale: 1 },
   popup: { name: 'Pop-up', hp: 60, speed: 0.7, radius: 0.4, armour: 0, plating: 0, shield: 0, value: 18, wallDps: 0, integrity: 0, scale: 1 },
   'grunt-boss': { name: 'Sergeant', hp: 120, speed: 0.55, radius: 0.48, armour: 0, plating: 0, shield: 0, value: 24, wallDps: 0, integrity: 4, scale: 1.6 },

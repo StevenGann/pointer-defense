@@ -10,8 +10,8 @@ import { secondsToTicks } from './time.ts';
  *
  * Waves 1..10 are the hand-written tutorial and are kept exactly as authored. Waves 11..100 are
  * produced by a deterministic generator: the wave number is the seed, so there is no `Math.random`
- * in the table and every player sees the same hundred waves. Bosses ride waves 10, 25, 50, 75 and
- * 100, and modifiers begin at wave 51.
+ * in the table and every player sees the same hundred waves. Type bosses ride waves 10, 25, 50, 75
+ * and 100, and modifiers begin at wave 51.
  */
 
 export interface SpawnGroup {
@@ -126,6 +126,24 @@ export function isBossWave(wave: number): boolean {
   return BOSS_WAVES.has(wave);
 }
 
+/**
+ * The type boss each milestone wave spawns. The generic marker boss is gone, so the type bosses own
+ * the milestone waves themselves: wave 10 is the Sergeant, 25 the Pacer, 50 the Bastion, 75 the
+ * Carrier and 100 the Dreadnought. Only the boss changes; the escort stays as authored.
+ */
+const MILESTONE_BOSS_KINDS: Readonly<Record<number, EnemyKind>> = {
+  10: 'grunt-boss',
+  25: 'runner-boss',
+  50: 'shielded-boss',
+  75: 'flyer-boss',
+  100: 'armoured-boss',
+};
+
+/** The type boss a milestone wave spawns, or null for non-milestone waves. */
+export function milestoneBossKind(wave: number): EnemyKind | null {
+  return MILESTONE_BOSS_KINDS[wave] ?? null;
+}
+
 /** Ground enemies available in a band for boss escorts (flyers are the dedicated air group). */
 function escortKinds(wave: number): readonly EnemyKind[] {
   return wave >= 21 ? ['grunt', 'runner', 'shielded', 'armoured'] : ['grunt', 'runner', 'shielded'];
@@ -137,12 +155,14 @@ function bossGroups(wave: number): readonly SpawnGroup[] {
   const escortCount = 6 + Math.floor(rnd() * 7); // 6..12
   const kinds = escortKinds(wave);
   const escortKind = kinds[hashInt(seedFor(wave) + 7) % kinds.length];
+  // bossGroups is only called on boss waves, so the milestone mapping is always present.
+  const bossKind = milestoneBossKind(wave) as EnemyKind;
   const bossDelay = secondsToTicks(2);
   const escortInterval = secondsToTicks(0.45);
   const escortDelay = Math.max(0, bossDelay - Math.floor(escortCount / 2) * escortInterval);
   return [
     { kind: escortKind, count: escortCount, interval: escortInterval, delay: escortDelay },
-    { kind: 'boss', count: 1, interval: 1, delay: bossDelay },
+    { kind: bossKind, count: 1, interval: 1, delay: bossDelay },
   ];
 }
 
@@ -174,9 +194,9 @@ export function typeBossUnlockWave(kind: EnemyKind): number {
 
 /**
  * Whether a wave carries a single type boss. Each unlock wave (12/18/24/30/36/42/48) is the boss's
- * first appearance; after the last unlock one boss rides every eighth wave (48 + 8k). The marker
- * bosses at 10/25/50/75/100 are never replaced — these waves simply do not coincide with a type-boss
- * wave, though a type boss may later share a marker wave once pass 3 widens the schedule.
+ * first appearance; after the last unlock one boss rides every eighth wave (48 + 8k). The milestone
+ * waves at 10/25/50/75/100 spawn their own mapped type boss (see `milestoneBossKind`) and simply do
+ * not coincide with a type-boss wave, so a type boss may appear on a milestone wave's neighbour.
  */
 export function isTypeBossWave(wave: number): boolean {
   if (wave < 12 || wave > WAVE_COUNT) return false;
@@ -282,7 +302,6 @@ const KIND_INTERVAL_S: Readonly<Record<EnemyKind, number>> = {
   armoured: 2.0,
   saboteur: 3.0,
   breacher: 3.5,
-  boss: 0,
   popup: 0,
   'grunt-boss': 0,
   'runner-boss': 0,

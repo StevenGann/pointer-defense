@@ -68,7 +68,7 @@ export function bossName(kind: EnemyKind): string {
   return ENEMY_STATS[kind].name.toUpperCase();
 }
 
-/** The one-line gimmick subtitle for a type's first appearance, or null for the marker boss. */
+/** The one-line gimmick subtitle for a type's first appearance, or null when the kind has none. */
 export function bossGimmick(kind: EnemyKind): string | null {
   switch (kind) {
     case 'grunt-boss':

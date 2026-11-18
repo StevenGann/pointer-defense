@@ -101,18 +101,6 @@
       }
     },
     {
-      "name": "enemies/boss",
-      "frames": 9,
-      "anim": {
-        "fps": 15,
-        "loop": "loop",
-        "hold": 0,
-        "holdAfter": 0,
-        "randomStart": true,
-        "when": "moving"
-      }
-    },
-    {
       "name": "enemies/breacher",
       "frames": 6,
       "anim": {

@@ -28,7 +28,7 @@ what an artist owns; what is not is what the code owns.**
   Wall) never rotates.
 - **Enemies face right.** An enemy's file is drawn facing **+x (right)**, which is heading `0`. The
   engine rotates the sprite by the enemy's live heading as it turns corners. Kinds whose shape is
-  symmetric (Grunt, Shielded, Armoured, Boss) are not rotated.
+  symmetric (Grunt, Shielded, Armoured, and their boss variants) are not rotated.
 - **The path is code.** The route is a dashed line drawn from live pathfinding state, not a tile
   colour. `path-tile` below is reserved and currently unused.
 
@@ -45,7 +45,6 @@ what an artist owns; what is not is what the code owns.**
 | `armoured.svg` | square with four corner rivets and a thicker 2 px outline |
 | `saboteur.svg` | diamond with a small fuse spark at the rear corner |
 | `breacher.svg` | rounded square with a jaw-notch cut into the leading edge and three teeth |
-| `boss.svg` | large circle with a segmented outer rim and a crown notch at the top |
 
 **Every boss variant has its own files.** `grunt-boss.svg`, `runner-boss.svg`, `shielded-boss.svg`,
 `flyer-boss.svg`, `armoured-boss.svg`, `saboteur-boss.svg` and `breacher-boss.svg`, each with the same

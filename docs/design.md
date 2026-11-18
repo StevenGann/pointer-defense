@@ -409,7 +409,7 @@ each other instead of drifting apart. Cursors never crit, never mark, and ignore
 and weak points: the ladder feeds them through click damage and nothing else.
 
 A cursor's targeting is fixed, not a player choice. It clicks the nearest shielded enemy to its home
-tile — a **Shielded** or a **Boss**, whose shield is above zero — and with no shielded enemy in radius
+tile — a **Shielded** or a **Bastion**, whose shield is above zero — and with no shielded enemy in radius
 it clicks the nearest enemy to its home tile. An enemy hidden under a Pop-up window is never a
 candidate. **Manual Override** (§9.5) still wins over this rule, exactly as it beats the Taser's lock:
 while the marked enemy is in range and targetable, the cursor clicks it instead.
@@ -511,7 +511,6 @@ never re-lock, so a tower bought once stays available through endless.
 | **Flyer** | 14 | 2.2 t/s | 0.26 | 0 | 0 | 7 | Flak, laser, pointer |
 | **Armoured** | 45 | 1.0 t/s | 0.34 | 8 | 0 | 12 | taser, laser, Overload |
 | **Saboteur** | 25 | 1.5 t/s | 0.28 | 0 | 0 | 11 | kill it before it arrives — it disables a tower for 4 s |
-| **Boss** | 900 | 0.8 t/s | 0.55 | 6 | 120 | 120 | both halves: towers strip armour, pointer breaks the shield |
 | **Breacher** | 55 | 0.6 t/s | 0.42 | 0 | 0 | 14 | chews walls and shoots a 2.2-tile turret at your towers — walls disarm it, a gun in front of the wall finishes it |
 | **Pop-up** | 60 | 0.7 t/s | 0.40 | 0 | 0 | 18 | click its close box — a window that shields every enemy under it from towers |
 
@@ -531,7 +530,7 @@ waves — and the balance harness's scripted player now does the same (it repair
 or below 35% HP between waves, paying out of salvage it cannot otherwise spend).
 
 Shield damage is visible, not a silent clock: every enemy whose shield is above zero draws a cyan
-shield ring whose alpha tracks the fraction remaining (a Boss entering at 120 reads as heavily
+shield ring whose alpha tracks the fraction remaining (a Shielded entering at 15 reads as heavily
 protected, one nearly stripped as faint), and every hit the shield absorbs pops a cyan `SHD` floater
 with a short arc at the impact, so a fully absorbed click still shows something happening.
 
@@ -555,7 +554,7 @@ If an enemy could be answered equally well by either half, it is not doing its j
 Every enemy type has a bigger, nastier version of itself. Each is a **separate enemy kind** (not a flag
 on the base kind), keeps the base type's identity, and counts as its base type for tower rules (an
 Overload Taser reads a Bastion as shielded). Killing one pays **6×** the base type's kill value and
-shows a distinct death pop; a boss variant that leaks costs its own integrity, not the marker boss's 3.
+shows a distinct death pop; a boss variant that leaks costs its own integrity.
 
 | Kind | Name | Scale | HP | Speed | Integrity | Gimmick |
 |---|---|---|---|---|---|---|
@@ -569,8 +568,9 @@ pipeline needs no new files yet; the Pacer aura draws as a faint ring.
 
 Type bosses unlock at **wave 12 (Sergeant), 18 (Pacer) and 24 (Bastion)** — each boss's first
 appearance is its unlock wave, never before it — and then one boss rides every eighth wave after that
-(wave 24 + 8k), chosen from the unlocked set by a seeded roll that favours the newest type. They never
-replace the marker bosses at 10/25/50/75/100.
+(wave 24 + 8k), chosen from the unlocked set by a seeded roll that favours the newest type. The
+milestone waves 10/25/50/75/100 spawn their own mapped type boss (see §8.2); a type boss appearing on
+a milestone wave's neighbour is fine and intended.
 
 The Bastion's **Warden aura** — an area shield grant to nearby enemies — is **deferred to boss pass 3**.
 Pass 1 shipped it and it read as a wall on the two open maps: shields only fall to pointer damage, so
@@ -611,8 +611,8 @@ The radius is still the base type's radius × scale. Each gimmick is a first-cut
 
 The pass-2 schedule extends pass 1's: unlocks at **12 (Sergeant), 18 (Pacer), 24 (Bastion), 30
 (Carrier), 36 (Dreadnought), 42 (Wirecutter) and 48 (Ram)**, then one boss rides every eighth wave
-after 48 (56 + 8k), chosen from the unlocked set by a seeded roll that favours the newest type. Marker
-bosses at 10/25/50/75/100 are never replaced; multi-boss waves are pass 3.
+after 48 (56 + 8k), chosen from the unlocked set by a seeded roll that favours the newest type. The
+milestone waves 10/25/50/75/100 spawn their mapped type boss (§8.2); multi-boss waves are pass 3.
 
 The **Ram is the scare**: every other boss asks the player to shoot it better; the Ram asks whether the
 line can survive being eaten. It is telegraphed in the draw (a drill nose) and named in the NEXT WAVE
@@ -637,11 +637,19 @@ waves are authored without listing individuals.
 | Pressure | 6–20 | flyers, shielded, breachers (from 12), the first real maze |
 | Specialists | 21–40 | armoured, saboteurs, branch towers |
 | Attrition | 41–60 | mixed waves; modifiers begin at 51 |
-| Siege | 61–80 | boss at 70, dense flyer waves |
+| Siege | 61–80 | boss at 75, dense flyer waves |
 | Endgame | 81–100 | everything, modifiers stack, boss at 100 |
 
-Boss waves at **10, 25, 50, 75, 100**. A boss is one large enemy plus escorts and does not pause the
-wave timer.
+Boss waves at **10, 25, 50, 75, 100**. Each milestone wave carries one type boss plus its 6–12 ground
+escort and does not pause the wave timer. The mapping is fixed:
+
+| Wave | Type boss |
+|---|---|
+| 10 | **Sergeant** (`grunt-boss`) |
+| 25 | **Pacer** (`runner-boss`) |
+| 50 | **Bastion** (`shielded-boss`) |
+| 75 | **Carrier** (`flyer-boss`) |
+| 100 | **Dreadnought** (`armoured-boss`) |
 
 ### 8.3 Scaling
 
@@ -932,7 +940,8 @@ same ad in the same place. It lives **8 seconds**. Clicking its close box dismis
 | sell | refunds 70 % |
 
 Starting salvage **60** — two Guns or one Cannon. Starting integrity **20**; a leak costs 1, a boss
-leak costs **3**. Integrity never regenerates: the run's mistake budget is spent, not healed.
+variant leak costs **3–5** (its own integrity). Integrity never regenerates: the run's mistake budget
+is spent, not healed.
 
 ---
 
@@ -1006,7 +1015,6 @@ Shape carries meaning before colour does — readability, and colour-blind playe
 | Flyer | circle with two swept wings and an elliptical shadow on the tile below it |
 | Armoured | square with four corner rivets and a thicker 2 px outline |
 | Saboteur | diamond with a small fuse spark at the rear corner |
-| Boss | large circle with a segmented outer rim and a crown notch at the top |
 | Breacher | rounded square with a jaw-notch cut into the leading edge and three teeth |
 | Pop-up | Win95 window with a title bar and close box |
 | Gun | small square with a barrel |
@@ -1033,7 +1041,7 @@ Short and mechanical, measured in ticks at 60 Hz:
 |---|---|
 | muzzle flash | 2 ticks, weapon-shaped: a wedge (gun), a puff (cannon/frost), a cross-spark (laser), an arc flicker (taser), nothing (beacon) |
 | tracer | 6 ticks |
-| hit spark | 3 short lines from the impact for 4 ticks; shielded/boss show a shield arc instead |
+| hit spark | 3 short lines from the impact for 4 ticks; shielded (and the Bastion) show a shield arc instead |
 | knockback | a 1 px nudge along the shot direction, decaying over 3 ticks (cosmetic only) |
 | shield hit | cyan arc at the impact (8 ticks) plus a cyan `SHD` floater (30 ticks) |
 | death | 6 ticks: a ring that expands and fades, with 3 small pieces |

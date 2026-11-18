@@ -102,7 +102,6 @@ export const ENEMY_COLOR: Record<EnemyKind, number> = {
   flyer: 0x6b8598,
   armoured: 0x406080,
   saboteur: 0x4a637a,
-  boss: 0x27495d,
   breacher: 0x5a7183,
   popup: 0x000080,
   'grunt-boss': 0x35506a,
@@ -131,7 +130,6 @@ export const ENEMY_ART_BODY: Record<EnemyKind, number> = {
   flyer: 2.6,
   armoured: 1.6,
   saboteur: 2.4,
-  boss: 2.6,
   breacher: 2.2,
   popup: 2.0,
   'grunt-boss': 2.0,
@@ -1384,22 +1382,6 @@ export function drawEnemyShape(
       }
       break;
     }
-    case 'boss': {
-      // A large circle with a segmented outer rim and a crown notch at the top.
-      g.circle(x, y, r).fill(fill).stroke(thickOutline);
-      const rimR = r * 1.28;
-      const span = (Math.PI * 2) / 12;
-      for (let i = 0; i < 12; i++) {
-        const a0 = span * i;
-        const a1 = a0 + span * 0.65;
-        g.moveTo(x + Math.cos(a0) * rimR, y + Math.sin(a0) * rimR)
-          .arc(x, y, rimR, a0, a1)
-          .stroke({ width: 1, color: PAL.dark, alpha });
-      }
-      const nw = r * 0.32;
-      g.moveTo(x - nw, y - r).lineTo(x, y - r - r * 0.18).lineTo(x + nw, y - r).stroke({ width: 1, color: PAL.dark, alpha });
-      break;
-    }
     default: {
       // Pop-up (and any future kind) falls back to a plain hexagon; the live window is drawn by
       // drawPopupWindow, not here.
@@ -1491,7 +1473,7 @@ function drawEnemy(
     }
   } else if (e.shield > 0) {
     const frac = e.maxShield > 0 ? Math.max(0, Math.min(1, e.shield / e.maxShield)) : 0;
-    fx.circle(ex, ey, r + (e.kind === 'boss' ? 7 : 3)).stroke({
+    fx.circle(ex, ey, r + 3).stroke({
       width: 2,
       color: SHIELD_COLOR,
       alpha: 0.25 + 0.75 * frac,
@@ -1543,7 +1525,7 @@ function drawEnemy(
   }
 }
 
-/** A crown/notch tick at the top of a boss-variant silhouette, mirroring the marker boss's crown. */
+/** A crown/notch tick at the top of a boss-variant silhouette, the runtime "boss" motif. */
 function drawBossCrown(g: Graphics, x: number, y: number, r: number): void {
   const nw = r * 0.32;
   g.moveTo(x - nw, y - r).lineTo(x, y - r - r * 0.18).lineTo(x + nw, y - r).stroke({ width: 1, color: PAL.dark });
