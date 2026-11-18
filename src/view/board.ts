@@ -6,7 +6,7 @@ import {
   enemyAt,
   canPlace,
   towerAt,
-  currentPath,
+  currentRoutes,
   selectedTower,
   towerRangeMult,
   type Mine,
@@ -346,7 +346,7 @@ export class BoardView {
       this.drawStatic(state.grid, board, cell);
     }
 
-    this.drawRoute([currentPath(state)], board, cell);
+    this.drawRoute(currentRoutes(state), board, cell);
 
     this.mines.clear();
     for (const m of state.mines) drawMine(this.mines, m, board, cell, state.clock);
