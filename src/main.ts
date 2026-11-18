@@ -25,7 +25,7 @@ import { SPAWN_KINDS, spawnKindLabel } from './core/cheats.ts';
 import { DEFAULT_LEVEL, type Level } from './core/levels.ts';
 import { addSeenEnemies, checkProfileAchievements, loadProfile, saveProfile, type Profile, type SpecKind } from './core/save.ts';
 import { buyNode, effectsFor, treeNodeById } from './core/tree.ts';
-import { achievementName, ACHIEVEMENTS } from './core/achievements.ts';
+import { achievementName } from './core/achievements.ts';
 import { unlockAchievement } from './steam.ts';
 import { ChromeView, computeLayout, PAL, pixelToWorld, pointInRect, type Layout, type MenuName } from './view/chrome.ts';
 import { BoardView } from './view/board.ts';
@@ -45,6 +45,7 @@ import {
 import { AdView } from './view/ad.ts';
 import { FloatingNumbersView } from './view/numbers.ts';
 import { MenuView, type OpenMenu } from './view/menu.ts';
+import { AchievementGridView, AchievementSession, achievementGridHitAt, buildAchievementGrid, computeAchievementGrid, type AchievementGridModel } from './view/dialog.ts';
 import { DialogView, type DialogModel } from './view/dialog.ts';
 import { HelpSession, HelpView, computeHelpLayout, helpHitAt, helpRows } from './view/help.ts';
 import { RestoreView, computeRestoreLayout, restoreHitAt } from './view/restore.ts';
@@ -161,6 +162,8 @@ const editorView = new EditorView();
 const helpSession = new HelpSession();
 const helpView = new HelpView();
 const restoreView = new RestoreView();
+const achievementSession = new AchievementSession();
+const achievementView = new AchievementGridView();
 
 // Art loads without blocking the first frame; when it (or a DPR change) invalidates, the board drops
 // its cached procedural art and re-reads the texture lookup on the next frame.
@@ -172,7 +175,7 @@ void preloadArt().then(() => drawCursorArrow());
 
 const root = new Container();
 app.stage.addChild(root);
-root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, helpView.root, restoreView.root, ad.root, menuView.root, dialogView.root, tooltip.root, menuScreenView.root, loadDialogView.root, editorView.root);
+root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, helpView.root, restoreView.root, achievementView.root, ad.root, menuView.root, dialogView.root, tooltip.root, menuScreenView.root, loadDialogView.root, editorView.root);
 
 sfx.setEnabled(profile.soundOn);
 sfx.setVolume(profile.volume);
@@ -255,6 +258,7 @@ function buyTreeNode(id: string): void {
   const node = treeNodeById(id);
   if (!node || !buyNode(profile, node)) return;
   state.rp = profile.rp;
+  state.tree = [...profile.tree];
   state.treeEffects = effectsFor(profile);
   saveProfile(profile);
 }
@@ -265,6 +269,19 @@ function toastAchievement(id: string): void {
   unlockAchievement(id);
 }
 
+/** The local date as YYYY-MM-DD, stamped onto an achievement when it fires. */
+function todayISO(): string {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** Stamp the earned date when an achievement first lands in the profile. */
+function stampEarnedDates(ids: readonly string[]): void {
+  for (const id of ids) if (profile.achievementDates[id] === undefined) profile.achievementDates[id] = todayISO();
+}
+
 /** Record any profile-only achievement (reboot count, help completion) and toast it. */
 function syncProfileAchievements(): void {
   const newly = checkProfileAchievements(profile);
@@ -273,20 +290,26 @@ function syncProfileAchievements(): void {
     state.achievements.add(id);
     toastAchievement(id);
   }
+  stampEarnedDates(newly);
   saveProfile(profile);
 }
 
 /** Push any achievement unlocked in the sim this frame into the profile and toast it. */
 function syncAchievements(): void {
   let changed = false;
+  const fresh: string[] = [];
   for (const id of state.achievements) {
     if (!profile.achievements.includes(id)) {
       profile.achievements.push(id);
+      fresh.push(id);
       toastAchievement(id);
       changed = true;
     }
   }
-  if (changed) saveProfile(profile);
+  if (changed) {
+    stampEarnedDates(fresh);
+    saveProfile(profile);
+  }
 }
 
 /** Record the highest wave reached, persisted to the profile as soon as it moves. */
@@ -309,6 +332,7 @@ function doRestartWindows(): void {
   menu = null;
   for (const id of newly) toastAchievement(id);
   for (const id of profileNewly) toastAchievement(id);
+  stampEarnedDates([...newly, ...profileNewly]);
 }
 
 function doNewRun(): void {
@@ -396,21 +420,9 @@ function menuAction(id: string): void {
     case 'exit':
       exitRun();
       break;
-    case 'achievements': {
-      const unlockedCount = ACHIEVEMENTS.filter((a) => profile.achievements.includes(a.id)).length;
-      dialog = {
-        title: 'Achievements',
-        rows: [
-          { text: `${unlockedCount} / ${ACHIEVEMENTS.length}` },
-          ...ACHIEVEMENTS.map((a) => ({
-            text: a.name,
-            greyed: !profile.achievements.includes(a.id),
-          })),
-        ],
-        buttons: [{ id: 'close', label: 'Close' }],
-      };
+    case 'achievements':
+      achievementSession.show();
       break;
-    }
     case 'about':
       dialog = {
         title: 'About',
@@ -468,6 +480,47 @@ function dialogAction(id: string): void {
 
 function closeDialog(): void {
   dialog = null;
+}
+
+// --- Achievements grid -------------------------------------------------------------------------
+
+function achievementModel(): AchievementGridModel {
+  const model = buildAchievementGrid(profile.achievements, profile.achievementDates, achievementSession.filter);
+  model.selectedId = achievementSession.selectedId;
+  model.scroll = achievementSession.scroll;
+  return model;
+}
+
+function achievementHit(x: number, y: number) {
+  const model = achievementModel();
+  const al = computeAchievementGrid(model, layout.client);
+  return { model, al, hit: achievementGridHitAt(al, model, x, y) };
+}
+
+function achievementPointerDown(x: number, y: number, button: number): boolean {
+  if (button !== 0) return pointInRect(computeAchievementGrid(achievementModel(), layout.client).window, x, y);
+  const { hit } = achievementHit(x, y);
+  if (hit === null) return false;
+  if (hit.type === 'close') {
+    achievementSession.hide();
+  } else if (hit.type === 'filter') {
+    achievementSession.setFilter(hit.filter);
+  } else if (hit.type === 'cell') {
+    achievementSession.clickCell(hit.id);
+  }
+  return true;
+}
+
+function achievementPointerMove(x: number, y: number): void {
+  const { hit } = achievementHit(x, y);
+  const hoveredId = hit?.type === 'cell' ? hit.id : null;
+  if (hoveredId !== achievementSession.hoveredId) achievementSession.hoveredId = hoveredId;
+}
+
+function achievementMove(dx: number, dy: number): void {
+  const model = achievementModel();
+  const al = computeAchievementGrid(model, layout.client);
+  achievementSession.moveSelection(dx, dy, model.entries, al);
 }
 
 // --- Screen transitions -----------------------------------------------------------------------
@@ -620,6 +673,11 @@ const mouse = new MouseController(app, {
   helpPointerMove: (x: number, y: number) => helpSession.dragTo(layout, x, y),
   helpPointerUp: () => helpSession.endDrag(),
   closeHelp: () => helpSession.hide(),
+  achievementOpen: () => achievementSession.open,
+  achievementPointerDown,
+  achievementPointerMove,
+  achievementMove,
+  closeAchievement: () => achievementSession.hide(),
   restoreOpen: () => restoreOpen,
   openRestore: () => {
     restoreOpen = true;
@@ -796,6 +854,15 @@ app.canvas.addEventListener('pointerdown', (e) => {
 app.canvas.addEventListener('pointerup', (e) => {
   if (e.button === 0) painting = false;
 });
+
+app.canvas.addEventListener('wheel', (e) => {
+  if (!achievementSession.open) return;
+  const { x, y } = canvasPoint(e as unknown as PointerEvent);
+  const { al } = achievementHit(x, y);
+  if (!pointInRect(al.window, x, y)) return;
+  e.preventDefault();
+  achievementSession.scrollBy(e.deltaY, al);
+}, { passive: false });
 
 function typingTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
@@ -984,6 +1051,15 @@ app.ticker.add((ticker) => {
     ad.draw(state);
     helpView.draw(helpSession, profile, mouse.hover.x, mouse.hover.y);
     restoreView.draw(restoreOpen, profile, layout);
+    if (achievementSession.open) {
+      const m = achievementModel();
+      const al = computeAchievementGrid(m, layout.client);
+      const hit = achievementGridHitAt(al, m, mouse.hover.x, mouse.hover.y);
+      m.hoveredId = hit?.type === 'cell' ? hit.id : null;
+      achievementView.draw(m, layout);
+    } else {
+      achievementView.draw(null, layout);
+    }
     dialogView.draw(dialog, layout);
     updateTooltip();
     const shakeOffset = shake.offset(state.tick);
@@ -1003,6 +1079,7 @@ app.ticker.add((ticker) => {
   hud.root.visible = running;
   helpView.root.visible = running && helpSession.open;
   restoreView.root.visible = running && restoreOpen;
+  achievementView.root.visible = running && achievementSession.open;
   ad.root.visible = running;
   menuView.root.visible = running;
   dialogView.root.visible = running;
@@ -1088,6 +1165,7 @@ function updateTooltip(): void {
     state.selected !== null || // placing a tower
     menu !== null || // dropdown open
     dialog !== null || // modal open
+    achievementSession.open || // achievements grid open
     h.menuItem >= 0 || // over the menu bar
     state.phase === 'halted' ||
     state.phase === 'victory' ||

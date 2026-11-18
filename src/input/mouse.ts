@@ -104,6 +104,11 @@ export interface MouseContext {
   helpPointerMove: (x: number, y: number) => void;
   helpPointerUp: () => void;
   closeHelp: () => void;
+  achievementOpen: () => boolean;
+  achievementPointerDown: (x: number, y: number, button: number) => boolean;
+  achievementPointerMove: (x: number, y: number) => void;
+  achievementMove: (dx: number, dy: number) => void;
+  closeAchievement: () => void;
   restoreOpen: () => boolean;
   restorePointerDown: (x: number, y: number, button: number) => boolean;
   openRestore: () => void;
@@ -187,6 +192,7 @@ export class MouseController {
       return;
     }
     if (this.ctx.helpOpen()) this.ctx.helpPointerMove(x, y);
+    if (this.ctx.achievementOpen()) this.ctx.achievementPointerMove(x, y);
 
     const open = this.ctx.menu();
     this.hover.menuHover = open ? menuEntryAt(l.menu, open, x, y) : null;
@@ -214,6 +220,9 @@ export class MouseController {
 
     // The Restore window swallows clicks inside it the same way the help window does.
     if (this.ctx.restoreOpen() && this.ctx.restorePointerDown(x, y, e.button)) return;
+
+    // The achievements grid swallows clicks inside it (cells, filters, close).
+    if (this.ctx.achievementOpen() && this.ctx.achievementPointerDown(x, y, e.button)) return;
 
     if (e.button === 2) {
       cancelSelection(s);
@@ -412,6 +421,10 @@ export class MouseController {
         this.ctx.closeHelp();
         return;
       }
+      if (this.ctx.achievementOpen()) {
+        this.ctx.closeAchievement();
+        return;
+      }
       const hadSelection = s.selected !== null || s.selectedTowerId !== null;
       cancelSelection(s);
       if (!hadSelection) this.ctx.exitRun();
@@ -419,6 +432,13 @@ export class MouseController {
     }
 
     const s = this.ctx.state();
+    if (this.ctx.achievementOpen()) {
+      if (e.key === 'ArrowLeft') this.ctx.achievementMove(-1, 0);
+      else if (e.key === 'ArrowRight') this.ctx.achievementMove(1, 0);
+      else if (e.key === 'ArrowUp') this.ctx.achievementMove(0, -1);
+      else if (e.key === 'ArrowDown') this.ctx.achievementMove(0, 1);
+      return;
+    }
     if (this.ctx.menu() || this.ctx.dialog()) return;
 
     // Cheat shortcuts: Ctrl+Shift+G toggles God Mode, Ctrl+Shift+K kills all. They read the same
