@@ -63,10 +63,12 @@ The **Pop-up** enemy is a Windows window and stays runtime (it is chrome, not ar
 | `beacon-base.svg` | ring with a dot |
 | `cursor-base.svg` | grey plinth with a cursor-shaped cap |
 | `repair-base.svg` | ring with a white cross |
-| `wall-base.svg` | the Windows push-button face (raised / pressed / disabled states derive from this) |
+| `wall-base.svg` | a white button-face template; the engine applies the Win95 grey per state and draws the bevel in code |
 
 Beacon, Cursor, Repair and Wall ship only a base — the loader treats a missing turret as "no
-rotation".
+rotation". The wall's face is a button, so its bevel and its raised / pressed / disabled shade are
+runtime chrome: `wall-base.svg` is a white template that the engine tints to the state's grey (see
+below), because the shade changes with state and damage and a tint cannot brighten a pre-greyed face.
 
 ### `branches/`
 
@@ -106,6 +108,8 @@ branch mark, and the Repair tower has no branches.
 
 - **Damage flash** — not currently applied; when it is, it will be a white tint on the sprite.
 - **Offline towers** — a grey desaturation wash is applied to the sprite, plus a red crossed wrench.
+- **Wall face shade** — `wall-base.svg` is white; the engine tints it to the raised / pressed / disabled
+  / damaged grey, because a button's shade is stateful and a tint cannot brighten a pre-greyed face.
 - **Shield ring, slow arc, weak-point notch, health bar** — drawn by code on top of the enemy sprite.
 
 ## Adding or changing art

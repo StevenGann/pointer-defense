@@ -3897,7 +3897,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   // 37b. Every shipped manifest file exists on disk, and no SVG on disk is unreferenced. The
   // shipped set grows as each art phase lands (towers, branches, board); the manifest itself lists
   // the whole contract from the start, so unshipped entries simply fall back to procedural drawing.
-  const shippedCategories = ['enemies'];
+  const shippedCategories = ['enemies', 'towers'];
   const missing = ART_MANIFEST.filter(
     (e) => shippedCategories.includes(e.category) && !existsSync(`${artDir}/${e.file}`),
   );

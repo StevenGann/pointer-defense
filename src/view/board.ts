@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
-import { artNameForEnemy, artSpriteSize, getArtTexture } from './art.ts';
+import { artNameForEnemy, artNameForTowerBase, artNameForTowerTurret, artSpriteSize, getArtTexture } from './art.ts';
 import { bevel, FONT, FONT_SIZE, PAL, type BoardGeometry, type Layout } from './chrome.ts';
 import {
   enemyAt,
@@ -24,6 +24,7 @@ import {
   wallFootprintSize,
   wallSpec,
   WALL_OUTLINE,
+  type WallSpec,
   type WallState,
 } from './wallAppearance.ts';
 import {
@@ -135,6 +136,9 @@ export class BoardView {
   private readonly path = new Graphics();
   private readonly toggles = new Graphics();
   private readonly towers = new Graphics();
+  private readonly towerSprites = new Container();
+  private readonly towerBaseSprites: Sprite[] = [];
+  private readonly towerTurretSprites: Sprite[] = [];
   private readonly popups = new Container();
   private readonly popupGfx = new Graphics();
   private readonly enemies = new Container();
@@ -154,7 +158,7 @@ export class BoardView {
   constructor() {
     this.note.anchor.set(0, 0.5);
     this.popups.addChild(this.popupGfx);
-    this.root.addChild(this.tiles, this.path, this.toggles, this.towers, this.popups, this.enemies, this.enemyBodies, this.enemyFx, this.overlay, this.note);
+    this.root.addChild(this.tiles, this.path, this.toggles, this.towerSprites, this.towers, this.popups, this.enemies, this.enemyBodies, this.enemyFx, this.overlay, this.note);
   }
 
   /** The pooled body sprite for the `index`-th living enemy, grown on demand. */
@@ -165,6 +169,32 @@ export class BoardView {
       s.anchor.set(0.5, 0.5);
       this.enemySprites.push(s);
       this.enemies.addChild(s);
+    }
+    s.visible = true;
+    return s;
+  }
+
+  /** The pooled plinth sprite for the `index`-th tower, grown on demand. */
+  private towerBaseSprite(index: number): Sprite {
+    let s = this.towerBaseSprites[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0.5, 0.5);
+      this.towerBaseSprites.push(s);
+      this.towerSprites.addChild(s);
+    }
+    s.visible = true;
+    return s;
+  }
+
+  /** The pooled barrel sprite for the `index`-th tower, grown on demand. */
+  private towerTurretSprite(index: number): Sprite {
+    let s = this.towerTurretSprites[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0.5, 0.5);
+      this.towerTurretSprites.push(s);
+      this.towerSprites.addChild(s);
     }
     s.visible = true;
     return s;
@@ -219,9 +249,13 @@ export class BoardView {
       drawShutter(this.toggles, tg, board, cell, state.clock);
     }
 
+    let towerIndex = 0;
     for (const t of state.towers) {
-      drawTower(this.towers, t, board, cell, state.clock);
+      drawTower(this.towerBaseSprite(towerIndex), this.towerTurretSprite(towerIndex), this.towers, t, board, cell, state.clock);
+      towerIndex++;
     }
+    for (let i = towerIndex; i < this.towerBaseSprites.length; i++) this.towerBaseSprites[i].visible = false;
+    for (let i = towerIndex; i < this.towerTurretSprites.length; i++) this.towerTurretSprites[i].visible = false;
 
     const rangeMult = towerRangeMult(state);
     const hoveredTower = hover.onBoard ? towerAt(state, hover.col, hover.row) : undefined;
@@ -468,6 +502,8 @@ function dashedCircle(g: Graphics, cx: number, cy: number, r: number, color: num
 }
 
 function drawTower(
+  baseSprite: Sprite,
+  turretSprite: Sprite,
   g: Graphics,
   t: Tower,
   board: { x: number; y: number; cell: number },
@@ -478,7 +514,7 @@ function drawTower(
   const cy = board.y + (t.row + 0.5) * cell;
   if (t.kind === 'wall') {
     const repairing = isRepairing(t, clock);
-    drawWallShape(g, { ...t, locked: isGateLocked(t, clock), repairing }, cx, cy, cell, 1);
+    drawWallTower(baseSprite, g, { ...t, locked: isGateLocked(t, clock), repairing }, cx, cy, cell);
     if (repairing) {
       // A repair replaces the health bar with a progress bar: how far the job has to run.
       drawBar(g, cx, cy, cell, repairProgress(t, clock), REPAIR_COLOR);
@@ -486,7 +522,7 @@ function drawTower(
       drawBar(g, cx, cy, cell, t.hp / t.maxHp, healthColor(t.hp / t.maxHp));
     }
   } else {
-    drawTowerShape(g, t.kind, cx, cy, cell, 1, t.angle, t.branch);
+    drawTowerBody(baseSprite, turretSprite, g, t, cx, cy, cell);
     if (isRepairing(t, clock)) {
       drawBar(g, cx, cy, cell, repairProgress(t, clock), REPAIR_COLOR);
     } else if (isOffline(t)) {
@@ -501,6 +537,85 @@ function drawTower(
   if (isFullyUpgraded(t)) {
     const r = pipRect(cx, cy, cell, pipUsesBottomCorner(t, clock));
     drawPip(g, r);
+  }
+}
+
+/** Draw a non-wall tower as a base sprite plus a rotating turret sprite, or the procedural fallback. */
+function drawTowerBody(
+  baseSprite: Sprite,
+  turretSprite: Sprite,
+  g: Graphics,
+  t: Tower,
+  cx: number,
+  cy: number,
+  cell: number,
+): void {
+  const baseTex = getArtTexture(artNameForTowerBase(t.kind), cell);
+  if (baseTex !== null) {
+    baseSprite.texture = baseTex;
+    baseSprite.visible = true;
+    baseSprite.position.set(cx, cy);
+    baseSprite.width = cell;
+    baseSprite.height = cell;
+    baseSprite.tint = 0xffffff;
+    baseSprite.rotation = 0;
+    baseSprite.alpha = 1;
+  } else {
+    baseSprite.visible = false;
+  }
+
+  const turretName = artNameForTowerTurret(t.kind);
+  const turretTex = turretName !== null ? getArtTexture(turretName, cell) : null;
+  if (turretTex !== null) {
+    turretSprite.texture = turretTex;
+    turretSprite.visible = true;
+    turretSprite.position.set(cx, cy);
+    turretSprite.width = cell;
+    turretSprite.height = cell;
+    turretSprite.tint = 0xffffff;
+    turretSprite.rotation = t.angle;
+    turretSprite.alpha = 1;
+  } else {
+    turretSprite.visible = false;
+  }
+
+  if (baseTex === null) {
+    // Procedural fallback for a half-finished art pass (deleted once parity is confirmed).
+    drawTowerShape(g, t.kind, cx, cy, cell, 1, t.angle, t.branch);
+  } else {
+    // The branch mark is drawn with the tower's own colours on top of the sprite (procedural until
+    // Phase 3 converts the marks to SVG).
+    drawBranchMark(g, t.kind, t.branch, cx, cy, cell, { color: TOWER_COLOR[t.kind], alpha: 1 }, { width: 1, color: PAL.dark, alpha: 1 });
+  }
+}
+
+/** Draw a wall as a tinted face sprite plus the procedural button bevel and branch marks. */
+function drawWallTower(
+  baseSprite: Sprite,
+  g: Graphics,
+  wall: WallState,
+  cx: number,
+  cy: number,
+  cell: number,
+): void {
+  const spec = wallSpec(wall);
+  const size = wallFootprintSize(cell);
+  const faceTex = getArtTexture('wall-base', size);
+  if (faceTex !== null) {
+    // The face is a white button template; the Win95 grey is applied per state (a button's bevel and
+    // its raised/disabled/pressed shade are runtime chrome).
+    baseSprite.texture = faceTex;
+    baseSprite.visible = true;
+    baseSprite.position.set(cx, cy);
+    baseSprite.width = size;
+    baseSprite.height = size;
+    baseSprite.tint = spec.face;
+    baseSprite.rotation = 0;
+    baseSprite.alpha = 1;
+    drawWallFaceDetails(g, spec, cx, cy, cell, 1);
+  } else {
+    baseSprite.visible = false;
+    drawWallShape(g, wall, cx, cy, cell, 1);
   }
 }
 
@@ -749,6 +864,16 @@ function drawWallShape(
   const s = Math.round(size);
 
   g.rect(x, y, s, s).fill({ color: spec.face, alpha });
+  drawWallFaceDetails(g, spec, cx, cy, cell, alpha);
+}
+
+/** The wall's outline, bevel, Bulwark rim, Mesh crosshatch and repair hatch — the runtime chrome. */
+function drawWallFaceDetails(g: Graphics, spec: WallSpec, cx: number, cy: number, cell: number, alpha: number): void {
+  const size = wallFootprintSize(cell);
+  const x = Math.round(cx - size / 2);
+  const y = Math.round(cy - size / 2);
+  const s = Math.round(size);
+
   g.rect(x + 0.5, y + 0.5, s - 1, s - 1).stroke({ width: 1, color: WALL_OUTLINE, alpha });
   wallBevel(g, x + 1, y + 1, s - 2, spec.tl, spec.br, alpha);
 
