@@ -46,6 +46,12 @@ export interface Profile {
   /** The salvage the last rebooted run earned, for Restore Point's 10% carry. */
   lastSalvage: number;
   achievements: string[];
+  /** The local date (YYYY-MM-DD) each achievement fired, for the grid tooltip. */
+  achievementDates: Record<string, string>;
+  /** Authored map ids a wave has been cleared on, across all runs (for the every-map shadow). */
+  mapsCleared: string[];
+  /** Bosses killed by the pointer's final blow, across all runs (for the boss-hunter meta). */
+  lifetimeBossKillsByPointer: number;
   bestWave: number;
   reboots: number;
   /** Whether sound effects play at all. */
@@ -118,6 +124,9 @@ export function defaultProfile(): Profile {
     tree: [],
     lastSalvage: 0,
     achievements: [],
+    achievementDates: {},
+    mapsCleared: [],
+    lifetimeBossKillsByPointer: 0,
     bestWave: 0,
     reboots: 0,
     soundOn: true,
@@ -150,6 +159,9 @@ export function cloneProfile(p: Profile): Profile {
     tree: [...p.tree],
     lastSalvage: p.lastSalvage,
     achievements: [...p.achievements],
+    achievementDates: { ...p.achievementDates },
+    mapsCleared: [...p.mapsCleared],
+    lifetimeBossKillsByPointer: p.lifetimeBossKillsByPointer,
     bestWave: p.bestWave,
     reboots: p.reboots,
     soundOn: p.soundOn,
@@ -199,6 +211,7 @@ export function checkProfileAchievements(p: Profile): string[] {
     }
   };
   if (p.reboots >= 2) add('two-reboots');
+  if (p.reboots >= 10) add('reboot-10');
   if (allHelpUnlocked(p)) add('all-help');
   return unlocked;
 }
@@ -278,6 +291,12 @@ function parseProfile(raw: string): Profile | null {
   const achievements = Array.isArray(o.achievements)
     ? o.achievements.filter((a): a is string => typeof a === 'string')
     : [];
+  const achievementDates: Record<string, string> = {};
+  if (typeof o.achievementDates === 'object' && o.achievementDates !== null) {
+    for (const [k, v] of Object.entries(o.achievementDates as Record<string, unknown>)) {
+      if (typeof v === 'string') achievementDates[k] = v;
+    }
+  }
   const bestWave =
     typeof o.bestWave === 'number' && Number.isFinite(o.bestWave) ? Math.max(0, Math.floor(o.bestWave)) : 0;
   const reboots =
@@ -296,8 +315,16 @@ function parseProfile(raw: string): Profile | null {
     ? [...new Set(o.seenEnemies.filter((k): k is EnemyKind => typeof k === 'string' && isEnemyKind(k as EnemyKind)))]
     : [];
   const lastChoice: MenuChoice = o.lastChoice === 'editor' || o.lastChoice === 'load' ? o.lastChoice : 'play';
+  // Cross-run achievement counters, migration-safe: absent on older saves, so they default empty.
+  const mapsCleared = Array.isArray(o.mapsCleared)
+    ? [...new Set(o.mapsCleared.filter((m): m is string => typeof m === 'string'))]
+    : [];
+  const lifetimeBossKillsByPointer =
+    typeof o.lifetimeBossKillsByPointer === 'number' && Number.isFinite(o.lifetimeBossKillsByPointer)
+      ? Math.max(0, Math.floor(o.lifetimeBossKillsByPointer))
+      : 0;
 
-  return { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, bestWave, reboots, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice };
+  return { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, achievementDates, mapsCleared, lifetimeBossKillsByPointer, bestWave, reboots, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice };
 }
 
 /**

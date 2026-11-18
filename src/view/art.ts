@@ -1,5 +1,6 @@
 import { Texture } from 'pixi.js';
 import { baseEnemyKind, type EnemyKind } from '../core/enemies.ts';
+import { ACHIEVEMENTS } from '../core/achievements.ts';
 import { liveDevicePixelRatio } from './screen.ts';
 import { currentAnimFrame, lifetimeFrame, secondsToWholeTicks, type AnimMeta } from './anim.ts';
 
@@ -18,7 +19,7 @@ import { currentAnimFrame, lifetimeFrame, secondsToWholeTicks, type AnimMeta } f
  * `scripts/smoke.mjs`, so an unreferenced SVG or a listed-but-absent one fails the smoke run.
  */
 
-export type ArtCategory = 'enemies' | 'towers' | 'branches' | 'board' | 'fx' | 'ui' | 'wall';
+export type ArtCategory = 'enemies' | 'towers' | 'branches' | 'board' | 'fx' | 'ui' | 'wall' | 'achievements';
 
 export interface ArtEntry {
   /** The unique asset name, e.g. `grunt`, `gun-base`, `gun-marksman`, `tile`. */
@@ -59,6 +60,9 @@ const BRANCH_NAMES: Readonly<Record<string, Readonly<Partial<Record<string, stri
 };
 
 const BOARD_NAMES = ['tile', 'path-tile', 'obstacle', 'block'] as const;
+
+/** Achievement icons: one file per id, plus the `_placeholder` every missing file falls back to. */
+const ACHIEVEMENT_NAMES = ['_placeholder', ...ACHIEVEMENTS.map((a) => a.id)] as const;
 
 /** Effect sprites: fixed shapes whose only runtime variation is position/scale/rotation/alpha/tint. */
 const FX_NAMES = [
@@ -119,6 +123,7 @@ export const ART_MANIFEST: readonly ArtEntry[] = [
   ...entries('fx', 'fx', FX_NAMES),
   ...entries('ui', 'ui', UI_NAMES),
   ...entries('wall', 'wall', WALL_NAMES),
+  ...entries('achievements', 'achievements', ACHIEVEMENT_NAMES),
 ];
 
 const MANIFEST_BY_NAME: ReadonlyMap<string, ArtEntry> = new Map(ART_MANIFEST.map((e) => [e.name, e]));

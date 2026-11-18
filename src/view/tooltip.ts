@@ -45,6 +45,11 @@ export class TooltipView {
     this.root.addChild(this.g);
   }
 
+  /** True while a tooltip has a hover target (shadow-hover reads this from the main loop). */
+  get showing(): boolean {
+    return this.key !== null;
+  }
+
   /** Called once per frame with the current hover target and the pointer/viewport geometry. */
   update(target: TooltipTarget, x: number, y: number, viewportW: number, viewportH: number): void {
     if (target.key === null) {

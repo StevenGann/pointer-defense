@@ -10,6 +10,7 @@
 // sealed boards, and flyers beat grunts across the board.
 
 import { FLYER_OFF_KIND_DAMAGE,
+  buildStats,
   createRunState,
   cursorMaintenanceStatus,
   GOD_SALVAGE_CEILING,
@@ -135,6 +136,7 @@ import {
 import { backingStorePixelSize } from '../src/view/screen.ts';
 import { HELP_PAGES, pageUnlocked, lockedReason, pageById } from '../src/content/help.ts';
 import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, HelpSession, HELP_W, HELP_H } from '../src/view/help.ts';
+import { buildAchievementGrid, gridRowCount, gridCellRect, ACH_COLUMNS, ACH_CELL, ACH_GUTTER, computeAchievementGrid, achievementGridHitAt, AchievementSession } from '../src/view/dialog.ts';
 import {
   ART_MANIFEST,
   ART_VIEWBOX,
@@ -170,6 +172,7 @@ import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { animFrame, currentAnimFrame, DEFAULT_ANIM, entityOffset } from '../src/view/anim.ts';
 import { scanArt } from './art-manifest.mjs';
+import { runAchArt } from './ach-art.mjs';
 import { EffectsView } from '../src/view/effects.ts';
 import { fileURLToPath } from 'node:url';
 import {
@@ -1189,15 +1192,51 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(!again.includes('first-blood'), 'first-blood does not fire twice');
 }
 
-// --- 15b. The achievement table: 24 definitions, unique ids, names and descriptions ------------
+// --- 15b. The achievement table: 118 definitions, unique ids, names and descriptions -----------
 {
-  check(ACHIEVEMENTS.length === 24, `exactly 24 achievements (${ACHIEVEMENTS.length})`);
+  check(ACHIEVEMENTS.length === 118, `exactly 118 achievements (${ACHIEVEMENTS.length})`);
   const ids = ACHIEVEMENTS.map((a) => a.id);
   check(new Set(ids).size === ACHIEVEMENTS.length, 'achievement ids are unique');
   check(
     ACHIEVEMENTS.every((a) => a.name.trim().length > 0 && a.description.trim().length > 0),
     'every achievement has a name and a description',
   );
+  // Every shadow- id is hidden (the three redefined ids — leak-recovery, sell-profit and
+  // early-call-wave-1 — are also hidden but keep their original ids).
+  check(
+    ACHIEVEMENTS.every((a) => !a.id.startsWith('shadow-') || a.hidden === true),
+    'every shadow- id is hidden',
+  );
+  // Every achievement carries a live predicate (no `() => false` placeholder).
+  check(
+    ACHIEVEMENTS.every((a) => a.when !== undefined),
+    'every achievement has a when predicate',
+  );
+  // The full 118-id catalog is present verbatim, and nothing extra ships.
+  const DOC_IDS = [
+    'first-blood', 'sharpshooter', 'weak-point-kills', 'crit-hits', 'crit-100', 'pointer-1k', 'click-combo', 'override',
+    'pointer-only-wave', 'weak-point-10', 'crit-first', 'overclock-max', 'click-idle', 'pointer-boss-10',
+    'five-tier-five', 'beacon-field', 'maxed-branch', 'aa-flak', 'mine-layer', 'wall-only-wave', 'toggle-master', 'repair-shop',
+    'tower-zoo', 'tier-five-first', 'sell-10', 'no-upgrade-wave', 'laser-chain', 'frost-lock', 'taser-chain', 'cannon-splash',
+    'cursor-first', 'cursor-repair', 'beacon-buff', 'one-kind', 'two-kinds', 'upgrade-first', 'branch-first', 'sell-tower-first',
+    'salvage-peak', 'salvage-10k', 'earn-100k', 'no-spend-wave', 'ad-collector', 'ad-ignore', 'early-call-streak', 'early-call-10',
+    'early-call-wave-1', 'idle-hour', 'sell-profit', 'no-sell',
+    'clean-wave', 'flawless-wave', 'flawless-10', 'perfect-run', 'long-road', 'maze-100', 'wave-25', 'wave-50', 'wave-100',
+    'endless-150', 'endless-200', 'integrity-1', 'speed-3', 'wave-1-no-damage', 'leak-recovery',
+    'boss-by-pointer', 'milestone-boss-pointer', 'boss-10', 'boss-first-wave', 'shield-break-5', 'carrier-brood',
+    'dreadnought-kill', 'wirecutter-kill', 'ram-kill', 'boss-no-leak',
+    'reboot-50', 'two-reboots', 'reboot-10', 'specs-banked', 'first-rp', 'rp-100', 'prestige-25', 'tree-tier-3', 'tree-complete',
+    'fast-boot-40', 'no-cheats-100', 'all-help',
+    'custom-map-cleared', 'editor-first', 'map-export', 'map-import', 'fork-cleared', 'ladder-cleared',
+    'shadow-ad-no-close', 'shadow-zero-towers', 'shadow-all-walls', 'shadow-sell-all', 'shadow-1hp-boss', 'shadow-pause',
+    'shadow-hover', 'shadow-resize', 'shadow-mute', 'shadow-reload', 'shadow-clippy', 'shadow-monochrome', 'shadow-owl',
+    'shadow-weekend', 'shadow-flat-battery', 'shadow-printer', 'shadow-boots', 'shadow-perfect-100', 'shadow-every-map',
+    'shadow-broke', 'shadow-help-clippy', 'shadow-drag', 'shadow-tooltip', 'shadow-cheat-lose', 'shadow-console',
+  ];
+  const idSet = new Set(ids);
+  check(DOC_IDS.length === 118, `the doc catalog has 118 ids (${DOC_IDS.length})`);
+  check(DOC_IDS.every((id) => idSet.has(id)), 'every doc id is present');
+  check(ids.every((id) => DOC_IDS.includes(id)), 'no id ships that is not in the doc');
 }
 
 // --- 15c. Each new run-state achievement fires once and only once -----------------------------
@@ -1437,7 +1476,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(!checkAchievements(s).includes('first-blood'), 'a round-tripped achievement does not fire again');
 }
 
-// --- 15f. A cheated run records none of the new achievements ----------------------------------
+// --- 15f. A cheated run records only the cheat-only shadow ------------------------------------
 {
   const s = createRunState();
   s.cheatsUsed = true;
@@ -1450,7 +1489,9 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   s.milestoneBossByPointer = true;
   s.rp = 3;
   s.clearedWaves = 1;
-  check(checkAchievements(s).length === 0, 'a cheated run records none of the new achievements');
+  const got = checkAchievements(s);
+  check(got.length === 1 && got[0] === 'shadow-console',
+    'a cheated run records only shadow-console, not the non-cheat-only achievements');
 }
 
 // --- 16. The hundred: generator, bosses, modifiers, victory, endless ---------------------------
@@ -6858,7 +6899,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
 }
 
 {
-  // A cheated run records no achievement and no bestWave.
+  // A cheated run records only the cheat-only shadow, and no bestWave.
   const s = createRunState();
   s.phase = 'wave';
   const grunt = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
@@ -6869,7 +6910,9 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     pointerUp(s);
   }
   check(grunt.dead, 'the grunt died in a cheated run');
-  check(checkAchievements(s).length === 0, 'a cheated run fires no achievement');
+  const got = checkAchievements(s);
+  check(got.includes('shadow-console'), 'a cheated run fires shadow-console');
+  check(!got.includes('first-blood'), 'a cheated run does not fire first-blood');
   check(!s.achievements.has('first-blood'), 'the first-blood achievement is not recorded in a cheated run');
 
   s.wave = 52;
@@ -7024,6 +7067,267 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   const s = createRunState(defaultProfile());
   check(s.wave === 0 && s.economy.salvage === 60 && s.integrity === 20 && s.towers.length === 0,
     'a run with an empty tree is identical to today');
+}
+
+// --- 46. The achievements grid ---------------------------------------------------------------
+{
+  check(ACH_COLUMNS === 8, 'grid: eight columns');
+  check(gridRowCount(0) === 0, 'grid: zero cells, zero rows');
+  check(gridRowCount(8) === 1, 'grid: eight cells fill one row');
+  check(gridRowCount(9) === 2, 'grid: nine cells spill to two rows');
+  check(gridRowCount(118) === 15, 'grid: 118 cells form 15 rows');
+  const r = gridCellRect(100, 200, 3, 2);
+  check(
+    r.x === 100 + 3 * (ACH_CELL + ACH_GUTTER) && r.y === 200 + 2 * (ACH_CELL + ACH_GUTTER) && r.w === ACH_CELL && r.h === ACH_CELL,
+    'grid: a cell lands at col*pitch, row*pitch',
+  );
+}
+
+{
+  const model = buildAchievementGrid(['first-blood'], { 'first-blood': '2026-11-18' }, 'all');
+  check(model.total === 118, 'grid: the stored total is 118');
+  check(model.earnedCount === 1, 'grid: earned count reads the profile');
+  check(model.shadowCount === 0, 'grid: no shadow earned yet');
+  check(
+    model.entries.every((e) => !e.id.startsWith('shadow-')),
+    'grid: a hidden achievement has no cell before earning',
+  );
+  const earnedShadow = buildAchievementGrid(['shadow-owl'], {}, 'all');
+  check(earnedShadow.shadowCount === 1, 'grid: an earned shadow is counted');
+  check(earnedShadow.entries.some((e) => e.id === 'shadow-owl'), 'grid: an earned shadow gets a cell');
+  check(model.entries.find((e) => e.id === 'first-blood').earnedDate === '2026-11-18', 'grid: earned date is attached');
+
+  const client = { x: 0, y: 0, w: 1280, h: 800 };
+  const al = computeAchievementGrid(model, client);
+  check(al.window.w === 560, 'grid: the window is 560 wide');
+  const cells = al.cells;
+  check(new Set(cells.slice(0, 8).map((c) => c.rect.y)).size === 1, 'grid: the first eight cells share a row');
+  check(cells.length <= 8 || cells[8].rect.y > cells[0].rect.y, 'grid: the ninth cell starts the next row');
+  const hit = achievementGridHitAt(al, model, cells[0].rect.x + 4, cells[0].rect.y + 4);
+  check(hit !== null && hit.type === 'cell' && hit.id === model.entries[0].id, 'grid: a click on a cell hit-tests to that cell');
+  const session = new AchievementSession();
+  session.show();
+  check(session.open, 'grid session: show opens the grid');
+  session.hide();
+  check(!session.open, 'grid session: hide closes the grid');
+}
+
+// --- 46b. Every AchievementStats field is populated in a built snapshot ------------------------
+{
+  const keys = Object.keys(buildStats(createRunState())).sort();
+  const fields = [
+    'aaFlak', 'aaKills', 'adsClosed', 'adsExpired', 'autoWave', 'beaconBuffKill', 'beaconCount',
+    'bossKilledAtOneIntegrity', 'bossKilledByOverride', 'bossKilledByPointer', 'bossKillsByPointer',
+    'bossesKilled', 'branches', 'calledEarlyBeforeTower', 'cheatSpawns', 'cheatsUsed', 'cleanWave',
+    'clearedBossNoLeak', 'clearedNoSpendWave', 'clearedNoTowerWave', 'clearedNoUpgradeWave',
+    'clearedSellAllWave', 'clearedTwoKinds', 'clearedWallOnlyWave', 'clearedWave1NoLeak', 'clearedWaves',
+    'critHits', 'cursorBuilt', 'cursorKills', 'cursorRepairs', 'customMap', 'dayOfWeek',
+    'earlyCallStreak', 'earlyCalls', 'earned', 'endlessWave', 'flyersKilled', 'idleSeconds',
+    'idleTowerKilled', 'integrity', 'integrityLowWater', 'killedCarrier', 'killedDreadnought',
+    'killedRam', 'killedWirecutter', 'kills', 'killsByPointer', 'killsByTower', 'leaks',
+    'lifetimeBossKillsByPointer', 'mapId', 'maxBeamKills', 'maxChainKills', 'maxCursorRepairs',
+    'maxSlowCount', 'maxSplashKills', 'maxTowerTier', 'maxTreeTier', 'maxedBranch',
+    'milestoneBossByPointer', 'minesTriggered', 'notified', 'overclockMax', 'pausedTicks',
+    'perfectWaveStreak', 'perfectWaves', 'pointerHits', 'pointerIdleSeconds', 'prestigeLevel',
+    'rebootCount', 'recentPointerKills', 'repairsDone', 'routeLength', 'rp', 'runEnded', 'runLost',
+    'salvage', 'salvagePeak', 'salvageSpentOnRepairs', 'shadowBroke', 'shieldsBroken',
+    'shippedMapsCleared', 'soldTowerSameWave', 'specTotal', 'startingWave', 'tierFiveCount',
+    'timeOfDayHour', 'toggles', 'towerKinds', 'towersBuilt', 'towersOnBoard', 'towersSold',
+    'treeNodeCount', 'treesFullyUpgraded', 'upgradesBought', 'wallsBuilt', 'wave', 'wavesAtThreeSpeed',
+    'wavesClearedSinceLeak', 'weakHits', 'weakKills',
+  ].sort();
+  check(
+    JSON.stringify(keys) === JSON.stringify(fields),
+    'the built snapshot has exactly the 101 AchievementStats fields',
+  );
+}
+
+// --- 47. Every achievement has a live detector (no `() => false` placeholder) -----------------
+// Each row is [id, stats overrides, optional profile]; the predicate must fire for that input, so a
+// `when` that is (or became) constant-false fails this sweep.
+{
+  const base = buildStats(createRunState());
+  const p = defaultProfile();
+  const muteProfile = { ...p, soundOn: false };
+  const shakeProfile = { ...p, shakeOn: false };
+  const helpProfile = { ...p, bestWave: 24, seenEnemies: [...ENEMY_KINDS], seenBossKinds: [...BOSS_KINDS] };
+  const fires = (id, overrides, prof = p) => ACHIEVEMENTS.find((a) => a.id === id).when({ ...base, ...overrides }, prof);
+  const N = (id) => new Set([id]);
+  const cases = [
+    // Pointer and the clicker
+    ['first-blood', { kills: 1 }],
+    ['sharpshooter', { weakHits: 100 }],
+    ['weak-point-kills', { weakKills: 50 }],
+    ['crit-hits', { critHits: 25 }],
+    ['crit-100', { critHits: 100 }],
+    ['pointer-1k', { pointerHits: 1000 }],
+    ['click-combo', { recentPointerKills: 10 }],
+    ['override', { bossKilledByOverride: true }],
+    ['pointer-only-wave', { clearedNoTowerWave: true }],
+    ['weak-point-10', { weakHits: 10 }],
+    ['crit-first', { critHits: 1, wave: 1 }],
+    ['overclock-max', { overclockMax: true }],
+    ['click-idle', { pointerIdleSeconds: 60, idleTowerKilled: true }],
+    ['pointer-boss-10', { lifetimeBossKillsByPointer: 10 }],
+    // Towers
+    ['five-tier-five', { tierFiveCount: 5 }],
+    ['beacon-field', { beaconCount: 10 }],
+    ['maxed-branch', { maxedBranch: true }],
+    ['aa-flak', { aaFlak: true }],
+    ['mine-layer', { minesTriggered: 25 }],
+    ['wall-only-wave', { clearedWallOnlyWave: true }],
+    ['toggle-master', { toggles: 50 }],
+    ['repair-shop', { salvageSpentOnRepairs: 2000 }],
+    ['tower-zoo', { towerKinds: 10 }],
+    ['tier-five-first', { maxTowerTier: 5 }],
+    ['sell-10', { towersSold: 10 }],
+    ['no-upgrade-wave', { clearedNoUpgradeWave: true }],
+    ['laser-chain', { maxBeamKills: 5 }],
+    ['frost-lock', { maxSlowCount: 12 }],
+    ['taser-chain', { maxChainKills: 4 }],
+    ['cannon-splash', { maxSplashKills: 6 }],
+    ['cursor-first', { cursorBuilt: true }],
+    ['cursor-repair', { maxCursorRepairs: 5 }],
+    ['beacon-buff', { beaconBuffKill: true }],
+    ['one-kind', { clearedWaves: 1, towerKinds: 1 }],
+    ['two-kinds', { clearedTwoKinds: true }],
+    ['upgrade-first', { upgradesBought: 1 }],
+    ['branch-first', { branches: 1 }],
+    ['sell-tower-first', { towersSold: 1 }],
+    // Economy
+    ['salvage-peak', { salvagePeak: 1000 }],
+    ['salvage-10k', { salvagePeak: 10000 }],
+    ['earn-100k', { earned: 100000 }],
+    ['no-spend-wave', { clearedNoSpendWave: true }],
+    ['ad-collector', { adsClosed: 10 }],
+    ['ad-ignore', { adsExpired: 10 }],
+    ['early-call-streak', { earlyCallStreak: 3 }],
+    ['early-call-10', { earlyCalls: 10 }],
+    ['early-call-wave-1', { calledEarlyBeforeTower: true }],
+    ['idle-hour', { autoWave: true, idleSeconds: 300 }],
+    ['sell-profit', { soldTowerSameWave: true }],
+    ['no-sell', { wave: 20, towersSold: 0 }],
+    // Waves and survival
+    ['clean-wave', { cleanWave: true }],
+    ['flawless-wave', { perfectWaves: 1 }],
+    ['flawless-10', { perfectWaves: 10 }],
+    ['perfect-run', { wave: 50, leaks: 0 }],
+    ['long-road', { routeLength: 50 }],
+    ['maze-100', { routeLength: 100 }],
+    ['wave-25', { wave: 25 }],
+    ['wave-50', { wave: 50 }],
+    ['wave-100', { wave: 100 }],
+    ['endless-150', { endlessWave: 150 }],
+    ['endless-200', { endlessWave: 200 }],
+    ['integrity-1', { integrity: 1 }],
+    ['speed-3', { wavesAtThreeSpeed: 1 }],
+    ['wave-1-no-damage', { clearedWave1NoLeak: true }],
+    ['leak-recovery', { wavesClearedSinceLeak: 5 }],
+    // Bosses
+    ['boss-by-pointer', { bossKilledByPointer: true }],
+    ['milestone-boss-pointer', { milestoneBossByPointer: true }],
+    ['boss-10', { bossesKilled: 10 }],
+    ['boss-first-wave', { bossesKilled: 1, wave: 19 }],
+    ['shield-break-5', { shieldsBroken: 5 }],
+    ['carrier-brood', { killedCarrier: true }],
+    ['dreadnought-kill', { killedDreadnought: true }],
+    ['wirecutter-kill', { killedWirecutter: true }],
+    ['ram-kill', { killedRam: true }],
+    ['boss-no-leak', { clearedBossNoLeak: true }],
+    // Prestige, meta
+    ['reboot-50', { specTotal: 50 }],
+    ['two-reboots', { rebootCount: 2 }],
+    ['reboot-10', { rebootCount: 10 }],
+    ['specs-banked', { rp: 1 }],
+    ['first-rp', { prestigeLevel: 1 }],
+    ['rp-100', { prestigeLevel: 100 }],
+    ['prestige-25', { prestigeLevel: 25 }],
+    ['tree-tier-3', { maxTreeTier: 3 }],
+    ['tree-complete', { treesFullyUpgraded: true }],
+    ['fast-boot-40', { startingWave: 40 }],
+    ['no-cheats-100', { wave: 100, cheatsUsed: false }],
+    ['all-help', {}, helpProfile],
+    // Maps and the editor
+    ['custom-map-cleared', { customMap: true, clearedWaves: 1 }],
+    ['editor-first', { notified: N('editor-first') }],
+    ['map-export', { notified: N('map-export') }],
+    ['map-import', { notified: N('map-import') }],
+    ['fork-cleared', { mapId: 'fork', clearedWaves: 10 }],
+    ['ladder-cleared', { mapId: 'ladder', clearedWaves: 10 }],
+    // Shadow
+    ['shadow-ad-no-close', { adsExpired: 10, runLost: true }],
+    ['shadow-zero-towers', { wave: 5, towersBuilt: 0, pointerHits: 0 }],
+    ['shadow-all-walls', { wallsBuilt: 40 }],
+    ['shadow-sell-all', { clearedSellAllWave: true }],
+    ['shadow-1hp-boss', { bossKilledAtOneIntegrity: true }],
+    ['shadow-pause', { pausedTicks: 36000 }],
+    ['shadow-hover', { notified: N('shadow-hover') }],
+    ['shadow-resize', { notified: N('shadow-resize') }],
+    ['shadow-mute', { clearedWaves: 50 }, muteProfile],
+    ['shadow-reload', { notified: N('shadow-reload') }],
+    ['shadow-clippy', { notified: N('shadow-clippy') }],
+    ['shadow-monochrome', { runEnded: true }, shakeProfile],
+    ['shadow-owl', { timeOfDayHour: 3, clearedWaves: 1 }],
+    ['shadow-weekend', { dayOfWeek: 0, clearedWaves: 1 }],
+    ['shadow-flat-battery', { notified: N('shadow-flat-battery') }],
+    ['shadow-boots', { notified: N('shadow-boots') }],
+    ['shadow-perfect-100', { wave: 100, leaks: 0, repairsDone: 0, towersSold: 0 }],
+    ['shadow-every-map', { shippedMapsCleared: 6 }],
+    ['shadow-broke', { shadowBroke: true }],
+    ['shadow-help-clippy', { notified: N('shadow-help-clippy') }],
+    ['shadow-drag', { notified: N('shadow-drag') }],
+    ['shadow-tooltip', { notified: N('shadow-tooltip') }],
+    ['shadow-printer', { cheatSpawns: 50, runLost: true }],
+    ['shadow-cheat-lose', { cheatsUsed: true, integrity: 0, runLost: true }],
+    ['shadow-console', { cheatsUsed: true }],
+  ];
+  let allFired = true;
+  for (const [id, overrides, prof] of cases) {
+    if (!fires(id, overrides, prof)) {
+      allFired = false;
+      console.log(`  missing fire: ${id}`);
+    }
+  }
+  check(cases.length === 118, `all 118 conditions are enumerated (${cases.length})`);
+  check(new Set(cases.map((c) => c[0])).size === 118, 'every achievement is covered exactly once');
+  check(allFired, 'all 118 achievements fire from constructed stats');
+}
+
+// --- 48. A cheated run awards only the cheat-only shadow --------------------------------------
+{
+  const s = createRunState();
+  s.cheatsUsed = true;
+  s.wallsBuilt = 40; // shadow-all-walls is met (non-cheat-only)
+  s.wave = 5; // shadow-zero-towers is met (non-cheat-only)
+  s.towersBuilt = 0;
+  s.pointerHits = 0;
+  s.economy.kills.tower = 1; // first-blood is met (non-cheat-only)
+  const got = checkAchievements(s);
+  check(got.includes('shadow-console'), 'a cheated run awards shadow-console');
+  check(!got.includes('first-blood'), 'a cheated run does not award first-blood');
+  check(!got.includes('shadow-all-walls') && !got.includes('shadow-zero-towers'),
+    'a cheated run skips non-cheat-only achievements');
+  check(checkAchievements(s).length === 0,
+    'once shadow-console fires, a cheated run returns [] for the remaining non-cheat-only ids');
+}
+
+// --- 49. The art script is idempotent and never overwrites ------------------------------------
+{
+  const tmp = mkdtempSync(join(tmpdir(), 'pd-ach-'));
+  try {
+    const achDir = join(tmp, 'achievements');
+    mkdirSync(achDir, { recursive: true });
+    writeFileSync(join(achDir, '_placeholder.svg'), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44"/>');
+    const custom = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44"><!-- artist work --></svg>';
+    writeFileSync(join(achDir, 'first-blood.svg'), custom);
+    const first = runAchArt(tmp);
+    check(first.copied > 0 && first.skipped >= 1, `ach-art copies missing ids and keeps existing (${first.copied}/${first.skipped})`);
+    check(readFileSync(join(achDir, 'first-blood.svg'), 'utf8') === custom, 'ach-art never overwrites an existing file');
+    const second = runAchArt(tmp);
+    check(second.copied === 0, 'ach-art is idempotent (second run copies nothing)');
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

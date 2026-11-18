@@ -240,12 +240,23 @@ export class HelpSession {
   expanded: number | null = null;
   status = '';
   dragging = false;
+  /** Every page id the player has opened this session (for the shadow-clippy rule). */
+  readonly visited = new Set<string>([HELP_PAGES[0].id]);
+  /** True once a drag pushed the window against the clamped edge (for the shadow-drag rule). */
+  draggedToEdge = false;
 
   private history: string[] = [HELP_PAGES[0].id];
   private index = 0;
   private centered = false;
   private dragDx = 0;
   private dragDy = 0;
+
+  /** How many currently-unlocked pages have been opened this session. */
+  visitedCount(profile: Profile): number {
+    let n = 0;
+    for (const p of HELP_PAGES) if (pageUnlocked(p, profile) && this.visited.has(p.id)) n++;
+    return n;
+  }
 
   /** Open the window (no second instance): it centres on first open, then keeps its position. */
   show(layout: Layout): void {
@@ -275,7 +286,10 @@ export class HelpSession {
 
   dragTo(layout: Layout, x: number, y: number): void {
     if (!this.dragging) return;
-    const p = clampHelpPosition(layout, x - this.dragDx, y - this.dragDy);
+    const rx = x - this.dragDx;
+    const ry = y - this.dragDy;
+    const p = clampHelpPosition(layout, rx, ry);
+    if (p.x !== rx || p.y !== ry) this.draggedToEdge = true;
     this.x = p.x;
     this.y = p.y;
   }
@@ -317,6 +331,7 @@ export class HelpSession {
   }
 
   private select(id: string): void {
+    this.visited.add(id);
     if (this.history[this.index] === id) return;
     this.history = this.history.slice(0, this.index + 1);
     this.history.push(id);

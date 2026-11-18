@@ -10,6 +10,7 @@ import {
   killAllEnemies,
   noBuildActive,
   NO_BUILD_MESSAGE,
+  notifyAchievement,
   pointerDamageMult,
   restartPointsGained,
   restartWindows,
@@ -25,7 +26,7 @@ import { SPAWN_KINDS, spawnKindLabel } from './core/cheats.ts';
 import { DEFAULT_LEVEL, type Level } from './core/levels.ts';
 import { addSeenEnemies, checkProfileAchievements, loadProfile, saveProfile, type Profile, type SpecKind } from './core/save.ts';
 import { buyNode, effectsFor, treeNodeById } from './core/tree.ts';
-import { achievementName, ACHIEVEMENTS } from './core/achievements.ts';
+import { achievementName } from './core/achievements.ts';
 import { unlockAchievement } from './steam.ts';
 import { ChromeView, computeLayout, PAL, pixelToWorld, pointInRect, type Layout, type MenuName } from './view/chrome.ts';
 import { BoardView } from './view/board.ts';
@@ -45,6 +46,7 @@ import {
 import { AdView } from './view/ad.ts';
 import { FloatingNumbersView } from './view/numbers.ts';
 import { MenuView, type OpenMenu } from './view/menu.ts';
+import { AchievementGridView, AchievementSession, achievementGridHitAt, buildAchievementGrid, computeAchievementGrid, type AchievementGridModel } from './view/dialog.ts';
 import { DialogView, type DialogModel } from './view/dialog.ts';
 import { HelpSession, HelpView, computeHelpLayout, helpHitAt, helpRows } from './view/help.ts';
 import { RestoreView, computeRestoreLayout, restoreHitAt } from './view/restore.ts';
@@ -55,7 +57,7 @@ import { sfx, type SoundName } from './audio/sfx.ts';
 import { CameraShake, shakeImpulseFor } from './view/shake.ts';
 import { backingStorePixelSize, cssViewportSize, liveDevicePixelRatio } from './view/screen.ts';
 import { getArtTexture, onArtInvalidate, preloadArt, setArtDpr } from './view/art.ts';
-import { repairHealingCount, TOWER_STATS, type Branch, type TowerKind } from './core/towers.ts';
+import { repairHealingCount, TOWER_KINDS, TOWER_STATS, type Branch, type TowerKind } from './core/towers.ts';
 import { isBossVariant, type EnemyKind } from './core/enemies.ts';
 import { encodeLevel, decodeCode } from './core/codec.ts';
 import {
@@ -73,6 +75,7 @@ import {
   type EditorModel,
 } from './core/editor.ts';
 import { LoadDialogView, menuButtonAt, MenuScreenView, loadDialogButtonAt, computeLoadDialog, type MenuButtonId } from './view/menuScreen.ts';
+import { HELP_PAGES, pageUnlocked } from './content/help.ts';
 import { EditorView, editorPaletteAt, editorToggleNudgeAt, editorToolbarAt, type EditorAction, type ToggleNudge } from './view/editor.ts';
 import pkg from '../package.json';
 
@@ -161,6 +164,8 @@ const editorView = new EditorView();
 const helpSession = new HelpSession();
 const helpView = new HelpView();
 const restoreView = new RestoreView();
+const achievementSession = new AchievementSession();
+const achievementView = new AchievementGridView();
 
 // Art loads without blocking the first frame; when it (or a DPR change) invalidates, the board drops
 // its cached procedural art and re-reads the texture lookup on the next frame.
@@ -172,7 +177,7 @@ void preloadArt().then(() => drawCursorArrow());
 
 const root = new Container();
 app.stage.addChild(root);
-root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, helpView.root, restoreView.root, ad.root, menuView.root, dialogView.root, tooltip.root, menuScreenView.root, loadDialogView.root, editorView.root);
+root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, helpView.root, restoreView.root, achievementView.root, ad.root, menuView.root, dialogView.root, tooltip.root, menuScreenView.root, loadDialogView.root, editorView.root);
 
 sfx.setEnabled(profile.soundOn);
 sfx.setVolume(profile.volume);
@@ -195,6 +200,49 @@ const editor: EditorModel = createEditor();
 let loadText = '';
 let loadStatus = '';
 let loadOpen = profile.lastChoice === 'load';
+
+// --- View/OS achievement state (group D: recorded via notifyAchievement) ----------------------
+// Cumulative time a tooltip has been visible this run (shadow-hover).
+let tooltipHoverMs = 0;
+// Tower kinds whose tooltip has been opened this run (shadow-tooltip).
+const tooltipTowerKinds = new Set<TowerKind>();
+// OS battery below 10% at boot (shadow-flat-battery), resolved once.
+let batteryLow = false;
+// Whether this page load was a reload after a prior run (shadow-reload).
+let reloadedAfterRun = false;
+try {
+  const nav = performance.getEntriesByType?.('navigation')?.[0] as { type?: string } | undefined;
+  reloadedAfterRun = nav?.type === 'reload' && profile.bestWave > 0;
+} catch {
+  reloadedAfterRun = false;
+}
+void (async () => {
+  try {
+    const nav = (navigator as unknown as { getBattery?: () => Promise<{ level?: number }> }).getBattery;
+    if (nav) {
+      const b = await nav();
+      batteryLow = (b.level ?? 1) <= 0.1;
+    }
+  } catch {
+    batteryLow = false;
+  }
+})();
+
+/** Grant an achievement outside the run sim (editor / menu actions), stamping and toasting it. */
+function grantAchievement(id: string): void {
+  if (profile.achievements.includes(id)) return;
+  profile.achievements.push(id);
+  state.achievements.add(id);
+  stampEarnedDates([id]);
+  saveProfile(profile);
+  toastAchievement(id);
+}
+
+/** Reset the view-scoped notify trackers when a fresh run begins. */
+function resetRunNotified(): void {
+  tooltipTowerKinds.clear();
+  tooltipHoverMs = 0;
+}
 
 function syncViewport(): void {
   state.viewport = {
@@ -255,6 +303,7 @@ function buyTreeNode(id: string): void {
   const node = treeNodeById(id);
   if (!node || !buyNode(profile, node)) return;
   state.rp = profile.rp;
+  state.tree = [...profile.tree];
   state.treeEffects = effectsFor(profile);
   saveProfile(profile);
 }
@@ -265,6 +314,19 @@ function toastAchievement(id: string): void {
   unlockAchievement(id);
 }
 
+/** The local date as YYYY-MM-DD, stamped onto an achievement when it fires. */
+function todayISO(): string {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+/** Stamp the earned date when an achievement first lands in the profile. */
+function stampEarnedDates(ids: readonly string[]): void {
+  for (const id of ids) if (profile.achievementDates[id] === undefined) profile.achievementDates[id] = todayISO();
+}
+
 /** Record any profile-only achievement (reboot count, help completion) and toast it. */
 function syncProfileAchievements(): void {
   const newly = checkProfileAchievements(profile);
@@ -273,20 +335,26 @@ function syncProfileAchievements(): void {
     state.achievements.add(id);
     toastAchievement(id);
   }
+  stampEarnedDates(newly);
   saveProfile(profile);
 }
 
 /** Push any achievement unlocked in the sim this frame into the profile and toast it. */
 function syncAchievements(): void {
   let changed = false;
+  const fresh: string[] = [];
   for (const id of state.achievements) {
     if (!profile.achievements.includes(id)) {
       profile.achievements.push(id);
+      fresh.push(id);
       toastAchievement(id);
       changed = true;
     }
   }
-  if (changed) saveProfile(profile);
+  if (changed) {
+    stampEarnedDates(fresh);
+    saveProfile(profile);
+  }
 }
 
 /** Record the highest wave reached, persisted to the profile as soon as it moves. */
@@ -304,15 +372,18 @@ function doRestartWindows(): void {
   const profileNewly = checkProfileAchievements(profile);
   saveProfile(profile);
   state = createRunState(profile);
+  resetRunNotified();
   syncViewport();
   dialog = null;
   menu = null;
   for (const id of newly) toastAchievement(id);
   for (const id of profileNewly) toastAchievement(id);
+  stampEarnedDates([...newly, ...profileNewly]);
 }
 
 function doNewRun(): void {
   state = createRunState(profile);
+  resetRunNotified();
   syncViewport();
   dialog = null;
   menu = null;
@@ -396,21 +467,9 @@ function menuAction(id: string): void {
     case 'exit':
       exitRun();
       break;
-    case 'achievements': {
-      const unlockedCount = ACHIEVEMENTS.filter((a) => profile.achievements.includes(a.id)).length;
-      dialog = {
-        title: 'Achievements',
-        rows: [
-          { text: `${unlockedCount} / ${ACHIEVEMENTS.length}` },
-          ...ACHIEVEMENTS.map((a) => ({
-            text: a.name,
-            greyed: !profile.achievements.includes(a.id),
-          })),
-        ],
-        buttons: [{ id: 'close', label: 'Close' }],
-      };
+    case 'achievements':
+      achievementSession.show();
       break;
-    }
     case 'about':
       dialog = {
         title: 'About',
@@ -420,6 +479,10 @@ function menuAction(id: string): void {
       break;
     case 'show-help':
       helpSession.show(layout);
+      // shadow-help-clippy: open the Help window while a boss is on the board.
+      if (state.phase === 'wave' && state.enemies.some((e) => e.isBoss && !e.dead)) {
+        notifyAchievement(state, 'shadow-help-clippy');
+      }
       break;
     case 'sound':
       profile.soundOn = !profile.soundOn;
@@ -470,10 +533,53 @@ function closeDialog(): void {
   dialog = null;
 }
 
+// --- Achievements grid -------------------------------------------------------------------------
+
+function achievementModel(): AchievementGridModel {
+  const model = buildAchievementGrid(profile.achievements, profile.achievementDates, achievementSession.filter);
+  model.selectedId = achievementSession.selectedId;
+  model.scroll = achievementSession.scroll;
+  return model;
+}
+
+function achievementHit(x: number, y: number) {
+  const model = achievementModel();
+  const al = computeAchievementGrid(model, layout.client);
+  return { model, al, hit: achievementGridHitAt(al, model, x, y) };
+}
+
+function achievementPointerDown(x: number, y: number, button: number): boolean {
+  if (button !== 0) return pointInRect(computeAchievementGrid(achievementModel(), layout.client).window, x, y);
+  const { hit } = achievementHit(x, y);
+  if (hit === null) return false;
+  if (hit.type === 'close') {
+    achievementSession.hide();
+  } else if (hit.type === 'filter') {
+    achievementSession.setFilter(hit.filter);
+  } else if (hit.type === 'cell') {
+    achievementSession.clickCell(hit.id);
+  }
+  return true;
+}
+
+function achievementPointerMove(x: number, y: number): void {
+  const { hit } = achievementHit(x, y);
+  const hoveredId = hit?.type === 'cell' ? hit.id : null;
+  if (hoveredId !== achievementSession.hoveredId) achievementSession.hoveredId = hoveredId;
+}
+
+function achievementMove(dx: number, dy: number): void {
+  const model = achievementModel();
+  const al = computeAchievementGrid(model, layout.client);
+  achievementSession.moveSelection(dx, dy, model.entries, al);
+}
+
 // --- Screen transitions -----------------------------------------------------------------------
 
 function startRun(level: Level, origin: 'play' | 'load' | 'editor'): void {
   state = createRunState(profile, level);
+  resetRunNotified();
+  if (batteryLow) notifyAchievement(state, 'shadow-flat-battery');
   syncViewport();
   runOrigin = origin;
   screen = 'run';
@@ -515,6 +621,7 @@ function attemptLoad(): void {
     return;
   }
   loadInput.blur();
+  grantAchievement('map-import');
   startRun(result.level, 'load');
 }
 
@@ -532,6 +639,7 @@ function copyCode(): void {
     // clipboard may be unavailable; the editor status still confirms the code was produced.
   }
   showEditorNotice('Code copied');
+  grantAchievement('map-export');
 }
 
 /** Esc from a run: a Test run returns to the editor (drawing intact), anything else to the menu. */
@@ -564,6 +672,7 @@ const mouse = new MouseController(app, {
   screen: () => screen,
   restart: () => {
     state = createRunState(profile);
+    resetRunNotified();
     syncViewport();
   },
   restartWindows: doRestartWindows,
@@ -618,8 +727,20 @@ const mouse = new MouseController(app, {
     return true;
   },
   helpPointerMove: (x: number, y: number) => helpSession.dragTo(layout, x, y),
-  helpPointerUp: () => helpSession.endDrag(),
+  helpPointerUp: () => {
+    // shadow-drag: drag the Help window to the clamped edge and release.
+    if (helpSession.draggedToEdge) {
+      notifyAchievement(state, 'shadow-drag');
+      helpSession.draggedToEdge = false;
+    }
+    helpSession.endDrag();
+  },
   closeHelp: () => helpSession.hide(),
+  achievementOpen: () => achievementSession.open,
+  achievementPointerDown,
+  achievementPointerMove,
+  achievementMove,
+  closeAchievement: () => achievementSession.hide(),
   restoreOpen: () => restoreOpen,
   openRestore: () => {
     restoreOpen = true;
@@ -788,6 +909,7 @@ app.canvas.addEventListener('pointerdown', (e) => {
       painting = true;
       const refusal = paintEditor(editor, hit.col, hit.row);
       if (refusal) showEditorNotice(refusal);
+      else grantAchievement('editor-first');
     }
     return;
   }
@@ -796,6 +918,15 @@ app.canvas.addEventListener('pointerdown', (e) => {
 app.canvas.addEventListener('pointerup', (e) => {
   if (e.button === 0) painting = false;
 });
+
+app.canvas.addEventListener('wheel', (e) => {
+  if (!achievementSession.open) return;
+  const { x, y } = canvasPoint(e as unknown as PointerEvent);
+  const { al } = achievementHit(x, y);
+  if (!pointInRect(al.window, x, y)) return;
+  e.preventDefault();
+  achievementSession.scrollBy(e.deltaY, al);
+}, { passive: false });
 
 function typingTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
@@ -966,6 +1097,30 @@ app.ticker.add((ticker) => {
       syncBestWave();
       syncProfileAchievements();
     }
+    // Persist cross-run counters the sim just advanced (maps cleared, lifetime boss kills).
+    if (state.profileDirty) {
+      state.profileDirty = false;
+      saveProfile(profile);
+    }
+    // shadow-reload: a reload after a prior run, then the first wave of the new session clears.
+    if (reloadedAfterRun && state.clearedWaves >= 1) {
+      notifyAchievement(state, 'shadow-reload');
+      reloadedAfterRun = false;
+    }
+    // shadow-hover: a tooltip stays open for 60 cumulative seconds.
+    if (tooltip.showing) {
+      tooltipHoverMs += ticker.deltaMS;
+      if (tooltipHoverMs >= 60_000) {
+        notifyAchievement(state, 'shadow-hover');
+        tooltipHoverMs = 0;
+      }
+    } else {
+      tooltipHoverMs = 0;
+    }
+    // shadow-clippy: every currently-unlocked Help page visited before any wave clears.
+    if (state.wave === 0 && helpSession.visitedCount(profile) >= HELP_PAGES.filter((p) => pageUnlocked(p, profile)).length) {
+      notifyAchievement(state, 'shadow-clippy');
+    }
     if (state.cheatsUsed && cheatNotified !== state) {
       cheatNotified = state;
       hud.showNotice('Cheats active — this run will not be recorded', 240);
@@ -984,6 +1139,15 @@ app.ticker.add((ticker) => {
     ad.draw(state);
     helpView.draw(helpSession, profile, mouse.hover.x, mouse.hover.y);
     restoreView.draw(restoreOpen, profile, layout);
+    if (achievementSession.open) {
+      const m = achievementModel();
+      const al = computeAchievementGrid(m, layout.client);
+      const hit = achievementGridHitAt(al, m, mouse.hover.x, mouse.hover.y);
+      m.hoveredId = hit?.type === 'cell' ? hit.id : null;
+      achievementView.draw(m, layout);
+    } else {
+      achievementView.draw(null, layout);
+    }
     dialogView.draw(dialog, layout);
     updateTooltip();
     const shakeOffset = shake.offset(state.tick);
@@ -1003,6 +1167,7 @@ app.ticker.add((ticker) => {
   hud.root.visible = running;
   helpView.root.visible = running && helpSession.open;
   restoreView.root.visible = running && restoreOpen;
+  achievementView.root.visible = running && achievementSession.open;
   ad.root.visible = running;
   menuView.root.visible = running;
   dialogView.root.visible = running;
@@ -1088,6 +1253,7 @@ function updateTooltip(): void {
     state.selected !== null || // placing a tower
     menu !== null || // dropdown open
     dialog !== null || // modal open
+    achievementSession.open || // achievements grid open
     h.menuItem >= 0 || // over the menu bar
     state.phase === 'halted' ||
     state.phase === 'victory' ||
@@ -1123,6 +1289,8 @@ function updateTooltip(): void {
     }
     const tower = h.onBoard ? towerAt(state, h.col, h.row) : undefined;
     if (tower) {
+      tooltipTowerKinds.add(tower.kind);
+      if (tooltipTowerKinds.size >= TOWER_KINDS.length) notifyAchievement(state, 'shadow-tooltip');
       const healed = tower.kind === 'repair' ? repairHealingCount(state.towers, tower, state.clock) : 0;
       const maintenance = tower.kind === 'cursor' ? cursorMaintenanceStatus(state, tower) : null;
       tooltip.update(
@@ -1151,4 +1319,8 @@ app.renderer.on('resize', () => {
   layout = computeLayout(app.screen.width, app.screen.height);
   syncViewport();
   helpSession.reclamp(layout);
+  // shadow-resize: play in an 800×600 window.
+  if (screen === 'run' && Math.abs(app.screen.width - 800) <= 1 && Math.abs(app.screen.height - 600) <= 1) {
+    notifyAchievement(state, 'shadow-resize');
+  }
 });

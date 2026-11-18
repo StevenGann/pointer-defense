@@ -116,6 +116,7 @@ import {
   CRIT_MULTIPLIER,
   holdDamagePerTick,
   MARKED_DAMAGE_MULT,
+  MAX_OVERCLOCK_LEVEL,
   MAX_POINTER_STAGE,
   nextCritRoll,
   nextOverclockCost,
@@ -152,6 +153,7 @@ import {
 } from './projectiles.ts';
 import { rngNext } from './rng.ts';
 import { cheatsEnabled } from './cheats.ts';
+import { ACHIEVEMENTS, type AchievementStats } from './achievements.ts';
 import { secondsToTicks, TICK_HZ, TICK_MS } from './time.ts';
 import {
   cloneProfile,
@@ -163,7 +165,7 @@ import {
   type SpecKind,
   type SpecLevels,
 } from './save.ts';
-import { effectsFor, type TreeEffects } from './tree.ts';
+import { effectsFor, TREE_NODES, type TreeEffects } from './tree.ts';
 
 /**
  * The run state and the functions that change it.
@@ -232,6 +234,25 @@ export interface WaveRun {
   wave: number;
   startTick: number;
   spawns: Spawn[];
+}
+
+/**
+ * One started wave's opening snapshot, captured in `startWave` and read when the wave clears in
+ * `clearDue`. It is what the per-wave achievements (docs/ACHIEVEMENTS.md "Per-wave snapshots") diff
+ * against: whatever the player built, spent or lost during that one wave.
+ */
+export interface WaveSnapshot {
+  salvage: number;
+  salvageSpent: number;
+  integrity: number;
+  towersBuilt: number;
+  wallsBuilt: number;
+  towersSold: number;
+  upgradesBought: number;
+  branches: number;
+  bossesKilled: number;
+  /** Towers standing when the wave started, for the sell-everything shadow. */
+  towerCount: number;
 }
 
 /** A Minesweeper's live mine, sitting on a path tile. */
@@ -337,6 +358,12 @@ export interface RunState {
   treeEffects: TreeEffects;
   /** Achievement ids unlocked so far this run (seeded from the profile). */
   achievements: Set<string>;
+  /** The live profile backing this run; the unlock rules read it for cross-run counters. */
+  profile: Profile;
+  /** Achievement ids recorded from outside the sim (a hover, a resize, an editor action). */
+  notified: Set<string>;
+  /** Set once the sim mutates a profile counter that the view must persist. */
+  profileDirty: boolean;
   /** Weak-point hits this run, for the sharpshooter achievement. */
   weakPointHits: number;
   /** Ads dismissed this run, for the ad-collector achievement. */
@@ -383,6 +410,131 @@ export interface RunState {
   godMode: boolean;
   /** Cheats: true the moment any cheat is used this run; the run then records nothing. */
   cheatsUsed: boolean;
+
+  // --- Achievement counters (populated by buildStats once per tick) --------------------------
+  /** Pointer hits that landed on an enemy this run. */
+  pointerHits: number;
+  /** Towers built this run (all kinds). */
+  towersBuilt: number;
+  /** Towers sold this run (soldTower is the boolean gate). */
+  towersSold: number;
+  /** Tower upgrades bought this run. */
+  upgradesBought: number;
+  /** Branch choices made this run. */
+  branches: number;
+  /** Waves cleared with zero leaks this run. */
+  perfectWaves: number;
+  /** Consecutive perfect waves (reset by any leak). */
+  perfectWaveStreak: number;
+  /** Bosses killed this run. */
+  bossesKilled: number;
+  /** Bosses killed by a pointer hit (the final blow) this run. */
+  bossKillsByPointer: number;
+  /** Shields fully broken this run (including Bastion layers). */
+  shieldsBroken: number;
+  /** Ads that expired without being closed this run. */
+  adsExpired: number;
+  /** Mines triggered this run. */
+  minesTriggered: number;
+  /** Repair jobs completed this run (manual or cursor). */
+  repairsDone: number;
+  /** Salvage spent on repairs this run. */
+  salvageSpentOnRepairs: number;
+  /** Map toggle (shutter) flips this run. */
+  toggleFlips: number;
+  /** Walls built this run. */
+  wallsBuilt: number;
+  /** Flyers killed this run. */
+  flyersKilled: number;
+  /** Kills scored by an AA tower this run. */
+  aaKills: number;
+  /** Kills scored by a Cursor tower this run. */
+  cursorKills: number;
+  /** Repairs started by a Maintenance cursor this run. */
+  cursorRepairs: number;
+  /** Waves called early this run (total, not the streak). */
+  earlyCalls: number;
+  /** Waves played at 3× speed this run. */
+  wavesAtThreeSpeed: number;
+  /** The wave most recently counted for wavesAtThreeSpeed, or -1. */
+  waveAtThreeCounted: number;
+  /** Total enemies leaked this run. */
+  totalLeaks: number;
+  /** The lowest integrity reached this run. */
+  integrityLowWater: number;
+  /** Ticks spent paused (accumulated wall-clock, not sim ticks). */
+  pausedTicks: number;
+  /** Profile reboot count at run start (frozen snapshot for meta achievements). */
+  reboots: number;
+  /** The profile's owned Restore-tree node ids (frozen snapshot). */
+  tree: string[];
+  /** True once a Cursor tower has been built this run. */
+  cursorBuilt: boolean;
+  /** True once wave 1 has been cleared with no leak. */
+  clearedWave1NoLeak: boolean;
+  /** The boss kinds killed this run (for the named boss achievements). */
+  killedBossKinds: Set<string>;
+
+  // --- Per-wave snapshots (captured in startWave, read in clearDue) ----------------------------
+  waveSnapshots: Map<number, WaveSnapshot>;
+  /** True once a wave cleared with only walls built that wave and no damage tower standing. */
+  clearedWallOnlyWave: boolean;
+  /** True once a wave 30+ cleared with every tower still tier 1. */
+  clearedNoUpgradeWave: boolean;
+  /** True once a wave 40+ cleared with exactly two tower kinds standing. */
+  clearedTwoKinds: boolean;
+  /** True once a wave cleared with no salvage spent during it. */
+  clearedNoSpendWave: boolean;
+  /** True once a milestone boss died in a wave whose integrity never moved. */
+  clearedBossNoLeak: boolean;
+  /** True once every tower standing at wave start was sold and the wave still cleared. */
+  clearedSellAllWave: boolean;
+  /** True once a wave cleared with no tower built during that wave (pointer-only). */
+  clearedNoTowerWave: boolean;
+  /** True once a tower was sold in the same wave it was built (sell-profit). */
+  soldTowerSameWave: boolean;
+  /** True once a wave was called early before any tower was built (early-call-wave-1). */
+  calledEarlyBeforeTower: boolean;
+  /** Consecutive waves cleared since the last leak (leak-recovery). */
+  wavesClearedSinceLeak: number;
+  /** Enemies spawned from the cheat menu this run (shadow-printer). */
+  cheatSpawns: number;
+  /** True while this wave has seen salvage hit zero (shadow-broke). */
+  salvageHitZeroThisWave: boolean;
+  /** True while this wave has seen a tower go offline (shadow-broke). */
+  towerOfflineThisWave: boolean;
+  /** True once salvage hit zero and a tower went offline in the same wave (shadow-broke). */
+  shadowBroke: boolean;
+
+  // --- Per-shot / per-wave tallies (the group B and A rules) -----------------------------------
+  /** Max enemies a single beam (Laser) killed in one shot. */
+  maxBeamKills: number;
+  /** Max enemies a single Taser chain killed in one shot. */
+  maxChainKills: number;
+  /** Max enemies a single Cannon shell's splash killed. */
+  maxSplashKills: number;
+  /** Highest number of enemies slowed at once (Frost and the like). */
+  maxSlowCount: number;
+  /** True once a tower buffed by three beacons landed a kill. */
+  beaconBuffKill: boolean;
+  /** Repairs started by each Maintenance cursor, keyed by tower id. */
+  cursorRepairsByTower: Map<number, number>;
+
+  // --- Timers and view/OS flags (group D) -------------------------------------------------------
+  /** Ticks since the pointer last fired; reset on any pointer click. */
+  pointerIdleTicks: number;
+  /** True once a tower killed during the current pointer-idle window. */
+  idleTowerKilled: boolean;
+  /** Recent pointer-kill ticks, pruned to a 10 s window (click-combo). */
+  pointerKillTicks: number[];
+  /** Ticks since the last player input (idle-hour). */
+  idleTicks: number;
+  /** True once a boss died while Manual Override was on. */
+  bossKilledByOverride: boolean;
+  /** True once a boss died while integrity was exactly 1. */
+  bossKilledAtOneIntegrity: boolean;
+  /** Salvage spent this run (no-spend-wave diffs it per wave). */
+  salvageSpent: number;
 }
 
 export function createRunState(profile: Profile = defaultProfile(), level: Level = DEFAULT_LEVEL): RunState {
@@ -456,6 +608,9 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     rpEarned: profile.rpEarned,
     treeEffects,
     achievements: new Set(profile.achievements),
+    profile,
+    notified: new Set(),
+    profileDirty: false,
     weakPointHits: 0,
     adsDismissed: 0,
     leaksByWave: new Map(),
@@ -479,6 +634,65 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     autoWaveAtTick: 0,
     godMode: false,
     cheatsUsed: false,
+    pointerHits: 0,
+    towersBuilt: 0,
+    towersSold: 0,
+    upgradesBought: 0,
+    branches: 0,
+    perfectWaves: 0,
+    perfectWaveStreak: 0,
+    bossesKilled: 0,
+    bossKillsByPointer: 0,
+    shieldsBroken: 0,
+    adsExpired: 0,
+    minesTriggered: 0,
+    repairsDone: 0,
+    salvageSpentOnRepairs: 0,
+    toggleFlips: 0,
+    wallsBuilt: 0,
+    flyersKilled: 0,
+    aaKills: 0,
+    cursorKills: 0,
+    cursorRepairs: 0,
+    earlyCalls: 0,
+    wavesAtThreeSpeed: 0,
+    waveAtThreeCounted: -1,
+    totalLeaks: 0,
+    integrityLowWater: startIntegrity,
+    pausedTicks: 0,
+    reboots: profile.reboots,
+    tree: [...profile.tree],
+    cursorBuilt: false,
+    clearedWave1NoLeak: false,
+    killedBossKinds: new Set(),
+    waveSnapshots: new Map(),
+    clearedWallOnlyWave: false,
+    clearedNoUpgradeWave: false,
+    clearedTwoKinds: false,
+    clearedNoSpendWave: false,
+    clearedBossNoLeak: false,
+    clearedSellAllWave: false,
+    clearedNoTowerWave: false,
+    soldTowerSameWave: false,
+    calledEarlyBeforeTower: false,
+    wavesClearedSinceLeak: 0,
+    cheatSpawns: 0,
+    salvageHitZeroThisWave: false,
+    towerOfflineThisWave: false,
+    shadowBroke: false,
+    maxBeamKills: 0,
+    maxChainKills: 0,
+    maxSplashKills: 0,
+    maxSlowCount: 0,
+    beaconBuffKill: false,
+    cursorRepairsByTower: new Map(),
+    pointerIdleTicks: 0,
+    idleTowerKilled: false,
+    pointerKillTicks: [],
+    idleTicks: 0,
+    bossKilledByOverride: false,
+    bossKilledAtOneIntegrity: false,
+    salvageSpent: 0,
   };
   preloadTowers(s);
   rebuildField(s);
@@ -518,6 +732,7 @@ function preloadTowers(s: RunState): void {
     if (wouldSeal(s, idx)) continue;
     const tower = createTower(s.nextId++, 'gun', col, row);
     tower.placedTick = s.clock;
+    tower.builtWave = s.wave;
     if (s.treeEffects.startTier > 1) {
       tower.tier = s.treeEffects.startTier as Tier;
       refreshTowerHp(tower);
@@ -630,10 +845,14 @@ export function selectPlacedTower(s: RunState, tower: Tower): void {
 
 export function placeTower(s: RunState, kind: TowerKind, col: number, row: number): boolean {
   if (!canPlace(s, kind, col, row)) return false;
-  spend(s.economy, towerCost(s, kind));
+  const cost = towerCost(s, kind);
+  spend(s.economy, cost);
+  s.salvageSpent += cost;
+  s.idleTicks = 0;
   s.blocked.add(row * s.grid.cols + col);
   const tower = createTower(s.nextId++, kind, col, row);
   tower.placedTick = s.clock;
+  tower.builtWave = s.wave;
   if (s.treeEffects.startTier > 1) {
     tower.tier = s.treeEffects.startTier as Tier;
     refreshTowerHp(tower);
@@ -647,6 +866,9 @@ export function placeTower(s: RunState, kind: TowerKind, col: number, row: numbe
     tower.cursorWanderAngle = r.value * Math.PI * 2;
   }
   s.towers.push(tower);
+  s.towersBuilt++;
+  if (kind === 'wall') s.wallsBuilt++;
+  if (kind === 'cursor') s.cursorBuilt = true;
   rebuildField(s);
   recomputeAuras(s.towers, s.clock);
   s.placedFirstTower = true;
@@ -798,8 +1020,11 @@ export function upgradeTower(s: RunState, col: number, row: number): boolean {
   const cost = upgradeCost(t);
   if (cost === null) return false;
   if (!spend(s.economy, cost)) return false;
+  s.salvageSpent += cost;
+  s.idleTicks = 0;
   t.tier = (t.tier + 1) as Tier;
   t.spent += cost;
+  s.upgradesBought++;
   refreshTowerHp(t);
   recomputeAuras(s.towers, s.clock);
   return true;
@@ -814,9 +1039,12 @@ export function chooseBranch(s: RunState, col: number, row: number, branch: Bran
   const cost = upgradeCost(t);
   if (cost === null) return false;
   if (!spend(s.economy, cost)) return false;
+  s.salvageSpent += cost;
+  s.idleTicks = 0;
   t.branch = branch;
   t.tier = 3;
   t.spent += cost;
+  s.branches++;
   // A Minesweeper arms its drop clock the moment it is built, so the first mine lands 2.5 s later.
   if (isMinesweeper(t)) t.mineCooldown = MINE_INTERVAL_TICKS;
   // A Toggle gate installs closed: the branch must never silently open the route the player built.
@@ -837,6 +1065,9 @@ export function sellTower(s: RunState, col: number, row: number): boolean {
   s.mines = s.mines.filter((m) => m.towerId !== t.id);
   s.economy.salvage += refund;
   s.soldTower = true;
+  s.towersSold++;
+  s.idleTicks = 0;
+  if (t.builtWave === s.wave) s.soldTowerSameWave = true;
   if (s.selectedTowerId === t.id) s.selectedTowerId = null;
   rebuildField(s);
   recomputeAuras(s.towers, s.clock);
@@ -858,6 +1089,9 @@ export function startRepair(s: RunState, col: number, row: number): boolean {
   if (t.hp >= t.maxHp) return false;
   const cost = repairCost(t);
   if (!spend(s.economy, cost)) return false;
+  s.salvageSpent += cost;
+  s.idleTicks = 0;
+  s.salvageSpentOnRepairs += cost;
 
   t.repairStartHp = t.hp;
   t.repairMissing = repairHpToRestore(t);
@@ -928,6 +1162,8 @@ export function toggleGate(s: RunState, col: number, row: number): boolean {
 
   const closing = !t.open;
   t.toggleReadyAt = s.clock + TOGGLE_LOCK_TICKS;
+  s.toggleFlips++;
+  s.idleTicks = 0;
   rebuildField(s);
   for (const e of s.enemies) {
     if (e.attackTowerId === t.id) {
@@ -966,8 +1202,23 @@ export function startWave(s: RunState): boolean {
   const elapsed = s.waveTick;
   s.wave += 1;
   s.runs.push({ wave: s.wave, startTick: s.clock, spawns: buildSchedule(s.wave) });
+  s.waveSnapshots.set(s.wave, {
+    salvage: s.economy.salvage,
+    salvageSpent: s.salvageSpent,
+    integrity: s.integrity,
+    towersBuilt: s.towersBuilt,
+    wallsBuilt: s.wallsBuilt,
+    towersSold: s.towersSold,
+    upgradesBought: s.upgradesBought,
+    branches: s.branches,
+    bossesKilled: s.bossesKilled,
+    towerCount: s.towers.length,
+  });
   s.phase = 'wave';
   s.waveTick = 0;
+  s.idleTicks = 0;
+  s.salvageHitZeroThisWave = false;
+  s.towerOfflineThisWave = false;
   s.autoWaveAtTick = 0; // any start — manual or automatic — cancels a pending countdown
   s.leaksByWave.set(s.wave, 0);
   s.modifiers = waveModifiers(s.wave);
@@ -977,7 +1228,9 @@ export function startWave(s: RunState): boolean {
   if (unlocked.length > 0) s.events.push({ type: 'towerUnlocked', kinds: unlocked });
   if (early) {
     s.calledEarly = true;
+    s.earlyCalls++;
     s.earlyCallsInARow++;
+    if (s.towersBuilt === 0) s.calledEarlyBeforeTower = true;
     earn(s.economy, earlyCallBonus(elapsed, s.wave));
   } else {
     s.earlyCallsInARow = 0;
@@ -999,6 +1252,8 @@ export function upgradePointer(s: RunState): boolean {
   const stageCost = nextStageCost(s.pointer);
   if (stageCost !== null) {
     if (!spend(s.economy, stageCost)) return false;
+    s.salvageSpent += stageCost;
+    s.idleTicks = 0;
     s.pointer.stage = Math.min(MAX_POINTER_STAGE, s.pointer.stage + 1) as PointerStage;
     return true;
   }
@@ -1008,6 +1263,8 @@ export function upgradePointer(s: RunState): boolean {
   // The ceiling is a guard, not a tax: it only ever rises with the wave counter, so a level bought
   // earlier is never taken away when a run is restored or the wave count is odd.
   if (!spend(s.economy, overclockCost)) return false;
+  s.salvageSpent += overclockCost;
+  s.idleTicks = 0;
   s.pointer.clickLevel += 1;
   return true;
 }
@@ -1081,43 +1338,183 @@ export function restartWindows(s: RunState, profile: Profile): RestartResult {
 }
 
 /**
+ * Build the flat `AchievementStats` snapshot the unlock rules read. Called once per tick by
+ * `checkAchievements`; the per-achievement loop reuses this one snapshot rather than recomputing
+ * any counter.
+ */
+export function buildStats(s: RunState): AchievementStats {
+  const towers = s.towers;
+  let maxTier = 1;
+  let tierFive = 0;
+  let beacons = 0;
+  let maxedBranch = false;
+  let aaFlak = false;
+  let cursorBuilt = s.cursorBuilt;
+  const kinds = new Set<string>();
+  for (const t of towers) {
+    kinds.add(t.kind);
+    if (t.tier > maxTier) maxTier = t.tier;
+    if (t.tier === 5) tierFive++;
+    if (t.kind === 'beacon') beacons++;
+    if (t.branch !== null && isFullyUpgraded(t)) maxedBranch = true;
+    if (t.kind === 'aa' && t.branch === 'A') aaFlak = true;
+    if (t.kind === 'cursor') cursorBuilt = true;
+  }
+  let maxTreeTier = 0;
+  for (const id of s.tree) {
+    const node = TREE_NODES.find((n) => n.id === id);
+    if (node && node.tier > maxTreeTier) maxTreeTier = node.tier;
+  }
+
+  let maxCursorRepairs = 0;
+  for (const n of s.cursorRepairsByTower.values()) if (n > maxCursorRepairs) maxCursorRepairs = n;
+  const nowTick = s.tick;
+  let recentPointerKills = 0;
+  for (const t of s.pointerKillTicks) if (nowTick - t <= secondsToTicks(10)) recentPointerKills++;
+  let shippedMapsCleared = 0;
+  for (const l of LEVELS) if (s.profile.mapsCleared.includes(l.id)) shippedMapsCleared++;
+  const date = new Date();
+
+  return {
+    wave: s.wave,
+    kills: s.economy.kills.tower + s.economy.kills.pointer,
+    killsByTower: s.economy.kills.tower,
+    killsByPointer: s.economy.kills.pointer,
+    pointerHits: s.pointerHits,
+    critHits: s.critHits,
+    weakHits: s.weakPointHits,
+    weakKills: s.weakPointKills,
+    leaks: s.totalLeaks,
+    integrity: s.integrity,
+    salvage: s.economy.salvage,
+    salvagePeak: s.salvagePeak,
+    earned: s.economy.earned,
+    towersBuilt: s.towersBuilt,
+    towersSold: s.soldTower ? Math.max(1, s.towersSold) : s.towersSold,
+    upgradesBought: s.upgradesBought,
+    branches: s.branches,
+    maxTowerTier: maxTier,
+    perfectWaves: Math.max(s.perfectWaves, s.clearedFlawlessWave ? 1 : 0),
+    perfectWaveStreak: s.perfectWaveStreak,
+    bossesKilled: s.bossesKilled,
+    bossKillsByPointer: s.bossKillsByPointer,
+    shieldsBroken: s.shieldsBroken,
+    adsClosed: s.adsDismissed,
+    adsExpired: s.adsExpired,
+    minesTriggered: s.minesTriggered,
+    repairsDone: s.repairsDone,
+    salvageSpentOnRepairs: s.salvageSpentOnRepairs,
+    toggles: s.toggleFlips,
+    wallsBuilt: s.wallsBuilt,
+    flyersKilled: s.flyersKilled,
+    aaKills: s.aaKills,
+    cursorKills: s.cursorKills,
+    cursorRepairs: s.cursorRepairs,
+    earlyCalls: s.earlyCalls,
+    earlyCallStreak: s.earlyCallsInARow,
+    endlessWave: s.endless ? s.wave : 0,
+    wavesAtThreeSpeed: s.wavesAtThreeSpeed,
+    cheatsUsed: s.cheatsUsed,
+    treesFullyUpgraded: s.tree.length === TREE_NODES.length,
+    treeNodeCount: s.tree.length,
+    prestigeLevel: s.rpEarned,
+    rebootCount: s.reboots,
+    mapId: s.levelId,
+    customMap: !LEVELS.some((l) => l.id === s.levelId),
+    timeOfDayHour: date.getHours(),
+    dayOfWeek: date.getDay(),
+    pausedTicks: s.pausedTicks,
+    routeLength: currentPath(s).length,
+    rp: s.rp,
+    clearedWaves: s.clearedWaves,
+    startingWave: s.treeEffects.startingWave,
+    towerKinds: kinds.size,
+    tierFiveCount: tierFive,
+    beaconCount: beacons,
+    maxedBranch,
+    aaFlak,
+    cursorBuilt,
+    overclockMax: s.pointer.stage >= MAX_POINTER_STAGE && s.pointer.clickLevel >= MAX_OVERCLOCK_LEVEL,
+    bossKilledByPointer: s.bossKilledByPointer,
+    milestoneBossByPointer: s.milestoneBossByPointer,
+    cleanWave: s.clearedWaveNoLeaks,
+    integrityLowWater: s.integrityLowWater,
+    clearedWave1NoLeak: s.clearedWave1NoLeak,
+    maxTreeTier,
+    killedCarrier: s.killedBossKinds.has('flyer-boss'),
+    killedDreadnought: s.killedBossKinds.has('armoured-boss'),
+    killedWirecutter: s.killedBossKinds.has('saboteur-boss'),
+    killedRam: s.killedBossKinds.has('breacher-boss'),
+    // Per-wave snapshot rules (group A).
+    towersOnBoard: s.towers.length,
+    clearedWallOnlyWave: s.clearedWallOnlyWave,
+    clearedNoUpgradeWave: s.clearedNoUpgradeWave,
+    clearedTwoKinds: s.clearedTwoKinds,
+    clearedNoSpendWave: s.clearedNoSpendWave,
+    clearedBossNoLeak: s.clearedBossNoLeak,
+    clearedSellAllWave: s.clearedSellAllWave,
+    // Per-shot tallies (group B).
+    maxBeamKills: s.maxBeamKills,
+    maxChainKills: s.maxChainKills,
+    maxSplashKills: s.maxSplashKills,
+    maxSlowCount: s.maxSlowCount,
+    beaconBuffKill: s.beaconBuffKill,
+    maxCursorRepairs,
+    // Profile counters (group C).
+    lifetimeBossKillsByPointer: s.profile.lifetimeBossKillsByPointer,
+    shippedMapsCleared,
+    // Timers and flags (group D + the remaining shadows).
+    pointerIdleSeconds: s.pointerIdleTicks / TICK_HZ,
+    idleTowerKilled: s.idleTowerKilled,
+    recentPointerKills,
+    idleSeconds: s.idleTicks / TICK_HZ,
+    autoWave: s.autoWave,
+    bossKilledByOverride: s.bossKilledByOverride,
+    bossKilledAtOneIntegrity: s.bossKilledAtOneIntegrity,
+    notified: s.notified,
+    runLost: s.phase === 'halted',
+    runEnded: s.phase === 'halted' || s.phase === 'victory',
+    specTotal: s.specs.cpu + s.specs.ram + s.specs.gpu + s.specs.disk,
+    clearedNoTowerWave: s.clearedNoTowerWave,
+    soldTowerSameWave: s.soldTowerSameWave,
+    calledEarlyBeforeTower: s.calledEarlyBeforeTower,
+    wavesClearedSinceLeak: s.wavesClearedSinceLeak,
+    cheatSpawns: s.cheatSpawns,
+    shadowBroke: s.shadowBroke,
+  };
+}
+
+/**
  * Evaluate every achievement against the current run and return the ids that just unlocked (which
  * are also recorded in `s.achievements`, so each id fires exactly once). Runs in the simulation
- * step, never in the view.
+ * step, never in the view. A new achievement is a single data row in `ACHIEVEMENTS`; this loop is
+ * the whole engine.
  */
 export function checkAchievements(s: RunState): string[] {
-  if (s.cheatsUsed) return [];
   const unlocked: string[] = [];
-  const add = (id: string): void => {
-    if (!s.achievements.has(id)) {
-      s.achievements.add(id);
-      unlocked.push(id);
-    }
-  };
-
-  if (s.economy.kills.tower + s.economy.kills.pointer > 0) add('first-blood');
-  if (currentPath(s).length >= 50) add('long-road');
-  if (s.clearedWaveNoLeaks) add('clean-wave');
-  if (s.weakPointHits >= 100) add('sharpshooter');
-  if (s.towers.filter((t) => t.tier === 5).length >= 5) add('five-tier-five');
-  if (s.towers.filter((t) => t.kind === 'beacon').length >= 10) add('beacon-field');
-  if (s.bossKilledByPointer) add('boss-by-pointer');
-  if (s.adsDismissed >= 10) add('ad-collector');
-  if (s.wave >= 150) add('endless-150');
-  if (s.weakPointKills >= 50) add('weak-point-kills');
-  if (s.critHits >= 25) add('crit-hits');
-  if (s.salvagePeak >= 1000) add('salvage-peak');
-  if (s.wave >= 20 && !s.soldTower) add('no-sell');
-  if (s.clearedWaves > 0 && s.towers.length > 0 && new Set(s.towers.map((t) => t.kind)).size === 1) add('one-kind');
-  if (s.towers.some((t) => t.branch !== null && isFullyUpgraded(t))) add('maxed-branch');
-  if (s.towers.some((t) => t.kind === 'aa' && t.branch === 'A')) add('aa-flak');
-  if (s.earlyCallsInARow >= 3) add('early-call-streak');
-  if (s.clearedFlawlessWave) add('flawless-wave');
-  if (s.milestoneBossByPointer) add('milestone-boss-pointer');
-  if (s.rp > 0) add('specs-banked');
-  if (s.clearedWaves > 0 && !LEVELS.some((l) => l.id === s.levelId)) add('custom-map-cleared');
-
+  const stats = buildStats(s);
+  const profile = s.profile;
+  for (const a of ACHIEVEMENTS) {
+    if (s.achievements.has(a.id)) continue;
+    // A cheated run records nothing — except the cheat-only shadows, whose condition *is* the
+    // cheating (docs/design.md §12.4). They still need the sim state to match.
+    if (s.cheatsUsed && !a.cheatOnly) continue;
+    if (!a.when || !a.when(stats, profile)) continue;
+    s.achievements.add(a.id);
+    unlocked.push(a.id);
+  }
   return unlocked;
+}
+
+/**
+ * The view/OS hook for achievements the sim cannot observe: a tooltip hover, a window resize, an
+ * editor action. It only records the observed event in `s.notified`; the normal `checkAchievements`
+ * loop does the actual unlock on the next tick, so a notified id still fires once and toasts like
+ * every other achievement. Kept deliberately narrow — callers pass an id, nothing more.
+ */
+export function notifyAchievement(s: RunState, id: string): void {
+  if (s.cheatsUsed && !ACHIEVEMENTS.some((a) => a.id === id && a.cheatOnly)) return;
+  s.notified.add(id);
 }
 
 /**
@@ -1143,6 +1540,9 @@ function relayPointerBonus(s: RunState, x: number, y: number): { damage: number;
 export function pointerDown(s: RunState, x: number, y: number): boolean {
   s.pointer.x = x;
   s.pointer.y = y;
+  s.pointerIdleTicks = 0;
+  s.idleTowerKilled = false;
+  s.idleTicks = 0;
   if (s.phase !== 'wave') return false;
   const previousTargetId = s.pointer.targetId;
   s.pointer.held = true;
@@ -1158,6 +1558,7 @@ export function pointerDown(s: RunState, x: number, y: number): boolean {
   // The reticle's locked enemy is marked; clicking an already-marked enemy pays +15 % and a better
   // crit chance, so holding the reticle on one enemy (a boss) makes the next clicks hurt more. The
   // mark is a stage-2 reticle feature: a bare stage-1 click never locks, so it never marks.
+  s.pointerHits++;
   const marked = s.pointer.stage >= MAX_POINTER_STAGE && target.id === previousTargetId;
   const roll = nextCritRoll(s.rng, marked, weak);
   s.rng = roll.next;
@@ -1237,6 +1638,7 @@ export function spawnCheatEnemy(s: RunState, kind: EnemyKind): boolean {
   enemy.spawnTick = s.tick;
   s.enemies.push(enemy);
   s.cheatsUsed = true;
+  s.cheatSpawns++;
   return true;
 }
 
@@ -1265,6 +1667,8 @@ export function step(s: RunState, dtMs: number): number {
   if (!s.paused) {
     // Speed scales the wall-clock time fed in, never the fixed timestep (docs/design.md §15).
     s.accumulator += Math.max(0, dtMs) * s.speed;
+  } else {
+    s.pausedTicks += Math.max(0, dtMs) / TICK_MS;
   }
   let n = 0;
   while (s.accumulator >= TICK_MS && n < MAX_TICKS_PER_STEP) {
@@ -1279,8 +1683,18 @@ export function step(s: RunState, dtMs: number): number {
 /** One fixed 1/60 s simulation tick. */
 export function tick(s: RunState): void {
   s.tick++;
+  s.pointerIdleTicks++;
+  s.idleTicks++;
+  if (s.phase === 'wave' && s.speed === 3 && s.waveAtThreeCounted !== s.wave) {
+    s.wavesAtThreeSpeed++;
+    s.waveAtThreeCounted = s.wave;
+  }
   if (s.godMode) s.economy.salvage = Math.max(s.economy.salvage, GOD_SALVAGE_CEILING);
   if (s.economy.salvage > s.salvagePeak) s.salvagePeak = s.economy.salvage;
+  if (s.economy.salvage === 0) {
+    s.salvageHitZeroThisWave = true;
+    if (s.towerOfflineThisWave) s.shadowBroke = true;
+  }
   updateToggles(s);
   tickRepairs(s);
   tickRepairAuras(s);
@@ -1298,6 +1712,7 @@ export function tick(s: RunState): void {
     tickProjectiles(s); // move in-flight shells/missiles, resolve hits and expiries
     tickMines(s); // drop, arm and detonate Minesweeper mines
     fireTowers(s);
+    updateMaxSlowCount(s);
     applyReticle(s);
     s.enemies = s.enemies.filter((e) => !e.dead);
     if (s.phase === 'wave') {
@@ -1312,6 +1727,15 @@ export function tick(s: RunState): void {
   }
   s.clock++;
   tickAutoWave(s);
+}
+
+/** Track the highest number of enemies slowed at once (the frost-lock rule). */
+function updateMaxSlowCount(s: RunState): void {
+  let n = 0;
+  for (const e of s.enemies) {
+    if (!e.dead && s.tick < e.slowUntilTick && e.slowFactor < 1) n++;
+  }
+  if (n > s.maxSlowCount) s.maxSlowCount = n;
 }
 
 /**
@@ -1393,6 +1817,7 @@ function tickRepairs(s: RunState): void {
   }
 
   if (finished.length === 0) return;
+  s.repairsDone += finished.length;
   rebuildField(s);
   recomputeAuras(s.towers, s.clock); // a repaired tower may have come back online (beacon/repair aura resumes)
   for (const e of s.enemies) {
@@ -1756,6 +2181,8 @@ function damageTower(s: RunState, tower: Tower, amount: number): void {
     tower.hp = 0;
     recomputeAuras(s.towers, s.clock); // an offline beacon/repair stops buffing/healing immediately
     s.events.push({ type: 'towerOffline', x: tower.col + 0.5, y: tower.row + 0.5, towerId: tower.id });
+    s.towerOfflineThisWave = true;
+    if (s.salvageHitZeroThisWave) s.shadowBroke = true;
   }
 }
 
@@ -1816,9 +2243,12 @@ function fireBreacherTurrets(s: RunState): void {
 
 function leak(s: RunState, e: Enemy): void {
   e.dead = true;
+  s.totalLeaks++;
+  s.wavesClearedSinceLeak = 0;
   s.leaksByWave.set(e.wave, (s.leaksByWave.get(e.wave) ?? 0) + 1);
   if (baseEnemyKind(e.kind) === 'flyer') s.flyerLeaksByWave.set(e.wave, (s.flyerLeaksByWave.get(e.wave) ?? 0) + 1);
   if (!s.godMode) s.integrity = Math.max(0, s.integrity - ENEMY_STATS[e.kind].integrity);
+  if (s.integrity < s.integrityLowWater) s.integrityLowWater = s.integrity;
   s.events.push({ type: 'leak', x: e.x, y: e.y });
   if (s.pointer.targetId === e.id) s.pointer.targetId = null;
   if (s.integrity === 0) {
@@ -1986,24 +2416,28 @@ function applySlow(s: RunState, e: Enemy, factor: number, ticks: number): void {
   e.slowUntilTick = s.tick + ticks;
 }
 
-function hitEnemy(s: RunState, t: Tower, st: EffectiveStats, e: Enemy, dmg: number): void {
+/** Deal one tower hit. Returns whether the enemy died, so a shot can tally its own kill count. */
+function hitEnemy(s: RunState, t: Tower, st: EffectiveStats, e: Enemy, dmg: number): boolean {
   damageEnemy(s, e, perEnemyDamage(st, e, dmg, t.kind), 'tower', st.ignoresArmour, t);
   if (st.slowFactor < 1 && st.slowTicks > 0 && !e.dead) applySlow(s, e, st.slowFactor, st.slowTicks);
+  return e.dead;
 }
 
 function fireSplash(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg: number): void {
   const cx = target.x;
   const cy = target.y;
+  let kills = 0;
   for (const e of s.enemies) {
     if (!towerCanHurt(s, e)) continue;
     if (st.targetsFlyersOnly && baseEnemyKind(e.kind) !== 'flyer') continue;
     const r = st.splash + radiusOf(e);
-    if ((e.x - cx) ** 2 + (e.y - cy) ** 2 <= r * r) hitEnemy(s, t, st, e, dmg);
+    if ((e.x - cx) ** 2 + (e.y - cy) ** 2 <= r * r && hitEnemy(s, t, st, e, dmg)) kills++;
   }
+  if (t.kind === 'cannon' && kills > s.maxSplashKills) s.maxSplashKills = kills;
 }
 
 function fireChain(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg: number): void {
-  hitEnemy(s, t, st, target, dmg);
+  let kills = hitEnemy(s, t, st, target, dmg) ? 1 : 0;
   const hitIds = new Set<number>([target.id]);
   let prev = target;
   for (let i = 1; i < st.chainCount; i++) {
@@ -2020,9 +2454,10 @@ function fireChain(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg
     }
     if (!next) break;
     hitIds.add(next.id);
-    hitEnemy(s, t, st, next, dmg * st.chainDamage);
+    if (hitEnemy(s, t, st, next, dmg * st.chainDamage)) kills++;
     prev = next;
   }
+  if (t.kind === 'taser' && kills > s.maxChainKills) s.maxChainKills = kills;
 }
 
 function fireBeam(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg: number): void {
@@ -2037,7 +2472,9 @@ function fireBeam(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg:
   }
   hits.sort((a, b) => dist2(a, ox, oy) - dist2(b, ox, oy));
   const n = Math.min(st.pierce, hits.length);
-  for (let i = 0; i < n; i++) hitEnemy(s, t, st, hits[i], dmg);
+  let kills = 0;
+  for (let i = 0; i < n; i++) if (hitEnemy(s, t, st, hits[i], dmg)) kills++;
+  if (t.kind === 'laser' && kills > s.maxBeamKills) s.maxBeamKills = kills;
 }
 
 /**
@@ -2146,6 +2583,7 @@ function cursorDamage(s: RunState, t: Tower): number {
 /** A cursor click: pointer damage on the target, then the clock gate re-arms. */
 function cursorClick(s: RunState, t: Tower, target: Enemy): void {
   damageEnemy(s, target, cursorDamage(s, t), 'pointer', true, undefined, false, false);
+  if (target.dead) s.cursorKills++;
   // Full interval: tickCursors decrements at the top of the next tick before checking the gate, so
   // a full-interval value here yields exactly `cursorClickIntervalTicks` ticks between clicks.
   t.cursorCooldown = cursorClickIntervalTicks(t);
@@ -2288,6 +2726,8 @@ function tickMaintenanceCursor(s: RunState, t: Tower): void {
       t.cursorClickY = ty;
       t.cursorCooldown = cursorClickIntervalTicks(t);
       if (startRepair(s, target.col, target.row)) {
+        s.cursorRepairs++;
+        s.cursorRepairsByTower.set(t.id, (s.cursorRepairsByTower.get(t.id) ?? 0) + 1);
         t.cursorRepairTowerId = null;
         wanderCursor(s, t);
       }
@@ -2536,6 +2976,7 @@ function detonateMines(s: RunState): void {
       continue;
     }
     const tower = s.towers.find((t) => t.id === m.towerId);
+    s.minesTriggered++;
     for (const e of s.enemies) {
       if (isFlyerKind(e.kind) || !towerCanHurt(s, e)) continue;
       if ((e.x - m.x) ** 2 + (e.y - m.y) ** 2 <= blast2) {
@@ -2760,6 +3201,20 @@ function applyReticle(s: RunState): void {
   );
 }
 
+/** How many live beacons are currently boosting a tower (used for the beacon-buff achievement). */
+function beaconsBuffing(s: RunState, tower: Tower): number {
+  let n = 0;
+  for (const b of s.towers) {
+    if (b.kind !== 'beacon' || b.id === tower.id || isDown(b, s.clock)) continue;
+    const st = effectiveStats(b);
+    const r = st.range;
+    const dx = tower.col + 0.5 - (b.col + 0.5);
+    const dy = tower.row + 0.5 - (b.row + 0.5);
+    if (dx * dx + dy * dy <= r * r) n++;
+  }
+  return n;
+}
+
 /**
  * Apply damage from a source. Pointer damage wears the shield first and overflows into hp;
  * tower damage is subtracted by armour unless the tower ignores it. Kill attribution is decided
@@ -2783,6 +3238,7 @@ function damageEnemy(
     // Bastion layers: one layer per hit, worth the base shield, never overflowing into hit points.
     e.shieldsRemaining -= 1;
     e.shield = e.shieldsRemaining * BASTION_SHIELD_LAYER_VALUE;
+    s.shieldsBroken++;
     s.events.push({ type: 'shieldHit', x: e.x, y: e.y, absorbed: BASTION_SHIELD_LAYER_VALUE, left: e.shield });
     return;
   }
@@ -2790,6 +3246,7 @@ function damageEnemy(
     const absorbed = Math.min(e.shield, dmg);
     e.shield -= absorbed;
     dmg -= absorbed;
+    if (e.shield <= 1e-9) s.shieldsBroken++;
     // A shield absorbing the hit is still a hit the player must see: emit a distinct event even when
     // nothing overflows into hit points, so a cursor stripping a shield is not silently invisible.
     s.events.push({ type: 'shieldHit', x: e.x, y: e.y, absorbed, left: e.shield });
@@ -2830,6 +3287,25 @@ function damageEnemy(
     if (source === 'pointer' && weak) s.weakPointKills++;
     if (e.isBoss && source === 'pointer' && !e.towerDamaged) s.bossKilledByPointer = true;
     if (e.isBoss && source === 'pointer' && milestoneBossKind(e.wave) === e.kind) s.milestoneBossByPointer = true;
+    if (e.isBoss) {
+      s.bossesKilled++;
+      s.killedBossKinds.add(e.kind);
+      if (source === 'pointer') {
+        s.bossKillsByPointer++;
+        s.profile.lifetimeBossKillsByPointer++;
+        s.profileDirty = true;
+      }
+      if (s.pointer.manualOverride) s.bossKilledByOverride = true;
+      if (s.integrity === 1) s.bossKilledAtOneIntegrity = true;
+    }
+    if (source === 'tower' && tower && beaconsBuffing(s, tower) >= 3) s.beaconBuffKill = true;
+    if (source === 'tower' && s.pointerIdleTicks > 0) s.idleTowerKilled = true;
+    if (source === 'pointer') {
+      s.pointerKillTicks.push(s.tick);
+      s.pointerKillTicks = s.pointerKillTicks.filter((t) => s.tick - t <= secondsToTicks(10));
+    }
+    if (isFlyerKind(e.kind)) s.flyersKilled++;
+    if (tower && tower.kind === 'aa') s.aaKills++;
     // A Carrier releases twice its brood on death, the one boss that fights on after it falls.
     if (e.kind === 'flyer-boss') releaseBrood(s, e, CARRIER_DEATH_BROOD_COUNT);
     const value = e.value * (s.modifiers.includes('rush') ? 1.1 : 1);
@@ -2855,12 +3331,69 @@ function clearDue(s: RunState): void {
     const bonus = waveClearBonus(run.wave);
     earn(s.economy, bonus);
     s.events.push({ type: 'waveCleared', wave: run.wave, bonus });
-    if ((s.leaksByWave.get(run.wave) ?? 0) === 0) s.clearedFlawlessWave = true;
-    if (run.wave >= 40 && (s.leaksByWave.get(run.wave) ?? 0) === 0) s.clearedWaveNoLeaks = true;
+    const waveLeaks = s.leaksByWave.get(run.wave) ?? 0;
+    if (waveLeaks === 0) {
+      s.clearedFlawlessWave = true;
+      s.perfectWaves++;
+      s.perfectWaveStreak++;
+      if (run.wave === 1) s.clearedWave1NoLeak = true;
+      if (s.totalLeaks > 0) s.wavesClearedSinceLeak++;
+    } else {
+      s.perfectWaveStreak = 0;
+      s.wavesClearedSinceLeak = 0;
+    }
+    if (run.wave >= 40 && waveLeaks === 0) s.clearedWaveNoLeaks = true;
+    evaluateWaveAchievements(s, run.wave);
     cleared.add(run);
   }
   s.clearedWaves += cleared.size;
-  if (cleared.size > 0) s.runs = s.runs.filter((r) => !cleared.has(r));
+  if (cleared.size > 0) {
+    s.runs = s.runs.filter((r) => !cleared.has(r));
+    // A cleared wave marks the current map as cleared, for the every-map shadow.
+    if (!s.profile.mapsCleared.includes(s.levelId)) {
+      s.profile.mapsCleared.push(s.levelId);
+      s.profileDirty = true;
+    }
+  }
+}
+
+/**
+ * Read a wave's opening snapshot at clear time and set the one-shot per-wave flags the group-A
+ * rules read (docs/ACHIEVEMENTS.md "Per-wave snapshots"). The flags latch, so an achievement fires
+ * once no matter how many qualifying waves clear afterwards.
+ */
+function evaluateWaveAchievements(s: RunState, wave: number): void {
+  const snap = s.waveSnapshots.get(wave);
+  if (!snap) return;
+
+  const builtThisWave = s.towersBuilt - snap.towersBuilt;
+  const wallsThisWave = s.wallsBuilt - snap.wallsBuilt;
+  if (builtThisWave === 0) s.clearedNoTowerWave = true;
+  if (builtThisWave >= 1 && builtThisWave === wallsThisWave && s.towers.length >= 1 && s.towers.every((t) => isWall(t))) {
+    s.clearedWallOnlyWave = true;
+  }
+  if (wave >= 30 && s.towers.length >= 1 && s.towers.every((t) => t.tier === 1)) {
+    s.clearedNoUpgradeWave = true;
+  }
+  if (wave >= 40 && distinctTowerKinds(s) === 2) {
+    s.clearedTwoKinds = true;
+  }
+  if (s.salvageSpent === snap.salvageSpent) {
+    s.clearedNoSpendWave = true;
+  }
+  if (milestoneBossKind(wave) !== null && s.bossesKilled > snap.bossesKilled && s.integrity === snap.integrity) {
+    s.clearedBossNoLeak = true;
+  }
+  if (snap.towerCount >= 1 && s.towers.length === 0 && s.towersSold > snap.towersSold) {
+    s.clearedSellAllWave = true;
+  }
+}
+
+/** The number of distinct tower kinds currently standing. */
+function distinctTowerKinds(s: RunState): number {
+  const kinds = new Set<string>();
+  for (const t of s.towers) kinds.add(t.kind);
+  return kinds.size;
 }
 
 /** With every wave cleared and no enemies left, the run returns to build (or wins at wave 100). */
