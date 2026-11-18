@@ -176,7 +176,10 @@ export function tickAds(s: RunState): void {
 
   if (s.ad) {
     s.ad.ttl--;
-    if (s.ad.ttl <= 0) s.ad = null;
+    if (s.ad.ttl <= 0) {
+      s.ad = null;
+      s.adsExpired++;
+    }
   }
 
   if (s.nextAdAttemptTick === 0) {

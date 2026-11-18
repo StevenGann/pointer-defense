@@ -46,6 +46,8 @@ export interface Profile {
   /** The salvage the last rebooted run earned, for Restore Point's 10% carry. */
   lastSalvage: number;
   achievements: string[];
+  /** The local date (YYYY-MM-DD) each achievement fired, for the grid tooltip. */
+  achievementDates: Record<string, string>;
   bestWave: number;
   reboots: number;
   /** Whether sound effects play at all. */
@@ -118,6 +120,7 @@ export function defaultProfile(): Profile {
     tree: [],
     lastSalvage: 0,
     achievements: [],
+    achievementDates: {},
     bestWave: 0,
     reboots: 0,
     soundOn: true,
@@ -150,6 +153,7 @@ export function cloneProfile(p: Profile): Profile {
     tree: [...p.tree],
     lastSalvage: p.lastSalvage,
     achievements: [...p.achievements],
+    achievementDates: { ...p.achievementDates },
     bestWave: p.bestWave,
     reboots: p.reboots,
     soundOn: p.soundOn,
@@ -199,6 +203,7 @@ export function checkProfileAchievements(p: Profile): string[] {
     }
   };
   if (p.reboots >= 2) add('two-reboots');
+  if (p.reboots >= 10) add('reboot-10');
   if (allHelpUnlocked(p)) add('all-help');
   return unlocked;
 }
@@ -278,6 +283,12 @@ function parseProfile(raw: string): Profile | null {
   const achievements = Array.isArray(o.achievements)
     ? o.achievements.filter((a): a is string => typeof a === 'string')
     : [];
+  const achievementDates: Record<string, string> = {};
+  if (typeof o.achievementDates === 'object' && o.achievementDates !== null) {
+    for (const [k, v] of Object.entries(o.achievementDates as Record<string, unknown>)) {
+      if (typeof v === 'string') achievementDates[k] = v;
+    }
+  }
   const bestWave =
     typeof o.bestWave === 'number' && Number.isFinite(o.bestWave) ? Math.max(0, Math.floor(o.bestWave)) : 0;
   const reboots =
@@ -297,7 +308,7 @@ function parseProfile(raw: string): Profile | null {
     : [];
   const lastChoice: MenuChoice = o.lastChoice === 'editor' || o.lastChoice === 'load' ? o.lastChoice : 'play';
 
-  return { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, bestWave, reboots, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice };
+  return { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, achievementDates, bestWave, reboots, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice };
 }
 
 /**

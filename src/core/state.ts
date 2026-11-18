@@ -116,6 +116,7 @@ import {
   CRIT_MULTIPLIER,
   holdDamagePerTick,
   MARKED_DAMAGE_MULT,
+  MAX_OVERCLOCK_LEVEL,
   MAX_POINTER_STAGE,
   nextCritRoll,
   nextOverclockCost,
@@ -152,6 +153,7 @@ import {
 } from './projectiles.ts';
 import { rngNext } from './rng.ts';
 import { cheatsEnabled } from './cheats.ts';
+import { ACHIEVEMENTS, type AchievementStats } from './achievements.ts';
 import { secondsToTicks, TICK_HZ, TICK_MS } from './time.ts';
 import {
   cloneProfile,
@@ -163,7 +165,7 @@ import {
   type SpecKind,
   type SpecLevels,
 } from './save.ts';
-import { effectsFor, type TreeEffects } from './tree.ts';
+import { effectsFor, TREE_NODES, type TreeEffects } from './tree.ts';
 
 /**
  * The run state and the functions that change it.
@@ -186,6 +188,9 @@ const SPEC_DAMAGE_PCT_PER_POINT = 0.02;
 
 /** The passive prestige bonus: +0.5% tower and pointer damage per prestige level (docs §12.1). */
 const PRESTIGE_DAMAGE_PCT_PER_LEVEL = 0.005;
+
+/** The profile handed to unlock rules; none currently read it, so it is a single shared default. */
+const STATS_PROFILE: Profile = defaultProfile();
 
 export function towerDamageMult(s: RunState): number {
   return 1 + SPEC_DAMAGE_PCT_PER_POINT * s.specs.cpu + s.treeEffects.towerDamagePct + s.rpEarned * PRESTIGE_DAMAGE_PCT_PER_LEVEL;
@@ -383,6 +388,70 @@ export interface RunState {
   godMode: boolean;
   /** Cheats: true the moment any cheat is used this run; the run then records nothing. */
   cheatsUsed: boolean;
+
+  // --- Achievement counters (populated by buildStats once per tick) --------------------------
+  /** Pointer hits that landed on an enemy this run. */
+  pointerHits: number;
+  /** Towers built this run (all kinds). */
+  towersBuilt: number;
+  /** Towers sold this run (soldTower is the boolean gate). */
+  towersSold: number;
+  /** Tower upgrades bought this run. */
+  upgradesBought: number;
+  /** Branch choices made this run. */
+  branches: number;
+  /** Waves cleared with zero leaks this run. */
+  perfectWaves: number;
+  /** Consecutive perfect waves (reset by any leak). */
+  perfectWaveStreak: number;
+  /** Bosses killed this run. */
+  bossesKilled: number;
+  /** Bosses killed by a pointer hit (the final blow) this run. */
+  bossKillsByPointer: number;
+  /** Shields fully broken this run (including Bastion layers). */
+  shieldsBroken: number;
+  /** Ads that expired without being closed this run. */
+  adsExpired: number;
+  /** Mines triggered this run. */
+  minesTriggered: number;
+  /** Repair jobs completed this run (manual or cursor). */
+  repairsDone: number;
+  /** Salvage spent on repairs this run. */
+  salvageSpentOnRepairs: number;
+  /** Map toggle (shutter) flips this run. */
+  toggleFlips: number;
+  /** Walls built this run. */
+  wallsBuilt: number;
+  /** Flyers killed this run. */
+  flyersKilled: number;
+  /** Kills scored by an AA tower this run. */
+  aaKills: number;
+  /** Kills scored by a Cursor tower this run. */
+  cursorKills: number;
+  /** Repairs started by a Maintenance cursor this run. */
+  cursorRepairs: number;
+  /** Waves called early this run (total, not the streak). */
+  earlyCalls: number;
+  /** Waves played at 3× speed this run. */
+  wavesAtThreeSpeed: number;
+  /** The wave most recently counted for wavesAtThreeSpeed, or -1. */
+  waveAtThreeCounted: number;
+  /** Total enemies leaked this run. */
+  totalLeaks: number;
+  /** The lowest integrity reached this run, for the leak-recovery rule. */
+  integrityLowWater: number;
+  /** Ticks spent paused (accumulated wall-clock, not sim ticks). */
+  pausedTicks: number;
+  /** Profile reboot count at run start (frozen snapshot for meta achievements). */
+  reboots: number;
+  /** The profile's owned Restore-tree node ids (frozen snapshot). */
+  tree: string[];
+  /** True once a Cursor tower has been built this run. */
+  cursorBuilt: boolean;
+  /** True once wave 1 has been cleared with no leak. */
+  clearedWave1NoLeak: boolean;
+  /** The boss kinds killed this run (for the named boss achievements). */
+  killedBossKinds: Set<string>;
 }
 
 export function createRunState(profile: Profile = defaultProfile(), level: Level = DEFAULT_LEVEL): RunState {
@@ -479,6 +548,37 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     autoWaveAtTick: 0,
     godMode: false,
     cheatsUsed: false,
+    pointerHits: 0,
+    towersBuilt: 0,
+    towersSold: 0,
+    upgradesBought: 0,
+    branches: 0,
+    perfectWaves: 0,
+    perfectWaveStreak: 0,
+    bossesKilled: 0,
+    bossKillsByPointer: 0,
+    shieldsBroken: 0,
+    adsExpired: 0,
+    minesTriggered: 0,
+    repairsDone: 0,
+    salvageSpentOnRepairs: 0,
+    toggleFlips: 0,
+    wallsBuilt: 0,
+    flyersKilled: 0,
+    aaKills: 0,
+    cursorKills: 0,
+    cursorRepairs: 0,
+    earlyCalls: 0,
+    wavesAtThreeSpeed: 0,
+    waveAtThreeCounted: -1,
+    totalLeaks: 0,
+    integrityLowWater: startIntegrity,
+    pausedTicks: 0,
+    reboots: profile.reboots,
+    tree: [...profile.tree],
+    cursorBuilt: false,
+    clearedWave1NoLeak: false,
+    killedBossKinds: new Set(),
   };
   preloadTowers(s);
   rebuildField(s);
@@ -647,6 +747,9 @@ export function placeTower(s: RunState, kind: TowerKind, col: number, row: numbe
     tower.cursorWanderAngle = r.value * Math.PI * 2;
   }
   s.towers.push(tower);
+  s.towersBuilt++;
+  if (kind === 'wall') s.wallsBuilt++;
+  if (kind === 'cursor') s.cursorBuilt = true;
   rebuildField(s);
   recomputeAuras(s.towers, s.clock);
   s.placedFirstTower = true;
@@ -800,6 +903,7 @@ export function upgradeTower(s: RunState, col: number, row: number): boolean {
   if (!spend(s.economy, cost)) return false;
   t.tier = (t.tier + 1) as Tier;
   t.spent += cost;
+  s.upgradesBought++;
   refreshTowerHp(t);
   recomputeAuras(s.towers, s.clock);
   return true;
@@ -817,6 +921,7 @@ export function chooseBranch(s: RunState, col: number, row: number, branch: Bran
   t.branch = branch;
   t.tier = 3;
   t.spent += cost;
+  s.branches++;
   // A Minesweeper arms its drop clock the moment it is built, so the first mine lands 2.5 s later.
   if (isMinesweeper(t)) t.mineCooldown = MINE_INTERVAL_TICKS;
   // A Toggle gate installs closed: the branch must never silently open the route the player built.
@@ -837,6 +942,7 @@ export function sellTower(s: RunState, col: number, row: number): boolean {
   s.mines = s.mines.filter((m) => m.towerId !== t.id);
   s.economy.salvage += refund;
   s.soldTower = true;
+  s.towersSold++;
   if (s.selectedTowerId === t.id) s.selectedTowerId = null;
   rebuildField(s);
   recomputeAuras(s.towers, s.clock);
@@ -858,6 +964,7 @@ export function startRepair(s: RunState, col: number, row: number): boolean {
   if (t.hp >= t.maxHp) return false;
   const cost = repairCost(t);
   if (!spend(s.economy, cost)) return false;
+  s.salvageSpentOnRepairs += cost;
 
   t.repairStartHp = t.hp;
   t.repairMissing = repairHpToRestore(t);
@@ -928,6 +1035,7 @@ export function toggleGate(s: RunState, col: number, row: number): boolean {
 
   const closing = !t.open;
   t.toggleReadyAt = s.clock + TOGGLE_LOCK_TICKS;
+  s.toggleFlips++;
   rebuildField(s);
   for (const e of s.enemies) {
     if (e.attackTowerId === t.id) {
@@ -977,6 +1085,7 @@ export function startWave(s: RunState): boolean {
   if (unlocked.length > 0) s.events.push({ type: 'towerUnlocked', kinds: unlocked });
   if (early) {
     s.calledEarly = true;
+    s.earlyCalls++;
     s.earlyCallsInARow++;
     earn(s.economy, earlyCallBonus(elapsed, s.wave));
   } else {
@@ -1081,42 +1190,124 @@ export function restartWindows(s: RunState, profile: Profile): RestartResult {
 }
 
 /**
+ * Build the flat `AchievementStats` snapshot the unlock rules read. Called once per tick by
+ * `checkAchievements`; the per-achievement loop reuses this one snapshot rather than recomputing
+ * any counter.
+ */
+export function buildStats(s: RunState): AchievementStats {
+  const towers = s.towers;
+  let maxTier = 1;
+  let tierFive = 0;
+  let beacons = 0;
+  let maxedBranch = false;
+  let aaFlak = false;
+  let cursorBuilt = s.cursorBuilt;
+  const kinds = new Set<string>();
+  for (const t of towers) {
+    kinds.add(t.kind);
+    if (t.tier > maxTier) maxTier = t.tier;
+    if (t.tier === 5) tierFive++;
+    if (t.kind === 'beacon') beacons++;
+    if (t.branch !== null && isFullyUpgraded(t)) maxedBranch = true;
+    if (t.kind === 'aa' && t.branch === 'A') aaFlak = true;
+    if (t.kind === 'cursor') cursorBuilt = true;
+  }
+  let maxTreeTier = 0;
+  for (const id of s.tree) {
+    const node = TREE_NODES.find((n) => n.id === id);
+    if (node && node.tier > maxTreeTier) maxTreeTier = node.tier;
+  }
+
+  return {
+    wave: s.wave,
+    kills: s.economy.kills.tower + s.economy.kills.pointer,
+    killsByTower: s.economy.kills.tower,
+    killsByPointer: s.economy.kills.pointer,
+    pointerHits: s.pointerHits,
+    critHits: s.critHits,
+    weakHits: s.weakPointHits,
+    weakKills: s.weakPointKills,
+    leaks: s.totalLeaks,
+    integrity: s.integrity,
+    salvage: s.economy.salvage,
+    salvagePeak: s.salvagePeak,
+    earned: s.economy.earned,
+    towersBuilt: s.towersBuilt,
+    towersSold: s.soldTower ? Math.max(1, s.towersSold) : s.towersSold,
+    upgradesBought: s.upgradesBought,
+    branches: s.branches,
+    maxTowerTier: maxTier,
+    perfectWaves: Math.max(s.perfectWaves, s.clearedFlawlessWave ? 1 : 0),
+    perfectWaveStreak: s.perfectWaveStreak,
+    bossesKilled: s.bossesKilled,
+    bossKillsByPointer: s.bossKillsByPointer,
+    shieldsBroken: s.shieldsBroken,
+    adsClosed: s.adsDismissed,
+    adsExpired: s.adsExpired,
+    minesTriggered: s.minesTriggered,
+    repairsDone: s.repairsDone,
+    salvageSpentOnRepairs: s.salvageSpentOnRepairs,
+    toggles: s.toggleFlips,
+    wallsBuilt: s.wallsBuilt,
+    flyersKilled: s.flyersKilled,
+    aaKills: s.aaKills,
+    cursorKills: s.cursorKills,
+    cursorRepairs: s.cursorRepairs,
+    earlyCalls: s.earlyCalls,
+    earlyCallStreak: s.earlyCallsInARow,
+    endlessWave: s.endless ? s.wave : 0,
+    wavesAtThreeSpeed: s.wavesAtThreeSpeed,
+    cheatsUsed: s.cheatsUsed,
+    treesFullyUpgraded: s.tree.length === TREE_NODES.length,
+    treeNodeCount: s.tree.length,
+    prestigeLevel: s.rpEarned,
+    rebootCount: s.reboots,
+    mapId: s.levelId,
+    customMap: !LEVELS.some((l) => l.id === s.levelId),
+    timeOfDayHour: new Date().getHours(),
+    pausedTicks: s.pausedTicks,
+    routeLength: currentPath(s).length,
+    rp: s.rp,
+    clearedWaves: s.clearedWaves,
+    startingWave: s.treeEffects.startingWave,
+    towerKinds: kinds.size,
+    tierFiveCount: tierFive,
+    beaconCount: beacons,
+    maxedBranch,
+    aaFlak,
+    cursorBuilt,
+    overclockMax: s.pointer.stage >= MAX_POINTER_STAGE && s.pointer.clickLevel >= MAX_OVERCLOCK_LEVEL,
+    bossKilledByPointer: s.bossKilledByPointer,
+    milestoneBossByPointer: s.milestoneBossByPointer,
+    cleanWave: s.clearedWaveNoLeaks,
+    integrityLowWater: s.integrityLowWater,
+    clearedWave1NoLeak: s.clearedWave1NoLeak,
+    maxTreeTier,
+    killedCarrier: s.killedBossKinds.has('flyer-boss'),
+    killedDreadnought: s.killedBossKinds.has('armoured-boss'),
+    killedWirecutter: s.killedBossKinds.has('saboteur-boss'),
+    killedRam: s.killedBossKinds.has('breacher-boss'),
+  };
+}
+
+/**
  * Evaluate every achievement against the current run and return the ids that just unlocked (which
  * are also recorded in `s.achievements`, so each id fires exactly once). Runs in the simulation
- * step, never in the view.
+ * step, never in the view. A new achievement is a single data row in `ACHIEVEMENTS`; this loop is
+ * the whole engine.
  */
 export function checkAchievements(s: RunState): string[] {
   if (s.cheatsUsed) return [];
   const unlocked: string[] = [];
-  const add = (id: string): void => {
-    if (!s.achievements.has(id)) {
-      s.achievements.add(id);
-      unlocked.push(id);
-    }
-  };
-
-  if (s.economy.kills.tower + s.economy.kills.pointer > 0) add('first-blood');
-  if (currentPath(s).length >= 50) add('long-road');
-  if (s.clearedWaveNoLeaks) add('clean-wave');
-  if (s.weakPointHits >= 100) add('sharpshooter');
-  if (s.towers.filter((t) => t.tier === 5).length >= 5) add('five-tier-five');
-  if (s.towers.filter((t) => t.kind === 'beacon').length >= 10) add('beacon-field');
-  if (s.bossKilledByPointer) add('boss-by-pointer');
-  if (s.adsDismissed >= 10) add('ad-collector');
-  if (s.wave >= 150) add('endless-150');
-  if (s.weakPointKills >= 50) add('weak-point-kills');
-  if (s.critHits >= 25) add('crit-hits');
-  if (s.salvagePeak >= 1000) add('salvage-peak');
-  if (s.wave >= 20 && !s.soldTower) add('no-sell');
-  if (s.clearedWaves > 0 && s.towers.length > 0 && new Set(s.towers.map((t) => t.kind)).size === 1) add('one-kind');
-  if (s.towers.some((t) => t.branch !== null && isFullyUpgraded(t))) add('maxed-branch');
-  if (s.towers.some((t) => t.kind === 'aa' && t.branch === 'A')) add('aa-flak');
-  if (s.earlyCallsInARow >= 3) add('early-call-streak');
-  if (s.clearedFlawlessWave) add('flawless-wave');
-  if (s.milestoneBossByPointer) add('milestone-boss-pointer');
-  if (s.rp > 0) add('specs-banked');
-  if (s.clearedWaves > 0 && !LEVELS.some((l) => l.id === s.levelId)) add('custom-map-cleared');
-
+  const stats = buildStats(s);
+  // No rule currently reads the profile; it is passed for the interface only.
+  const profile = STATS_PROFILE;
+  for (const a of ACHIEVEMENTS) {
+    if (s.achievements.has(a.id)) continue;
+    if (!a.when || !a.when(stats, profile)) continue;
+    s.achievements.add(a.id);
+    unlocked.push(a.id);
+  }
   return unlocked;
 }
 
@@ -1158,6 +1349,7 @@ export function pointerDown(s: RunState, x: number, y: number): boolean {
   // The reticle's locked enemy is marked; clicking an already-marked enemy pays +15 % and a better
   // crit chance, so holding the reticle on one enemy (a boss) makes the next clicks hurt more. The
   // mark is a stage-2 reticle feature: a bare stage-1 click never locks, so it never marks.
+  s.pointerHits++;
   const marked = s.pointer.stage >= MAX_POINTER_STAGE && target.id === previousTargetId;
   const roll = nextCritRoll(s.rng, marked, weak);
   s.rng = roll.next;
@@ -1265,6 +1457,8 @@ export function step(s: RunState, dtMs: number): number {
   if (!s.paused) {
     // Speed scales the wall-clock time fed in, never the fixed timestep (docs/design.md §15).
     s.accumulator += Math.max(0, dtMs) * s.speed;
+  } else {
+    s.pausedTicks += Math.max(0, dtMs) / TICK_MS;
   }
   let n = 0;
   while (s.accumulator >= TICK_MS && n < MAX_TICKS_PER_STEP) {
@@ -1279,6 +1473,10 @@ export function step(s: RunState, dtMs: number): number {
 /** One fixed 1/60 s simulation tick. */
 export function tick(s: RunState): void {
   s.tick++;
+  if (s.phase === 'wave' && s.speed === 3 && s.waveAtThreeCounted !== s.wave) {
+    s.wavesAtThreeSpeed++;
+    s.waveAtThreeCounted = s.wave;
+  }
   if (s.godMode) s.economy.salvage = Math.max(s.economy.salvage, GOD_SALVAGE_CEILING);
   if (s.economy.salvage > s.salvagePeak) s.salvagePeak = s.economy.salvage;
   updateToggles(s);
@@ -1393,6 +1591,7 @@ function tickRepairs(s: RunState): void {
   }
 
   if (finished.length === 0) return;
+  s.repairsDone += finished.length;
   rebuildField(s);
   recomputeAuras(s.towers, s.clock); // a repaired tower may have come back online (beacon/repair aura resumes)
   for (const e of s.enemies) {
@@ -1816,9 +2015,11 @@ function fireBreacherTurrets(s: RunState): void {
 
 function leak(s: RunState, e: Enemy): void {
   e.dead = true;
+  s.totalLeaks++;
   s.leaksByWave.set(e.wave, (s.leaksByWave.get(e.wave) ?? 0) + 1);
   if (baseEnemyKind(e.kind) === 'flyer') s.flyerLeaksByWave.set(e.wave, (s.flyerLeaksByWave.get(e.wave) ?? 0) + 1);
   if (!s.godMode) s.integrity = Math.max(0, s.integrity - ENEMY_STATS[e.kind].integrity);
+  if (s.integrity < s.integrityLowWater) s.integrityLowWater = s.integrity;
   s.events.push({ type: 'leak', x: e.x, y: e.y });
   if (s.pointer.targetId === e.id) s.pointer.targetId = null;
   if (s.integrity === 0) {
@@ -2136,6 +2337,7 @@ function cursorDamage(s: RunState, t: Tower): number {
 /** A cursor click: pointer damage on the target, then the clock gate re-arms. */
 function cursorClick(s: RunState, t: Tower, target: Enemy): void {
   damageEnemy(s, target, cursorDamage(s, t), 'pointer', true, undefined, false, false);
+  if (target.dead) s.cursorKills++;
   // Full interval: tickCursors decrements at the top of the next tick before checking the gate, so
   // a full-interval value here yields exactly `cursorClickIntervalTicks` ticks between clicks.
   t.cursorCooldown = cursorClickIntervalTicks(t);
@@ -2278,6 +2480,7 @@ function tickMaintenanceCursor(s: RunState, t: Tower): void {
       t.cursorClickY = ty;
       t.cursorCooldown = cursorClickIntervalTicks(t);
       if (startRepair(s, target.col, target.row)) {
+        s.cursorRepairs++;
         t.cursorRepairTowerId = null;
         wanderCursor(s, t);
       }
@@ -2526,6 +2729,7 @@ function detonateMines(s: RunState): void {
       continue;
     }
     const tower = s.towers.find((t) => t.id === m.towerId);
+    s.minesTriggered++;
     for (const e of s.enemies) {
       if (isFlyerKind(e.kind) || !towerCanHurt(s, e)) continue;
       if ((e.x - m.x) ** 2 + (e.y - m.y) ** 2 <= blast2) {
@@ -2773,6 +2977,7 @@ function damageEnemy(
     // Bastion layers: one layer per hit, worth the base shield, never overflowing into hit points.
     e.shieldsRemaining -= 1;
     e.shield = e.shieldsRemaining * BASTION_SHIELD_LAYER_VALUE;
+    s.shieldsBroken++;
     s.events.push({ type: 'shieldHit', x: e.x, y: e.y, absorbed: BASTION_SHIELD_LAYER_VALUE, left: e.shield });
     return;
   }
@@ -2780,6 +2985,7 @@ function damageEnemy(
     const absorbed = Math.min(e.shield, dmg);
     e.shield -= absorbed;
     dmg -= absorbed;
+    if (e.shield <= 1e-9) s.shieldsBroken++;
     // A shield absorbing the hit is still a hit the player must see: emit a distinct event even when
     // nothing overflows into hit points, so a cursor stripping a shield is not silently invisible.
     s.events.push({ type: 'shieldHit', x: e.x, y: e.y, absorbed, left: e.shield });
@@ -2820,6 +3026,13 @@ function damageEnemy(
     if (source === 'pointer' && weak) s.weakPointKills++;
     if (e.isBoss && source === 'pointer' && !e.towerDamaged) s.bossKilledByPointer = true;
     if (e.isBoss && source === 'pointer' && milestoneBossKind(e.wave) === e.kind) s.milestoneBossByPointer = true;
+    if (e.isBoss) {
+      s.bossesKilled++;
+      s.killedBossKinds.add(e.kind);
+      if (source === 'pointer') s.bossKillsByPointer++;
+    }
+    if (isFlyerKind(e.kind)) s.flyersKilled++;
+    if (tower && tower.kind === 'aa') s.aaKills++;
     // A Carrier releases twice its brood on death, the one boss that fights on after it falls.
     if (e.kind === 'flyer-boss') releaseBrood(s, e, CARRIER_DEATH_BROOD_COUNT);
     const value = e.value * (s.modifiers.includes('rush') ? 1.1 : 1);
@@ -2845,7 +3058,14 @@ function clearDue(s: RunState): void {
     const bonus = waveClearBonus(run.wave);
     earn(s.economy, bonus);
     s.events.push({ type: 'waveCleared', wave: run.wave, bonus });
-    if ((s.leaksByWave.get(run.wave) ?? 0) === 0) s.clearedFlawlessWave = true;
+    if ((s.leaksByWave.get(run.wave) ?? 0) === 0) {
+      s.clearedFlawlessWave = true;
+      s.perfectWaves++;
+      s.perfectWaveStreak++;
+      if (run.wave === 1) s.clearedWave1NoLeak = true;
+    } else {
+      s.perfectWaveStreak = 0;
+    }
     if (run.wave >= 40 && (s.leaksByWave.get(run.wave) ?? 0) === 0) s.clearedWaveNoLeaks = true;
     cleared.add(run);
   }
