@@ -392,7 +392,6 @@ export class AchievementGridView {
   private readonly g = new Graphics();
   private readonly icons = new Container();
   private readonly iconSprites: Sprite[] = [];
-  private readonly cellTexts: Text[] = [];
   private readonly titleText: Text;
   private readonly summaryText: Text;
   private readonly filterTexts: Text[] = [];
@@ -407,11 +406,6 @@ export class AchievementGridView {
       s.visible = false;
       this.iconSprites.push(s);
       this.icons.addChild(s);
-      const t = makeText('', PAL.text);
-      t.anchor.set(0.5, 0);
-      t.visible = false;
-      this.cellTexts.push(t);
-      this.root.addChild(t);
     }
     this.titleText = makeText('Achievements', PAL.titleInverse, true);
     this.titleText.anchor.set(0, 0.5);
@@ -443,7 +437,6 @@ export class AchievementGridView {
       this.titleText.text = '';
       this.summaryText.text = '';
       for (const s of this.iconSprites) s.visible = false;
-      for (const t of this.cellTexts) t.visible = false;
       for (const t of this.tooltipTexts) t.text = '';
       for (const t of this.filterTexts) t.visible = false;
       this.closeText.visible = false;
@@ -486,8 +479,7 @@ export class AchievementGridView {
       // the rest.
       if (r.y < al.grid.y || r.y + r.h > al.grid.y + al.grid.h) continue;
       const spr = this.iconSprites[visible];
-      const text = this.cellTexts[visible];
-      if (!spr || !text) break;
+      if (!spr) break;
       const raised = e.earned || model.selectedId === e.id;
       bevel(g, r, raised, PAL.face);
       const tex = getArtTexture(e.id, ACH_ICON) ?? getArtTexture('_placeholder', ACH_ICON);
@@ -501,18 +493,9 @@ export class AchievementGridView {
       } else {
         spr.visible = false;
       }
-      text.text = e.name;
-      text.style.fill = e.earned ? PAL.text : PAL.shadow;
-      text.style.fontSize = FONT_SIZE.board;
-      text.position.set(r.x + ACH_CELL / 2, r.y + ACH_CELL + 1);
-      // The name sits under the tile, so it can outlive the tile's own visibility check.
-      text.visible = r.y + ACH_CELL + 12 <= al.grid.y + al.grid.h;
       visible++;
     }
-    for (let i = visible; i < this.iconSprites.length; i++) {
-      this.iconSprites[i].visible = false;
-      this.cellTexts[i].visible = false;
-    }
+    for (let i = visible; i < this.iconSprites.length; i++) this.iconSprites[i].visible = false;
 
     bevel(g, al.close, true, PAL.face);
     this.closeText.position.set(al.close.x + al.close.w / 2, al.close.y + al.close.h / 2);
