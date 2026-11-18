@@ -7,19 +7,19 @@
     </linearGradient>
   </defs>
   <!-- Speed streaks trail behind the tail. Faces +x. -->
-  <!-- Run frame 1: the upper fin kicks in toward the spine and its streak stretches. -->
+  <!-- Run frame 1 of 8: the upper fin is part way kicked in and its streak stretches. -->
   <g stroke="#16242f" stroke-width="1.8" stroke-linecap="round" opacity="0.3">
-    <line x1="5.6" y1="12.4" x2="1.6" y2="12.4"/>
+    <line x1="4.96" y1="12.14" x2="1.6" y2="12.14"/>
     <line x1="6.4" y1="16" x2="1.6" y2="16"/>
     <line x1="3.4" y1="20.5" x2="1.6" y2="20.5"/>
   </g>
   <g stroke="#f2f7fa" stroke-width="1" stroke-linecap="round">
-    <line x1="5.6" y1="12.4" x2="1.6" y2="12.4"/>
+    <line x1="4.96" y1="12.14" x2="1.6" y2="12.14"/>
     <line x1="6.4" y1="16" x2="1.6" y2="16"/>
     <line x1="3.4" y1="20.5" x2="1.6" y2="20.5"/>
   </g>
   <!-- A dart with a notched tail. -->
-  <path d="M30 16 L9 9.5 L6.4 12.6 L8 16 L4 21.5 L9 22.5 Z" fill="url(#body)" stroke="#000000" stroke-width="1" stroke-linejoin="round"/>
+  <path d="M30 16 L9 9.5 L5.7 11.98 L8 16 L4 21.5 L9 22.5 Z" fill="url(#body)" stroke="#000000" stroke-width="1" stroke-linejoin="round"/>
   <!-- The lower half is a darker facet, so the dart reads as folded along the spine. -->
   <polygon points="28.6,16 8.7,16 5,21 9,21.9" fill="#16242f" opacity="0.28"/>
   <!-- Spine and a top-edge highlight. -->

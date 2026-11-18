@@ -118,7 +118,9 @@ export const SHIELD_COLOR = 0x00d0d0;
  */
 export const ENEMY_ART_BODY: Record<EnemyKind, number> = {
   grunt: 2.0,
-  runner: 2.2,
+  // Drawn larger than its hitbox so the dart reads at Grunt size (3.3 × 0.18 ≈ 2.0 × 0.3). Its tip
+  // stays inside the click radius plus CLICK_SLACK, so every visible part of it is still clickable.
+  runner: 3.3,
   shielded: 2.7,
   flyer: 2.6,
   armoured: 1.6,
@@ -127,7 +129,7 @@ export const ENEMY_ART_BODY: Record<EnemyKind, number> = {
   breacher: 2.2,
   popup: 2.0,
   'grunt-boss': 2.0,
-  'runner-boss': 2.2,
+  'runner-boss': 3.3,
   'shielded-boss': 2.7,
 };
 

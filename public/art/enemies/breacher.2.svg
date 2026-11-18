@@ -11,12 +11,12 @@
     <rect x="7.5" y="3.6" width="15" height="3.6" rx="1.2"/>
     <rect x="7.5" y="24.8" width="15" height="3.6" rx="1.2"/>
   </g>
-  <!-- Roll frame 2: 2 units forward; a new grouser comes over the rear sprocket. -->
+  <!-- Roll frame 2 of 6: the grousers have moved 1 units forward. -->
   <g stroke="#5a6b78" stroke-width="0.8">
-    <line x1="9.5" y1="4.2" x2="9.5" y2="6"/><line x1="12.5" y1="4.2" x2="12.5" y2="6"/>
-    <line x1="15.5" y1="4.2" x2="15.5" y2="6"/><line x1="18.5" y1="4.2" x2="18.5" y2="6"/>
-    <line x1="9.5" y1="26" x2="9.5" y2="27.8"/><line x1="12.5" y1="26" x2="12.5" y2="27.8"/>
-    <line x1="15.5" y1="26" x2="15.5" y2="27.8"/><line x1="18.5" y1="26" x2="18.5" y2="27.8"/>
+    <line x1="11.5" y1="4.2" x2="11.5" y2="6"/><line x1="14.5" y1="4.2" x2="14.5" y2="6"/>
+    <line x1="17.5" y1="4.2" x2="17.5" y2="6"/><line x1="20.5" y1="4.2" x2="20.5" y2="6"/>
+    <line x1="11.5" y1="26" x2="11.5" y2="27.8"/><line x1="14.5" y1="26" x2="14.5" y2="27.8"/>
+    <line x1="17.5" y1="26" x2="17.5" y2="27.8"/><line x1="20.5" y1="26" x2="20.5" y2="27.8"/>
   </g>
   <!-- The hull. -->
   <rect x="6" y="6" width="20" height="20" rx="4.5" fill="url(#hull)" stroke="#000000" stroke-width="2"/>

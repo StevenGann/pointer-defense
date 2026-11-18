@@ -22,11 +22,12 @@
     <line x1="10.63" y1="12.9" x2="5.09" y2="9.7"/>
     <line x1="21.37" y1="12.9" x2="26.91" y2="9.7"/>
   </g>
-  <!-- Walk frame 2: back to centre, the same pose as frame 0. -->
-  <!-- The old 1 px inner dot, grown into a sensor eye: socket, iris, pupil, glint. -->
-  <circle cx="16" cy="16" r="5.8" fill="#0e1a24"/>
-  <circle cx="16" cy="16" r="4.4" fill="url(#iris)"/>
-  <circle cx="16" cy="16" r="2" fill="#000000"/>
-  <circle cx="14.5" cy="14.4" r="0.95" fill="#ffffff"/>
-  <circle cx="17.7" cy="17.8" r="0.5" fill="#ffffff" opacity="0.5"/>
+  <!-- Walk frame 2 of 8: the dome leans fully left; the eye swings with it and the pupil leads. -->
+  <g transform="translate(-1.6 0.3)">
+    <circle cx="16" cy="16" r="5.8" fill="#0e1a24"/>
+    <circle cx="16" cy="16" r="4.4" fill="url(#iris)"/>
+    <circle cx="15.2" cy="16" r="2" fill="#000000"/>
+    <circle cx="14.5" cy="14.4" r="0.95" fill="#ffffff"/>
+    <circle cx="17.7" cy="17.8" r="0.5" fill="#ffffff" opacity="0.5"/>
+  </g>
 </svg>
