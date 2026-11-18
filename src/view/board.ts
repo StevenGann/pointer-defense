@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
-import { artNameForEnemy, artNameForTowerBase, artNameForTowerTurret, artSpriteSize, getArtTexture } from './art.ts';
+import { artNameForBranch, artNameForEnemy, artNameForTowerBase, artNameForTowerTurret, artSpriteSize, getArtTexture } from './art.ts';
 import { bevel, FONT, FONT_SIZE, PAL, type BoardGeometry, type Layout } from './chrome.ts';
 import {
   enemyAt,
@@ -139,8 +139,10 @@ export class BoardView {
   private readonly towerSprites = new Container();
   private readonly towerBaseSprites: Sprite[] = [];
   private readonly towerTurretSprites: Sprite[] = [];
+  private readonly towerMarkSprites: Sprite[] = [];
   private readonly popups = new Container();
   private readonly popupGfx = new Graphics();
+  private readonly tileSprites = new Container();
   private readonly enemies = new Container();
   private readonly enemyBodies = new Graphics();
   private readonly enemyFx = new Graphics();
@@ -158,7 +160,7 @@ export class BoardView {
   constructor() {
     this.note.anchor.set(0, 0.5);
     this.popups.addChild(this.popupGfx);
-    this.root.addChild(this.tiles, this.path, this.toggles, this.towerSprites, this.towers, this.popups, this.enemies, this.enemyBodies, this.enemyFx, this.overlay, this.note);
+    this.root.addChild(this.tileSprites, this.tiles, this.path, this.toggles, this.towerSprites, this.towers, this.popups, this.enemies, this.enemyBodies, this.enemyFx, this.overlay, this.note);
   }
 
   /** The pooled body sprite for the `index`-th living enemy, grown on demand. */
@@ -194,6 +196,19 @@ export class BoardView {
       s = new Sprite();
       s.anchor.set(0.5, 0.5);
       this.towerTurretSprites.push(s);
+      this.towerSprites.addChild(s);
+    }
+    s.visible = true;
+    return s;
+  }
+
+  /** The pooled branch-mark sprite for the `index`-th tower, grown on demand. */
+  private towerMarkSprite(index: number): Sprite {
+    let s = this.towerMarkSprites[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0.5, 0.5);
+      this.towerMarkSprites.push(s);
       this.towerSprites.addChild(s);
     }
     s.visible = true;
@@ -251,11 +266,12 @@ export class BoardView {
 
     let towerIndex = 0;
     for (const t of state.towers) {
-      drawTower(this.towerBaseSprite(towerIndex), this.towerTurretSprite(towerIndex), this.towers, t, board, cell, state.clock);
+      drawTower(this.towerBaseSprite(towerIndex), this.towerTurretSprite(towerIndex), this.towerMarkSprite(towerIndex), this.towers, t, board, cell, state.clock);
       towerIndex++;
     }
     for (let i = towerIndex; i < this.towerBaseSprites.length; i++) this.towerBaseSprites[i].visible = false;
     for (let i = towerIndex; i < this.towerTurretSprites.length; i++) this.towerTurretSprites[i].visible = false;
+    for (let i = towerIndex; i < this.towerMarkSprites.length; i++) this.towerMarkSprites[i].visible = false;
 
     const rangeMult = towerRangeMult(state);
     const hoveredTower = hover.onBoard ? towerAt(state, hover.col, hover.row) : undefined;
@@ -356,13 +372,25 @@ export class BoardView {
   private drawStatic(grid: Grid, board: { x: number; y: number; cell: number }, cell: number): void {
     const g = this.tiles;
     g.clear();
+    this.tileSprites.removeChildren();
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
         const kind = tileAt(grid, col, row);
         if (!kind) continue;
         const px = board.x + col * cell;
         const py = board.y + row * cell;
-        drawTile(g, kind, px, py, cell);
+        const name = kind === 'buildable' ? 'tile' : 'obstacle';
+        const tex = getArtTexture(name, cell);
+        if (tex !== null) {
+          const s = new Sprite(tex);
+          s.anchor.set(0.5, 0.5);
+          s.position.set(px + cell / 2, py + cell / 2);
+          s.width = cell;
+          s.height = cell;
+          this.tileSprites.addChild(s);
+        } else {
+          drawTile(g, kind, px, py, cell);
+        }
       }
     }
   }
@@ -504,6 +532,7 @@ function dashedCircle(g: Graphics, cx: number, cy: number, r: number, color: num
 function drawTower(
   baseSprite: Sprite,
   turretSprite: Sprite,
+  markSprite: Sprite,
   g: Graphics,
   t: Tower,
   board: { x: number; y: number; cell: number },
@@ -522,7 +551,7 @@ function drawTower(
       drawBar(g, cx, cy, cell, t.hp / t.maxHp, healthColor(t.hp / t.maxHp));
     }
   } else {
-    drawTowerBody(baseSprite, turretSprite, g, t, cx, cy, cell);
+    drawTowerBody(baseSprite, turretSprite, markSprite, g, t, cx, cy, cell);
     if (isRepairing(t, clock)) {
       drawBar(g, cx, cy, cell, repairProgress(t, clock), REPAIR_COLOR);
     } else if (isOffline(t)) {
@@ -544,6 +573,7 @@ function drawTower(
 function drawTowerBody(
   baseSprite: Sprite,
   turretSprite: Sprite,
+  markSprite: Sprite,
   g: Graphics,
   t: Tower,
   cx: number,
@@ -581,10 +611,28 @@ function drawTowerBody(
 
   if (baseTex === null) {
     // Procedural fallback for a half-finished art pass (deleted once parity is confirmed).
+    markSprite.visible = false;
     drawTowerShape(g, t.kind, cx, cy, cell, 1, t.angle, t.branch);
+    return;
+  }
+
+  // The branch mark: an SVG sprite authored in the tower's own colour at the mark's cell-fraction
+  // position, sitting on top of the base and turret. A missing mark leaves no sprite.
+  const markName = artNameForBranch(t.kind, t.branch);
+  const markTex = markName !== null ? getArtTexture(markName, cell) : null;
+  if (markTex !== null) {
+    markSprite.texture = markTex;
+    markSprite.visible = true;
+    markSprite.position.set(cx, cy);
+    markSprite.width = cell;
+    markSprite.height = cell;
+    markSprite.tint = 0xffffff;
+    markSprite.rotation = 0;
+    markSprite.alpha = 1;
   } else {
-    // The branch mark is drawn with the tower's own colours on top of the sprite (procedural until
-    // Phase 3 converts the marks to SVG).
+    markSprite.visible = false;
+    // Fall back to the procedural mark (deleted once parity is confirmed) only when the base is
+    // missing too, which is the half-finished-art case; a live tower always has its base.
     drawBranchMark(g, t.kind, t.branch, cx, cy, cell, { color: TOWER_COLOR[t.kind], alpha: 1 }, { width: 1, color: PAL.dark, alpha: 1 });
   }
 }

@@ -72,7 +72,11 @@ below), because the shade changes with state and damage and a tint cannot bright
 
 ### `branches/`
 
-Small marks drawn on top of a tier-3 tower body, in the tower's own colour.
+Small marks drawn on top of a tier-3 tower body, in the tower's own colour. Each file is drawn in
+the same cell-fraction coordinate space as the tower: the tower centre is at the viewBox centre
+(16,16) and one tile is 32 units, so a mark meant to sit 0.15 tiles above the centre is drawn at
+`y = 16 − 0.15 × 32`. The engine places the mark sprite at the tower centre at one tile per 32 units,
+so the mark lands exactly where the procedural spec put it.
 
 | File | Represents |
 |---|---|

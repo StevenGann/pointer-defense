@@ -134,6 +134,16 @@ const MARK_PRIMITIVES: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch
   // repair tower's plain upgrade ladder). A cursor's Maintenance branch is the one cursor branch with
   // a mark: an open-end wrench, so it reads as repair rather than Overclock or Wide Search.
   cursor: {
+    // Overclock: a lightning bolt above the plinth.
+    A: [
+      { type: 'poly', pts: [0.04, -0.22, -0.08, 0.02, -0.02, 0.02, -0.06, 0.16, 0.1, -0.06, 0.04, -0.06] },
+    ],
+    // Wide Search: two nested arcs sweeping the widened radius.
+    B: [
+      { type: 'arc', x: 0, y: 0.1, r: 0.08, a0: Math.PI, a1: Math.PI * 2 },
+      { type: 'arc', x: 0, y: 0.1, r: 0.15, a0: Math.PI, a1: Math.PI * 2 },
+    ],
+    // Maintenance: an open-end wrench.
     C: [
       { type: 'line', x1: -0.09, y1: -0.06, x2: -0.09, y2: 0.12 },
       { type: 'line', x1: -0.09, y1: -0.06, x2: -0.03, y2: -0.06 },

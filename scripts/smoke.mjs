@@ -2886,7 +2886,7 @@ function cursorTower(tier, branch) {
 {
   // 29a. Every kind/branch combination produces a distinct mark, and unbranched or unmarked kinds
   // (walls, cursors) draw none.
-  const markedKinds = ['gun', 'cannon', 'taser', 'frost', 'laser', 'beacon'];
+  const markedKinds = ['gun', 'cannon', 'taser', 'frost', 'laser', 'beacon', 'cursor'];
   const seen = new Set();
   let distinct = true;
   for (const kind of markedKinds) {
@@ -2901,13 +2901,15 @@ function cursorTower(tier, branch) {
       seen.add(key);
     }
   }
-  check(distinct && seen.size === 12, 'every kind/branch combination produces a distinct mark');
+  check(distinct && seen.size === 14, 'every kind/branch combination produces a distinct mark');
   check(
     branchMarkSpec('wall', 'A') === null && branchMarkSpec('wall', 'B') === null && branchMarkSpec('wall', 'C') === null,
     'walls carry no branch mark (their button states do)',
   );
-  check(branchMarkSpec('cursor', 'A') === null && branchMarkSpec('cursor', 'B') === null,
-    'cursors carry no branch mark');
+  check(
+    branchMarkSpec('cursor', 'A') !== null && branchMarkSpec('cursor', 'B') !== null,
+    'cursor A and B carry branch marks',
+  );
   check(branchMarkSpec('gun', null) === null, 'an unbranched tower carries no mark');
 }
 
@@ -3465,8 +3467,8 @@ function maintenanceRig(gunHp) {
   check(branchName('cursor', 'C') === 'Maintenance', 'cursor branch C is named Maintenance');
   check(CURSOR_REPAIR_THRESHOLD === 0.8, 'maintenance threshold is 80%');
   check(branchMarkSpec('cursor', 'C') !== null, 'Maintenance carries a wrench branch mark');
-  check(branchMarkSpec('cursor', 'A') === null && branchMarkSpec('cursor', 'B') === null,
-    'Overclock and Wide Search still carry no mark');
+  check(branchMarkSpec('cursor', 'A') !== null && branchMarkSpec('cursor', 'B') !== null,
+    'Overclock and Wide Search carry branch marks');
 
   const rs = createRunState();
   const placed = cursorTooltipLines(cursorTower(3, 'C'), rs.pointer, rs.specs, 'Repairing Gun 42%');
@@ -3897,7 +3899,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   // 37b. Every shipped manifest file exists on disk, and no SVG on disk is unreferenced. The
   // shipped set grows as each art phase lands (towers, branches, board); the manifest itself lists
   // the whole contract from the start, so unshipped entries simply fall back to procedural drawing.
-  const shippedCategories = ['enemies', 'towers'];
+  const shippedCategories = ['enemies', 'towers', 'branches', 'board'];
   const missing = ART_MANIFEST.filter(
     (e) => shippedCategories.includes(e.category) && !existsSync(`${artDir}/${e.file}`),
   );
