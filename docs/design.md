@@ -1597,6 +1597,26 @@ wave 1–100 balance hash is unchanged.
 
 ---
 
+## 23. Global upgrades
+
+The late-run salvage sink: expensive, one-shot upgrades bought with salvage and owned until the run
+ends. They answer "my economy has outgrown my board" — a run at wave 50 has cash it cannot spend, and
+this is where it goes. Fourteen are specified; each is hidden until the run reaches its wave (20–60),
+costs 1,000–30,000 salvage, and is bought once. They are run state, never profile state, so a reboot or
+a new run starts with none; RP and specs stay the meta layer.
+
+The right panel's GLOBAL UPGRADES section has two rows: **Restore** opens the Restore tree, and
+**Upgrades** (`— N available`) opens the Global Upgrades dialog, also on **U** when no tower is
+selected. The dialog lists the revealed upgrades by group with a Buy button each, and is never opened
+over another modal.
+
+The full contract — the fourteen items and their numbers, the sim hook points, the dialog layout, the
+icon pipeline (`public/art/upgrades/`, filled by `npm run upgrade-art`) and the smoke tests — is
+[`docs/GLOBAL-UPGRADES.md`](GLOBAL-UPGRADES.md). This section only places the feature in the design;
+where the two disagree, that document wins.
+
+---
+
 ## Appendix A — What four games got right
 
 **Desktop Tower Defense** (Paul Preece, March 2007) — the path is not fixed; creeps take the shortest
