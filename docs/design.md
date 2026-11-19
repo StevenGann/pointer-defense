@@ -940,6 +940,11 @@ on, reaching level 12 at wave 96. Buying above the ceiling is refused, and the p
 the current level against the ceiling (`Overclock 3 / 5`). The ceiling only ever rises, so levels
 already bought are never taken away — it is a guard, not a tax.
 
+The pointer panel's **Upgrade** button tells the same truth: it greys out while the next level sits
+above the ceiling — even with the salvage in hand — and its tooltip names the wave that lifts the gate
+(`Needs wave 16 — one overclock level every 8 waves.`). The button and the purchase share one helper
+(`pointerUpgradeState` in pointer.ts), so a disabled button can never hide a refused purchase.
+
 ### 9.3 Precision
 
 Every enemy carries a **weak point**: a 25 % arc on its leading edge, drawn as a small notch. Clicking

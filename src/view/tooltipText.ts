@@ -36,11 +36,9 @@ import { formatNumber } from '../core/format.ts';
 import {
   clickDamage,
   MAX_OVERCLOCK_LEVEL,
-  nextOverclockCost,
-  nextStageCost,
-  overclockCeiling,
-  overclockUnlockWave,
+  MAX_POINTER_STAGE,
   pointerInfo,
+  pointerUpgradeState,
   type PointerState,
   type PointerStage,
 } from '../core/pointer.ts';
@@ -59,6 +57,8 @@ import { ENEMY_STATS, type Enemy } from '../core/enemies.ts';
  */
 
 export const TOOLTIP_GOOD = 0x008000;
+/** The tooltip colour for a wave-gated purchase: the navy link blue. */
+export const TOOLTIP_BLUE = 0x000080;
 
 export interface TooltipSegment {
   text: string;
@@ -599,8 +599,11 @@ export function fmtClickDamage(n: number): string {
 
 /** Tooltip for the pointer Upgrade button: the next stage or overclock level's click damage and cost. */
 export function pointerTooltipLines(p: PointerState, salvage: number, wave: number, cap: number = MAX_OVERCLOCK_LEVEL): TooltipLine[] {
-  const stageCost = nextStageCost(p);
-  if (stageCost !== null) {
+  const state = pointerUpgradeState(wave, cap, p);
+
+  if (p.stage < MAX_POINTER_STAGE) {
+    const stageCost = state.cost;
+    if (stageCost === null) return ['Max level'];
     if (salvage < stageCost) return [cannotAffordText(salvage, stageCost)];
     const next = (p.stage + 1) as PointerStage;
     const before = pointerInfo(p).clickDamage;
@@ -612,16 +615,15 @@ export function pointerTooltipLines(p: PointerState, salvage: number, wave: numb
     ]];
   }
 
-  if (p.clickLevel >= cap) return ['Max level'];
-
-  const nextLevel = p.clickLevel + 1;
-  if (nextLevel > overclockCeiling(wave, cap)) {
-    return [`Wave ${overclockUnlockWave(nextLevel)} unlocks overclock ${nextLevel}`];
+  if (state.block === 'maxed') return ['Max level'];
+  if (state.block === 'wave') {
+    return [[{ text: `Needs wave ${state.unlockWave} — one overclock level every 8 waves.`, color: TOOLTIP_BLUE }]];
   }
 
-  const cost = nextOverclockCost(p);
+  const cost = state.cost;
   if (cost === null) return ['Max level'];
   if (salvage < cost) return [cannotAffordText(salvage, cost)];
+  const nextLevel = p.clickLevel + 1;
   const before = fmtClickDamage(clickDamage(p));
   const after = fmtClickDamage(clickDamage({ ...p, clickLevel: nextLevel }));
   return [[

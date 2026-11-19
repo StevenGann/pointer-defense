@@ -161,6 +161,38 @@ export function nextPointerCost(p: PointerState): number | null {
   return nextStageCost(p) ?? nextOverclockCost(p);
 }
 
+/** Why the pointer's Upgrade button is disabled: the ladder's top, the wave ceiling, or not at all. */
+export type PointerUpgradeBlock = 'maxed' | 'wave' | null;
+
+export interface PointerUpgradeState {
+  /** Cost of the next purchase, or null when there is nothing left to buy. */
+  readonly cost: number | null;
+  readonly block: PointerUpgradeBlock;
+  /** The wave that lifts a 'wave' block, or null when the block is not a wave block. */
+  readonly unlockWave: number | null;
+}
+
+/**
+ * The pointer's next purchase, from the same ceiling and cap the purchase uses, so the HUD can never
+ * present a buy that `upgradePointer` would refuse. Stage 1 -> 2 is never blocked; stage 2 asks the
+ * overclock ladder: a level at or below the ceiling is buyable, one above it is gated by the wave that
+ * lifts it, and the top of the ladder is `maxed`.
+ */
+export function pointerUpgradeState(wave: number, cap: number, p: PointerState): PointerUpgradeState {
+  if (p.stage < MAX_POINTER_STAGE) {
+    return { cost: nextStageCost(p), block: null, unlockWave: null };
+  }
+  if (p.clickLevel >= cap) {
+    return { cost: null, block: 'maxed', unlockWave: null };
+  }
+  const cost = nextOverclockCost(p);
+  const nextLevel = p.clickLevel + 1;
+  if (nextLevel > overclockCeiling(wave, cap)) {
+    return { cost, block: 'wave', unlockWave: overclockUnlockWave(nextLevel) };
+  }
+  return { cost, block: null, unlockWave: null };
+}
+
 export function holdDamagePerTick(p: PointerState): number {
   return holdDps(p) / TICK_HZ;
 }
