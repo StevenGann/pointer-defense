@@ -471,9 +471,11 @@ wall does.
 The **Cursor** is the one tower whose damage is not its own. It cannot fire; instead it carries a
 second cursor — the classic white arrow, drawn at the **same 16 px size as the player's own pointer**,
 not as a miniature — that wanders around its home tile and clicks enemies for you. Hovering the tower
-draws its range ring around **that cursor**, not around the tower tile: the cursor is what clicks, and
-it can be up to its full radius away from home, so a ring on the tower would describe a shot it cannot
-take. Every click deals **half the player's current click damage**, ladder and spec multipliers
+draws its range ring around the **tower tile**, which is the leash: the circle is how far the cursor may
+wander from home, not where the shot happens. A **dotted tether** runs from the tower's base to the
+cursor's current position, so the wandering arrow is legibly that tower's and not a second pointer
+loose on the board. A ring centred on the cursor was tried first and read wrong — it slid around the
+board as the cursor drifted and stopped describing a fixed property of the tower. Every click deals **half the player's current click damage**, ladder and spec multipliers
 included, and is treated as pointer damage: it ignores armour and wears shields down exactly as the
 player's own clicks do. The tower's radius (3.0 → 4.0 → 4.75 tiles) and its click clock (1.5 → 2.0 →
 2.75 clicks/s) are its only stats, and at tier 3 it branches into **Overclock** (more, weaker clicks),
