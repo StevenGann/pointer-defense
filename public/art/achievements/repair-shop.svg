@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
   <!-- Handy: spend 2,000 salvage on repairs. A wrench on the green repair cross. -->
   <!-- The frame: a raised Windows 95 button. White and light grey on the top and left, grey and black on the bottom and right. -->
-  <rect x="0" y="0" width="44" height="44" fill="#c0c0c0"/>
+  <defs><linearGradient id="ff" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#cecece"/><stop offset="1" stop-color="#b4b4b4"/></linearGradient></defs>
+  <rect x="0" y="0" width="44" height="44" fill="url(#ff)"/>
   <path d="M0 0 H44 V1 H1 V44 H0 Z" fill="#ffffff"/>
   <path d="M1 1 H43 V2 H2 V43 H1 Z" fill="#dfdfdf"/>
   <path d="M44 0 V44 H0 V43 H43 V0 Z" fill="#000000"/>
@@ -9,6 +10,6 @@
   <!-- The glyph, drawn in a 44-unit box and scaled to sit inside the frame. -->
   <g transform="translate(22 22) scale(0.84) translate(-22 -22)">
     <circle cx="22" cy="22" r="17" fill="#00a000" stroke="#000000" stroke-width="1.5"/><path d="M18 9 H26 V18 H35 V26 H26 V35 H18 V26 H9 V18 H18 Z" fill="#ffffff" stroke="#000000" stroke-width="1.2" stroke-linejoin="round"/>
-    <g transform="translate(22 22) scale(1.15) rotate(0)"><path d="M-8 9 L1.5 -0.5 M7 -10 A5 5 0 1 0 10 -3.5" fill="none" stroke="#000000" stroke-width="5.6" stroke-linecap="round"/><path d="M-8 9 L1.5 -0.5 M7 -10 A5 5 0 1 0 10 -3.5" fill="none" stroke="#dfdfdf" stroke-width="2.8" stroke-linecap="round"/></g>
+    <g transform="translate(22 22) scale(1.15) rotate(0)"><path d="M-8 9 L1.5 -0.5 M7 -10 A5 5 0 1 0 10 -3.5" fill="none" stroke="#000000" stroke-width="5.6" stroke-linecap="round"/><path d="M-8 9 L1.5 -0.5 M7 -10 A5 5 0 1 0 10 -3.5" fill="none" stroke="#dfdfdf" stroke-width="2.8" stroke-linecap="round"/><path d="M-8.6 8 L0.6 -1.2 M2.6 -7.4 A5 5 0 0 1 5.4 -9.6" fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round" stroke-width="0.8" opacity="0.9"/><circle cx="-7.4" cy="8.4" r="0.8" fill="#000000" opacity="0.5"/></g>
   </g>
 </svg>

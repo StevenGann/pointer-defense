@@ -1,13 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
   <!-- Low Battery: start a run with the battery below 10 percent. A battery with one red bar. -->
   <!-- The frame: a raised Windows 95 button. White and light grey on the top and left, grey and black on the bottom and right. -->
-  <rect x="0" y="0" width="44" height="44" fill="#c0c0c0"/>
+  <defs><linearGradient id="ff" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#cecece"/><stop offset="1" stop-color="#b4b4b4"/></linearGradient></defs>
+  <rect x="0" y="0" width="44" height="44" fill="url(#ff)"/>
   <path d="M0 0 H44 V1 H1 V44 H0 Z" fill="#ffffff"/>
   <path d="M1 1 H43 V2 H2 V43 H1 Z" fill="#dfdfdf"/>
   <path d="M44 0 V44 H0 V43 H43 V0 Z" fill="#000000"/>
   <path d="M43 1 V43 H1 V42 H42 V1 Z" fill="#808080"/>
   <!-- The glyph, drawn in a 44-unit box and scaled to sit inside the frame. -->
   <g transform="translate(22 22) scale(0.84) translate(-22 -22)">
-    <rect x="4" y="12" width="32" height="20" fill="#ffffff" stroke="#000000" stroke-width="1.8"/><rect x="36" y="18" width="4" height="8" fill="#000000"/><rect x="7" y="15" width="6" height="14" fill="#ff0000" stroke="#000000" stroke-width="0.8"/><g fill="none" stroke="#c0c0c0" stroke-width="1"><rect x="15.5" y="15.5" width="5" height="13"/><rect x="22.5" y="15.5" width="5" height="13"/><rect x="29.5" y="15.5" width="4" height="13"/></g>
+    <rect x="4" y="12" width="32" height="20" fill="#ffffff" stroke="#000000" stroke-width="1.8"/><rect x="36" y="18" width="4" height="8" fill="#000000"/><path d="M5.6 13.8 H34.4" stroke="#dfdfdf" stroke-width="1.6"/><path d="M5.6 30.4 H34.4" stroke="#c0c0c0" stroke-width="1.4"/><rect x="7" y="15" width="6" height="14" fill="#ff0000" stroke="#000000" stroke-width="0.8"/><path d="M8.2 16.2 V27.6" stroke="#ff9a9a" stroke-width="1"/><g fill="none" stroke="#c0c0c0" stroke-width="1"><rect x="15.5" y="15.5" width="5" height="13"/><rect x="22.5" y="15.5" width="5" height="13"/><rect x="29.5" y="15.5" width="4" height="13"/></g>
+    <g fill="#000000"><rect x="23.00" y="16.90" width="3.70" height="3.70"/><rect x="23.00" y="18.70" width="3.70" height="3.70"/><rect x="23.00" y="20.50" width="3.70" height="3.70"/><rect x="23.00" y="24.10" width="3.70" height="3.70"/></g><g fill="#ff0000"><rect x="23.60" y="17.50" width="2.15" height="2.15"/><rect x="23.60" y="19.30" width="2.15" height="2.15"/><rect x="23.60" y="21.10" width="2.15" height="2.15"/><rect x="23.60" y="24.70" width="2.15" height="2.15"/></g>
   </g>
 </svg>

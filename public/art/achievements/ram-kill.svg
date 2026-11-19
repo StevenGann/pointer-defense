@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
   <!-- Roadblock: kill a Ram boss. A ram wedge stopped at a striped barrier. -->
   <!-- The frame: a raised Windows 95 button. White and light grey on the top and left, grey and black on the bottom and right. -->
-  <rect x="0" y="0" width="44" height="44" fill="#c0c0c0"/>
+  <defs><linearGradient id="ff" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#cecece"/><stop offset="1" stop-color="#b4b4b4"/></linearGradient></defs>
+  <rect x="0" y="0" width="44" height="44" fill="url(#ff)"/>
   <path d="M0 0 H44 V1 H1 V44 H0 Z" fill="#ffffff"/>
   <path d="M1 1 H43 V2 H2 V43 H1 Z" fill="#dfdfdf"/>
   <path d="M44 0 V44 H0 V43 H43 V0 Z" fill="#000000"/>
@@ -9,6 +10,6 @@
   <!-- The glyph, drawn in a 44-unit box and scaled to sit inside the frame. -->
   <g transform="translate(22 22) scale(0.84) translate(-22 -22)">
     <polygon points="3,12 24,22 3,32" fill="#5a7183" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/><polygon points="5,15 19,22 5,22" fill="#9ab0bf"/><circle cx="9" cy="19" r="2" fill="#e6f4ff" stroke="#000000"/><rect x="26" y="6" width="9" height="32" fill="#ffcc00" stroke="#000000" stroke-width="1.5"/><path d="M26.8 13 L34.2 7.5 M26.8 22 L34.2 16.5 M26.8 31 L34.2 25.5 M26.8 37.2 L34.2 34.5" stroke="#000000" stroke-width="3.4"/><rect x="24" y="37" width="13" height="4" fill="#808080" stroke="#000000"/>
-    <g transform="translate(21 12) scale(0.6) rotate(0)"><polygon points="0,-8.00 2.40,-2.40 8.00,0 2.40,2.40 0,8.00 -2.40,2.40 -8.00,0 -2.40,-2.40" fill="#ffff00" stroke="#000000" stroke-width="1" stroke-linejoin="round"/></g>
+    <g transform="translate(21 12) scale(0.6) rotate(0)"><polygon points="0,-8.00 2.40,-2.40 8.00,0 2.40,2.40 0,8.00 -2.40,2.40 -8.00,0 -2.40,-2.40" fill="#ffff00" stroke="#000000" stroke-width="1" stroke-linejoin="round"/><polygon points="0,-4.00 1.20,-1.20 4.00,0 1.20,1.20 0,4.00 -1.20,1.20 -4.00,0 -1.20,-1.20" fill="#ffffff" opacity="0.85"/></g>
   </g>
 </svg>

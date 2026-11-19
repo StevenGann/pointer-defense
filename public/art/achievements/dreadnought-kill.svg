@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
   <!-- Ironclad: kill a Dreadnought. An armour plate with a dent and a crack. -->
   <!-- The frame: a raised Windows 95 button. White and light grey on the top and left, grey and black on the bottom and right. -->
-  <rect x="0" y="0" width="44" height="44" fill="#c0c0c0"/>
+  <defs><linearGradient id="ff" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#cecece"/><stop offset="1" stop-color="#b4b4b4"/></linearGradient></defs>
+  <rect x="0" y="0" width="44" height="44" fill="url(#ff)"/>
   <path d="M0 0 H44 V1 H1 V44 H0 Z" fill="#ffffff"/>
   <path d="M1 1 H43 V2 H2 V43 H1 Z" fill="#dfdfdf"/>
   <path d="M44 0 V44 H0 V43 H43 V0 Z" fill="#000000"/>
