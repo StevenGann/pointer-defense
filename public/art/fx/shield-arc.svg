@@ -1,4 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- The 270-degree cyan arc drawn where a shielded enemy is hit. -->
-  <path d="M23 16 A7 7 0 1 1 16 9" fill="none" stroke="#00d0d0" stroke-width="2" stroke-linecap="round"/>
+  <!-- A shield hit: the 270-degree cyan arc. Frame 0: the arc, bright, with a glint. -->
+  <path d="M23 16 A7 7 0 1 1 16 9" fill="none" stroke="#005a5a" stroke-width="3.6" stroke-linecap="round"/>
+  <path d="M23 16 A7 7 0 1 1 16 9" fill="none" stroke="#00d0d0" stroke-width="2.2" stroke-linecap="round"/>
+  <path d="M11.6 20.4 A6.2 6.2 0 0 1 11.6 11.6" fill="none" stroke="#ffffff" stroke-width="0.8" stroke-linecap="round" opacity="0.85"/>
 </svg>

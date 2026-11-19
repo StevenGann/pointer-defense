@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <g transform="rotate(90 16 16)">
+    <!-- Frame 1: a needle along the beam through a tight ring. -->
+    <polygon points="16,0.3 17.1,9.2 16,13.4 14.9,9.2" fill="#ff9a7a" stroke="#7a1800" stroke-width="0.8" stroke-linejoin="round"/>
+    <circle cx="16" cy="10.2" r="3.8" fill="none" stroke="#7a1800" stroke-width="2.4"/>
+    <circle cx="16" cy="10.2" r="3.8" fill="none" stroke="#ff3300" stroke-width="1.2"/>
+    <circle cx="16" cy="10.2" r="1.7" fill="#ffffff"/>
+  </g>
+</svg>

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <g transform="rotate(90 16 16)">
+    <!-- Frame 1: both flashes. -->
+    <g transform="translate(12.5 0) scale(0.62 1) translate(-16 0)">
+    <polygon points="16,1.2 17.9,7.6 22.4,5 19.2,10.4 16,12.8 12.8,10.4 9.6,5 14.1,7.6" fill="#ff9a2e" stroke="#5a1400" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="16,4.6 17.2,9.4 16,11.6 14.8,9.4" fill="#ffffff"/>
+    </g>
+    <g transform="translate(19.5 0) scale(0.62 1) translate(-16 0)">
+    <polygon points="16,1.2 17.9,7.6 22.4,5 19.2,10.4 16,12.8 12.8,10.4 9.6,5 14.1,7.6" fill="#ff9a2e" stroke="#5a1400" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="16,4.6 17.2,9.4 16,11.6 14.8,9.4" fill="#ffffff"/>
+    </g>
+  </g>
+</svg>

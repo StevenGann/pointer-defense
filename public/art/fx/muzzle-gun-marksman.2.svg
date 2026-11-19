@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <g transform="rotate(90 16 16)">
+    <!-- Frame 2: the needle thins and a shock ring is left across the muzzle. -->
+    <ellipse cx="16" cy="10.4" rx="6" ry="2.2" fill="none" stroke="#7a4a00" stroke-width="2" opacity="0.5"/>
+    <ellipse cx="16" cy="10.4" rx="6" ry="2.2" fill="none" stroke="#ffd75e" stroke-width="1"/>
+    <polygon points="16,0.4 16.9,6 16,9 15.1,6" fill="#ffd75e" stroke="#7a4a00" stroke-width="0.8" stroke-linejoin="round"/>
+  </g>
+</svg>

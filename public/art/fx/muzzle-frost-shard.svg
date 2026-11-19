@@ -1,7 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Placeholder fire effect for frost-shard. Drawn pointing up; the renderer rotates it to the shot's
-       heading. Replace with the tower's identity colour and silhouette — the artist's file wins. -->
-  <path d="M16 3 L20 15 L16 12 L12 15 Z" fill="#ffffff"/>
-  <path d="M8 26 L13 16 L15 22 Z" fill="#bfe9ff"/>
-  <path d="M24 26 L19 16 L17 22 Z" fill="#bfe9ff"/>
+  <g transform="rotate(90 16 16)">
+    <!-- Shard fire, pointing right (+x). Three blades of ice leave the tower. Frame 0: at the tower. -->
+    <g fill="#e8f8ff" stroke="#0c4466" stroke-width="0.8" stroke-linejoin="round">
+      <polygon points="0,-5.5 1.7,1 0,3.2 -1.7,1" transform="translate(12.6 16) rotate(-26)"/>
+      <polygon points="0,-5.5 1.7,1 0,3.2 -1.7,1" transform="translate(19.4 16) rotate(26)"/>
+      <polygon points="0,-5.5 1.7,1 0,3.2 -1.7,1" transform="translate(16 14)"/>
+    </g>
+  </g>
 </svg>

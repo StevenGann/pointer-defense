@@ -176,14 +176,19 @@ enemy's colour and nine near-identical files would be worse than one.
 
 | File | Represents |
 |---|---|
-| `muzzle-gun.svg` | the gun's bright wedge, tip ahead along the barrel |
-| `muzzle-cannon.svg` | a round puff: white outer, maroon core (the cannon's colour) |
-| `muzzle-frost.svg` | the same puff in the frost colour (ice-blue core) |
-| `muzzle-laser.svg` | the cross spark: two perpendicular white lines |
-| `muzzle-taser.svg` | the short arc flicker around the aim direction |
-| `spark-hit.svg` | three short radiating lines from a hit |
-| `shield-arc.svg` | the 270-degree cyan arc, scaled to the hit radius |
-| `death-ring.svg` | the expanding ring with three shards; white, tinted to the enemy's colour |
+| `muzzle-gun.svg` | a yellow three-tongue flash at the barrel tip (3 frames: ignition, flash, sparks and a smoke ring) |
+| `muzzle-cannon.svg` | an orange fireball (4 frames: white-hot ball, fireball, flame ring, smoke) |
+| `muzzle-frost.svg` | an ice sparkle (3 frames: one crystal, a six-point sparkle over mist, snow) |
+| `muzzle-laser.svg` | a lens flare on the crystal tip (3 frames: small star, long flare, afterglow ring) |
+| `muzzle-taser.svg` | a yellow bolt from the coil (3 frames, a different bolt in each, so it flickers) |
+| `muzzle-aa.svg` | the gun flash twice, one for each barrel (3 frames) |
+| `muzzle-cursor.svg` | six rays round the click point (a still: the engine draws frame 0 only, at half a cell) |
+| `spark-hit.svg` | a four-point star that bursts and scatters (4 frames, one per tick) |
+| `shield-arc.svg` | the 270-degree cyan arc (2 frames: the bright arc, then a wider broken ripple) |
+| `death-ring.svg` | the ring with three shards (3 frames: whole, cracked into six plates, slivers); white, tinted to the enemy's colour; the ring radius is 12 and the engine scales from it |
+
+Every branch has its own fire effect as well; the full list is under "Fire effects, mines and
+projectiles" below.
 
 ### `ui/`
 
@@ -220,8 +225,12 @@ Every tower that fires something has a fire-effect file: the muzzle flash at the
   `muzzle-cursor-wide-search`, `muzzle-cursor-maintenance`.
 - **Resolution order**: branch file, then kind file, then the old procedural flash. Deleting a branch
   file falls back to the kind's; deleting the kind's falls back to code.
-- **Drawing convention**: the file is drawn **pointing up**; the renderer rotates it to the shot's
-  heading. Keep the bright core at the centre so it reads at every angle.
+- **Drawing convention**: the file is drawn **pointing right (+x)**; the renderer sets the sprite's
+  rotation to the shot's angle, where 0 is +x. This is not the projectile convention below, which is
+  "pointing up". The renderer centres the sprite a quarter of a cell ahead of the tower centre, so in
+  the 32×32 box the tower centre is at (8,16) and a barrel tip is at about (21,16): start the flash
+  there. The cursor files are the exception: they are not rotated, and the renderer draws frame 0
+  only, at half a cell, on the click point.
 - **Timing**: a single-frame file flashes for two simulation ticks. Give the asset numbered frames
   (`muzzle-gun.1.svg`, `muzzle-gun.2.svg`, …) and it plays the whole sequence instead — see
   "Animating an asset" for the `.json` fps/hold rules. A 4-frame, 30 fps flash lives about 133 ms.

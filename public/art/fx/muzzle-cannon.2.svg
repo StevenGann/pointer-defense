@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <g transform="rotate(90 16 16)">
+    <!-- Frame 2: the fireball opens into a ring of flame round a core of smoke. -->
+    <defs><g id="f"><circle cx="16" cy="6.2" r="6.2"/><circle cx="10.6" cy="9.8" r="3.2"/><circle cx="21.4" cy="9.8" r="3.2"/><circle cx="16" cy="1.9" r="1.9"/></g></defs>
+    <use href="#f" fill="#5a1400" stroke="#5a1400" stroke-width="1.8" stroke-linejoin="round"/>
+    <use href="#f" fill="#e8701a"/>
+    <circle cx="16" cy="6.6" r="3.8" fill="#8a8a8a"/>
+    <circle cx="14.8" cy="5.4" r="1.5" fill="#b4b4b4"/>
+  </g>
+</svg>

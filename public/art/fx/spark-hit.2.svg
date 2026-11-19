@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Frame 2: the points leave the centre. -->
+  <g transform="rotate(22.9 16 16)" fill="#ffffff" stroke="#3a3a3a" stroke-width="0.7" stroke-linejoin="round">
+    <polygon points="16,6 17,10.6 15,10.6"/><polygon points="16,6 17,10.6 15,10.6" transform="rotate(90 16 16)"/>
+    <polygon points="16,6 17,10.6 15,10.6" transform="rotate(180 16 16)"/><polygon points="16,6 17,10.6 15,10.6" transform="rotate(270 16 16)"/>
+    <polygon points="16.00,8.10 17.05,9.60 16.00,11.10 14.95,9.60" fill="#ffe28a" transform="rotate(45 16 16)"/><polygon points="16.00,8.10 17.05,9.60 16.00,11.10 14.95,9.60" fill="#ffe28a" transform="rotate(135 16 16)"/>
+    <polygon points="16.00,8.10 17.05,9.60 16.00,11.10 14.95,9.60" fill="#ffe28a" transform="rotate(225 16 16)"/><polygon points="16.00,8.10 17.05,9.60 16.00,11.10 14.95,9.60" fill="#ffe28a" transform="rotate(315 16 16)"/>
+  </g>
+</svg>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <g transform="rotate(90 16 16)">
+    <g transform="translate(0 4)">
+      <!-- Frame 1: an eight-point burst. -->
+      <polygon points="16,3 17.91,10.38 24.49,6.51 20.62,13.09 28,15 20.62,16.91 24.49,23.49 17.91,19.62 16,27 14.09,19.62 7.51,23.49 11.38,16.91 4,15 11.38,13.09 7.51,6.51 14.09,10.38" fill="#ffff00" stroke="#4c4c00" stroke-width="0.9" stroke-linejoin="round"/>
+      <polygon points="16,3 17.91,10.38 24.49,6.51 20.62,13.09 28,15 20.62,16.91 24.49,23.49 17.91,19.62 16,27 14.09,19.62 7.51,23.49 11.38,16.91 4,15 11.38,13.09 7.51,6.51 14.09,10.38" fill="#ffffff" transform="translate(16 15) scale(0.5) translate(-16 -15)"/>
+    </g>
+  </g>
+</svg>

@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Placeholder fire effect for gun-marksman. Drawn pointing up; the renderer rotates it to the shot's
-       heading. Replace with the tower's identity colour and silhouette — the artist's file wins. -->
-  <rect x="15" y="0.5" width="2" height="18" fill="#ffffff"/>
-  <circle cx="16" cy="16" r="2.5" fill="#ffe28a"/>
+  <g transform="rotate(90 16 16)">
+    <!-- Marksman fire, pointing right (+x). Frame 0: a tight needle. -->
+    <polygon points="16,4 17.2,9.4 16,12.4 14.8,9.4" fill="#ffd75e" stroke="#7a4a00" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="16,6.6 16.7,9.6 16,11.4 15.3,9.6" fill="#ffffff"/>
+  </g>
 </svg>

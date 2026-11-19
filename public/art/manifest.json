@@ -722,31 +722,87 @@
     },
     {
       "name": "fx/death-ring",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 8,
+        "loop": "loop",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-aa",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-aa-flak",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-aa-missile",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-cannon",
-      "frames": 1
+      "frames": 4,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-cannon-minesweeper",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-cannon-mortar",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-cursor",
@@ -766,59 +822,171 @@
     },
     {
       "name": "fx/muzzle-frost",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-frost-deep-freeze",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-frost-shard",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-gun",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-gun-marksman",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-gun-repeater",
-      "frames": 1
+      "frames": 2,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-laser",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-laser-focus",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-laser-prism",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-taser",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-taser-arc",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/muzzle-taser-overload",
-      "frames": 1
+      "frames": 3,
+      "anim": {
+        "fps": 30,
+        "loop": "once",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": false,
+        "when": "always"
+      }
     },
     {
       "name": "fx/shield-arc",
-      "frames": 1
+      "frames": 2,
+      "anim": {
+        "fps": 8,
+        "loop": "loop",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "always"
+      }
     },
     {
       "name": "fx/spark-hit",
-      "frames": 1
+      "frames": 4,
+      "anim": {
+        "fps": 8,
+        "loop": "loop",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "always"
+      }
     },
     {
       "name": "mines/mine-armed",

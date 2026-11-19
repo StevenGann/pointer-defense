@@ -1,5 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Placeholder fire effect for taser. Drawn pointing up; the renderer rotates it to the shot's
-       heading. Replace with the tower's identity colour and silhouette — the artist's file wins. -->
-  <path d="M18 2 L11 14 L16 14 L13 26 L22 12 L17 12 Z" fill="#8fd4ff" stroke="#ffffff" stroke-width="1"/>
+  <g transform="rotate(90 16 16)">
+    <!-- Taser fire, pointing right (+x) from the coil. Three frames, three different bolts, so it flickers. -->
+    <path d="M16 21 L13 17 L18 14 L12.5 9.5 L17.5 6.5 L15 2.5" fill="none" stroke="#4c4c00" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 21 L13 17 L18 14 L12.5 9.5 L17.5 6.5 L15 2.5" fill="none" stroke="#ffff00" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 21 L13 17 L18 14 L12.5 9.5 L17.5 6.5 L15 2.5" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
 </svg>

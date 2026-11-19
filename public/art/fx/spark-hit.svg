@@ -1,9 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Three short radiating lines from a hit, 120 degrees apart, matching the old procedural
-       spark's 0.4 rad twist. -->
-  <g stroke="#ffffff" stroke-width="1" stroke-linecap="round" transform="rotate(22.918 16 16)">
-    <line x1="18.8" y1="16" x2="23" y2="16"/>
-    <line x1="18.8" y1="16" x2="23" y2="16" transform="rotate(120 16 16)"/>
-    <line x1="18.8" y1="16" x2="23" y2="16" transform="rotate(240 16 16)"/>
+  <!-- A hit. Frame 0: a small four-point star. The 22.9 degree twist matches the old spark. -->
+  <g transform="rotate(22.9 16 16)">
+    <polygon points="16.00,11.40 17.29,14.71 20.60,16.00 17.29,17.29 16.00,20.60 14.71,17.29 11.40,16.00 14.71,14.71" fill="#ffffff" stroke="#3a3a3a" stroke-width="0.7" stroke-linejoin="round"/>
+    <circle cx="16" cy="16" r="1.2" fill="#ffe28a"/>
   </g>
 </svg>

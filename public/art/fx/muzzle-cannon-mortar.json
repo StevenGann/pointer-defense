@@ -1,0 +1,8 @@
+{
+  "fps": 30,
+  "loop": "once",
+  "hold": 0,
+  "holdAfter": 0,
+  "randomStart": false,
+  "when": "always"
+}
