@@ -800,6 +800,21 @@ function dashedCircle(g: Graphics, cx: number, cy: number, r: number, color: num
   }
 }
 
+/** A 1px dotted line: 2px on, 3px off. Ties a drifting sprite to the thing it belongs to. */
+function dottedLine(g: Graphics, x1: number, y1: number, x2: number, y2: number, color: number): void {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const len = Math.hypot(dx, dy);
+  if (len < 1) return;
+  const step = 5;
+  for (let d = 0; d < len; d += step) {
+    const t0 = d / len;
+    const t1 = Math.min(1, (d + 2) / len);
+    g.moveTo(x1 + dx * t0, y1 + dy * t0).lineTo(x1 + dx * t1, y1 + dy * t1);
+  }
+  g.stroke({ width: 1, color });
+}
+
 function drawTower(
   baseSprite: Sprite,
   turretSprite: Sprite,
@@ -1117,6 +1132,15 @@ export function cursorRingCentre(
   return { x: board.x + t.cursorX * cell, y: board.y + t.cursorY * cell };
 }
 
+/** Where a Cursor tower's range ring is centred: the tower's own base tile. */
+export function cursorLeashCentre(
+  t: Tower,
+  board: { x: number; y: number; cell: number },
+  cell: number,
+): { x: number; y: number } {
+  return { x: board.x + (t.col + 0.5) * cell, y: board.y + (t.row + 0.5) * cell };
+}
+
 function drawTowerRange(
   g: Graphics,
   t: Tower,
@@ -1127,8 +1151,12 @@ function drawTowerRange(
   const cx = board.x + (t.col + 0.5) * cell;
   const cy = board.y + (t.row + 0.5) * cell;
   if (t.kind === 'cursor') {
+    // The ring is the leash: how far this tower's cursor may wander from its base. The tether shows
+    // where the cursor is on that leash right now, so the pair reads as one tower, not two.
+    const home = cursorLeashCentre(t, board, cell);
     const c = cursorRingCentre(t, board, cell);
-    dashedCircle(g, c.x, c.y, cursorRadius(t) * cell, PAL.navy, 1);
+    dashedCircle(g, home.x, home.y, cursorRadius(t) * cell, PAL.navy, 1);
+    dottedLine(g, home.x, home.y, c.x, c.y, PAL.navy);
     return;
   }
   if (t.kind === 'repair') {

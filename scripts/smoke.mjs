@@ -118,7 +118,7 @@ import {
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
 import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName } from '../src/view/tooltipText.ts';
-import { BoardView, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre } from '../src/view/board.ts';
+import { BoardView, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
 import { computeHud, computeRightPanel, hudControlAt, textWidth } from '../src/view/hud.ts';
@@ -975,7 +975,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(paletteTooltipLines('beacon').some((l) => l.includes('Cursors')), 'the palette warns that Cursors take nothing');
 }
 {
-  // 46z. A Cursor tower's range ring is centred on its own cursor, not on the tower tile.
+  // 46z. A Cursor tower's ring is centred on its base tile; a dotted tether runs from base to cursor.
   const s = allUnlocked();
   s.economy.salvage = 100000;
   s.phase = 'wave';
@@ -985,9 +985,11 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   t.cursorY = 4.5;
   const board = { x: 100, y: 50, cell: 20 };
   const c = cursorRingCentre(t, board, 20);
-  check(c.x === 250 && c.y === 140, `the cursor ring follows the cursor (${c.x}, ${c.y})`);
-  const towerCentre = { x: board.x + (5 + 0.5) * 20, y: board.y + (5 + 0.5) * 20 };
-  check(c.x !== towerCentre.x || c.y !== towerCentre.y, 'the ring is not drawn on the tower tile');
+  check(c.x === 250 && c.y === 140, `the cursor tether runs to the cursor (${c.x}, ${c.y})`);
+  const home = cursorLeashCentre(t, board, 20);
+  check(home.x === 210 && home.y === 160, `the cursor range ring is centred on the tower base (${home.x}, ${home.y})`);
+  check(c.x !== home.x || c.y !== home.y, 'the tether has a length, so base and cursor are distinguishable');
+  check(cursorRadius(t) > 0, 'the ring has a radius: the distance the cursor may wander from its base');
   // The art size the game draws a tower's cursor at matches the player's own arrow.
   check(CURSOR_ARROW_PX === 16, 'a tower cursor is drawn at the same size as the player pointer');
 }
