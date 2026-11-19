@@ -14,6 +14,7 @@
 //   node scripts/art-manifest.mjs            # scan and write public/art/manifest.json
 
 import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -36,6 +37,21 @@ function parseFrame(rel) {
 /** A relative path with forward slashes and no `.svg` suffix. */
 function baseName(rel) {
   return rel.replace(/\.svg$/, '');
+}
+
+/**
+ * A short content hash of every file that makes up an asset (all frames plus the `.json`). The
+ * runtime appends it to each request, so a replaced file is fetched fresh instead of being served
+ * from the CDN's four-hour cache under the name it already had.
+ */
+function assetRev(artDir, base, count) {
+  const hash = createHash('sha1');
+  for (let i = 0; i < count; i++) {
+    hash.update(readFileSync(join(artDir, i === 0 ? `${base}.svg` : `${base}.${i}.svg`)));
+  }
+  const jsonPath = join(artDir, `${base}.json`);
+  if (existsSync(jsonPath)) hash.update(readFileSync(jsonPath));
+  return hash.digest('hex').slice(0, 10);
 }
 
 /**
@@ -198,7 +214,7 @@ export function scanArt(artDir = ART_DIR) {
       for (let i = 1; i <= max; i++) {
         warnings.push(`${base}.${i}.svg will never play: ${reason}`);
       }
-      assets.push({ name: base, frames: 1 });
+      assets.push({ name: base, frames: 1, rev: assetRev(artDir, base, max + 1) });
       continue;
     }
 
@@ -218,12 +234,12 @@ export function scanArt(artDir = ART_DIR) {
       if (existsSync(join(artDir, `${base}.json`))) {
         warnings.push(`${base}.json: animation metadata ignored (${base}.svg has no numbered frames)`);
       }
-      assets.push({ name: base, frames: 1 });
+      assets.push({ name: base, frames: 1, rev: assetRev(artDir, base, 1) });
       continue;
     }
 
     const meta = readMetadata(artDir, base, (msg) => errors.push(msg), (msg) => warnings.push(msg));
-    assets.push({ name: base, frames: count, anim: meta ? meta.anim : { ...DEFAULTS } });
+    assets.push({ name: base, frames: count, anim: meta ? meta.anim : { ...DEFAULTS }, rev: assetRev(artDir, base, count) });
   }
 
   return { assets, warnings, errors };

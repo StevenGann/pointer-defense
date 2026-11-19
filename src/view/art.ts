@@ -213,6 +213,12 @@ export function artUrl(file: string): string {
   return `${base}art/${file}`;
 }
 
+/** An asset file URL carrying its content hash, so a replaced file is never served from cache. */
+export function artFileUrl(file: string, rev?: string): string {
+  const url = artUrl(file);
+  return rev ? `${url}?v=${rev}` : url;
+}
+
 /** The exact device-pixel size to rasterise a `logicalPx` asset at for a given ratio. */
 export function rasterPixelSize(logicalPx: number, dpr: number): number {
   return Math.max(1, Math.round(logicalPx * dpr));
@@ -243,6 +249,12 @@ export interface ManifestAsset {
   readonly frames: number;
   /** Animation metadata; present only for animated assets. */
   readonly anim?: AnimMeta;
+  /**
+   * A short content hash of the asset's files, used as a cache-busting query. Art keeps its name
+   * when the artist replaces it, and the CDN serves `/art/**` with a four-hour `max-age`, so without
+   * a version a returning player keeps their first copy of an icon for the rest of the day.
+   */
+  readonly rev?: string;
 }
 
 /** The bare asset name (the part after the last `/`) used by every texture lookup. */
@@ -473,8 +485,8 @@ function svgDataUrl(svg: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
 
-async function decodeSvg(file: string): Promise<HTMLImageElement> {
-  const response = await fetch(artUrl(file));
+async function decodeSvg(file: string, rev?: string): Promise<HTMLImageElement> {
+  const response = await fetch(artFileUrl(file, rev));
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
   }
@@ -492,7 +504,7 @@ async function preloadAsset(asset: ManifestAsset): Promise<void> {
   for (let i = 0; i < count; i++) {
     files.push(i === 0 ? `${asset.name}.svg` : `${asset.name}.${i}.svg`);
   }
-  const images = await Promise.all(files.map(decodeSvg));
+  const images = await Promise.all(files.map((file) => decodeSvg(file, asset.rev)));
   svgFrames.set(bareName(asset.name), images);
 }
 
@@ -513,6 +525,36 @@ async function loadManifestAssets(): Promise<ManifestAsset[]> {
 }
 
 /**
+ * How many art files are fetched at once. The assets are tiny, but ~220 simultaneous requests is
+ * more than the browser or the CDN will carry: in a real load 188 of 217 came back as failed
+ * fetches. Six at a time matches the per-host connection limit and finishes in about a second.
+ */
+export const PRELOAD_CONCURRENCY = 6;
+
+/** Run `job` over `items`, `limit` at a time, returning the items that threw. */
+async function loadInBatches<T>(
+  items: readonly T[],
+  job: (item: T) => Promise<void>,
+  limit = PRELOAD_CONCURRENCY,
+): Promise<T[]> {
+  const failed: T[] = [];
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    for (;;) {
+      const i = next++;
+      if (i >= items.length) return;
+      try {
+        await job(items[i]);
+      } catch {
+        failed.push(items[i]);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return failed;
+}
+
+/**
  * Load the runtime manifest, then preload every frame of every asset: fetch each SVG, decode it into
  * an `Image`, and store the per-asset frame list. A missing or malformed file logs a warning and
  * leaves the name absent, so `getArtFrames` returns an empty list and the caller's procedural
@@ -522,12 +564,11 @@ async function loadManifestAssets(): Promise<ManifestAsset[]> {
 export async function preloadArt(): Promise<void> {
   const assets = await loadManifestAssets();
   applyManifest(assets);
-  const results = await Promise.allSettled(assets.map(preloadAsset));
-  results.forEach((result, i) => {
-    if (result.status === 'rejected') {
-      const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
-      console.warn(`[art] failed to load ${assets[i].name}: ${reason}`);
-    }
-  });
+  const first = await loadInBatches(assets, preloadAsset);
+  // One sequential retry. A burst of requests can have a few connections dropped by the browser or
+  // the CDN, and a dropped asset keeps its procedural fallback for the whole session — which is how
+  // the achievement grid came to show a wall of placeholders over art that was sitting on disk.
+  const second = first.length > 0 ? await loadInBatches(first, preloadAsset) : [];
+  for (const asset of second) console.warn(`[art] failed to load ${asset.name}`);
   scheduleArtInvalidate();
 }

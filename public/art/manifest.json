@@ -2,555 +2,693 @@
   "assets": [
     {
       "name": "achievements/_placeholder",
-      "frames": 1
+      "frames": 1,
+      "rev": "2a4711d9aa"
     },
     {
       "name": "achievements/aa-flak",
-      "frames": 1
+      "frames": 1,
+      "rev": "f1900722df"
     },
     {
       "name": "achievements/ad-collector",
-      "frames": 1
+      "frames": 1,
+      "rev": "8515103eb5"
     },
     {
       "name": "achievements/ad-ignore",
-      "frames": 1
+      "frames": 1,
+      "rev": "cb257b1df2"
     },
     {
       "name": "achievements/all-help",
-      "frames": 1
+      "frames": 1,
+      "rev": "9ef62350e0"
     },
     {
       "name": "achievements/beacon-buff",
-      "frames": 1
+      "frames": 1,
+      "rev": "23c5ad0cc9"
     },
     {
       "name": "achievements/beacon-field",
-      "frames": 1
+      "frames": 1,
+      "rev": "e18fa32dac"
     },
     {
       "name": "achievements/boss-10",
-      "frames": 1
+      "frames": 1,
+      "rev": "1ff23e84e9"
     },
     {
       "name": "achievements/boss-by-pointer",
-      "frames": 1
+      "frames": 1,
+      "rev": "08d2cd2ff6"
     },
     {
       "name": "achievements/boss-first-wave",
-      "frames": 1
+      "frames": 1,
+      "rev": "7303b65950"
     },
     {
       "name": "achievements/boss-no-leak",
-      "frames": 1
+      "frames": 1,
+      "rev": "8d3a24f244"
     },
     {
       "name": "achievements/branch-first",
-      "frames": 1
+      "frames": 1,
+      "rev": "7da71399a7"
     },
     {
       "name": "achievements/cannon-splash",
-      "frames": 1
+      "frames": 1,
+      "rev": "81ca53b02c"
     },
     {
       "name": "achievements/carrier-brood",
-      "frames": 1
+      "frames": 1,
+      "rev": "d35e047d03"
     },
     {
       "name": "achievements/clean-wave",
-      "frames": 1
+      "frames": 1,
+      "rev": "e55ca0e304"
     },
     {
       "name": "achievements/click-combo",
-      "frames": 1
+      "frames": 1,
+      "rev": "4c2c544ea1"
     },
     {
       "name": "achievements/click-idle",
-      "frames": 1
+      "frames": 1,
+      "rev": "178572eb75"
     },
     {
       "name": "achievements/crit-100",
-      "frames": 1
+      "frames": 1,
+      "rev": "2e0f1685ad"
     },
     {
       "name": "achievements/crit-first",
-      "frames": 1
+      "frames": 1,
+      "rev": "dbd53360b1"
     },
     {
       "name": "achievements/crit-hits",
-      "frames": 1
+      "frames": 1,
+      "rev": "60595e1e03"
     },
     {
       "name": "achievements/cursor-first",
-      "frames": 1
+      "frames": 1,
+      "rev": "f2de36ab8d"
     },
     {
       "name": "achievements/cursor-repair",
-      "frames": 1
+      "frames": 1,
+      "rev": "59251fceee"
     },
     {
       "name": "achievements/custom-map-cleared",
-      "frames": 1
+      "frames": 1,
+      "rev": "3cbe83c019"
     },
     {
       "name": "achievements/dreadnought-kill",
-      "frames": 1
+      "frames": 1,
+      "rev": "fd38a8a6fd"
     },
     {
       "name": "achievements/early-call-10",
-      "frames": 1
+      "frames": 1,
+      "rev": "7468717467"
     },
     {
       "name": "achievements/early-call-streak",
-      "frames": 1
+      "frames": 1,
+      "rev": "453d673d5b"
     },
     {
       "name": "achievements/early-call-wave-1",
-      "frames": 1
+      "frames": 1,
+      "rev": "8729e71aec"
     },
     {
       "name": "achievements/earn-100k",
-      "frames": 1
+      "frames": 1,
+      "rev": "2262cda818"
     },
     {
       "name": "achievements/editor-first",
-      "frames": 1
+      "frames": 1,
+      "rev": "500e6a2e8f"
     },
     {
       "name": "achievements/endless-150",
-      "frames": 1
+      "frames": 1,
+      "rev": "27941899b5"
     },
     {
       "name": "achievements/endless-200",
-      "frames": 1
+      "frames": 1,
+      "rev": "fc0bde7609"
     },
     {
       "name": "achievements/fast-boot-40",
-      "frames": 1
+      "frames": 1,
+      "rev": "e7fbc10ead"
     },
     {
       "name": "achievements/first-blood",
-      "frames": 1
+      "frames": 1,
+      "rev": "2d3c37288f"
     },
     {
       "name": "achievements/first-rp",
-      "frames": 1
+      "frames": 1,
+      "rev": "0c6e13fd16"
     },
     {
       "name": "achievements/five-tier-five",
-      "frames": 1
+      "frames": 1,
+      "rev": "09acdd5d6f"
     },
     {
       "name": "achievements/flawless-10",
-      "frames": 1
+      "frames": 1,
+      "rev": "8da02c312f"
     },
     {
       "name": "achievements/flawless-wave",
-      "frames": 1
+      "frames": 1,
+      "rev": "f100382176"
     },
     {
       "name": "achievements/fork-cleared",
-      "frames": 1
+      "frames": 1,
+      "rev": "339f54d323"
     },
     {
       "name": "achievements/frost-lock",
-      "frames": 1
+      "frames": 1,
+      "rev": "ad9d108a26"
     },
     {
       "name": "achievements/idle-hour",
-      "frames": 1
+      "frames": 1,
+      "rev": "1c1344d6c6"
     },
     {
       "name": "achievements/integrity-1",
-      "frames": 1
+      "frames": 1,
+      "rev": "5ef5356056"
     },
     {
       "name": "achievements/ladder-cleared",
-      "frames": 1
+      "frames": 1,
+      "rev": "f49c7b3247"
     },
     {
       "name": "achievements/laser-chain",
-      "frames": 1
+      "frames": 1,
+      "rev": "38119ae7f7"
     },
     {
       "name": "achievements/leak-recovery",
-      "frames": 1
+      "frames": 1,
+      "rev": "de17a5d499"
     },
     {
       "name": "achievements/long-road",
-      "frames": 1
+      "frames": 1,
+      "rev": "8088231ba9"
     },
     {
       "name": "achievements/map-export",
-      "frames": 1
+      "frames": 1,
+      "rev": "6d7bc03f7b"
     },
     {
       "name": "achievements/map-import",
-      "frames": 1
+      "frames": 1,
+      "rev": "67af4ca2e2"
     },
     {
       "name": "achievements/maxed-branch",
-      "frames": 1
+      "frames": 1,
+      "rev": "1efe6ab4d9"
     },
     {
       "name": "achievements/maze-100",
-      "frames": 1
+      "frames": 1,
+      "rev": "6de7cc7f7d"
     },
     {
       "name": "achievements/milestone-boss-pointer",
-      "frames": 1
+      "frames": 1,
+      "rev": "ce994abf75"
     },
     {
       "name": "achievements/mine-layer",
-      "frames": 1
+      "frames": 1,
+      "rev": "aa9435bbf3"
     },
     {
       "name": "achievements/no-cheats-100",
-      "frames": 1
+      "frames": 1,
+      "rev": "2bf1ec08dc"
     },
     {
       "name": "achievements/no-sell",
-      "frames": 1
+      "frames": 1,
+      "rev": "305bcdece9"
     },
     {
       "name": "achievements/no-spend-wave",
-      "frames": 1
+      "frames": 1,
+      "rev": "3e90cd36aa"
     },
     {
       "name": "achievements/no-upgrade-wave",
-      "frames": 1
+      "frames": 1,
+      "rev": "9aca0572de"
     },
     {
       "name": "achievements/one-kind",
-      "frames": 1
+      "frames": 1,
+      "rev": "869c4d96a1"
     },
     {
       "name": "achievements/overclock-max",
-      "frames": 1
+      "frames": 1,
+      "rev": "52fcf62b07"
     },
     {
       "name": "achievements/override",
-      "frames": 1
+      "frames": 1,
+      "rev": "3f535c4b9b"
     },
     {
       "name": "achievements/perfect-run",
-      "frames": 1
+      "frames": 1,
+      "rev": "0bb661c93a"
     },
     {
       "name": "achievements/pointer-1k",
-      "frames": 1
+      "frames": 1,
+      "rev": "44e0089f82"
     },
     {
       "name": "achievements/pointer-boss-10",
-      "frames": 1
+      "frames": 1,
+      "rev": "9ebae0efd3"
     },
     {
       "name": "achievements/pointer-only-wave",
-      "frames": 1
+      "frames": 1,
+      "rev": "0f7770a677"
     },
     {
       "name": "achievements/prestige-25",
-      "frames": 1
+      "frames": 1,
+      "rev": "3f5997ad45"
     },
     {
       "name": "achievements/ram-kill",
-      "frames": 1
+      "frames": 1,
+      "rev": "4170376c76"
     },
     {
       "name": "achievements/reboot-10",
-      "frames": 1
+      "frames": 1,
+      "rev": "621ffc3f29"
     },
     {
       "name": "achievements/reboot-50",
-      "frames": 1
+      "frames": 1,
+      "rev": "e8408cdfaa"
     },
     {
       "name": "achievements/repair-shop",
-      "frames": 1
+      "frames": 1,
+      "rev": "0a73309e2b"
     },
     {
       "name": "achievements/rp-100",
-      "frames": 1
+      "frames": 1,
+      "rev": "41ca47d1b6"
     },
     {
       "name": "achievements/salvage-10k",
-      "frames": 1
+      "frames": 1,
+      "rev": "9ae51c6cd3"
     },
     {
       "name": "achievements/salvage-peak",
-      "frames": 1
+      "frames": 1,
+      "rev": "c8d38814ba"
     },
     {
       "name": "achievements/sell-10",
-      "frames": 1
+      "frames": 1,
+      "rev": "5f6267ed5a"
     },
     {
       "name": "achievements/sell-profit",
-      "frames": 1
+      "frames": 1,
+      "rev": "30b22364e3"
     },
     {
       "name": "achievements/sell-tower-first",
-      "frames": 1
+      "frames": 1,
+      "rev": "ffe7f64874"
     },
     {
       "name": "achievements/shadow-1hp-boss",
-      "frames": 1
+      "frames": 1,
+      "rev": "dcc5718a33"
     },
     {
       "name": "achievements/shadow-ad-no-close",
-      "frames": 1
+      "frames": 1,
+      "rev": "ce37820c44"
     },
     {
       "name": "achievements/shadow-all-walls",
-      "frames": 1
+      "frames": 1,
+      "rev": "588d85284e"
     },
     {
       "name": "achievements/shadow-boots",
-      "frames": 1
+      "frames": 1,
+      "rev": "f01f3090b8"
     },
     {
       "name": "achievements/shadow-broke",
-      "frames": 1
+      "frames": 1,
+      "rev": "f8423a55b6"
     },
     {
       "name": "achievements/shadow-cheat-lose",
-      "frames": 1
+      "frames": 1,
+      "rev": "f479ff2ba6"
     },
     {
       "name": "achievements/shadow-clippy",
-      "frames": 1
+      "frames": 1,
+      "rev": "f5631e3102"
     },
     {
       "name": "achievements/shadow-console",
-      "frames": 1
+      "frames": 1,
+      "rev": "b5e7215cf2"
     },
     {
       "name": "achievements/shadow-drag",
-      "frames": 1
+      "frames": 1,
+      "rev": "2919ebbb5f"
     },
     {
       "name": "achievements/shadow-every-map",
-      "frames": 1
+      "frames": 1,
+      "rev": "1a2d6388b0"
     },
     {
       "name": "achievements/shadow-flat-battery",
-      "frames": 1
+      "frames": 1,
+      "rev": "1a511c391a"
     },
     {
       "name": "achievements/shadow-help-clippy",
-      "frames": 1
+      "frames": 1,
+      "rev": "8204ce4f66"
     },
     {
       "name": "achievements/shadow-hover",
-      "frames": 1
+      "frames": 1,
+      "rev": "88cec009d6"
     },
     {
       "name": "achievements/shadow-monochrome",
-      "frames": 1
+      "frames": 1,
+      "rev": "7562e2e77a"
     },
     {
       "name": "achievements/shadow-mute",
-      "frames": 1
+      "frames": 1,
+      "rev": "ddfee04644"
     },
     {
       "name": "achievements/shadow-owl",
-      "frames": 1
+      "frames": 1,
+      "rev": "6f0a7d489a"
     },
     {
       "name": "achievements/shadow-pause",
-      "frames": 1
+      "frames": 1,
+      "rev": "cc0e9ed77b"
     },
     {
       "name": "achievements/shadow-perfect-100",
-      "frames": 1
+      "frames": 1,
+      "rev": "343241a055"
     },
     {
       "name": "achievements/shadow-printer",
-      "frames": 1
+      "frames": 1,
+      "rev": "2f55af6bc6"
     },
     {
       "name": "achievements/shadow-reload",
-      "frames": 1
+      "frames": 1,
+      "rev": "9861c6df1b"
     },
     {
       "name": "achievements/shadow-resize",
-      "frames": 1
+      "frames": 1,
+      "rev": "d66b4589e1"
     },
     {
       "name": "achievements/shadow-sell-all",
-      "frames": 1
+      "frames": 1,
+      "rev": "f557dc84a5"
     },
     {
       "name": "achievements/shadow-tooltip",
-      "frames": 1
+      "frames": 1,
+      "rev": "b39664e4d2"
     },
     {
       "name": "achievements/shadow-weekend",
-      "frames": 1
+      "frames": 1,
+      "rev": "448265a3ac"
     },
     {
       "name": "achievements/shadow-zero-towers",
-      "frames": 1
+      "frames": 1,
+      "rev": "8468efb91b"
     },
     {
       "name": "achievements/sharpshooter",
-      "frames": 1
+      "frames": 1,
+      "rev": "393f5a1ace"
     },
     {
       "name": "achievements/shield-break-5",
-      "frames": 1
+      "frames": 1,
+      "rev": "0ea8e7d889"
     },
     {
       "name": "achievements/specs-banked",
-      "frames": 1
+      "frames": 1,
+      "rev": "561bc6f4bf"
     },
     {
       "name": "achievements/speed-3",
-      "frames": 1
+      "frames": 1,
+      "rev": "2facce5a63"
     },
     {
       "name": "achievements/taser-chain",
-      "frames": 1
+      "frames": 1,
+      "rev": "4dd1eea5b3"
     },
     {
       "name": "achievements/tier-five-first",
-      "frames": 1
+      "frames": 1,
+      "rev": "413c503170"
     },
     {
       "name": "achievements/toggle-master",
-      "frames": 1
+      "frames": 1,
+      "rev": "c6f86ce40a"
     },
     {
       "name": "achievements/tower-zoo",
-      "frames": 1
+      "frames": 1,
+      "rev": "8cd53d35ed"
     },
     {
       "name": "achievements/tree-complete",
-      "frames": 1
+      "frames": 1,
+      "rev": "4b71b45645"
     },
     {
       "name": "achievements/tree-tier-3",
-      "frames": 1
+      "frames": 1,
+      "rev": "ba7d6e3738"
     },
     {
       "name": "achievements/two-kinds",
-      "frames": 1
+      "frames": 1,
+      "rev": "02a8e0a7ee"
     },
     {
       "name": "achievements/two-reboots",
-      "frames": 1
+      "frames": 1,
+      "rev": "a9a8ce8076"
     },
     {
       "name": "achievements/upgrade-first",
-      "frames": 1
+      "frames": 1,
+      "rev": "08bb460ffc"
     },
     {
       "name": "achievements/wall-only-wave",
-      "frames": 1
+      "frames": 1,
+      "rev": "63b8713b66"
     },
     {
       "name": "achievements/wave-1-no-damage",
-      "frames": 1
+      "frames": 1,
+      "rev": "294e1b179a"
     },
     {
       "name": "achievements/wave-100",
-      "frames": 1
+      "frames": 1,
+      "rev": "ff37ccfe83"
     },
     {
       "name": "achievements/wave-25",
-      "frames": 1
+      "frames": 1,
+      "rev": "81d6cf7fce"
     },
     {
       "name": "achievements/wave-50",
-      "frames": 1
+      "frames": 1,
+      "rev": "3ed268710d"
     },
     {
       "name": "achievements/weak-point-10",
-      "frames": 1
+      "frames": 1,
+      "rev": "5a7b371186"
     },
     {
       "name": "achievements/weak-point-kills",
-      "frames": 1
+      "frames": 1,
+      "rev": "11da749fa8"
     },
     {
       "name": "achievements/wirecutter-kill",
-      "frames": 1
+      "frames": 1,
+      "rev": "676f05e926"
     },
     {
       "name": "board/block",
-      "frames": 1
+      "frames": 1,
+      "rev": "8c16f25b71"
     },
     {
       "name": "board/obstacle",
-      "frames": 1
+      "frames": 1,
+      "rev": "75c6e99c0a"
     },
     {
       "name": "board/path-tile",
-      "frames": 1
+      "frames": 1,
+      "rev": "9215e49574"
     },
     {
       "name": "board/tile",
-      "frames": 1
+      "frames": 1,
+      "rev": "8679fed89b"
     },
     {
       "name": "branches/beacon-command",
-      "frames": 1
+      "frames": 1,
+      "rev": "7f4805be57"
     },
     {
       "name": "branches/beacon-relay",
-      "frames": 1
+      "frames": 1,
+      "rev": "0b98b39def"
     },
     {
       "name": "branches/cannon-minesweeper",
-      "frames": 1
+      "frames": 1,
+      "rev": "23414c4979"
     },
     {
       "name": "branches/cannon-mortar",
-      "frames": 1
+      "frames": 1,
+      "rev": "2609673319"
     },
     {
       "name": "branches/cursor-maintenance",
-      "frames": 1
+      "frames": 1,
+      "rev": "5feacc260b"
     },
     {
       "name": "branches/cursor-overclock",
-      "frames": 1
+      "frames": 1,
+      "rev": "39803bd230"
     },
     {
       "name": "branches/cursor-wide-search",
-      "frames": 1
+      "frames": 1,
+      "rev": "c38b3ab459"
     },
     {
       "name": "branches/frost-deep-freeze",
-      "frames": 1
+      "frames": 1,
+      "rev": "8665811adf"
     },
     {
       "name": "branches/frost-shard",
-      "frames": 1
+      "frames": 1,
+      "rev": "8fc454ccc0"
     },
     {
       "name": "branches/gun-marksman",
-      "frames": 1
+      "frames": 1,
+      "rev": "0e9135b061"
     },
     {
       "name": "branches/gun-repeater",
-      "frames": 1
+      "frames": 1,
+      "rev": "90d58140db"
     },
     {
       "name": "branches/laser-focus",
-      "frames": 1
+      "frames": 1,
+      "rev": "c113fab020"
     },
     {
       "name": "branches/laser-prism",
-      "frames": 1
+      "frames": 1,
+      "rev": "8a139c6c4e"
     },
     {
       "name": "branches/taser-arc",
-      "frames": 1
+      "frames": 1,
+      "rev": "bac01e72c2"
     },
     {
       "name": "branches/taser-overload",
-      "frames": 1
+      "frames": 1,
+      "rev": "cf985d5698"
     },
     {
       "name": "enemies/armoured",
@@ -562,7 +700,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
-      }
+      },
+      "rev": "eb8718980e"
     },
     {
       "name": "enemies/armoured-boss",
@@ -574,7 +713,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
-      }
+      },
+      "rev": "42a46f4922"
     },
     {
       "name": "enemies/breacher",
@@ -586,7 +726,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
-      }
+      },
+      "rev": "9f7542081d"
     },
     {
       "name": "enemies/breacher-boss",
@@ -598,7 +739,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "always"
-      }
+      },
+      "rev": "7e147314ff"
     },
     {
       "name": "enemies/flyer",
@@ -610,7 +752,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
-      }
+      },
+      "rev": "581ba5a755"
     },
     {
       "name": "enemies/flyer-boss",
@@ -622,7 +765,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
-      }
+      },
+      "rev": "d0ca19f06e"
     },
     {
       "name": "enemies/grunt",
@@ -634,7 +778,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
-      }
+      },
+      "rev": "a61ebe3e5d"
     },
     {
       "name": "enemies/grunt-boss",
@@ -646,7 +791,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
-      }
+      },
+      "rev": "2cb14c493e"
     },
     {
       "name": "enemies/runner",
@@ -658,7 +804,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
-      }
+      },
+      "rev": "8e90616f78"
     },
     {
       "name": "enemies/runner-boss",
@@ -670,7 +817,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
-      }
+      },
+      "rev": "9b4608b720"
     },
     {
       "name": "enemies/saboteur",
@@ -682,7 +830,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
-      }
+      },
+      "rev": "ca79d4fd12"
     },
     {
       "name": "enemies/saboteur-boss",
@@ -694,7 +843,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
-      }
+      },
+      "rev": "e22e6c4ff2"
     },
     {
       "name": "enemies/shielded",
@@ -706,7 +856,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
-      }
+      },
+      "rev": "dc2c2c6001"
     },
     {
       "name": "enemies/shielded-boss",
@@ -718,7 +869,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
-      }
+      },
+      "rev": "08c88b587a"
     },
     {
       "name": "fx/death-ring",
@@ -730,7 +882,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "always"
-      }
+      },
+      "rev": "d53710b1dc"
     },
     {
       "name": "fx/muzzle-aa",
@@ -742,7 +895,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "a348de8767"
     },
     {
       "name": "fx/muzzle-aa-flak",
@@ -754,7 +908,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "5e129c4337"
     },
     {
       "name": "fx/muzzle-aa-missile",
@@ -766,7 +921,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "3b3237b0e6"
     },
     {
       "name": "fx/muzzle-cannon",
@@ -778,7 +934,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "084d24b6e0"
     },
     {
       "name": "fx/muzzle-cannon-minesweeper",
@@ -790,7 +947,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "b85d882677"
     },
     {
       "name": "fx/muzzle-cannon-mortar",
@@ -802,23 +960,28 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "dc89702fef"
     },
     {
       "name": "fx/muzzle-cursor",
-      "frames": 1
+      "frames": 1,
+      "rev": "563d1a8d0a"
     },
     {
       "name": "fx/muzzle-cursor-maintenance",
-      "frames": 1
+      "frames": 1,
+      "rev": "e582f38db3"
     },
     {
       "name": "fx/muzzle-cursor-overclock",
-      "frames": 1
+      "frames": 1,
+      "rev": "4088a6f478"
     },
     {
       "name": "fx/muzzle-cursor-wide-search",
-      "frames": 1
+      "frames": 1,
+      "rev": "4ac7e561f7"
     },
     {
       "name": "fx/muzzle-frost",
@@ -830,7 +993,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "555bf0c371"
     },
     {
       "name": "fx/muzzle-frost-deep-freeze",
@@ -842,7 +1006,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "de5d5ee611"
     },
     {
       "name": "fx/muzzle-frost-shard",
@@ -854,7 +1019,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "00764dfcd7"
     },
     {
       "name": "fx/muzzle-gun",
@@ -866,7 +1032,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "ff9cfcd5b9"
     },
     {
       "name": "fx/muzzle-gun-marksman",
@@ -878,7 +1045,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "2292c52c9c"
     },
     {
       "name": "fx/muzzle-gun-repeater",
@@ -890,7 +1058,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "4896157c1a"
     },
     {
       "name": "fx/muzzle-laser",
@@ -902,7 +1071,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "a547eabcc4"
     },
     {
       "name": "fx/muzzle-laser-focus",
@@ -914,7 +1084,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "f7818eeba3"
     },
     {
       "name": "fx/muzzle-laser-prism",
@@ -926,7 +1097,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "8a1c6236da"
     },
     {
       "name": "fx/muzzle-taser",
@@ -938,7 +1110,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "48396e71c9"
     },
     {
       "name": "fx/muzzle-taser-arc",
@@ -950,7 +1123,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "b6688b5f86"
     },
     {
       "name": "fx/muzzle-taser-overload",
@@ -962,7 +1136,8 @@
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
-      }
+      },
+      "rev": "9dca564c28"
     },
     {
       "name": "fx/shield-arc",
@@ -974,7 +1149,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "always"
-      }
+      },
+      "rev": "3b7a9b7bf7"
     },
     {
       "name": "fx/spark-hit",
@@ -986,7 +1162,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "always"
-      }
+      },
+      "rev": "e1dc4a2141"
     },
     {
       "name": "mines/mine-armed",
@@ -998,11 +1175,13 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "always"
-      }
+      },
+      "rev": "9966a3f9c9"
     },
     {
       "name": "mines/mine-unarmed",
-      "frames": 1
+      "frames": 1,
+      "rev": "46499f44c1"
     },
     {
       "name": "projectiles/missile",
@@ -1014,7 +1193,8 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "always"
-      }
+      },
+      "rev": "e0d6aa4485"
     },
     {
       "name": "projectiles/shell",
@@ -1026,151 +1206,188 @@
         "holdAfter": 0,
         "randomStart": true,
         "when": "always"
-      }
+      },
+      "rev": "2f00efd274"
     },
     {
       "name": "towers/aa-base",
-      "frames": 1
+      "frames": 1,
+      "rev": "8872cb9881"
     },
     {
       "name": "towers/aa-turret",
-      "frames": 1
+      "frames": 1,
+      "rev": "6ff308ade9"
     },
     {
       "name": "towers/beacon-base",
-      "frames": 1
+      "frames": 1,
+      "rev": "bbc658ec51"
     },
     {
       "name": "towers/cannon-base",
-      "frames": 1
+      "frames": 1,
+      "rev": "0242743761"
     },
     {
       "name": "towers/cannon-turret",
-      "frames": 1
+      "frames": 1,
+      "rev": "e94c53257e"
     },
     {
       "name": "towers/cursor-base",
-      "frames": 1
+      "frames": 1,
+      "rev": "17ff7d1177"
     },
     {
       "name": "towers/frost-base",
-      "frames": 1
+      "frames": 1,
+      "rev": "4492d5e79a"
     },
     {
       "name": "towers/frost-turret",
-      "frames": 1
+      "frames": 1,
+      "rev": "f1484f9282"
     },
     {
       "name": "towers/gun-base",
-      "frames": 1
+      "frames": 1,
+      "rev": "31740bc76e"
     },
     {
       "name": "towers/gun-turret",
-      "frames": 1
+      "frames": 1,
+      "rev": "0626c0e697"
     },
     {
       "name": "towers/laser-base",
-      "frames": 1
+      "frames": 1,
+      "rev": "aa4b33bbf1"
     },
     {
       "name": "towers/laser-turret",
-      "frames": 1
+      "frames": 1,
+      "rev": "4256dafd83"
     },
     {
       "name": "towers/repair-base",
-      "frames": 1
+      "frames": 1,
+      "rev": "6a12b76aaf"
     },
     {
       "name": "towers/taser-base",
-      "frames": 1
+      "frames": 1,
+      "rev": "aa3957d653"
     },
     {
       "name": "towers/taser-turret",
-      "frames": 1
+      "frames": 1,
+      "rev": "10730cc912"
     },
     {
       "name": "ui/arrow-left",
-      "frames": 1
+      "frames": 1,
+      "rev": "381a358f90"
     },
     {
       "name": "ui/arrow-right",
-      "frames": 1
+      "frames": 1,
+      "rev": "2bc9d3f4ff"
     },
     {
       "name": "ui/check",
-      "frames": 1
+      "frames": 1,
+      "rev": "504dca6c57"
     },
     {
       "name": "ui/cursor-arrow",
-      "frames": 1
+      "frames": 1,
+      "rev": "a96d2bdd81"
     },
     {
       "name": "ui/glyph-close",
-      "frames": 1
+      "frames": 1,
+      "rev": "af19bb5a37"
     },
     {
       "name": "ui/glyph-maximize",
-      "frames": 1
+      "frames": 1,
+      "rev": "a3617af6e5"
     },
     {
       "name": "ui/glyph-minimize",
-      "frames": 1
+      "frames": 1,
+      "rev": "e15be0cb70"
     },
     {
       "name": "ui/offline-wrench",
-      "frames": 1
+      "frames": 1,
+      "rev": "7f9557c244"
     },
     {
       "name": "ui/shutter-closed",
-      "frames": 1
+      "frames": 1,
+      "rev": "4b7f6fb0d9"
     },
     {
       "name": "ui/shutter-open",
-      "frames": 1
+      "frames": 1,
+      "rev": "a92530c987"
     },
     {
       "name": "wall/wall-bulwark",
-      "frames": 1
+      "frames": 1,
+      "rev": "2cff09ff6d"
     },
     {
       "name": "wall/wall-damaged-1",
-      "frames": 1
+      "frames": 1,
+      "rev": "97876a38e8"
     },
     {
       "name": "wall/wall-damaged-2",
-      "frames": 1
+      "frames": 1,
+      "rev": "174323a722"
     },
     {
       "name": "wall/wall-damaged-3",
-      "frames": 1
+      "frames": 1,
+      "rev": "abd7b38189"
     },
     {
       "name": "wall/wall-mesh",
-      "frames": 1
+      "frames": 1,
+      "rev": "3a5107f844"
     },
     {
       "name": "wall/wall-repairing",
-      "frames": 1
+      "frames": 1,
+      "rev": "a45ab2136b"
     },
     {
       "name": "wall/wall-t1",
-      "frames": 1
+      "frames": 1,
+      "rev": "f3826fb11e"
     },
     {
       "name": "wall/wall-t2",
-      "frames": 1
+      "frames": 1,
+      "rev": "738ad1ae2a"
     },
     {
       "name": "wall/wall-t3",
-      "frames": 1
+      "frames": 1,
+      "rev": "d861ce0be6"
     },
     {
       "name": "wall/wall-t4",
-      "frames": 1
+      "frames": 1,
+      "rev": "890e3c9ae6"
     },
     {
       "name": "wall/wall-t5",
-      "frames": 1
+      "frames": 1,
+      "rev": "ea24275b21"
     }
   ]
 }

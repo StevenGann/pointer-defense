@@ -167,9 +167,12 @@ import {
   resetArt,
   injectArtTexture,
   onArtInvalidate,
+  artFileUrl,
+  PRELOAD_CONCURRENCY,
 } from '../src/view/art.ts';
 import { Texture } from 'pixi.js';
 import { readdirSync, existsSync, readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { animFrame, currentAnimFrame, DEFAULT_ANIM, entityOffset } from '../src/view/anim.ts';
@@ -7468,6 +7471,27 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
+}
+
+{
+  // Art is fetched under a content hash, so a replaced SVG is never served from the CDN's cache
+  // under the name it already had. The preloader is bounded too: 217 simultaneous requests had 188
+  // of them dropped, and a dropped asset silently keeps its procedural fallback.
+  const manifest = JSON.parse(readFileSync(new URL('../public/art/manifest.json', import.meta.url), 'utf8'));
+  const assets = manifest.assets;
+  check(assets.length > 100, `the manifest lists every asset (${assets.length})`);
+  const missing = assets.filter((a) => typeof a.rev !== 'string' || a.rev.length < 8);
+  check(missing.length === 0, `every asset carries a content hash (${missing.length} missing)`);
+  check(artFileUrl('achievements/first-blood.svg', 'abc') === '/art/achievements/first-blood.svg?v=abc',
+    'an art URL carries the hash as a cache-buster');
+  check(artFileUrl('achievements/first-blood.svg') === '/art/achievements/first-blood.svg',
+    'without a hash the URL stays bare');
+  check(PRELOAD_CONCURRENCY > 0 && PRELOAD_CONCURRENCY <= 12,
+    `the preloader fetches a few at a time (${PRELOAD_CONCURRENCY})`);
+  const entry = assets.find((a) => a.name === 'achievements/first-blood');
+  const bytes = readFileSync(new URL('../public/art/achievements/first-blood.svg', import.meta.url));
+  const expected = createHash('sha1').update(bytes).digest('hex').slice(0, 10);
+  check(entry.rev === expected, 'the hash is the file content, so new art means a new URL');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
