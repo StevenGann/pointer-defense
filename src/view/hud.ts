@@ -3,7 +3,7 @@ import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from
 import { getArtTexture } from './art.ts';
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
-import { BUFF_NAMES, buffSecondsLeft, hasUpgrade, revealedUpgrades, upgradeBuff, upgradesAvailable } from '../core/upgrades.ts';
+import { BUFF_NAMES, buffSecondsLeft, hasUpgrade, revealedUpgrades, upgradeBuff } from '../core/upgrades.ts';
 import { clickDamage, comboMultiplier, critChance, nextPointerCost, overclockCeiling, pointerInfo } from '../core/pointer.ts';
 import { autoWaveStatus, canCycleLevel, currentPath, cursorMaintenanceStatus, isFinalWave, noBuildActive, NO_BUILD_MESSAGE, overclockCap, pointerDamageMult, selectedTower, STARTING_INTEGRITY, towerCost, towerUnlocked, type RunState } from '../core/state.ts';
 
@@ -192,12 +192,18 @@ export function buffRowText(s: RunState): string | null {
   return b ? `${BUFF_NAMES[b.kind]} — ${buffSecondsLeft(s)} s` : null;
 }
 
-/** The Upgrades row's text: how many revealed upgrades are buyable now, or why none are. */
+/** Revealed upgrades the run does not own yet — affordable or not. Drives the Upgrades row's text
+ *  and its colour, so the two can never disagree. */
+export function upgradesNewCount(s: Pick<RunState, 'wave' | 'upgrades'>): number {
+  return revealedUpgrades(s).filter((d) => !hasUpgrade(s, d.id)).length;
+}
+
+/** The Upgrades row's text: how many revealed upgrades are not owned yet, or why there are none. */
 export function upgradesRowText(s: RunState): string {
-  const revealed = revealedUpgrades(s);
-  if (revealed.length === 0) return 'Upgrades — none yet';
-  if (revealed.every((d) => hasUpgrade(s, d.id))) return 'Upgrades — all owned';
-  return `Upgrades — ${upgradesAvailable(s).length} available`;
+  if (revealedUpgrades(s).length === 0) return 'Upgrades — none yet';
+  const fresh = upgradesNewCount(s);
+  if (fresh === 0) return 'Upgrades — all owned';
+  return `Upgrades — ${fresh} new`;
 }
 
 export function computeHud(l: Layout, s: RunState): HudLayout {
@@ -1055,7 +1061,7 @@ export class HudView {
     // GLOBAL UPGRADES: the Restore row and the Upgrades row, each a link to its dialog.
     this.drawInfoSection(g, this.globalTitle, this.globalRows, rp.globalUpgrades);
     this.globalRows[0].style.fill = PAL.title;
-    this.globalRows[1].style.fill = upgradesAvailable(s).length > 0 ? PAL.title : PAL.text;
+    this.globalRows[1].style.fill = upgradesNewCount(s) > 0 ? PAL.title : PAL.text;
     this.globalRows[2].style.fill = PAL.text;
   }
 

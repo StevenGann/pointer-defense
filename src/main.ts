@@ -401,6 +401,7 @@ function doRestartWindows(): void {
   syncViewport();
   dialog = null;
   menu = null;
+  closeRunModals();
   for (const id of newly) toastAchievement(id);
   for (const id of profileNewly) toastAchievement(id);
   stampEarnedDates([...newly, ...profileNewly]);
@@ -412,6 +413,7 @@ function doNewRun(): void {
   syncViewport();
   dialog = null;
   menu = null;
+  closeRunModals();
 }
 
 function openMenu(name: MenuName | null): void {
@@ -610,6 +612,7 @@ function startRun(level: Level, origin: 'play' | 'load' | 'editor'): void {
   screen = 'run';
   menu = null;
   dialog = null;
+  closeRunModals();
   loadOpen = false;
   loadInput.blur();
 }
@@ -676,7 +679,15 @@ function exitRun(): void {
   }
   menu = null;
   dialog = null;
+  closeRunModals();
   cancelSelection(state);
+}
+
+/** No run-scoped window survives a run boundary: Restore, Global Upgrades and achievements close. */
+function closeRunModals(): void {
+  restoreOpen = false;
+  upgradesSession.hide();
+  achievementSession.hide();
 }
 
 let editorNotice = '';
@@ -699,6 +710,7 @@ const mouse = new MouseController(app, {
     state = createRunState(profile);
     resetRunNotified();
     syncViewport();
+    closeRunModals();
   },
   restartWindows: doRestartWindows,
   startEndless: () => {
@@ -770,6 +782,9 @@ const mouse = new MouseController(app, {
   openRestore: () => {
     upgradesSession.hide();
     restoreOpen = true;
+  },
+  closeRestore: () => {
+    restoreOpen = false;
   },
   upgradesOpen: () => upgradesSession.open,
   openUpgrades,

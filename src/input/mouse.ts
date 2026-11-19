@@ -55,6 +55,7 @@ import {
   type RunState,
 } from '../core/state.ts';
 import { cheatsEnabled } from '../core/cheats.ts';
+import { escapeTarget } from './escape.ts';
 
 /**
  * Hit testing and gestures against the run state, the menus and the modal dialogs. Tracks the
@@ -113,6 +114,7 @@ export interface MouseContext {
   restoreOpen: () => boolean;
   restorePointerDown: (x: number, y: number, button: number) => boolean;
   openRestore: () => void;
+  closeRestore: () => void;
   upgradesOpen: () => boolean;
   upgradesPointerDown: (x: number, y: number, button: number) => boolean;
   openUpgrades: () => void;
@@ -427,30 +429,40 @@ export class MouseController {
 
     if (e.key === 'Escape') {
       const s = this.ctx.state();
-      // A modal dialog or open menu closes first, then the help viewer, then the run exits.
-      const modalOpen = this.ctx.menu() !== null || this.ctx.dialog() !== null;
-      if (modalOpen) {
-        this.ctx.openMenu(null);
-        this.ctx.closeDialog();
-        cancelSelection(s);
-        return;
+      // A modal dialog or open menu closes first, then Help, achievements, Restore and Global
+      // Upgrades; only with none of them open does Esc clear the selection or exit the run.
+      const target = escapeTarget({
+        menuOrDialog: this.ctx.menu() !== null || this.ctx.dialog() !== null,
+        help: this.ctx.helpOpen(),
+        achievements: this.ctx.achievementOpen(),
+        restore: this.ctx.restoreOpen(),
+        upgrades: this.ctx.upgradesOpen(),
+      });
+      switch (target) {
+        case 'menuOrDialog':
+          this.ctx.openMenu(null);
+          this.ctx.closeDialog();
+          cancelSelection(s);
+          return;
+        case 'help':
+          this.ctx.closeHelp();
+          return;
+        case 'achievements':
+          this.ctx.closeAchievement();
+          return;
+        case 'restore':
+          this.ctx.closeRestore();
+          return;
+        case 'upgrades':
+          this.ctx.closeUpgrades();
+          return;
+        case 'run': {
+          const hadSelection = s.selected !== null || s.selectedTowerId !== null;
+          cancelSelection(s);
+          if (!hadSelection) this.ctx.exitRun();
+          return;
+        }
       }
-      if (this.ctx.helpOpen()) {
-        this.ctx.closeHelp();
-        return;
-      }
-      if (this.ctx.achievementOpen()) {
-        this.ctx.closeAchievement();
-        return;
-      }
-      if (this.ctx.upgradesOpen()) {
-        this.ctx.closeUpgrades();
-        return;
-      }
-      const hadSelection = s.selected !== null || s.selectedTowerId !== null;
-      cancelSelection(s);
-      if (!hadSelection) this.ctx.exitRun();
-      return;
     }
 
     const s = this.ctx.state();

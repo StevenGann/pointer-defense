@@ -95,6 +95,7 @@ import {
   critChance,
   CRIT_MULTIPLIER,
   MARKED_DAMAGE_MULT,
+  CLICK_SLACK,
 } from '../src/core/pointer.ts';
 import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies, allHelpUnlocked, checkProfileAchievements, rpGain, specLevelCost } from '../src/core/save.ts';
 import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES } from '../src/core/tree.ts';
@@ -195,7 +196,8 @@ import {
   TRAY_W,
   TRAY_H,
 } from '../src/core/upgrades.ts';
-import { buffRowText } from '../src/view/hud.ts';
+import { buffRowText, upgradesRowText, upgradesNewCount } from '../src/view/hud.ts';
+import { escapeTarget } from '../src/input/escape.ts';
 import { EffectsView, muzzleAssetFor, muzzleLife, FIRE_KINDS } from '../src/view/effects.ts';
 
 import { fileURLToPath } from 'node:url';
@@ -3973,6 +3975,42 @@ function cursorTower(tier, branch) {
   check(
     restoreHit?.action === 'restore' && restoreHit.enabled && upgradesHit?.action === 'upgrades' && upgradesHit.enabled,
     'GLOBAL UPGRADES rows open the Restore and Upgrades dialogs',
+  );
+}
+
+{
+  // The Upgrades row counts revealed-but-unowned upgrades, affordable or not, and the row's
+  // bright/dim colour keys off the same upgradesNewCount (hud.ts), so the two cannot disagree.
+  const s = createRunState();
+  const none = upgradesRowText(s);
+  s.wave = 35; // reveals the wave-20..35 upgrades
+  s.economy.salvage = 0; // affords none of them
+  const revealed = revealedUpgrades(s).length;
+  const broke = upgradesRowText(s);
+  const brokeCount = upgradesNewCount(s);
+  s.economy.salvage = 1_000_000;
+  const first = revealedUpgrades(s)[0].id;
+  buyUpgrade(s, first);
+  const afterOne = upgradesRowText(s);
+  for (const d of revealedUpgrades(s)) buyUpgrade(s, d.id);
+  const allOwned = upgradesRowText(s);
+  check(
+    revealed >= 3 && none === 'Upgrades — none yet' && broke === `Upgrades — ${revealed} new` && brokeCount === revealed &&
+      afterOne === `Upgrades — ${revealed - 1} new` && allOwned === 'Upgrades — all owned' && upgradesNewCount(s) === 0,
+    `the Upgrades row counts revealed, unowned upgrades even when none are affordable (${none} / ${broke} / ${afterOne} / ${allOwned})`,
+  );
+}
+
+{
+  // Escape closes the topmost run modal before it ever exits the run — Restore included, which
+  // the chain used to skip (Esc ended the run with the Restore window still drawn).
+  const closed = { menuOrDialog: false, help: false, achievements: false, restore: false, upgrades: false };
+  const only = (k) => escapeTarget({ ...closed, [k]: true });
+  const each = ['menuOrDialog', 'help', 'achievements', 'restore', 'upgrades'].every((k) => only(k) === k);
+  check(
+    each && escapeTarget(closed) === 'run' && escapeTarget({ ...closed, restore: true, upgrades: true }) === 'restore' &&
+      escapeTarget({ ...closed, help: true, restore: true }) === 'help',
+    `Escape closes each open modal (Restore included) and only exits the run with none open (restore -> ${only('restore')})`,
   );
 }
 
@@ -8017,6 +8055,125 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     check(
       turboOk && overdriveOk && windfallOk,
       `system-tray buffs: turbo ${base} -> ${fast} ticks, overdrive click ${dPlain} -> ${dOver}, windfall kill $${vPlain} -> $${vWind}`,
+    );
+  }
+
+  // 50.21 Wide Reticle: a click 0.55 tiles from a grunt's centre misses without it (radius 0.3 +
+  // slack 0.15) and lands with it.
+  {
+    const clickNear = (owned) => {
+      const s = fullState();
+      if (owned) buyUpgrade(s, 'wide-reticle');
+      s.phase = 'wave';
+      s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+      const e = stationary(92001, 'grunt', 1, 5.5, 5.5);
+      e.maxHp = 1e6;
+      e.hp = 1e6;
+      s.enemies.push(e);
+      const hit = pointerDown(s, 5.5 + 0.55, 5.5);
+      pointerUp(s);
+      return hit && e.hp < 1e6;
+    };
+    const reach = ENEMY_STATS.grunt.radius + CLICK_SLACK;
+    check(
+      reach < 0.55 && !clickNear(false) && clickNear(true),
+      `wide-reticle lands a click 0.55 tiles off a grunt that misses without it (base reach ${reach})`,
+    );
+  }
+
+  // 50.22 Double-Buffered Click doubles both a click and a tick of held-reticle damage.
+  {
+    const run = (owned) => {
+      const s = fullState();
+      if (owned) buyUpgrade(s, 'double-buffer');
+      s.phase = 'wave';
+      s.runs = [];
+      s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+      s.pointer.stage = 2;
+      const e = stationary(92002, 'grunt', 1, 5.5, 5.5);
+      e.maxHp = 1e9;
+      e.hp = 1e9;
+      s.enemies.push(e);
+      const dealt = () => s.events.filter((ev) => ev.type === 'damage' && ev.id === e.id).reduce((n, ev) => n + ev.amount, 0);
+      s.events = [];
+      pointerDown(s, 5.5, 5.5);
+      const click = dealt();
+      s.events = [];
+      tick(s); // still held: applyReticle burns one tick of hold damage
+      const hold = dealt();
+      pointerUp(s);
+      return { click, hold };
+    };
+    const a = run(false);
+    const b = run(true);
+    check(
+      a.click > 0 && a.hold > 0 && Math.abs(b.click - a.click * 2) < 1e-9 && Math.abs(b.hold - a.hold * 2) < 1e-9,
+      `double-buffer doubles click and hold damage (click ${a.click} -> ${b.click}, hold ${a.hold} -> ${b.hold})`,
+    );
+  }
+
+  // 50.23 Structural Warranty halves breacher turret damage to a tower and halves repair time.
+  {
+    const turretLoss = (owned) => {
+      const s = stateOnLevel('open-field');
+      s.economy.salvage = 1_000_000;
+      placeTower(s, 'gun', 5, 5);
+      const gun = towerAt(s, 5, 5);
+      s.wave = 45;
+      if (owned) buyUpgrade(s, 'structural-warranty');
+      s.phase = 'wave';
+      s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+      const b = createEnemy(1, 'breacher', 12, SPAWN, EXIT);
+      Object.assign(b, { x: 5.0, y: 6.5, prevX: 5.0, prevY: 6.5, col: 5, row: 6, heading: 0, dist: 0 });
+      s.enemies.push(b);
+      const before = gun.hp;
+      for (let i = 0; i < 60; i++) tick(s);
+      return before - gun.hp;
+    };
+    const repairTicks = (owned) => {
+      const s = stateOnLevel('open-field');
+      s.economy.salvage = 1_000_000;
+      placeTower(s, 'wall', 5, 6);
+      const wall = towerAt(s, 5, 6);
+      s.wave = 45;
+      if (owned) buyUpgrade(s, 'structural-warranty');
+      wall.hp = wall.maxHp / 2;
+      const ok = startRepair(s, 5, 6);
+      return ok ? wall.repairReadyAt - s.clock : -1;
+    };
+    const plainLoss = turretLoss(false);
+    const warrantyLoss = turretLoss(true);
+    const plainRepair = repairTicks(false);
+    const warrantyRepair = repairTicks(true);
+    check(
+      plainLoss > 0 && warrantyLoss === plainLoss / 2 && plainRepair > 0 && warrantyRepair === Math.round(plainRepair / 2),
+      `structural-warranty halves tower damage taken and repair time (turret -${plainLoss} -> -${warrantyLoss}; repair ${plainRepair} -> ${warrantyRepair} ticks)`,
+    );
+  }
+
+  // 50.24 Shutter Licence: a Toggle gate flips back the very next call, with no 3 s lock.
+  {
+    const flipTwice = (owned) => {
+      const s = stateOnLevel('open-field');
+      s.economy.salvage = 1_000_000;
+      placeTower(s, 'wall', 5, 5);
+      upgradeTower(s, 5, 5);
+      chooseBranch(s, 5, 5, 'C');
+      s.wave = 35;
+      if (owned) buyUpgrade(s, 'shutter-licence');
+      const gate = towerAt(s, 5, 5);
+      const first = toggleGate(s, 5, 5);
+      const lockedAfter = isGateLocked(gate, s.clock);
+      s.clock++;
+      const second = toggleGate(s, 5, 5);
+      return { first, lockedAfter, second, open: gate.open };
+    };
+    const plain = flipTwice(false);
+    const licensed = flipTwice(true);
+    check(
+      plain.first && plain.lockedAfter && !plain.second && plain.open &&
+        licensed.first && !licensed.lockedAfter && licensed.second && !licensed.open,
+      'shutter-licence removes the 3 s Toggle lock: a gate flips back one tick later (refused without it)',
     );
   }
 

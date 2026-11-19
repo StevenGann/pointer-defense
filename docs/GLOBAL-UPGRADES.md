@@ -244,8 +244,11 @@ window, a buff clock and a HUD line, so a partial landing must not block the res
 it to `{ action: 'restore' }`. That section becomes **two rows**, both clickable:
 
 1. `Restore — {profile.rp} RP` → opens the Restore dialog (unchanged behaviour, now labelled).
-2. `Upgrades — {n} available` → opens the new dialog. When nothing is revealed yet the line reads
-   `Upgrades — none yet`; when every revealed one is owned, `Upgrades — all owned`.
+2. `Upgrades — {n} new` → opens the new dialog. `n` is `upgradesNewCount(s)` in `hud.ts`: revealed
+   upgrades not yet owned, affordable or not (affordability is the dialog's business). When nothing
+   is revealed yet the line reads `Upgrades — none yet`; when every revealed one is owned,
+   `Upgrades — all owned`. The row is drawn bright while `n > 0` and dim otherwise, keyed off the
+   same count so text and colour cannot disagree.
 
 - Add `'upgrades'` to the `HudAction` union and a per-row hit rect; the section is measured by
   height already, so two rows must not overlap the section below it.
