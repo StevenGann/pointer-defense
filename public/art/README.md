@@ -147,9 +147,14 @@ the old `towers/wall-base.svg` white template worked — so leave the tier faces
 | `wall-bulwark.svg` | the Bulwark branch's raised inner rim (an overlay) |
 | `wall-mesh.svg` | the Mesh branch's crosshatch (an overlay) |
 | `wall-repairing.svg` | the diagonal repair hatch (an overlay) |
-| `wall-damaged-1.svg` | damage overlay, stage 1 (the top third of HP) |
-| `wall-damaged-2.svg` | damage overlay, stage 2 (the middle third of HP) |
-| `wall-damaged-3.svg` | damage overlay, stage 3 (the bottom third of HP) |
+| `wall-damaged-1.svg` | damage overlay, stage 1 (the top third of HP): one stepped crack in from the left edge and one loose pixel |
+| `wall-damaged-2.svg` | damage overlay, stage 2 (the middle third of HP): the stage-1 crack runs on and puts out two branches |
+| `wall-damaged-3.svg` | damage overlay, stage 3 (the bottom third of HP): cracks to three edges, three dropped-out blocks, a darker face |
+
+The damage cracks run in right angles on a grid, like a broken bitmap. Each stage contains the stage
+before it, so keep that rule when you edit one: a wall that loses HP must gain cracks, not swap them.
+Each crack has a white copy one unit down and right, so it reads as cut into the face, and all three
+files clip to the 3..29 square to stay clear of the bevel the engine draws.
 
 A wall draws one tier face (tinted) and up to two overlays: a branch mark, then a damage stage — or
 the repair hatch in place of both while a repair runs. The damage stage is chosen from the HP fraction

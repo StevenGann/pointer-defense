@@ -1,12 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Damage stage 3 (heavy): a web of cracks over a darkened face. -->
-  <rect x="2" y="2" width="28" height="28" fill="#000000" opacity="0.18"/>
-  <g fill="none" stroke="#404040" stroke-width="1">
-    <path d="M8 8 L12 11 L10 15 L15 19 L13 24 L18 27"/>
-    <path d="M12 11 L17 10 L22 14"/>
-    <path d="M10 15 L5 18 L8 23"/>
-    <path d="M15 19 L20 18 L25 22"/>
-    <path d="M22 6 L20 12"/>
-    <path d="M26 14 L22 18"/>
+  <defs><clipPath id="face"><rect x="3" y="3" width="26" height="26"/></clipPath></defs>
+  <g clip-path="url(#face)">
+    <!-- Damage stage 3 (heavy): the cracks reach three edges, three blocks of the face have dropped
+         out, and the whole face is a little darker. -->
+    <rect x="2" y="2" width="28" height="28" fill="#000000" opacity="0.1"/>
+    <g fill="#000000" opacity="0.24">
+      <rect x="13" y="12" width="3" height="3"/>
+      <rect x="21" y="16" width="4" height="3"/>
+      <rect x="6" y="17" width="3" height="4"/>
+    </g>
+    <g transform="translate(1 1)" opacity="0.6">
+      <path d="M3 7.5 H8.5 V11.5 H12.5 V15.5 H16.5 M16.5 15.5 V19.5 H20.5 V23.5 M12.5 11.5 H17.5 V8.5 H21.5 M8.5 11.5 V16.5 H5.5 M20.5 23.5 H24.5 V27.5 H29 M21.5 8.5 V5.5 H25.5 V3 M5.5 16.5 V21.5 H9.5 V25.5 H13.5 V29 M20.5 19.5 H25.5 V15.5 H29 M21.5 8.5 H25.5 V12.5 M9.5 21.5 H13.5" fill="none" stroke="#ffffff" stroke-width="1.2" stroke-linecap="square" stroke-linejoin="miter"/>
+      <g fill="#ffffff"><rect x="9" y="13" width="2" height="2"/><rect x="19" y="10" width="2" height="2"/><rect x="22" y="21" width="2" height="2"/><rect x="4" y="18" width="2" height="2"/><rect x="27" y="9" width="2" height="2"/><rect x="15" y="25" width="2" height="2"/><rect x="21" y="26" width="2" height="2"/><rect x="6" y="5" width="2" height="2"/><rect x="26" y="22" width="2" height="2"/></g>
+    </g>
+    <path d="M3 7.5 H8.5 V11.5 H12.5 V15.5 H16.5 M16.5 15.5 V19.5 H20.5 V23.5 M12.5 11.5 H17.5 V8.5 H21.5 M8.5 11.5 V16.5 H5.5 M20.5 23.5 H24.5 V27.5 H29 M21.5 8.5 V5.5 H25.5 V3 M5.5 16.5 V21.5 H9.5 V25.5 H13.5 V29 M20.5 19.5 H25.5 V15.5 H29 M21.5 8.5 H25.5 V12.5 M9.5 21.5 H13.5" fill="none" stroke="#404040" stroke-width="1.2" stroke-linecap="square" stroke-linejoin="miter"/>
+    <g fill="#404040"><rect x="9" y="13" width="2" height="2"/><rect x="19" y="10" width="2" height="2"/><rect x="22" y="21" width="2" height="2"/><rect x="4" y="18" width="2" height="2"/><rect x="27" y="9" width="2" height="2"/><rect x="15" y="25" width="2" height="2"/><rect x="21" y="26" width="2" height="2"/><rect x="6" y="5" width="2" height="2"/><rect x="26" y="22" width="2" height="2"/></g>
   </g>
 </svg>
