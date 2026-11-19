@@ -16,6 +16,7 @@ import {
   baseEnemyKind,
   isBossKind,
   isBossVariant,
+  isFlyerKind,
   PACER_AURA_RADIUS,
   radiusOf,
   WIRECUTTER_EMP_RADIUS,
@@ -151,6 +152,38 @@ export const ENEMY_ART_ROTATES: ReadonlySet<EnemyKind> = new Set([
   'runner', 'flyer', 'saboteur', 'breacher', 'runner-boss', 'flyer-boss', 'saboteur-boss', 'breacher-boss',
 ]);
 
+/**
+ * Enemy shadows (design.md section 24). Each sprite-backed enemy casts a second sprite sharing the
+ * body's exact frame texture, tinted black (tint multiplies RGB, alpha is kept) at a fixed alpha and
+ * offset down-right in screen px, so the offset does not grow with the cell size.
+ */
+export const SHADOW_TINT = 0x000000;
+export const SHADOW_ALPHA = 0.32;
+export const SHADOW_OFFSET: Readonly<{ x: number; y: number }> = Object.freeze({ x: 2, y: 3 });
+/** Flyers are airborne, so their shadow is thrown further. */
+export const SHADOW_OFFSET_FLYER: Readonly<{ x: number; y: number }> = Object.freeze({ x: 4, y: 6 });
+
+/** The screen-space shadow offset for an enemy kind: the flyer offset for flyers, the ground one otherwise. */
+export function shadowOffsetFor(kind: EnemyKind): Readonly<{ x: number; y: number }> {
+  return isFlyerKind(kind) ? SHADOW_OFFSET_FLYER : SHADOW_OFFSET;
+}
+
+/** Whether an enemy kind casts a shadow. Pop-ups are windows, not creatures, and cast nothing. */
+export function shadowVisibleFor(kind: EnemyKind): boolean {
+  return kind !== 'popup';
+}
+
+/**
+ * The board root's child order, back to front. `shadows` sits after the route and before mines, so a
+ * shadow lies on the floor beneath mines, walls, towers, pop-ups and enemies.
+ */
+export const BOARD_LAYER_ORDER = Object.freeze([
+  'tileSprites', 'tiles', 'path', 'shadows', 'mines', 'mineArt', 'shutterSprites', 'toggles', 'towerSprites',
+  'towers', 'wrenches', 'popups', 'enemies', 'enemyBodies', 'enemyFx', 'cursorArrows', 'ghost', 'overlay',
+  'projectileArt',
+] as const);
+export type BoardLayerName = (typeof BOARD_LAYER_ORDER)[number];
+
 const AURA_COLOR = 0x6699ff;
 const SLOW_COLOR = 0x00d0ff;
 
@@ -166,6 +199,8 @@ export class BoardView {
   readonly root = new Container();
   private readonly tiles = new Graphics();
   private readonly path = new Graphics();
+  private readonly shadows = new Container();
+  private readonly shadowSprites: Sprite[] = [];
   private readonly mines = new Graphics();
   private readonly shutterSprites = new Container();
   private readonly shutterSpritePool: Sprite[] = [];
@@ -208,7 +243,43 @@ export class BoardView {
     this.ghostTurret.visible = false;
     this.ghost.addChild(this.ghostBase, this.ghostTurret);
     this.popups.addChild(this.popupGfx);
-    this.root.addChild(this.tileSprites, this.tiles, this.path, this.mines, this.mineArt, this.shutterSprites, this.toggles, this.towerSprites, this.towers, this.wrenches, this.popups, this.enemies, this.enemyBodies, this.enemyFx, this.cursorArrows, this.ghost, this.overlay, this.projectileArt);
+    const layers: Record<BoardLayerName, Container> = {
+      tileSprites: this.tileSprites,
+      tiles: this.tiles,
+      path: this.path,
+      shadows: this.shadows,
+      mines: this.mines,
+      mineArt: this.mineArt,
+      shutterSprites: this.shutterSprites,
+      toggles: this.toggles,
+      towerSprites: this.towerSprites,
+      towers: this.towers,
+      wrenches: this.wrenches,
+      popups: this.popups,
+      enemies: this.enemies,
+      enemyBodies: this.enemyBodies,
+      enemyFx: this.enemyFx,
+      cursorArrows: this.cursorArrows,
+      ghost: this.ghost,
+      overlay: this.overlay,
+      projectileArt: this.projectileArt,
+    };
+    for (const name of BOARD_LAYER_ORDER) this.root.addChild(layers[name]);
+  }
+
+  /** The pooled shadow sprite for the `index`-th shadow cast this frame, grown on demand. */
+  private shadowSprite(index: number): Sprite {
+    let s = this.shadowSprites[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0.5, 0.5);
+      s.tint = SHADOW_TINT;
+      s.alpha = SHADOW_ALPHA;
+      this.shadowSprites.push(s);
+      this.shadows.addChild(s);
+    }
+    s.visible = true;
+    return s;
   }
 
   /** The pooled body sprite for the `index`-th living enemy, grown on demand. */
@@ -494,14 +565,33 @@ export class BoardView {
     }
 
     let spriteIndex = 0;
+    let shadowIndex = 0;
     for (const e of layers.others) {
       if (e.dead) continue;
       const kb = knockbackFor ? knockbackFor(e.id, state.tick) : null;
-      drawEnemy(this.enemySprite(spriteIndex), this.enemyBodies, this.enemyFx, e, board, cell, alpha, state.tick < e.slowUntilTick, state.tick, kb);
+      const body = this.enemySprite(spriteIndex);
+      drawEnemy(body, this.enemyBodies, this.enemyFx, e, board, cell, alpha, state.tick < e.slowUntilTick, state.tick, kb);
       spriteIndex++;
+      // The shadow copies the body sprite exactly (same frame texture, size, rotation, knockback-
+      // adjusted position) and is only cast when the body is sprite-backed; a procedural fallback
+      // has no texture to copy.
+      if (body.visible && shadowVisibleFor(e.kind)) {
+        const off = shadowOffsetFor(e.kind);
+        const sh = this.shadowSprite(shadowIndex++);
+        sh.texture = body.texture;
+        sh.width = body.width;
+        sh.height = body.height;
+        sh.rotation = body.rotation;
+        sh.position.set(body.position.x + off.x, body.position.y + off.y);
+        sh.tint = SHADOW_TINT;
+        sh.alpha = SHADOW_ALPHA;
+      }
     }
     for (let i = spriteIndex; i < this.enemySprites.length; i++) {
       this.enemySprites[i].visible = false;
+    }
+    for (let i = shadowIndex; i < this.shadowSprites.length; i++) {
+      this.shadowSprites[i].visible = false;
     }
 
     // In-flight projectiles draw above enemies: a small square for a Flak shell, a tapered dart with
@@ -565,6 +655,9 @@ export class BoardView {
 
     this.enemies.removeChildren();
     this.enemySprites.length = 0;
+
+    this.shadows.removeChildren();
+    this.shadowSprites.length = 0;
 
     this.ghostBase.texture = Texture.EMPTY;
     this.ghostTurret.texture = Texture.EMPTY;
@@ -1715,11 +1808,6 @@ function drawPopupWindow(
   g.moveTo(cx + 4, cy - 4).lineTo(cx - 4, cy + 4).stroke({ width: 1, color: PAL.text });
 }
 
-/** The flyer's non-rotating shadow, drawn beneath the body sprite (the SVG carries only the swept body). */
-function drawFlyerShadow(g: Graphics, x: number, y: number, r: number, alpha: number): void {
-  g.ellipse(x, y + r * 0.55, r * 1.15, r * 0.42).fill({ color: 0x17222b, alpha: alpha * 0.4 });
-}
-
 function drawEnemy(
   sprite: Sprite,
   bodies: Graphics,
@@ -1757,9 +1845,10 @@ function drawEnemy(
     sprite.height = bodyPx;
     sprite.rotation = ENEMY_ART_ROTATES.has(e.kind) ? e.heading : 0;
     sprite.alpha = 1;
-    if (e.kind === 'flyer') drawFlyerShadow(bodies, ex, ey, r, 1);
+    // No ellipse here: a sprite-backed body casts a real silhouette shadow (BoardView.shadows).
   } else {
     sprite.visible = false;
+    // The procedural fallback has no texture to cast; the flyer shape keeps its faint ellipse.
     drawEnemyShape(bodies, baseEnemyKind(e.kind), ex, ey, r, color, e.heading);
   }
 

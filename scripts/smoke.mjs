@@ -119,7 +119,7 @@ import {
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
 import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName } from '../src/view/tooltipText.ts';
-import { BoardView, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre } from '../src/view/board.ts';
+import { BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
 import { computeHud, computeRightPanel, hudControlAt, textWidth } from '../src/view/hud.ts';
@@ -8192,6 +8192,63 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   // 50.14 Row lines fit in 46 characters, and every detail is written.
   const badText = GLOBAL_UPGRADES.filter((u) => u.line.length > 46 || u.detail.trim().length === 0);
   check(badText.length === 0, `every upgrade line is <= 46 chars and every detail is non-empty (${badText.map((u) => u.id).join(', ') || 'all fit'})`);
+}
+
+// --- Enemy shadows (design.md section 24) ------------------------------------------------------
+{
+  check(SHADOW_TINT === 0x000000, 'shadows: the tint is exactly black');
+  check(SHADOW_ALPHA > 0 && SHADOW_ALPHA < 1, `shadows: SHADOW_ALPHA is between 0 and 1 (${SHADOW_ALPHA})`);
+  check(
+    SHADOW_OFFSET_FLYER.x > SHADOW_OFFSET.x && SHADOW_OFFSET_FLYER.y > SHADOW_OFFSET.y &&
+      shadowOffsetFor('flyer') === SHADOW_OFFSET_FLYER && shadowOffsetFor('flyer-boss') === SHADOW_OFFSET_FLYER &&
+      shadowOffsetFor('grunt') === SHADOW_OFFSET,
+    'shadows: the flyer offset exceeds the ground offset, and flyers use it',
+  );
+  const li = (n) => BOARD_LAYER_ORDER.indexOf(n);
+  check(
+    li('shadows') > li('path') && li('shadows') < li('mines') &&
+      li('shadows') < li('towers') && li('shadows') < li('towerSprites') && li('shadows') < li('enemies'),
+    'shadows: the shadows layer sorts after path and before mines, towers and enemies',
+  );
+  check(!shadowVisibleFor('popup') && shadowVisibleFor('grunt') && shadowVisibleFor('flyer'),
+    'shadows: a pop-up casts no shadow');
+
+  // The view: a sprite-backed flyer casts a shadow that copies its body sprite, shifted by the flyer
+  // offset (knockback included); a pop-up casts none; unused pooled shadows hide.
+  resetArt();
+  const flyTex = new Texture({ width: 4, height: 4 });
+  injectArtTexture('flyer', flyTex);
+  const s = stateOnLevel('open-field');
+  const fly = createEnemy(1, 'flyer', 1, SPAWN, EXIT);
+  fly.x = fly.prevX = 5.5;
+  fly.y = fly.prevY = 6.5;
+  s.enemies.push(fly);
+  const pop = createEnemy(2, 'popup', 1, SPAWN, EXIT);
+  s.enemies.push(pop);
+  const layout = computeLayout(1280, 800);
+  const view = new BoardView();
+  check(view.root.children.indexOf(view.shadows) === BOARD_LAYER_ORDER.indexOf('shadows') &&
+    view.root.children.length === BOARD_LAYER_ORDER.length,
+    'shadows: the root child order follows BOARD_LAYER_ORDER');
+  const hover = { col: 0, row: 0, onBoard: false, x: 0, y: 0 };
+  view.draw(s, layout, 0, hover, (id) => (id === 1 ? { dx: 5, dy: -2 } : null));
+  const body = view.enemySprites[0];
+  const sh = view.shadowSprites[0];
+  check(view.shadowSprites.filter((x) => x.visible).length === 1, 'shadows: one shadow for the flyer, none for the pop-up');
+  check(
+    sh.texture === body.texture && sh.width === body.width && sh.height === body.height &&
+      sh.rotation === body.rotation && sh.tint === SHADOW_TINT && sh.alpha === SHADOW_ALPHA,
+    'shadows: the shadow shares the body texture, size and rotation, tinted black at SHADOW_ALPHA',
+  );
+  check(
+    sh.position.x === body.position.x + SHADOW_OFFSET_FLYER.x && sh.position.y === body.position.y + SHADOW_OFFSET_FLYER.y &&
+      body.position.x === layout.board.x + 5.5 * layout.board.cell + 5,
+    'shadows: the flyer shadow sits at the knocked-back body plus the flyer offset',
+  );
+  s.enemies.length = 0;
+  view.draw(s, layout, 0, hover);
+  check(view.shadowSprites.every((x) => !x.visible), 'shadows: unused pooled shadow sprites hide');
+  resetArt();
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
