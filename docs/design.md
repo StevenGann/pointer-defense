@@ -1617,6 +1617,39 @@ where the two disagree, that document wins.
 
 ---
 
+## 24. Enemy shadows
+
+Every enemy standing on the desktop casts a shadow of itself, black with its own alpha, offset down
+and to the right. The shadow is the enemy's own artwork, not an ellipse approximation, so a grunt with
+a toothed jaw throws a toothed shadow.
+
+**How it is made.** The body already draws through a Pixi `Sprite` once its artwork is decoded. The
+shadow is a second `Sprite` sharing that exact texture — the same rasterised frame the body is using
+that tick — with `tint = 0x000000` and `alpha = 0.32`. Pixi's tint multiplies the RGB channels and
+leaves alpha alone, which is precisely "copy the pixels, zero the colour, keep the mask" without a
+per-frame `renderer.extract` and without allocating a canvas texture per enemy. An animated walk
+cycle therefore casts an animated shadow for free, because both sprites read the same frame.
+
+**Where it sits.** A `shadows` container is inserted into the board's layer order after the route
+(`path`) and before `mines`, so it draws over the floor but beneath mines, walls, towers, pop-ups and
+enemies — a shadow lies on the desktop; nothing lies on a shadow.
+
+**Offset.** `(+2, +3)` CSS px for everything on the ground. Flyers are airborne, so their shadow is
+thrown further: `(+4, +6)`. The offset is applied in screen space after the cell scaling, so it does
+not grow with the board.
+
+**What does not get one.** Pop-up enemies are windows, not creatures, and cast nothing. An enemy whose
+artwork has not decoded yet falls back to the procedural shape, which is drawn into a `Graphics` and
+has no texture to copy; those keep the existing faint ellipse so a half-finished art pass still reads
+as grounded. The old flyer-only ellipse is removed — the flyer now casts a real silhouette shadow,
+with the larger offset standing in for altitude.
+
+**Tests.** The shadow constants and the layer order are exported so the smoke harness can assert
+them: the tint is exactly black, the flyer offset exceeds the ground offset, `shadows` sorts before
+`towers` and `enemies`, and a pop-up is excluded.
+
+---
+
 ## Appendix A — What four games got right
 
 **Desktop Tower Defense** (Paul Preece, March 2007) — the path is not fixed; creeps take the shortest
