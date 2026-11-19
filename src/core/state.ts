@@ -57,6 +57,12 @@ import {
   CARRIER_BROOD_SCATTER_TICKS,
   CARRIER_DEATH_BROOD_COUNT,
   createEnemy,
+  FLYER_LANE_OFFSET_MAX,
+  FLYER_SWAY_WAVELENGTH,
+  FLYER_TAPER_EXIT_HOLD_TILES,
+  FLYER_TAPER_EXIT_TILES,
+  FLYER_TAPER_SPAWN_TILES,
+  flyerSwayAmplitude,
   ENEMY_STATS,
   isFlyerKind,
   isBossKind,
@@ -1735,6 +1741,7 @@ export function spawnCheatEnemy(s: RunState, kind: EnemyKind): boolean {
   const enemy = createEnemy(s.nextId++, kind, cheatSpawnWave(s), spawnTile(s), exitTile(s));
   enemy.routeIndex = nextRouteIndex(s);
   enemy.spawnTick = s.tick;
+  initFlight(s, enemy);
   s.enemies.push(enemy);
   s.cheatsUsed = true;
   s.cheatSpawns++;
@@ -2019,6 +2026,7 @@ function spawnDue(s: RunState): void {
       const enemy = createEnemy(s.nextId++, sp.kind, run.wave, spawnTile(s), exitTile(s), hpMult);
       enemy.routeIndex = nextRouteIndex(s);
       enemy.spawnTick = s.tick;
+      initFlight(s, enemy);
       s.enemies.push(enemy);
       s.events.push({ type: 'enemySpawned', kind: sp.kind });
     }
@@ -2077,6 +2085,7 @@ function releaseBrood(s: RunState, carrier: Enemy, count: number): void {
     e.heading = carrier.heading + (Math.PI * 2 * i) / count;
     e.scatterTicks = CARRIER_BROOD_SCATTER_TICKS;
     e.spawnTick = s.tick;
+    initFlight(s, e);
     s.enemies.push(e);
     s.events.push({ type: 'enemySpawned', kind: 'flyer' });
   }
@@ -2122,6 +2131,131 @@ function clampToBoard(v: number, max: number): number {
   return Math.min(max - 1e-4, Math.max(0, v));
 }
 
+/**
+ * Draw a flyer's lane offset and sway phase from the run's seeded PRNG (docs/FLYER-FLIGHT.md).
+ * Every other kind is left untouched and consumes no randomness, so ground runs are unchanged.
+ */
+function initFlight(s: RunState, e: Enemy): void {
+  if (!isFlyerKind(e.kind)) return;
+  const lane = rngNext(s.rng);
+  s.rng = lane.next;
+  const phase = rngNext(s.rng);
+  s.rng = phase.next;
+  e.laneOffset = (lane.value * 2 - 1) * FLYER_LANE_OFFSET_MAX;
+  e.swayPhase = phase.value * Math.PI * 2;
+}
+
+/** Radians the flyer's lateral frame may turn per tile of base travel, so a corner sweeps, not snaps. */
+const FLYER_TURN_PER_TILE = 0.4;
+
+/** Rotate the unit vector (e.flightDirX, e.flightDirY) toward (ux, uy) by at most `maxTurn` radians. */
+function turnFlightDir(e: Enemy, ux: number, uy: number, maxTurn: number): void {
+  const cur = Math.atan2(e.flightDirY, e.flightDirX);
+  let delta = Math.atan2(uy, ux) - cur;
+  while (delta > Math.PI) delta -= Math.PI * 2;
+  while (delta < -Math.PI) delta += Math.PI * 2;
+  const a = cur + Math.max(-maxTurn, Math.min(maxTurn, delta));
+  e.flightDirX = Math.cos(a);
+  e.flightDirY = Math.sin(a);
+}
+
+/** Base-path distance from (bx, by) to the exit, following the flyer's current target (Infinity if unreachable). */
+function flyerRemaining(s: RunState, e: Enemy, field: Int32Array, bx: number, by: number): number {
+  const cols = s.grid.cols;
+  const c = e.targetCol >= 0 ? e.targetCol : e.col;
+  const r = e.targetCol >= 0 ? e.targetRow : e.row;
+  const d = field[r * cols + c];
+  if (d < 0) return Infinity;
+  return d + Math.hypot(c + 0.5 - bx, r + 0.5 - by);
+}
+
+/**
+ * Move a flyer (docs/FLYER-FLIGHT.md). A base position walks the air field waypoint to waypoint in
+ * continuous space; `col`/`row` follow the base. The drawn position `x`/`y` is the base plus a lane
+ * offset and a sinusoidal sway along the right-hand normal of the direction of travel, tapered to
+ * zero near spawn and near the exit, and clamped inside the board. `heading` follows actual motion.
+ */
+function flyFlyer(s: RunState, e: Enemy, field: Int32Array, exit: Tile, remaining: number): void {
+  let bx = e.x - e.flightOffX;
+  let by = e.y - e.flightOffY;
+  const startX = e.x;
+  const startY = e.y;
+  let leaked = false;
+  while (remaining > 0) {
+    if (e.targetCol < 0) {
+      const next = stepToward(field, e.col, e.row);
+      if (!next) break;
+      e.targetCol = next.col;
+      e.targetRow = next.row;
+    }
+    const tx = e.targetCol + 0.5;
+    const ty = e.targetRow + 0.5;
+    const dx = tx - bx;
+    const dy = ty - by;
+    const d = Math.hypot(dx, dy);
+    const travel = Math.min(d, remaining);
+    if (d > 0) {
+      if (e.flightDist < FLYER_TAPER_SPAWN_TILES) {
+        // Still on the spawn taper (offset near zero): adopt the path direction outright.
+        e.flightDirX = dx / d;
+        e.flightDirY = dy / d;
+      } else {
+        turnFlightDir(e, dx / d, dy / d, FLYER_TURN_PER_TILE * travel);
+      }
+    }
+    e.dist += travel;
+    e.flightDist += travel;
+    remaining -= travel;
+    if (d <= travel) {
+      bx = tx;
+      by = ty;
+      e.col = e.targetCol;
+      e.row = e.targetRow;
+      e.targetCol = -1;
+      e.targetRow = -1;
+      if (e.col === exit.col && e.row === exit.row) {
+        leaked = true;
+        break;
+      }
+    } else {
+      bx += (dx / d) * travel;
+      by += (dy / d) * travel;
+      // col/row follow the base: update only when it crosses into a new tile.
+      const c = Math.floor(bx);
+      const r = Math.floor(by);
+      if ((c !== e.col || r !== e.row) && c >= 0 && r >= 0 && c < s.grid.cols && r < s.grid.rows) {
+        e.col = c;
+        e.row = r;
+      }
+    }
+  }
+
+  // The offset: lane + sway along the right-hand normal, tapered at both ends of the journey.
+  const rem = leaked ? 0 : flyerRemaining(s, e, field, bx, by);
+  const taper = Math.max(
+    0,
+    Math.min(1, e.flightDist / FLYER_TAPER_SPAWN_TILES, (rem - FLYER_TAPER_EXIT_HOLD_TILES) / FLYER_TAPER_EXIT_TILES),
+  );
+  const sway = flyerSwayAmplitude(e.kind) * Math.sin((2 * Math.PI * e.flightDist) / FLYER_SWAY_WAVELENGTH + e.swayPhase);
+  const lateral = taper * (e.laneOffset + sway);
+  // Right-hand normal of (dx, dy) in screen space (y down): (-dy, dx).
+  const nx = -e.flightDirY;
+  const ny = e.flightDirX;
+  const cols = s.grid.cols;
+  const rows = s.grid.rows;
+  // Clamp inside the board, never pulling the drawn position past the base itself.
+  const x = Math.min(Math.max(cols - 0.5, bx), Math.max(Math.min(0.5, bx), bx + nx * lateral));
+  const y = Math.min(Math.max(rows - 0.5, by), Math.max(Math.min(0.5, by), by + ny * lateral));
+  e.x = x;
+  e.y = y;
+  e.flightOffX = x - bx;
+  e.flightOffY = y - by;
+  const mx = x - startX;
+  const my = y - startY;
+  if (mx * mx + my * my > 1e-12) e.heading = Math.atan2(my, mx);
+  if (leaked) leak(s, e);
+}
+
 function moveEnemies(s: RunState): void {
   const speedMult = s.modifiers.includes('fast') ? 1.15 : 1;
   const exit = exitTile(s);
@@ -2164,11 +2298,22 @@ function moveEnemies(s: RunState): void {
         e.row = Math.floor(e.y);
         e.targetCol = -1;
         e.targetRow = -1;
+        // Join the sway from here: the base path starts at the scatter's end, the offset at zero.
+        e.flightDist = 0;
+        e.flightOffX = 0;
+        e.flightOffY = 0;
+        e.flightDirX = Math.cos(e.heading);
+        e.flightDirY = Math.sin(e.heading);
       }
       continue;
     }
 
     const field = fieldFor(s, e);
+
+    if (isFlyerKind(e.kind)) {
+      flyFlyer(s, e, field, exit, remaining);
+      continue;
+    }
 
     // Chewing: a breacher chews a wall; the Ram chews any tower in its path, standing still.
     if (e.attackTowerId !== null) {

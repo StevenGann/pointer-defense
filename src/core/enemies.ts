@@ -70,6 +70,29 @@ export const CARRIER_DEATH_BROOD_COUNT = 6;
 /** Brood flyers scatter outward for half a second before homing on the exit. */
 export const CARRIER_BROOD_SCATTER_TICKS = Math.round(TICK_HZ * 0.5);
 
+/** Flyer flight (docs/FLYER-FLIGHT.md): each flyer's fixed lane is drawn from [-max, +max] tiles. */
+export const FLYER_LANE_OFFSET_MAX = 4;
+/** Wavelength of the flyer sway, in tiles travelled along the base path. */
+export const FLYER_SWAY_WAVELENGTH = 12;
+/** The offset tapers to zero linearly over this many tiles as the flyer nears the exit... */
+export const FLYER_TAPER_EXIT_TILES = 3;
+/**
+ * ...finishing this many tiles short of it, so the final approach is flown on the route itself.
+ * docs/FLYER-FLIGHT.md asks both for a 3-tile linear taper and for under 0.25 tiles of deviation
+ * within the last two tiles; a ramp ending at the exit cannot meet the second (it would still allow
+ * (2/3) * 7 tiles there), so the ramp ends two tiles out.
+ */
+export const FLYER_TAPER_EXIT_HOLD_TILES = 2;
+/** ...and over this many tiles after spawn (or after a brood scatter ends). */
+export const FLYER_TAPER_SPAWN_TILES = 0.75;
+
+/** Sway amplitude in tiles: 3 for a flyer, 2 for the Carrier, 0 for anything that does not fly. */
+export function flyerSwayAmplitude(kind: EnemyKind): number {
+  if (kind === 'flyer') return 3;
+  if (kind === 'flyer-boss') return 2;
+  return 0;
+}
+
 /** The Dreadnought's plating: flat reduction added to its base armour on every tower hit. */
 export const DREADNOUGHT_PLATING = 6;
 
@@ -231,6 +254,21 @@ export interface Enemy {
   broodCooldown: number;
   /** Index into the level's routes (0 on a single implicit route); picked at spawn. */
   routeIndex: number;
+  /** Flyer only: fixed perpendicular lane offset in tiles, drawn at spawn from [-4, +4]. */
+  laneOffset: number;
+  /** Flyer only: sway phase in radians, drawn at spawn from [0, 2*pi). */
+  swayPhase: number;
+  /** Flyer only: distance flown along the base path since spawn (or since the brood scatter ended). */
+  flightDist: number;
+  /**
+   * Flyer only: the offset applied to the base path, so the base position is (x - flightOffX,
+   * y - flightOffY). Storing the offset rather than the base keeps a direct write to x/y coherent.
+   */
+  flightOffX: number;
+  flightOffY: number;
+  /** Flyer only: smoothed unit direction of base travel; the offset is along its right-hand normal. */
+  flightDirX: number;
+  flightDirY: number;
   dead: boolean;
 }
 
@@ -316,6 +354,13 @@ export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Ti
     scatterTicks: 0,
     broodCooldown: kind === 'flyer-boss' ? CARRIER_BROOD_INTERVAL_TICKS : 0,
     routeIndex: 0,
+    laneOffset: 0,
+    swayPhase: 0,
+    flightDist: 0,
+    flightOffX: 0,
+    flightOffY: 0,
+    flightDirX: Math.cos(heading),
+    flightDirY: Math.sin(heading),
     dead: false,
   };
 }

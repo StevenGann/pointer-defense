@@ -74,7 +74,7 @@ import {
   setEditorToggle,
   editorTileAt,
 } from '../src/core/editor.ts';
-import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, ENEMY_KINDS, BOSS_KINDS, isBossKind, isBossVariant, isPopupEnemy, isFlyerKind, slowFactorFor, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS, CARRIER_BROOD_COUNT, CARRIER_BROOD_INTERVAL_TICKS, CARRIER_DEATH_BROOD_COUNT, DREADNOUGHT_PLATING, WIRECUTTER_EMP_RADIUS, WIRECUTTER_EMP_TICKS, RAM_TOWER_DPS, RAM_TURRET_DAMAGE, RAM_TURRET_RANGE } from '../src/core/enemies.ts';
+import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, ENEMY_KINDS, BOSS_KINDS, isBossKind, isBossVariant, isPopupEnemy, isFlyerKind, slowFactorFor, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS, CARRIER_BROOD_COUNT, CARRIER_BROOD_INTERVAL_TICKS, CARRIER_BROOD_SCATTER_TICKS, CARRIER_DEATH_BROOD_COUNT, DREADNOUGHT_PLATING, WIRECUTTER_EMP_RADIUS, WIRECUTTER_EMP_TICKS, RAM_TOWER_DPS, RAM_TURRET_DAMAGE, RAM_TURRET_RANGE } from '../src/core/enemies.ts';
 import { missileSeed } from '../src/core/projectiles.ts';
 import { rngNext } from '../src/core/rng.ts';
 import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS } from '../src/core/ads.ts';
@@ -380,6 +380,167 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   const gruntTicks = ticksToLeak('grunt');
   const flyerTicks = ticksToLeak('flyer');
   check(flyerTicks < gruntTicks, `flyer crosses in fewer ticks than a grunt (${flyerTicks} < ${gruntTicks})`);
+}
+
+// --- 5f. Flyer flight (docs/FLYER-FLIGHT.md) ----------------------------------------------------
+{
+  /** Run one level's wave-6 schedule (three flyers) plus a Carrier under God Mode, recording flyers. */
+  const flyRun = (levelId, seed) => {
+    const s = stateOnLevel(levelId);
+    if (seed !== undefined) s.rng = seed;
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    s.godMode = true;
+    s.wave = 5;
+    startWave(s);
+    const exit = s.level.exits[0];
+    const tracks = new Map();
+    const leakTiles = new Map();
+    let carrierQueued = false;
+    for (let i = 0; i < 9000; i++) {
+      if (!carrierQueued && i === 60) {
+        const c = createEnemy(s.nextId++, 'flyer-boss', 6, s.level.starts[0], exit);
+        c.laneOffset = 4; // worst case lane, so the clamp and the bound are both exercised
+        c.swayPhase = 0;
+        c.broodCooldown = Number.MAX_SAFE_INTEGER;
+        s.enemies.push(c);
+        carrierQueued = true;
+      }
+      const leaksBefore = s.totalLeaks;
+      const alive = s.enemies.filter((e) => !e.dead);
+      tick(s);
+      for (const e of alive) {
+        if (!isFlyerKind(e.kind)) continue;
+        if (!tracks.has(e.id)) tracks.set(e.id, { kind: e.kind, lane: e.laneOffset, pts: [] });
+        const bx = e.x - e.flightOffX;
+        const by = e.y - e.flightOffY;
+        const remain = e.dead ? 0 : s.flyerField[e.row * COLS + e.col] + Math.hypot(e.col + 0.5 - bx, e.row + 0.5 - by);
+        tracks.get(e.id).pts.push({ x: e.x, y: e.y, bx, by, col: e.col, row: e.row, dev: Math.hypot(e.x - bx, e.y - by), remain, dead: e.dead });
+        if (e.dead && s.totalLeaks > leaksBefore) leakTiles.set(e.id, { col: e.col, row: e.row });
+      }
+      if (s.enemies.length === 0 && s.phase !== 'wave' && carrierQueued) break;
+    }
+    return { s, tracks, leakTiles, exit };
+  };
+
+  const run = flyRun('corridor');
+  const flyers = [...run.tracks.values()].filter((t) => t.kind === 'flyer');
+  check(flyers.length >= 3 && run.tracks.size === flyers.length + 1, `flyer flight: the wave flies ${flyers.length} flyers and a Carrier`);
+
+  // 1. Mid-flight a flyer is not tile-centre-snapped: x or y is off the nearest integer (and off the
+  // tile centre) by more than 0.05 on most ticks.
+  for (const t of run.tracks.values()) {
+    const mid = t.pts.slice(Math.floor(t.pts.length * 0.1), Math.floor(t.pts.length * 0.9));
+    const offInt = mid.filter((p) => Math.abs(p.x - Math.round(p.x)) > 0.05 || Math.abs(p.y - Math.round(p.y)) > 0.05).length;
+    const offCentre = mid.filter((p) => Math.abs(p.x - Math.floor(p.x) - 0.5) > 0.05 || Math.abs(p.y - Math.floor(p.y) - 0.5) > 0.05).length;
+    check(offInt > mid.length * 0.5 && offCentre > mid.length * 0.5,
+      `flyer flight: a ${t.kind} is not grid-snapped mid-flight (${offInt}/${mid.length} off-integer, ${offCentre}/${mid.length} off-centre)`);
+  }
+
+  // 2. Two flyers spawned by one wave have different lane offsets, each inside [-4, +4].
+  const lanes = flyers.map((t) => t.lane);
+  check(new Set(lanes).size === lanes.length && lanes.every((l) => l >= -4 && l <= 4),
+    `flyer flight: each flyer in a wave draws its own lane (${lanes.map((l) => l.toFixed(2)).join(', ')})`);
+
+  // 3. The perpendicular deviation from the base path never exceeds |laneOffset| + amplitude; the base
+  // itself stays on the air route (its tile is on the field) and col/row are the base's tile.
+  for (const levelId of ['corridor', 'open-field', 'ladder']) {
+    const r = levelId === 'corridor' ? run : flyRun(levelId);
+    let worst = -Infinity;
+    let bounded = true;
+    let onBoard = true;
+    let baseTiles = true;
+    for (const t of r.tracks.values()) {
+      const amp = t.kind === 'flyer-boss' ? 2 : 3;
+      for (const p of t.pts) {
+        if (p.dev > Math.abs(t.lane) + amp + 1e-6) bounded = false;
+        worst = Math.max(worst, p.dev - Math.abs(t.lane) - amp);
+        if (p.x < 0 || p.y < 0 || p.x >= COLS || p.y >= ROWS) onBoard = false;
+        if (!p.dead && (Math.floor(p.bx) !== p.col || Math.floor(p.by) !== p.row) &&
+          Math.hypot(p.bx - p.col - 0.5, p.by - p.row - 0.5) > 1e-9) baseTiles = false;
+      }
+    }
+    check(bounded, `flyer flight (${levelId}): deviation never exceeds |lane| + amplitude (worst margin ${worst.toFixed(3)})`);
+    check(onBoard, `flyer flight (${levelId}): every flyer stays inside the board`);
+    check(baseTiles, `flyer flight (${levelId}): col/row follow the base path position`);
+
+    // 4. Within the last two tiles before the exit the deviation is under 0.25 tiles, and every
+    // flyer still leaks on the exit tile.
+    let nearExit = 0;
+    let tight = true;
+    for (const t of r.tracks.values()) {
+      for (const p of t.pts) {
+        if (p.remain > 2) continue;
+        nearExit++;
+        if (p.dev >= 0.25) tight = false;
+      }
+    }
+    check(nearExit > 0 && tight, `flyer flight (${levelId}): within two tiles of the exit the deviation is under 0.25 (${nearExit} samples)`);
+    const leaked = [...r.leakTiles.values()];
+    check(leaked.length === r.tracks.size && leaked.every((l) => l.col === r.exit.col && l.row === r.exit.row),
+      `flyer flight (${levelId}): all ${r.tracks.size} flyers leak on the exit tile (${leaked.length})`);
+  }
+
+  // 5. A non-flyer fixture is byte-identical to the build before flyer flight. The hash below was
+  // recorded from that build (commit 3cb9f15) with exactly this fixture.
+  const nonFlyerFixture = () => {
+    const s = stateOnLevel('open-field');
+    s.economy.salvage = 10000;
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    for (const [c, r] of [[5, 6], [8, 5], [8, 7], [11, 5]]) placeTower(s, 'wall', c, r);
+    placeTower(s, 'gun', 6, 4);
+    startWave(s);
+    const kinds = ['popup', 'shielded-boss', 'armoured-boss', 'saboteur-boss', 'grunt', 'runner', 'shielded', 'armoured', 'saboteur', 'breacher', 'grunt-boss', 'runner-boss', 'breacher-boss'];
+    let id = 10000;
+    for (const k of kinds) s.enemies.push(createEnemy(id++, k, 5, SPAWN, EXIT));
+    const buf = [];
+    for (let i = 0; i < 2400; i++) {
+      tick(s);
+      for (const e of s.enemies) if (!e.dead) buf.push(`${e.id}:${e.x},${e.y},${e.heading},${e.col},${e.row},${e.dist}`);
+      buf.push(`|${s.rng}`);
+    }
+    return createHash('sha1').update(buf.join(';')).digest('hex');
+  };
+  const fixtureHash = nonFlyerFixture();
+  check(fixtureHash === 'ef768fdff0d07c96d27a99421dee2f0675f03271',
+    `flyer flight: a non-flyer fixture run is byte-identical to the pre-flight build (${fixtureHash.slice(0, 10)})`);
+
+  // 6. The same seed reproduces identical flyer flight; a different seed flies differently.
+  const trace = (seed) => {
+    const r = flyRun('open-field', seed);
+    return [...r.tracks.entries()].map(([id, t]) => `${id}:${t.pts.map((p) => `${p.x},${p.y}`).join(' ')}`).join('\n');
+  };
+  const a = trace(12345);
+  check(a === trace(12345), 'flyer flight: the same seed produces identical flyer positions across two runs');
+  check(a !== trace(54321), 'flyer flight: a different seed produces a different flight');
+
+  // The Carrier brood keeps its straight scatter, then joins the sway.
+  {
+    const s = stateOnLevel('corridor');
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    s.godMode = true;
+    s.phase = 'wave';
+    const c = createEnemy(1, 'flyer-boss', 30, SPAWN, EXIT);
+    c.broodCooldown = 0;
+    s.nextId = 2;
+    s.enemies.push(c);
+    tick(s);
+    const brood = s.enemies.filter((e) => e.kind === 'flyer');
+    const h0 = brood.map((e) => e.heading);
+    let straight = true;
+    for (let i = 1; i < CARRIER_BROOD_SCATTER_TICKS; i++) {
+      tick(s);
+      brood.forEach((e, k) => { if (e.heading !== h0[k] || e.flightOffX !== 0 || e.flightOffY !== 0) straight = false; });
+    }
+    check(brood.length === CARRIER_BROOD_COUNT && straight, 'flyer flight: brood flyers scatter in a straight line first');
+    tick(s); // the brood is released after movement, so its last scatter step lands one tick later
+    check(brood.every((e) => e.scatterTicks === 0), 'flyer flight: the brood scatter ends on schedule');
+    let swayed = false;
+    for (let i = 0; i < 240; i++) {
+      tick(s);
+      if (brood.some((e) => !e.dead && Math.hypot(e.flightOffX, e.flightOffY) > 0.5)) swayed = true;
+    }
+    check(swayed, 'flyer flight: brood flyers join the sway after the scatter');
+  }
 }
 
 // --- 5e. Authored levels: walkable ends, expected route length, sealing, mazing, cycling -------
