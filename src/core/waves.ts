@@ -8,7 +8,8 @@ import { secondsToTicks } from './time.ts';
  * apart, starting `delay` ticks after the wave begins. Groups may overlap, which is how mixed waves
  * are made without listing every enemy.
  *
- * Waves 1..10 are the hand-written tutorial and are kept exactly as authored. Waves 11..100 are
+ * Waves 1..10 are the hand-written tutorial and are kept as authored, except that every flyer group
+ * (tutorial included) is multiplied and packed into flights (docs/FLYER-SWARMS.md). Waves 11..100 are
  * produced by a deterministic generator: the wave number is the seed, so there is no `Math.random`
  * in the table and every player sees the same hundred waves. Type bosses ride waves 10, 25, 50, 75
  * and 100, and modifiers begin at wave 51.
@@ -414,14 +415,84 @@ function generateWave(wave: number): WaveDef {
 // ---------------------------------------------------------------------------------------------
 // Public surface
 
-/** The wave definition for any wave, or null below wave 1. Tutorial waves are hand-written. */
-export function waveDef(wave: number): WaveDef | null {
-  if (wave < 1) return null;
-  if (wave <= TUTORIAL_WAVES.length) return TUTORIAL_WAVES[wave - 1];
-  return generateWave(wave);
+// ---------------------------------------------------------------------------------------------
+// Flyer swarms (docs/FLYER-SWARMS.md)
+
+/** At most this many flyers spawn together as one flight. */
+export const FLYER_FLIGHT_SIZE = 6;
+
+/** Ticks between members of one flight (0.15 s). */
+export const FLYER_FLIGHT_MEMBER_TICKS = secondsToTicks(0.15);
+
+/** Ticks between the last member of one flight and the first member of the next (0.9 s). */
+export const FLYER_FLIGHT_GAP_TICKS = secondsToTicks(0.9);
+
+/** The flyer-count multiplier for a wave's band: 2x for 1-20, 3x for 21-50, 4x for 51+. */
+export function flyerSwarmFactor(wave: number): number {
+  if (wave <= 20) return 2;
+  if (wave <= 50) return 3;
+  return 4;
 }
 
-/** Flatten a wave into a tick-ordered spawn schedule. Ties keep group order (stable sort). */
+/** Enemies a wave spawns outside its definition's groups: boss + escort, type boss, pop-ups. */
+function extraEnemyCount(wave: number): number {
+  let n = 0;
+  if (isBossWave(wave)) n += bossGroups(wave).reduce((sum, grp) => sum + grp.count, 0);
+  if (typeBossKindForWave(wave)) n += 1;
+  n += popupCountForWave(wave);
+  return n;
+}
+
+/**
+ * Multiply a wave's flyers by its band factor and pack them into flights, then hold the whole wave
+ * to `WAVE_ENEMY_CAP` by trimming the chaff (grunt/runner, latest group first) — never the flyers.
+ * Only if the chaff is exhausted (deep endless) are the remaining ground groups trimmed, again latest
+ * first. Groups trimmed to zero are dropped. A wave with no flyers is returned untouched.
+ */
+function swarmWave(wave: number, base: WaveDef): WaveDef {
+  if (!base.groups.some((grp) => grp.kind === 'flyer')) return base;
+  const factor = flyerSwarmFactor(wave);
+  const groups: SpawnGroup[] = base.groups.map((grp) =>
+    grp.kind === 'flyer'
+      ? { kind: grp.kind, count: Math.round(grp.count * factor), interval: FLYER_FLIGHT_MEMBER_TICKS, delay: grp.delay }
+      : grp,
+  );
+  let over = groups.reduce((sum, grp) => sum + grp.count, 0) + extraEnemyCount(wave) - WAVE_ENEMY_CAP;
+  const trim = (eligible: (kind: EnemyKind) => boolean): void => {
+    for (let i = groups.length - 1; i >= 0 && over > 0; i--) {
+      if (!eligible(groups[i].kind)) continue;
+      const cut = Math.min(over, groups[i].count);
+      groups[i] = { ...groups[i], count: groups[i].count - cut };
+      over -= cut;
+    }
+  };
+  if (over > 0) trim((kind) => kind === 'grunt' || kind === 'runner');
+  if (over > 0) trim((kind) => kind !== 'flyer');
+  return { groups: groups.filter((grp) => grp.count > 0) };
+}
+
+/** Spawn tick offsets (from the group's delay) for the i-th member of a flyer group. */
+function flyerSpawnOffset(i: number): number {
+  const flight = Math.floor(i / FLYER_FLIGHT_SIZE);
+  const member = i % FLYER_FLIGHT_SIZE;
+  const flightSpan = (FLYER_FLIGHT_SIZE - 1) * FLYER_FLIGHT_MEMBER_TICKS + FLYER_FLIGHT_GAP_TICKS;
+  return flight * flightSpan + member * FLYER_FLIGHT_MEMBER_TICKS;
+}
+
+/**
+ * The wave definition for any wave, or null below wave 1. Tutorial waves are hand-written; flyer
+ * groups (tutorial included) carry the swarm multiplier and the wave is held to the enemy cap.
+ */
+export function waveDef(wave: number): WaveDef | null {
+  if (wave < 1) return null;
+  const base = wave <= TUTORIAL_WAVES.length ? TUTORIAL_WAVES[wave - 1] : generateWave(wave);
+  return swarmWave(wave, base);
+}
+
+/**
+ * Flatten a wave into a tick-ordered spawn schedule. Ties keep group order (stable sort). Flyer
+ * groups spawn as flights on the fixed swarm clock (not scaled by rush or endless tightening).
+ */
 export function buildSchedule(wave: number): Spawn[] {
   const def = waveDef(wave);
   if (!def) return [];
@@ -433,6 +504,10 @@ export function buildSchedule(wave: number): Spawn[] {
   const intervalScale = (rush ? 0.75 : 1) * endlessIntervalScale(wave);
   const out: Spawn[] = [];
   for (const grp of groups) {
+    if (grp.kind === 'flyer') {
+      for (let i = 0; i < grp.count; i++) out.push({ tick: grp.delay + flyerSpawnOffset(i), kind: grp.kind });
+      continue;
+    }
     const interval = Math.max(1, Math.round(grp.interval * intervalScale));
     for (let i = 0; i < grp.count; i++) out.push({ tick: grp.delay + i * interval, kind: grp.kind });
   }
