@@ -1335,6 +1335,81 @@
       "rev": "a92530c987"
     },
     {
+      "name": "upgrades/_placeholder",
+      "frames": 1,
+      "rev": "950da9994b"
+    },
+    {
+      "name": "upgrades/autoloader",
+      "frames": 1,
+      "rev": "950da9994b"
+    },
+    {
+      "name": "upgrades/ballistic-telemetry",
+      "frames": 1,
+      "rev": "950da9994b"
+    },
+    {
+      "name": "upgrades/bounty-board",
+      "frames": 1,
+      "rev": "950da9994b"
+    },
+    {
+      "name": "upgrades/bulk-requisition",
+      "frames": 1,
+      "rev": "950da9994b"
+    },
+    {
+      "name": "upgrades/chain-reaction",
+      "frames": 1,
+      "rev": "950da9994b"
+    },
+    {
+      "name": "upgrades/compound-interest",
+      "frames": 1,
+      "rev": "950da9994b"
+    },
+    {
+      "name": "upgrades/coolant",
+      "frames": 1,
+      "rev": "950da9994b"
+    },
+    {
+      "name": "upgrades/double-buffer",
+      "frames": 1,
+      "rev": "950da9994b"
+    },
+    {
+      "name": "upgrades/emergency-patch",
+      "frames": 1,
+      "rev": "950da9994b"
+    },
+    {
+      "name": "upgrades/salvage-contract",
+      "frames": 1,
+      "rev": "950da9994b"
+    },
+    {
+      "name": "upgrades/shutter-licence",
+      "frames": 1,
+      "rev": "950da9994b"
+    },
+    {
+      "name": "upgrades/structural-warranty",
+      "frames": 1,
+      "rev": "950da9994b"
+    },
+    {
+      "name": "upgrades/system-tray",
+      "frames": 1,
+      "rev": "950da9994b"
+    },
+    {
+      "name": "upgrades/wide-reticle",
+      "frames": 1,
+      "rev": "950da9994b"
+    },
+    {
       "name": "wall/wall-bulwark",
       "frames": 1,
       "rev": "2cff09ff6d"
