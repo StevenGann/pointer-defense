@@ -28,8 +28,10 @@ next invalidation. No call site changes.
   A `now` request is served before any `idle` request, including ones already queued.
 - `getArtFrames` calls `requestArt(name, 'now')` on a miss. Its cost must stay trivial: a Map lookup
   and an early return when the asset is already known, since the draw loop hits it every frame.
-- `idle` work is started from `requestIdleCallback` (fallback `setTimeout(…, 200)`), one asset at a
-  time, and yields whenever a `now` request is outstanding or the idle deadline runs out.
+- `idle` work is started from `requestIdleCallback` (fallback `setTimeout(…, 200)` where it is
+  missing), one asset at a time, and yields whenever a `now` request is outstanding or the idle
+  deadline runs out. A busy 60fps loop can starve `requestIdleCallback`, so a 400 ms timer is armed
+  alongside it; whichever fires first runs the slice and cancels the other.
 - Network concurrency stays 6 (`PRELOAD_CONCURRENCY`). Decoding is main-thread CPU work, so at most
   one decode is in flight per idle slice; `now` requests may decode immediately.
 - A failed asset is retried once, then left absent with one warning, as today.

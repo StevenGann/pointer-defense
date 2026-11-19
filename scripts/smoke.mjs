@@ -177,6 +177,7 @@ import {
   artLoadStats,
   setArtTransport,
   setArtIdleScheduler,
+  IDLE_STARVED_MS,
 } from '../src/view/art.ts';
 import { Texture } from 'pixi.js';
 import { readdirSync, existsSync, readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
@@ -5424,6 +5425,76 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   getArtFrames('runner', 32);
   await settle();
   check(t6.attempts.get('runner') === 2, 'lazy art: a failed asset is not refetched on every draw');
+
+  // 7. A starved requestIdleCallback (a busy 60fps loop) cannot stall the warm-up: the fallback
+  // timer runs the slice, still one asset at a time, and cancels the idle callback it beat.
+  {
+    const hadRic = 'requestIdleCallback' in globalThis;
+    const realRic = globalThis.requestIdleCallback;
+    const realCic = globalThis.cancelIdleCallback;
+    const pendingIdle = new Map();
+    let nextHandle = 1;
+    let cancelled = 0;
+    globalThis.requestIdleCallback = (cb) => {
+      const h = nextHandle++;
+      pendingIdle.set(h, cb);
+      return h;
+    };
+    globalThis.cancelIdleCallback = (h) => {
+      if (pendingIdle.delete(h)) cancelled++;
+    };
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    try {
+      resetArt();
+      setArtIdleScheduler(null);
+      const t7 = makeTransport(small);
+      setArtTransport(t7);
+      await preloadArt();
+      await settle();
+      t7.order.length = 0;
+      check(pendingIdle.size === 1, `lazy art: the default scheduler arms requestIdleCallback (${pendingIdle.size})`);
+      // requestIdleCallback never fires.
+      await sleep(IDLE_STARVED_MS + 100);
+      check(t7.order.length === 1,
+        `lazy art: an idle slice still arrives when requestIdleCallback never fires (${t7.order.join(',')})`);
+      check(cancelled === 1, `lazy art: the fallback timer cancels the starved idle callback (${cancelled})`);
+      await settle();
+      // The next slice is armed again; this time requestIdleCallback wins and the timer is cleared.
+      check(pendingIdle.size === 1, 'lazy art: the next idle slice is armed after the fallback ran');
+      const [h, cb] = [...pendingIdle][0];
+      pendingIdle.delete(h);
+      const realClear = globalThis.clearTimeout;
+      let timersCleared = 0;
+      globalThis.clearTimeout = (id) => { timersCleared++; return realClear(id); };
+      try {
+        cb({ didTimeout: false, timeRemaining: () => 10 });
+      } finally {
+        globalThis.clearTimeout = realClear;
+      }
+      check(t7.order.length === 2, `lazy art: requestIdleCallback still runs a slice when it fires (${t7.order.join(',')})`);
+      check(timersCleared === 1, `lazy art: requestIdleCallback winning clears the fallback timer (${timersCleared})`);
+      await settle();
+      const afterIdle = t7.order.length;
+      // Only the remaining asset's slice is pending; let its timer fire, then make sure no stale timer
+      // from the slice requestIdleCallback won starts an extra load.
+      await sleep(IDLE_STARVED_MS + 100);
+      await settle();
+      check(t7.order.length === afterIdle + 1 && t7.order.join(',') === 'grunt,runner,flyer',
+        `lazy art: one asset per slice, in queue order, with no double-fired slice (${t7.order.join(',')})`);
+      check(artQueueLength() === 0, 'lazy art: the starved-idle queue drains');
+    } finally {
+      setArtTransport(null);
+      setArtIdleScheduler(null);
+      resetArt();
+      if (hadRic) {
+        globalThis.requestIdleCallback = realRic;
+        globalThis.cancelIdleCallback = realCic;
+      } else {
+        delete globalThis.requestIdleCallback;
+        delete globalThis.cancelIdleCallback;
+      }
+    }
+  }
 
   setArtTransport(null);
   setArtIdleScheduler(null);

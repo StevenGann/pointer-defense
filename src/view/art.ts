@@ -560,6 +560,8 @@ export type ArtIdleScheduler = (callback: (deadline: ArtIdleDeadline) => void) =
 
 /** The idle fallback delay where `requestIdleCallback` is unavailable (Safari). */
 const IDLE_FALLBACK_MS = 200;
+/** How long an idle slice waits on `requestIdleCallback` before a timer runs it anyway. */
+export const IDLE_STARVED_MS = 400;
 
 interface QueuedAsset {
   priority: ArtPriority;
@@ -647,10 +649,30 @@ function activeManifestSource(): () => Promise<ManifestAsset[]> {
   return testTransport !== null ? testTransport.manifest : loadManifestAssets;
 }
 
+/**
+ * A busy 60fps frame loop can starve `requestIdleCallback` indefinitely, so a fallback timer is armed
+ * alongside it. Whichever fires first runs the slice and cancels the other.
+ */
 const defaultIdleScheduler: ArtIdleScheduler = (callback) => {
   if (typeof requestIdleCallback === 'function') {
-    const handle = requestIdleCallback(callback);
-    return () => cancelIdleCallback(handle);
+    let done = false;
+    const idleHandle = requestIdleCallback((deadline) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timerHandle);
+      callback(deadline);
+    });
+    const timerHandle = setTimeout(() => {
+      if (done) return;
+      done = true;
+      cancelIdleCallback(idleHandle);
+      callback({ didTimeout: true, timeRemaining: () => 0 });
+    }, IDLE_STARVED_MS);
+    return () => {
+      done = true;
+      cancelIdleCallback(idleHandle);
+      clearTimeout(timerHandle);
+    };
   }
   const handle = setTimeout(() => callback({ didTimeout: true, timeRemaining: () => 0 }), IDLE_FALLBACK_MS);
   return () => clearTimeout(handle);
