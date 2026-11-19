@@ -1,16 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
-  <!-- Beveled Win95 tile in the grey palette. -->
-  <rect x="0.5" y="0.5" width="43" height="43" fill="#c0c0c0"/>
-  <rect x="0" y="0" width="44" height="1" fill="#ffffff"/>
-  <rect x="0" y="0" width="1" height="44" fill="#ffffff"/>
-  <rect x="0" y="1" width="44" height="1" fill="#dfdfdf"/>
-  <rect x="1" y="0" width="1" height="44" fill="#dfdfdf"/>
-  <rect x="0" y="43" width="44" height="1" fill="#000000"/>
-  <rect x="43" y="0" width="1" height="44" fill="#000000"/>
-  <rect x="0" y="42" width="44" height="1" fill="#808080"/>
-  <rect x="42" y="0" width="1" height="44" fill="#808080"/>
-  <!-- Question-block glyph: a sunken panel with a question mark. -->
-  <rect x="13" y="13" width="18" height="18" fill="#c0c0c0"/>
-  <rect x="13" y="13" width="18" height="18" fill="none" stroke="#808080" stroke-width="1"/>
-  <text x="22" y="27" font-family="Tahoma, Verdana, Geneva, sans-serif" font-size="16" font-weight="bold" fill="#000000" text-anchor="middle">?</text>
+  <!-- Pack Rat: reach wave 20 without selling. A tower with a cobweb. -->
+  <!-- The frame: a raised Windows 95 button. White and light grey on the top and left, grey and black on the bottom and right. -->
+  <rect x="0" y="0" width="44" height="44" fill="#c0c0c0"/>
+  <path d="M0 0 H44 V1 H1 V44 H0 Z" fill="#ffffff"/>
+  <path d="M1 1 H43 V2 H2 V43 H1 Z" fill="#dfdfdf"/>
+  <path d="M44 0 V44 H0 V43 H43 V0 Z" fill="#000000"/>
+  <path d="M43 1 V43 H1 V42 H42 V1 Z" fill="#808080"/>
+  <!-- The glyph, drawn in a 44-unit box and scaled to sit inside the frame. -->
+  <g transform="translate(22 22) scale(0.84) translate(-22 -22)">
+    <g transform="translate(24 25) scale(1.2) rotate(0)"><rect x="-8" y="-8" width="16" height="16" fill="#9a9a9a" stroke="#000000" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M-6.5 6.5 V-6.5 H6.5" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.6"/><rect x="-1.8" y="-12" width="3.6" height="10" fill="#5a5a5a" stroke="#000000" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/><circle r="4.5" fill="#5a5a5a" stroke="#000000" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/></g>
+    <path d="M3 3 L21 9 M3 3 L9 21 M3 3 L17 17 M10 5.5 Q11 9 6 10 M16 7.5 Q17 14 8 16.5" fill="none" stroke="#ffffff" stroke-width="1.3"/><path d="M3 3 L21 9 M3 3 L9 21 M3 3 L17 17" fill="none" stroke="#000000" stroke-width="0.6"/>
+  </g>
 </svg>

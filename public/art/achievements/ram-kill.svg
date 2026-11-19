@@ -1,16 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
-  <!-- Beveled Win95 tile in the grey palette. -->
-  <rect x="0.5" y="0.5" width="43" height="43" fill="#c0c0c0"/>
-  <rect x="0" y="0" width="44" height="1" fill="#ffffff"/>
-  <rect x="0" y="0" width="1" height="44" fill="#ffffff"/>
-  <rect x="0" y="1" width="44" height="1" fill="#dfdfdf"/>
-  <rect x="1" y="0" width="1" height="44" fill="#dfdfdf"/>
-  <rect x="0" y="43" width="44" height="1" fill="#000000"/>
-  <rect x="43" y="0" width="1" height="44" fill="#000000"/>
-  <rect x="0" y="42" width="44" height="1" fill="#808080"/>
-  <rect x="42" y="0" width="1" height="44" fill="#808080"/>
-  <!-- Question-block glyph: a sunken panel with a question mark. -->
-  <rect x="13" y="13" width="18" height="18" fill="#c0c0c0"/>
-  <rect x="13" y="13" width="18" height="18" fill="none" stroke="#808080" stroke-width="1"/>
-  <text x="22" y="27" font-family="Tahoma, Verdana, Geneva, sans-serif" font-size="16" font-weight="bold" fill="#000000" text-anchor="middle">?</text>
+  <!-- Roadblock: kill a Ram boss. A ram wedge stopped at a striped barrier. -->
+  <!-- The frame: a raised Windows 95 button. White and light grey on the top and left, grey and black on the bottom and right. -->
+  <rect x="0" y="0" width="44" height="44" fill="#c0c0c0"/>
+  <path d="M0 0 H44 V1 H1 V44 H0 Z" fill="#ffffff"/>
+  <path d="M1 1 H43 V2 H2 V43 H1 Z" fill="#dfdfdf"/>
+  <path d="M44 0 V44 H0 V43 H43 V0 Z" fill="#000000"/>
+  <path d="M43 1 V43 H1 V42 H42 V1 Z" fill="#808080"/>
+  <!-- The glyph, drawn in a 44-unit box and scaled to sit inside the frame. -->
+  <g transform="translate(22 22) scale(0.84) translate(-22 -22)">
+    <polygon points="3,12 24,22 3,32" fill="#5a7183" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/><polygon points="5,15 19,22 5,22" fill="#9ab0bf"/><circle cx="9" cy="19" r="2" fill="#e6f4ff" stroke="#000000"/><rect x="26" y="6" width="9" height="32" fill="#ffcc00" stroke="#000000" stroke-width="1.5"/><path d="M26.8 13 L34.2 7.5 M26.8 22 L34.2 16.5 M26.8 31 L34.2 25.5 M26.8 37.2 L34.2 34.5" stroke="#000000" stroke-width="3.4"/><rect x="24" y="37" width="13" height="4" fill="#808080" stroke="#000000"/>
+    <g transform="translate(21 12) scale(0.6) rotate(0)"><polygon points="0,-8.00 2.40,-2.40 8.00,0 2.40,2.40 0,8.00 -2.40,2.40 -8.00,0 -2.40,-2.40" fill="#ffff00" stroke="#000000" stroke-width="1" stroke-linejoin="round"/></g>
+  </g>
 </svg>

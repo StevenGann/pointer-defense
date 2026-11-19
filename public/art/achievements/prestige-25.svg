@@ -1,16 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
-  <!-- Beveled Win95 tile in the grey palette. -->
-  <rect x="0.5" y="0.5" width="43" height="43" fill="#c0c0c0"/>
-  <rect x="0" y="0" width="44" height="1" fill="#ffffff"/>
-  <rect x="0" y="0" width="1" height="44" fill="#ffffff"/>
-  <rect x="0" y="1" width="44" height="1" fill="#dfdfdf"/>
-  <rect x="1" y="0" width="1" height="44" fill="#dfdfdf"/>
-  <rect x="0" y="43" width="44" height="1" fill="#000000"/>
-  <rect x="43" y="0" width="1" height="44" fill="#000000"/>
-  <rect x="0" y="42" width="44" height="1" fill="#808080"/>
-  <rect x="42" y="0" width="1" height="44" fill="#808080"/>
-  <!-- Question-block glyph: a sunken panel with a question mark. -->
-  <rect x="13" y="13" width="18" height="18" fill="#c0c0c0"/>
-  <rect x="13" y="13" width="18" height="18" fill="none" stroke="#808080" stroke-width="1"/>
-  <text x="22" y="27" font-family="Tahoma, Verdana, Geneva, sans-serif" font-size="16" font-weight="bold" fill="#000000" text-anchor="middle">?</text>
+  <!-- Version 2.0: reach prestige level 25. A version stamp. -->
+  <!-- The frame: a raised Windows 95 button. White and light grey on the top and left, grey and black on the bottom and right. -->
+  <rect x="0" y="0" width="44" height="44" fill="#c0c0c0"/>
+  <path d="M0 0 H44 V1 H1 V44 H0 Z" fill="#ffffff"/>
+  <path d="M1 1 H43 V2 H2 V43 H1 Z" fill="#dfdfdf"/>
+  <path d="M44 0 V44 H0 V43 H43 V0 Z" fill="#000000"/>
+  <path d="M43 1 V43 H1 V42 H42 V1 Z" fill="#808080"/>
+  <!-- The glyph, drawn in a 44-unit box and scaled to sit inside the frame. -->
+  <g transform="translate(22 22) scale(0.84) translate(-22 -22)">
+    <rect x="3" y="11" width="38" height="22" rx="3" fill="#000080" stroke="#000000" stroke-width="1.5" transform="rotate(-8 22 22)"/><rect x="5.5" y="13.5" width="33" height="17" rx="2" fill="none" stroke="#ffffff" stroke-width="1.2" transform="rotate(-8 22 22)"/>
+    <g transform="translate(22 22) scale(1) rotate(-8)"><g fill="#000000"><rect x="-15.95" y="-7.55" width="3.90" height="3.90"/><rect x="-13.15" y="-7.55" width="3.90" height="3.90"/><rect x="-10.35" y="-7.55" width="3.90" height="3.90"/><rect x="-10.35" y="-4.75" width="3.90" height="3.90"/><rect x="-15.95" y="-1.95" width="3.90" height="3.90"/><rect x="-13.15" y="-1.95" width="3.90" height="3.90"/><rect x="-10.35" y="-1.95" width="3.90" height="3.90"/><rect x="-15.95" y="0.85" width="3.90" height="3.90"/><rect x="-15.95" y="3.65" width="3.90" height="3.90"/><rect x="-13.15" y="3.65" width="3.90" height="3.90"/><rect x="-10.35" y="3.65" width="3.90" height="3.90"/><rect x="-1.95" y="3.65" width="3.90" height="3.90"/><rect x="6.45" y="-7.55" width="3.90" height="3.90"/><rect x="9.25" y="-7.55" width="3.90" height="3.90"/><rect x="12.05" y="-7.55" width="3.90" height="3.90"/><rect x="6.45" y="-4.75" width="3.90" height="3.90"/><rect x="12.05" y="-4.75" width="3.90" height="3.90"/><rect x="6.45" y="-1.95" width="3.90" height="3.90"/><rect x="12.05" y="-1.95" width="3.90" height="3.90"/><rect x="6.45" y="0.85" width="3.90" height="3.90"/><rect x="12.05" y="0.85" width="3.90" height="3.90"/><rect x="6.45" y="3.65" width="3.90" height="3.90"/><rect x="9.25" y="3.65" width="3.90" height="3.90"/><rect x="12.05" y="3.65" width="3.90" height="3.90"/></g><g fill="#ffffff"><rect x="-15.40" y="-7.00" width="3.15" height="3.15"/><rect x="-12.60" y="-7.00" width="3.15" height="3.15"/><rect x="-9.80" y="-7.00" width="3.15" height="3.15"/><rect x="-9.80" y="-4.20" width="3.15" height="3.15"/><rect x="-15.40" y="-1.40" width="3.15" height="3.15"/><rect x="-12.60" y="-1.40" width="3.15" height="3.15"/><rect x="-9.80" y="-1.40" width="3.15" height="3.15"/><rect x="-15.40" y="1.40" width="3.15" height="3.15"/><rect x="-15.40" y="4.20" width="3.15" height="3.15"/><rect x="-12.60" y="4.20" width="3.15" height="3.15"/><rect x="-9.80" y="4.20" width="3.15" height="3.15"/><rect x="-1.40" y="4.20" width="3.15" height="3.15"/><rect x="7.00" y="-7.00" width="3.15" height="3.15"/><rect x="9.80" y="-7.00" width="3.15" height="3.15"/><rect x="12.60" y="-7.00" width="3.15" height="3.15"/><rect x="7.00" y="-4.20" width="3.15" height="3.15"/><rect x="12.60" y="-4.20" width="3.15" height="3.15"/><rect x="7.00" y="-1.40" width="3.15" height="3.15"/><rect x="12.60" y="-1.40" width="3.15" height="3.15"/><rect x="7.00" y="1.40" width="3.15" height="3.15"/><rect x="12.60" y="1.40" width="3.15" height="3.15"/><rect x="7.00" y="4.20" width="3.15" height="3.15"/><rect x="9.80" y="4.20" width="3.15" height="3.15"/><rect x="12.60" y="4.20" width="3.15" height="3.15"/></g></g>
+  </g>
 </svg>

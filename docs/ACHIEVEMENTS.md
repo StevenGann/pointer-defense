@@ -46,6 +46,30 @@ The achievements dialog becomes a grid, not a list.
 - `docs/ART-STYLE.md` governs palette; icons are 16 px-grid vector art, two colours plus the bevel,
   readable at 44 px.
 
+The shipped icons (2026-11-18) work to this contract. Keep it when you replace one:
+
+- **`viewBox="0 0 44 44"`, with a raised Windows 95 button frame in every file.** The frame is the
+  same bevel as `_placeholder.svg`: a `#c0c0c0` face, white and `#dfdfdf` on the top and left,
+  `#808080` and black on the bottom and right, each one unit wide. The glyph is drawn in a 44-unit
+  box and wrapped in `scale(0.84)` about the centre, so it sits inside the frame. The dialog
+  multiplies the whole icon by `#4d4d4d` while it is locked, so a locked icon is a dark tile with a
+  dim glyph.
+- **Flat fills and a black 1.5-unit outline.** Colours come from the Windows 16-colour palette plus
+  the game's own (tower identity colours, enemy blue-grey, shield cyan). Most icons use three or
+  four colours, not two: the tier colours below need them.
+- **Numerals are a 3×5 pixel font drawn as `<rect>`s, not `<text>`.** An SVG drawn as an image uses
+  the fonts on the player's machine, so `<text>` does not look the same everywhere. Three characters
+  is the most that reads at 44 px.
+- **Related achievements share a motif and step through it.** Tiers go bronze `#c0803c`, silver
+  `#dfdfdf`, gold `#ffcc00`, platinum `#9fe8ff`, violet `#c05cff`, with a numeral for the threshold:
+  Roman on the wave medals (XXV, L, C, CL, CC), Arabic elsewhere. The families are the wave medals,
+  the no-leak shields, the coin stacks, the target, the crit gauge, the power buttons, the chevrons,
+  the tower roster, the price tags and the early-call arrows. The three cheat-only shadows share a
+  magenta mark.
+- **The unlock condition comes before the brief.** Where a brief below and a family motif disagree,
+  the icon follows the family (for example `crit-hits` is a gauge, `map-import` is a floppy disk, and
+  the wave icons are medals).
+
 ### Art briefs
 
 Each brief describes one image, not a scene. Suggested shape: a single object or glyph, centred,
