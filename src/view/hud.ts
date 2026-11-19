@@ -3,6 +3,7 @@ import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from
 import { getArtTexture } from './art.ts';
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
+import { hasUpgrade, revealedUpgrades, upgradesAvailable } from '../core/upgrades.ts';
 import { clickDamage, comboMultiplier, critChance, nextPointerCost, overclockCeiling, pointerInfo } from '../core/pointer.ts';
 import { autoWaveStatus, canCycleLevel, currentPath, cursorMaintenanceStatus, isFinalWave, noBuildActive, NO_BUILD_MESSAGE, overclockCap, pointerDamageMult, selectedTower, STARTING_INTEGRITY, towerCost, towerUnlocked, type RunState } from '../core/state.ts';
 
@@ -51,7 +52,8 @@ export type HudAction =
   | 'branchA'
   | 'branchB'
   | 'branchC'
-  | 'restore';
+  | 'restore'
+  | 'upgrades';
 
 const NOTICE_TICKS = 150;
 
@@ -166,11 +168,28 @@ export interface PointerSection {
   override: Rect | null;
 }
 
+/**
+ * GLOBAL UPGRADES: two clickable rows. The first opens the Restore dialog (its only entry point), the
+ * second the run's Global Upgrades dialog (docs/GLOBAL-UPGRADES.md §6.1).
+ */
+export interface GlobalUpgradesSection extends InfoSection {
+  restore: Rect;
+  upgrades: Rect;
+}
+
 export interface RightPanelLayout {
   nextWave: InfoSection;
   kills: InfoSection;
   pointer: PointerSection;
-  globalUpgrades: InfoSection;
+  globalUpgrades: GlobalUpgradesSection;
+}
+
+/** The Upgrades row's text: how many revealed upgrades are buyable now, or why none are. */
+export function upgradesRowText(s: RunState): string {
+  const revealed = revealedUpgrades(s);
+  if (revealed.length === 0) return 'Upgrades — none yet';
+  if (revealed.every((d) => hasUpgrade(s, d.id))) return 'Upgrades — all owned';
+  return `Upgrades — ${upgradesAvailable(s).length} available`;
 }
 
 export function computeHud(l: Layout, s: RunState): HudLayout {
@@ -293,9 +312,9 @@ function pct(fraction: number): number {
 }
 
 /**
- * The right column: NEXT WAVE, KILLS, POINTER (the pointer's full home), then the reserved, empty
- * GLOBAL UPGRADES section. Sections stack by measured height, so rows can be added to any section
- * later without re-measuring the others.
+ * The right column: NEXT WAVE, KILLS, POINTER (the pointer's full home), then GLOBAL UPGRADES with
+ * its Restore and Upgrades rows. Sections stack by measured height, so rows can be added to any
+ * section later without re-measuring the others.
  */
 export function computeRightPanel(l: Layout, s: RunState): RightPanelLayout {
   const pad = 6;
@@ -336,10 +355,13 @@ export function computeRightPanel(l: Layout, s: RunState): RightPanelLayout {
   const pointer = computePointerSection(s, x, y, w);
   y += pointer.rect.h + SECTION_GAP;
 
-  const globalUpgrades: InfoSection = {
-    rect: { x, y, w, h: infoSectionHeight(1) },
+  const rowY = (i: number): number => y + SECTION_PAD_TOP + SECTION_TITLE_H + i * SECTION_ROW_H;
+  const globalUpgrades: GlobalUpgradesSection = {
+    rect: { x, y, w, h: infoSectionHeight(2) },
     title: 'GLOBAL UPGRADES',
-    rows: [`${s.rp} RP · level ${s.rpEarned}`],
+    rows: [`Restore — ${formatNumber(s.rp)} RP`, upgradesRowText(s)],
+    restore: { x: x + 2, y: rowY(0), w: w - 4, h: SECTION_ROW_H },
+    upgrades: { x: x + 2, y: rowY(1), w: w - 4, h: SECTION_ROW_H },
   };
 
   return { nextWave, kills, pointer, globalUpgrades };
@@ -450,6 +472,7 @@ export function hudControlAt(l: Layout, s: RunState, px: number, py: number): Hu
     if (pointInRect(h.autoWave, px, py)) return { action: 'auto', enabled: true };
   }
 
+  if (pointInRect(right.globalUpgrades.upgrades, px, py)) return { action: 'upgrades', enabled: true };
   if (pointInRect(right.globalUpgrades.rect, px, py)) return { action: 'restore', enabled: true };
 
   return null;
@@ -591,7 +614,7 @@ export class HudView {
   private readonly pointerTitle = makeText('POINTER', true);
   private readonly pointerRows: Text[] = [makeText(''), makeText(''), makeText(''), makeText('')];
   private readonly globalTitle = makeText('GLOBAL UPGRADES', true);
-  private readonly globalRows: Text[] = [makeText('')];
+  private readonly globalRows: Text[] = [makeText(''), makeText('')];
 
   constructor() {
     this.towerButtons = TOWER_KINDS.map(() => makeText(''));
@@ -648,7 +671,6 @@ export class HudView {
     this.comboText.style.fill = PAL.title;
     this.statusPaused.style.fill = PAL.title;
     this.cheatMarker.style.fill = PAL.maroon;
-    this.globalRows[0].style.fill = PAL.shadow;
   }
 
   showNotice(message: string, ticks = NOTICE_TICKS): void {
@@ -1016,8 +1038,10 @@ export class HudView {
       this.pointerOverrideButton.text = '';
     }
 
-    // GLOBAL UPGRADES: a reserved, empty section. One dim row, no buttons.
+    // GLOBAL UPGRADES: the Restore row and the Upgrades row, each a link to its dialog.
     this.drawInfoSection(g, this.globalTitle, this.globalRows, rp.globalUpgrades);
+    this.globalRows[0].style.fill = PAL.title;
+    this.globalRows[1].style.fill = upgradesAvailable(s).length > 0 ? PAL.title : PAL.text;
   }
 
   private drawInfoSection(g: Graphics, title: Text, rows: Text[], section: InfoSection): void {

@@ -33,6 +33,8 @@ import { ChromeView, computeLayout, PAL, pixelToWorld, pointInRect, type Layout,
 import { BoardView } from './view/board.ts';
 import { HudView, hudControlAt, paletteTowerAt, type HudAction } from './view/hud.ts';
 import { paletteTooltipLines, TooltipView, towerTooltipLines } from './view/tooltip.ts';
+import { computeUpgradesLayout, upgradeRowBuyable, upgradesHitAt, UpgradesSession, globalUpgradeTooltipLines, UpgradesView } from './view/upgrades.ts';
+import { buyUpgrade, GLOBAL_UPGRADES, type UpgradeId } from './core/upgrades.ts';
 import {
   branchTooltipLines,
   enemyTooltipLines,
@@ -167,6 +169,8 @@ const editorView = new EditorView();
 const helpSession = new HelpSession();
 const helpView = new HelpView();
 const restoreView = new RestoreView();
+const upgradesSession = new UpgradesSession();
+const upgradesView = new UpgradesView();
 const achievementSession = new AchievementSession();
 const achievementView = new AchievementGridView();
 
@@ -180,7 +184,7 @@ void preloadArt().then(() => drawCursorArrow());
 
 const root = new Container();
 app.stage.addChild(root);
-root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, helpView.root, restoreView.root, achievementView.root, ad.root, menuView.root, dialogView.root, tooltip.root, menuScreenView.root, loadDialogView.root, editorView.root);
+root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, helpView.root, restoreView.root, upgradesView.root, achievementView.root, ad.root, menuView.root, dialogView.root, tooltip.root, menuScreenView.root, loadDialogView.root, editorView.root);
 
 sfx.setEnabled(profile.soundOn);
 sfx.setVolume(profile.volume);
@@ -192,6 +196,23 @@ let menu: OpenMenu | null = null;
 let dialog: DialogModel | null = null;
 let cheatNotified: RunState | null = null;
 let restoreOpen = false;
+/** The run the Global Upgrades dialog was last drawn for; a different run closes it. */
+let upgradesState: RunState | null = null;
+
+/**
+ * Open the Global Upgrades dialog — never over another modal (docs/GLOBAL-UPGRADES.md §1): not over
+ * an open menu, dialog, the Help viewer, the achievements grid, Restore, or the end-of-run modal.
+ */
+function openUpgrades(): void {
+  if (menu !== null || dialog !== null || helpSession.open || achievementSession.open || restoreOpen) return;
+  if (state.phase === 'halted' || state.phase === 'victory') return;
+  upgradesSession.show();
+}
+
+/** Buy a global upgrade through the sim's one entry point, with the purchase blip on success. */
+function buyGlobalUpgrade(id: UpgradeId): void {
+  if (buyUpgrade(state, id)) sfx.play('adClose');
+}
 
 // --- Screens ---------------------------------------------------------------------------------
 // The app is one of three screens: the main menu, a live run, or the map editor. `runOrigin` says
@@ -746,7 +767,33 @@ const mouse = new MouseController(app, {
   closeAchievement: () => achievementSession.hide(),
   restoreOpen: () => restoreOpen,
   openRestore: () => {
+    upgradesSession.hide();
     restoreOpen = true;
+  },
+  upgradesOpen: () => upgradesSession.open,
+  openUpgrades,
+  closeUpgrades: () => upgradesSession.hide(),
+  upgradesPointerDown: (x: number, y: number, button: number): boolean => {
+    const ul = computeUpgradesLayout(layout, state);
+    const hit = upgradesHitAt(ul, x, y);
+    if (hit === null) return false;
+    if (button !== 0) return true;
+    if (hit.type === 'close') upgradesSession.hide();
+    else if (hit.type === 'buy') buyGlobalUpgrade(hit.id);
+    if (hit.type === 'buy' || hit.type === 'row') {
+      const index = ul.rows.findIndex((r) => r.def.id === hit.id);
+      if (index >= 0) upgradesSession.selected = index;
+    }
+    return true;
+  },
+  upgradesKey: (key) => {
+    const rows = computeUpgradesLayout(layout, state).rows;
+    if (key === 'up') upgradesSession.move(-1, rows.length);
+    else if (key === 'down') upgradesSession.move(1, rows.length);
+    else {
+      const row = rows[upgradesSession.selected];
+      if (row && upgradeRowBuyable(row)) buyGlobalUpgrade(row.def.id);
+    }
   },
   restorePointerDown: (x: number, y: number, button: number): boolean => {
     const rl = computeRestoreLayout(layout, profile);
@@ -1142,6 +1189,12 @@ app.ticker.add((ticker) => {
     ad.draw(state);
     helpView.draw(helpSession, profile, mouse.hover.x, mouse.hover.y);
     restoreView.draw(restoreOpen, profile, layout);
+    // The run ending (or a new run starting) takes the dialog down with it.
+    if (upgradesSession.open && (state.phase === 'halted' || state.phase === 'victory' || upgradesState !== state)) {
+      upgradesSession.hide();
+    }
+    upgradesState = state;
+    upgradesView.draw(upgradesSession.open, state, layout, upgradesSession.selected);
     if (achievementSession.open) {
       const m = achievementModel();
       const al = computeAchievementGrid(m, layout.client);
@@ -1170,6 +1223,7 @@ app.ticker.add((ticker) => {
   hud.root.visible = running;
   helpView.root.visible = running && helpSession.open;
   restoreView.root.visible = running && restoreOpen;
+  upgradesView.root.visible = running && upgradesSession.open;
   achievementView.root.visible = running && achievementSession.open;
   ad.root.visible = running;
   menuView.root.visible = running;
@@ -1244,6 +1298,8 @@ function hudTooltipLines(action: HudAction, s: RunState): TooltipLine[] {
     }
     case 'restore':
       return ['Open the Restore tree and spec shop.'];
+    case 'upgrades':
+      return ['Open Global Upgrades: one-shot purchases for this run, paid in salvage.'];
     default:
       return [];
   }
@@ -1265,6 +1321,21 @@ function updateTooltip(): void {
 
   const viewportW = app.screen.width;
   const viewportH = app.screen.height;
+
+  // Over the Global Upgrades window: a row's detail (and its shortfall), or nothing at all, so the
+  // board and HUD tooltips never show through the dialog.
+  if (!suppressed && upgradesSession.open) {
+    const hit = upgradesHitAt(computeUpgradesLayout(layout, state), h.x, h.y);
+    if (hit !== null) {
+      const def = hit.type === 'buy' || hit.type === 'row' ? GLOBAL_UPGRADES.find((d) => d.id === hit.id) : undefined;
+      if (def) {
+        tooltip.update({ key: `upgrade:${def.id}`, lines: globalUpgradeTooltipLines(def, state) }, h.x, h.y, viewportW, viewportH);
+      } else {
+        tooltip.update({ key: null, lines: [] }, h.x, h.y, viewportW, viewportH);
+      }
+      return;
+    }
+  }
 
   if (!suppressed) {
     const palette = paletteTowerAt(layout, state, h.x, h.y);

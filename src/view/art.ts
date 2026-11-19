@@ -1,6 +1,7 @@
 import { Texture } from 'pixi.js';
 import { baseEnemyKind, type EnemyKind } from '../core/enemies.ts';
 import { ACHIEVEMENTS } from '../core/achievements.ts';
+import { GLOBAL_UPGRADES } from '../core/upgrades.ts';
 import { liveDevicePixelRatio } from './screen.ts';
 import { currentAnimFrame, lifetimeFrame, secondsToWholeTicks, type AnimMeta } from './anim.ts';
 
@@ -28,6 +29,7 @@ export type ArtCategory =
   | 'ui'
   | 'wall'
   | 'achievements'
+  | 'upgrades'
   | 'projectiles'
   | 'mines';
 
@@ -73,6 +75,16 @@ const BOARD_NAMES = ['tile', 'path-tile', 'obstacle', 'block'] as const;
 
 /** Achievement icons: one file per id, plus the `_placeholder` every missing file falls back to. */
 const ACHIEVEMENT_NAMES = ['_placeholder', ...ACHIEVEMENTS.map((a) => a.id)] as const;
+
+/**
+ * The global-upgrade placeholder's lookup name. Every other asset is keyed by its bare file name, but
+ * `upgrades/_placeholder.svg` shares its file name with the achievements' placeholder, so it keeps
+ * its folder to stay distinct (see `bareName`).
+ */
+export const UPGRADE_PLACEHOLDER = 'upgrades/_placeholder';
+
+/** Global-upgrade icons (docs/GLOBAL-UPGRADES.md §7): one 44x44 file per id. */
+const UPGRADE_NAMES = GLOBAL_UPGRADES.map((u) => u.id);
 
 /** Effect sprites: fixed shapes whose only runtime variation is position/scale/rotation/alpha/tint. */
 const FX_NAMES = [
@@ -158,6 +170,8 @@ export const ART_MANIFEST: readonly ArtEntry[] = [
   ...entries('ui', 'ui', UI_NAMES),
   ...entries('wall', 'wall', WALL_NAMES),
   ...entries('achievements', 'achievements', ACHIEVEMENT_NAMES),
+  { name: UPGRADE_PLACEHOLDER, category: 'upgrades', file: `${UPGRADE_PLACEHOLDER}.svg` },
+  ...entries('upgrades', 'upgrades', UPGRADE_NAMES),
   ...entries('projectiles', 'projectiles', PROJECTILE_NAMES),
   ...entries('mines', 'mines', MINE_NAMES),
 ];
@@ -259,6 +273,7 @@ export interface ManifestAsset {
 
 /** The bare asset name (the part after the last `/`) used by every texture lookup. */
 function bareName(assetName: string): string {
+  if (assetName === UPGRADE_PLACEHOLDER) return UPGRADE_PLACEHOLDER;
   return assetName.slice(assetName.lastIndexOf('/') + 1);
 }
 

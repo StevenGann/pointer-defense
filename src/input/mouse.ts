@@ -113,6 +113,11 @@ export interface MouseContext {
   restoreOpen: () => boolean;
   restorePointerDown: (x: number, y: number, button: number) => boolean;
   openRestore: () => void;
+  upgradesOpen: () => boolean;
+  upgradesPointerDown: (x: number, y: number, button: number) => boolean;
+  openUpgrades: () => void;
+  closeUpgrades: () => void;
+  upgradesKey: (key: 'up' | 'down' | 'buy') => void;
 }
 
 /** HUD actions the No-Build modifier disables (placing, upgrading, branching, selling, repairing,
@@ -221,6 +226,9 @@ export class MouseController {
 
     // The Restore window swallows clicks inside it the same way the help window does.
     if (this.ctx.restoreOpen() && this.ctx.restorePointerDown(x, y, e.button)) return;
+
+    // So does the Global Upgrades window.
+    if (this.ctx.upgradesOpen() && this.ctx.upgradesPointerDown(x, y, e.button)) return;
 
     // The achievements grid swallows clicks inside it (cells, filters, close).
     if (this.ctx.achievementOpen() && this.ctx.achievementPointerDown(x, y, e.button)) return;
@@ -389,6 +397,9 @@ export class MouseController {
       case 'restore':
         this.ctx.openRestore();
         break;
+      case 'upgrades':
+        this.ctx.openUpgrades();
+        break;
     }
   }
 
@@ -426,6 +437,10 @@ export class MouseController {
         this.ctx.closeAchievement();
         return;
       }
+      if (this.ctx.upgradesOpen()) {
+        this.ctx.closeUpgrades();
+        return;
+      }
       const hadSelection = s.selected !== null || s.selectedTowerId !== null;
       cancelSelection(s);
       if (!hadSelection) this.ctx.exitRun();
@@ -441,6 +456,28 @@ export class MouseController {
       return;
     }
     if (this.ctx.menu() || this.ctx.dialog()) return;
+
+    // The Global Upgrades dialog owns Up / Down / Enter while it is open; U toggles it shut.
+    if (this.ctx.upgradesOpen()) {
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        this.ctx.upgradesKey('up');
+        return;
+      }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        this.ctx.upgradesKey('down');
+        return;
+      }
+      if (e.key === 'Enter') {
+        this.ctx.upgradesKey('buy');
+        return;
+      }
+      if (e.key === 'u' || e.key === 'U') {
+        this.ctx.closeUpgrades();
+        return;
+      }
+    }
 
     // Cheat shortcuts: Ctrl+Shift+G toggles God Mode, Ctrl+Shift+K kills all. They read the same
     // gate as the menu, so with cheats hidden they are inert.
@@ -467,10 +504,14 @@ export class MouseController {
       return;
     }
     if (e.key === 'u' || e.key === 'U') {
+      // U upgrades the selected tower, as it always has; with nothing selected it opens the Global
+      // Upgrades dialog (docs/GLOBAL-UPGRADES.md §6.2).
       const tower = selectedTower(s);
       if (tower) {
         if (noBuildActive(s)) this.ctx.notice(NO_BUILD_MESSAGE);
         else upgradeTower(s, tower.col, tower.row);
+      } else {
+        this.ctx.openUpgrades();
       }
       return;
     }

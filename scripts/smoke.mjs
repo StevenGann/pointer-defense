@@ -3915,8 +3915,10 @@ function cursorTower(tier, branch) {
   check(right.pointer.rows.length === 3, 'the POINTER section lists stage, overclock and crits');
   check(right.globalUpgrades.title === 'GLOBAL UPGRADES', 'the right column ends with GLOBAL UPGRADES');
   check(
-    right.globalUpgrades.rows.length === 1 && right.globalUpgrades.rows[0] === '0 RP · level 0',
-    'GLOBAL UPGRADES reports the Restore Point balance and prestige level',
+    right.globalUpgrades.rows.length === 2 &&
+      right.globalUpgrades.rows[0] === 'Restore — 0 RP' &&
+      right.globalUpgrades.rows[1] === 'Upgrades — none yet',
+    'GLOBAL UPGRADES lists the Restore row and the Upgrades row',
   );
   check(
     right.nextWave.rect.y < right.kills.rect.y &&
@@ -3942,14 +3944,18 @@ function cursorTower(tier, branch) {
 }
 
 {
-  // GLOBAL UPGRADES is the live control that opens the Restore tree dialog.
+  // GLOBAL UPGRADES: the first row opens the Restore tree dialog (its only entry point), the second
+  // the Global Upgrades dialog (docs/GLOBAL-UPGRADES.md §6.1).
   const l = computeLayout(1280, 720);
   const s = createRunState();
   const right = computeRightPanel(l, s);
-  const gx = right.globalUpgrades.rect.x + right.globalUpgrades.rect.w / 2;
-  const gy = right.globalUpgrades.rect.y + right.globalUpgrades.rect.h - 4;
-  const hit = hudControlAt(l, s, gx, gy);
-  check(hit !== null && hit.action === 'restore' && hit.enabled, 'GLOBAL UPGRADES is the Restore dialog control');
+  const centre = (r) => [r.x + r.w / 2, r.y + r.h / 2];
+  const restoreHit = hudControlAt(l, s, ...centre(right.globalUpgrades.restore));
+  const upgradesHit = hudControlAt(l, s, ...centre(right.globalUpgrades.upgrades));
+  check(
+    restoreHit?.action === 'restore' && restoreHit.enabled && upgradesHit?.action === 'upgrades' && upgradesHit.enabled,
+    'GLOBAL UPGRADES rows open the Restore and Upgrades dialogs',
+  );
 }
 
 // --- 31. Ad chrome is the main window's scale, and the pop-up enemy matches it -----------------
