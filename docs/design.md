@@ -1670,6 +1670,44 @@ exceeds the flyer's, `shadows` sorts before
 
 ---
 
+## 25. Tower auras
+
+Four tower states are invisible until they matter: a tower being healed, one standing in a Beacon's
+aura, one dropped onto Manual Override, and one knocked offline by a Wirecutter EMP or a Blue Screen.
+Each is drawn as a placeholder aura over the tower's tile centre while the status holds, so the player
+sees *why* the numbers are moving instead of inferring it.
+
+The four auras are `fx/` assets, one per status:
+
+| Asset | Status |
+|---|---|
+| `fx/aura-heal` | a Repair tower is healing this tower (three green plus signs rising and fading) |
+| `fx/aura-beacon` | this tower is inside a Beacon's aura (a gold ring, gold at the rim fading to transparent at the centre) |
+| `fx/aura-override` | Manual Override is on, a target is marked, and this tower is in range of it (a cyan reticle tightening) |
+| `fx/aura-emp` | the tower is disabled — Wirecutter EMP or Blue Screen (violet broken arcs flickering around the rim) |
+
+Each ships four frames and a `.json` with `loop` and `randomStart`, so a row of auras does not pulse
+in lockstep. The **status model** lives in the core, never the view: three pure helpers read the exact
+state the effects read and describe when each aura is on.
+
+- `healedTowerIds(s)` — ids of towers a Repair tower healed this tick, recomputed from the same
+  `repairHealTargets` the heal loop uses.
+- `towerAuraSources(s)` — a map from tower id to its buffs: `beacon` when a Beacon's aura reaches it,
+  `override` when Manual Override has a marked target in range.
+- `disabledTowerIds(s)` — towers under a Wirecutter EMP or a Blue Screen.
+
+Because they read the sim state rather than a cached copy, a visual can never claim something the
+simulation is not doing.
+
+**Where it sits.** A new `auras` layer joins `BOARD_LAYER_ORDER` after `towers` and before `wrenches`:
+over the plinth, so the tower reads as affected, and under anything that floats above it. One pooled
+sprite is kept per status per tower, so a full board costs no more than four sprites per tower and
+nothing is created per frame. A status that is off hides its sprite rather than destroying it; alpha
+and scale come from the asset's animation and the view adds only position. Auras never take pointer
+events — tower selection, `enemyAt` and `hudButtonAt` keep working through them.
+
+---
+
 ## Appendix A — What four games got right
 
 **Desktop Tower Defense** (Paul Preece, March 2007) — the path is not fixed; creeps take the shortest

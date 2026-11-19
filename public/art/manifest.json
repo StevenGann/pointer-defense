@@ -873,6 +873,58 @@
       "rev": "08c88b587a"
     },
     {
+      "name": "fx/aura-beacon",
+      "frames": 4,
+      "anim": {
+        "fps": 6,
+        "loop": "loop",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "always"
+      },
+      "rev": "92610bca96"
+    },
+    {
+      "name": "fx/aura-emp",
+      "frames": 4,
+      "anim": {
+        "fps": 6,
+        "loop": "loop",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "always"
+      },
+      "rev": "99f98ed161"
+    },
+    {
+      "name": "fx/aura-heal",
+      "frames": 4,
+      "anim": {
+        "fps": 6,
+        "loop": "loop",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "always"
+      },
+      "rev": "f93a54ec0c"
+    },
+    {
+      "name": "fx/aura-override",
+      "frames": 4,
+      "anim": {
+        "fps": 6,
+        "loop": "loop",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "always"
+      },
+      "rev": "7ece53971a"
+    },
+    {
       "name": "fx/death-ring",
       "frames": 3,
       "anim": {

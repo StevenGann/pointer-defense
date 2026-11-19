@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A cyan reticle: four corner brackets tightening. Frame 2. -->
+  <g fill="#00e5ff">
+    <polygon points="6,6 13,6 13,9 9,9 9,13 6,13"/>
+    <polygon points="26,6 19,6 19,9 23,9 23,13 26,13"/>
+    <polygon points="6,26 13,26 13,23 9,23 9,19 6,19"/>
+    <polygon points="26,26 19,26 19,23 23,23 23,19 26,19"/>
+  </g>
+</svg>

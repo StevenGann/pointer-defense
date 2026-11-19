@@ -5,7 +5,10 @@ import { bevel, FONT, FONT_SIZE, PAL, type BoardGeometry, type Layout } from './
 import {
   enemyAt,
   canPlace,
+  disabledTowerIds,
+  healedTowerIds,
   towerAt,
+  towerAuraSources,
   currentRoutes,
   selectedTower,
   towerRangeMult,
@@ -189,13 +192,23 @@ export function shadowVisibleFor(kind: EnemyKind): boolean {
  */
 export const BOARD_LAYER_ORDER = Object.freeze([
   'tileSprites', 'tiles', 'path', 'shadows', 'mines', 'mineArt', 'shutterSprites', 'toggles', 'towerSprites',
-  'towers', 'wrenches', 'popups', 'enemies', 'enemyBodies', 'enemyFx', 'cursorArrows', 'ghost', 'overlay',
+  'towers', 'auras', 'wrenches', 'popups', 'enemies', 'enemyBodies', 'enemyFx', 'cursorArrows', 'ghost', 'overlay',
   'projectileArt',
 ] as const);
 export type BoardLayerName = (typeof BOARD_LAYER_ORDER)[number];
 
 const AURA_COLOR = 0x6699ff;
 const SLOW_COLOR = 0x00d0ff;
+
+/** The four tower-status auras, one sprite per status per tower (docs/TOWER-AURAS.md). */
+const AURA_STATUSES = ['heal', 'beacon', 'override', 'emp'] as const;
+type AuraStatus = (typeof AURA_STATUSES)[number];
+const AURA_ASSET: Record<AuraStatus, string> = {
+  heal: 'aura-heal',
+  beacon: 'aura-beacon',
+  override: 'aura-override',
+  emp: 'aura-emp',
+};
 
 export interface BoardHover {
   col: number;
@@ -216,6 +229,8 @@ export class BoardView {
   private readonly shutterSpritePool: Sprite[] = [];
   private readonly toggles = new Graphics();
   private readonly towers = new Graphics();
+  private readonly auras = new Container();
+  private readonly auraSprites: Sprite[] = [];
   private readonly wrenches = new Container();
   private readonly wrenchSprites: Sprite[] = [];
   private readonly towerSprites = new Container();
@@ -264,6 +279,7 @@ export class BoardView {
       toggles: this.toggles,
       towerSprites: this.towerSprites,
       towers: this.towers,
+      auras: this.auras,
       wrenches: this.wrenches,
       popups: this.popups,
       enemies: this.enemies,
@@ -365,6 +381,19 @@ export class BoardView {
       s.anchor.set(0.5, 0.5);
       this.shutterSpritePool.push(s);
       this.shutterSprites.addChild(s);
+    }
+    s.visible = true;
+    return s;
+  }
+
+  /** The pooled aura sprite for the `index`-th status slot, grown on demand. */
+  private auraSprite(index: number): Sprite {
+    let s = this.auraSprites[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0.5, 0.5);
+      this.auraSprites.push(s);
+      this.auras.addChild(s);
     }
     s.visible = true;
     return s;
@@ -531,6 +560,43 @@ export class BoardView {
     for (let i = towerIndex; i < this.wrenchSprites.length; i++) this.wrenchSprites[i].visible = false;
     for (let i = wallOverlayIndex; i < this.wallOverlaySprites.length; i++) this.wallOverlaySprites[i].visible = false;
 
+    // Tower-status auras: one sprite per status per tower, cycling on the asset's own animation while
+    // the status holds and hidden otherwise. They sit in their own layer above the plinth and never
+    // take pointer events (all board hit-tests are coordinate-based).
+    const healed = healedTowerIds(state);
+    const auraSources = towerAuraSources(state);
+    const disabled = disabledTowerIds(state);
+    let auraIndex = 0;
+    for (const t of state.towers) {
+      const active: Record<AuraStatus, boolean> = {
+        heal: healed.has(t.id),
+        beacon: auraSources.get(t.id)?.has('beacon') ?? false,
+        override: auraSources.get(t.id)?.has('override') ?? false,
+        emp: disabled.has(t.id),
+      };
+      for (const status of AURA_STATUSES) {
+        const sprite = this.auraSprite(auraIndex++);
+        if (!active[status]) {
+          sprite.visible = false;
+          continue;
+        }
+        const tex = frameTexture(AURA_ASSET[status], cell, state.clock, t.id);
+        if (tex === null) {
+          sprite.visible = false;
+          continue;
+        }
+        sprite.texture = tex;
+        sprite.visible = true;
+        sprite.position.set(board.x + (t.col + 0.5) * cell, board.y + (t.row + 0.5) * cell);
+        sprite.width = cell;
+        sprite.height = cell;
+        sprite.tint = 0xffffff;
+        sprite.rotation = 0;
+        sprite.alpha = 1;
+      }
+    }
+    for (let i = auraIndex; i < this.auraSprites.length; i++) this.auraSprites[i].visible = false;
+
     const rangeMult = towerRangeMult(state);
     const hoveredTower = hover.onBoard ? towerAt(state, hover.col, hover.row) : undefined;
     if (hoveredTower) drawTowerRange(this.overlay, hoveredTower, board, cell, rangeMult);
@@ -660,6 +726,9 @@ export class BoardView {
     this.towerTurretSprites.length = 0;
     this.towerMarkSprites.length = 0;
     this.wallOverlaySprites.length = 0;
+
+    this.auras.removeChildren();
+    this.auraSprites.length = 0;
 
     this.tileSprites.removeChildren();
 

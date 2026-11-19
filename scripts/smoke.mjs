@@ -13,7 +13,9 @@ import { FLYER_OFF_KIND_DAMAGE,
   buildStats,
   createRunState,
   cursorMaintenanceStatus,
+  disabledTowerIds,
   GOD_SALVAGE_CEILING,
+  healedTowerIds,
   killAllEnemies,
   placeTower,
   canPlace,
@@ -38,6 +40,7 @@ import { FLYER_OFF_KIND_DAMAGE,
   cancelSelection,
   placementSealsUnderToggles,
   toggleAtTile,
+  towerAuraSources,
   cycleTargetMode,
   startRepair,
   upgradePointer,
@@ -8926,6 +8929,206 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   selectPlacedTower(s, t);
   check(startWave(s), 'ux6: the wave starts');
   check(s.selectedTowerId === t.id, 'ux6: the inspected tower stays selected through a wave start');
+}
+
+// --- Tower auras (docs/TOWER-AURAS.md) --------------------------------------------------------
+
+{
+  // 1. Each helper returns exactly the towers the sim is acting on.
+
+  // healedTowerIds: a Repair tower marks its target and nothing outside radius or at full health.
+  {
+    const s = allUnlocked('open-field');
+    s.economy.salvage = 100000;
+    placeTower(s, 'repair', 5, 5);
+    placeTower(s, 'gun', 6, 5);
+    placeTower(s, 'gun', 12, 5);
+    const healed = towerAt(s, 6, 5);
+    const far = towerAt(s, 12, 5);
+    healed.hp = 40;
+    far.hp = 40;
+    const ids = healedTowerIds(s);
+    check(ids.has(healed.id) && !ids.has(far.id), 'healedTowerIds marks the in-radius damaged tower only');
+    check(!ids.has(towerAt(s, 5, 5).id), 'healedTowerIds never marks the repair tower itself');
+    healed.hp = healed.maxHp;
+    check(healedTowerIds(s).size === 0, 'healedTowerIds is empty once every tower is at full health');
+  }
+
+  // towerAuraSources: a Beacon marks every tower in radius and nothing outside it.
+  {
+    const s = allUnlocked('open-field');
+    s.economy.salvage = 100000;
+    placeTower(s, 'beacon', 5, 5);
+    placeTower(s, 'gun', 6, 5);
+    placeTower(s, 'gun', 12, 5);
+    const inGun = towerAt(s, 6, 5);
+    const outGun = towerAt(s, 12, 5);
+    const sources = towerAuraSources(s);
+    check(sources.get(inGun.id)?.has('beacon') === true, 'towerAuraSources marks the tower inside the beacon radius');
+    check(sources.get(outGun.id)?.has('beacon') !== true, 'towerAuraSources leaves the tower outside the beacon radius alone');
+    check(sources.get(towerAt(s, 5, 5).id)?.has('beacon') !== true, 'a beacon never buffs itself');
+  }
+
+  // towerAuraSources: Manual Override marks only towers within range of the marked enemy.
+  {
+    const s = allUnlocked('open-field');
+    s.economy.salvage = 100000;
+    placeTower(s, 'gun', 5, 5);
+    placeTower(s, 'gun', 12, 5);
+    const near = towerAt(s, 5, 5);
+    const far = towerAt(s, 12, 5);
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const marked = stationary(1, 'grunt', 1, 5.5, 4.0);
+    s.enemies.push(marked);
+    s.pointer.targetId = marked.id;
+    toggleManualOverride(s);
+    const sources = towerAuraSources(s);
+    check(sources.get(near.id)?.has('override') === true, 'towerAuraSources marks the tower in range of the marked enemy');
+    check(sources.get(far.id)?.has('override') !== true, 'towerAuraSources leaves the out-of-range tower alone');
+  }
+
+  // disabledTowerIds: an EMP marks the towers inside it, and a Blue Screen marks its tower.
+  {
+    const s = stateOnLevel('open-field');
+    s.economy.salvage = 100000;
+    placeTower(s, 'gun', 5, 5);
+    placeTower(s, 'gun', 12, 5);
+    const near = towerAt(s, 5, 5);
+    const far = towerAt(s, 12, 5);
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const w = stationary(1, 'saboteur-boss', 42, 5.5, 5.5);
+    s.enemies.push(w);
+    for (let i = 0; i < 3; i++) tick(s);
+    const ids = disabledTowerIds(s);
+    check(ids.has(near.id) && !ids.has(far.id), 'disabledTowerIds marks the tower inside the EMP radius only');
+  }
+  {
+    const s = allUnlocked('open-field');
+    s.economy.salvage = 100000;
+    placeTower(s, 'gun', 5, 5);
+    const g = towerAt(s, 5, 5);
+    s.towerDisabled.set(g.id, secondsToTicks(3));
+    check(disabledTowerIds(s).has(g.id), 'disabledTowerIds marks a Blue-Screen-disabled tower');
+  }
+}
+
+{
+  // 2. Each helper returns nothing when the status is absent.
+  const s = allUnlocked('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 5, 5);
+  placeTower(s, 'beacon', 12, 5); // far from the gun, buffs nothing
+  check(healedTowerIds(s).size === 0, 'healedTowerIds is empty with no repair tower');
+  check(disabledTowerIds(s).size === 0, 'disabledTowerIds is empty with no EMP or Blue Screen');
+  const sources = towerAuraSources(s);
+  check([...sources.values()].every((set) => set.size === 0), 'towerAuraSources is empty with no beacon aura or override');
+}
+
+{
+  // 3. BOARD_LAYER_ORDER puts auras after towers and before wrenches.
+  const li = (n) => BOARD_LAYER_ORDER.indexOf(n);
+  check(li('auras') === li('towers') + 1 && li('auras') === li('wrenches') - 1,
+    'the auras layer sits between towers and wrenches');
+}
+
+{
+  // 4. Exactly one pooled sprite per active status, none for an inactive one, and pooled sprites hide.
+  resetArt();
+  const healTex = new Texture({ width: 4, height: 4 });
+  const beaconTex = new Texture({ width: 4, height: 4 });
+  const overrideTex = new Texture({ width: 4, height: 4 });
+  const empTex = new Texture({ width: 4, height: 4 });
+  injectArtTexture('aura-heal', healTex);
+  injectArtTexture('aura-beacon', beaconTex);
+  injectArtTexture('aura-override', overrideTex);
+  injectArtTexture('aura-emp', empTex);
+  const layout = computeLayout(1280, 800);
+  const hover = { col: 0, row: 0, onBoard: false, x: 0, y: 0 };
+  const cell = layout.board.cell;
+
+  // A damaged gun healed by a repair tower and buffed by a beacon: two statuses on one tower.
+  const s = allUnlocked('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'repair', 5, 5);
+  placeTower(s, 'gun', 6, 5);
+  placeTower(s, 'beacon', 9, 5);
+  const gun = towerAt(s, 6, 5);
+  gun.hp = 40;
+  const view = new BoardView();
+  view.draw(s, layout, 0, hover);
+  const visible = () => view.auraSprites.filter((x) => x.visible);
+  check(view.auraSprites.length === 12, `three towers pool 12 aura sprites (${view.auraSprites.length})`);
+  check(visible().length === 2, `exactly one sprite per active status (${visible().length})`);
+  check(new Set(visible().map((x) => x.texture)).size === 2 &&
+    visible().some((x) => x.texture === healTex) && visible().some((x) => x.texture === beaconTex),
+    'the two active statuses draw heal and beacon');
+  const gunCx = layout.board.x + (gun.col + 0.5) * cell;
+  const gunCy = layout.board.y + (gun.row + 0.5) * cell;
+  check(visible().every((x) => x.position.x === gunCx && x.position.y === gunCy), 'the auras sit at the gun tile centre');
+
+  // Healing finishes: the heal aura hides, the beacon aura stays.
+  gun.hp = gun.maxHp;
+  view.draw(s, layout, 0, hover);
+  check(visible().length === 1 && visible()[0].texture === beaconTex, 'an inactive status hides its sprite');
+
+  // Sell the beacon: every status is gone and the pooled sprites all hide.
+  sellTower(s, 9, 5);
+  view.draw(s, layout, 0, hover);
+  check(visible().length === 0, 'no active status leaves no visible aura');
+  check(view.auraSprites.length === 12, 'pooled aura sprites are reused, not recreated');
+
+  // Override and EMP: each active status draws its own sprite.
+  resetArt();
+  injectArtTexture('aura-override', overrideTex);
+  injectArtTexture('aura-emp', empTex);
+  const s2 = allUnlocked('open-field');
+  s2.economy.salvage = 100000;
+  placeTower(s2, 'gun', 5, 5);
+  placeTower(s2, 'gun', 12, 5);
+  const over = towerAt(s2, 5, 5);
+  const emped = towerAt(s2, 12, 5);
+  s2.phase = 'wave';
+  s2.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const marked = stationary(1, 'grunt', 1, 5.5, 4.0);
+  s2.enemies.push(marked);
+  s2.pointer.targetId = marked.id;
+  toggleManualOverride(s2);
+  emped.empUntilTick = s2.clock + 100;
+  const view2 = new BoardView();
+  view2.draw(s2, layout, 0, hover);
+  const vis = view2.auraSprites.filter((x) => x.visible);
+  check(vis.length === 2, `one override and one EMP draw exactly two auras (${vis.length})`);
+  check(vis.some((x) => x.texture === overrideTex) && vis.some((x) => x.texture === empTex),
+    'the override reticle and the EMP static each draw');
+  check(vis.some((x) => x.texture === overrideTex && x.position.x === layout.board.x + (over.col + 0.5) * cell && x.position.y === layout.board.y + (over.row + 0.5) * cell),
+    'the override aura sits at the tower tile centre');
+  resetArt();
+}
+
+{
+  // 5. The four assets exist, have at least four frames, and pass the manifest checks.
+  const artDir = fileURLToPath(new URL('../public/art', import.meta.url));
+  const { assets, errors } = scanArt(artDir);
+  const svgLooksValid = (text) => {
+    const t = text.trim();
+    return t.startsWith('<svg') && t.endsWith('</svg>') && t.includes('viewBox="0 0 32 32"') &&
+      (t.match(/</g) || []).length === (t.match(/>/g) || []).length;
+  };
+  for (const name of ['aura-heal', 'aura-beacon', 'aura-override', 'aura-emp']) {
+    const entry = assets.find((a) => a.name === `fx/${name}`);
+    check(entry !== undefined, `the ${name} asset is present in the manifest scan`);
+    check(entry !== undefined && entry.frames >= 4, `the ${name} asset has at least four frames (${entry?.frames})`);
+    check(entry !== undefined && entry.anim?.loop === 'loop' && entry.anim?.randomStart === true,
+      `the ${name} asset loops with a random start`);
+    for (const f of ['', '.1', '.2', '.3']) {
+      const file = `${artDir}/fx/${name}${f}.svg`;
+      check(existsSync(file) && svgLooksValid(readFileSync(file, 'utf8')), `fx/${name}${f}.svg is a well-formed 32x32 SVG`);
+    }
+    check(existsSync(`${artDir}/fx/${name}.json`), `fx/${name}.json ships with the frames`);
+  }
+  check(errors.length === 0, `the aura assets pass the manifest checks (${errors.join(', ') || 'no errors'})`);
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

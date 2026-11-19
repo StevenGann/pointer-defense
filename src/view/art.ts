@@ -110,6 +110,10 @@ const FX_NAMES = [
   'spark-hit',
   'shield-arc',
   'death-ring',
+  'aura-heal',
+  'aura-beacon',
+  'aura-override',
+  'aura-emp',
 ] as const;
 
 /** UI glyphs: fixed chrome marks. `arrow-right` is reserved (its mirror ships first). */
