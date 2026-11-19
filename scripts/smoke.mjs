@@ -53,7 +53,7 @@ import { FLYER_OFF_KIND_DAMAGE,
 import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
-import { buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers } from '../src/core/waves.ts';
+import { buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, FLYER_FLIGHT_MEMBER_TICKS, FLYER_FLIGHT_SIZE, flyerSwarmFactor, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers, WAVE_ENEMY_CAP } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
@@ -384,7 +384,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 
 // --- 5f. Flyer flight (docs/FLYER-FLIGHT.md) ----------------------------------------------------
 {
-  /** Run one level's wave-6 schedule (three flyers) plus a Carrier under God Mode, recording flyers. */
+  /** Run one level's wave-6 schedule (six flyers since the swarm) plus a Carrier under God Mode, recording flyers. */
   const flyRun = (levelId, seed) => {
     const s = stateOnLevel(levelId);
     if (seed !== undefined) s.rng = seed;
@@ -1831,11 +1831,160 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(s.wave === 101, 'endless continues at 101');
 }
 
+// --- 16a. Flyer swarms (docs/FLYER-SWARMS.md) --------------------------------------------------
+{
+  // Captured from buildSchedule on the branch point (0a2b9ce), before the swarm change:
+  // wave: [flyer count, total schedule length, chaff (grunt + runner) count].
+  const PRE_SWARM = {
+    6: [3, 22, 19], 7: [4, 25, 21], 8: [5, 30, 25], 9: [6, 30, 21], 10: [8, 52, 31], 11: [7, 32, 20], 12: [5, 29, 16],
+    13: [6, 30, 19], 14: [7, 32, 18], 15: [6, 30, 17], 16: [8, 33, 19], 17: [5, 28, 19], 18: [5, 29, 14], 19: [6, 31, 18],
+    20: [5, 28, 18], 21: [7, 40, 24], 22: [7, 41, 24], 23: [11, 45, 22], 24: [10, 45, 24], 25: [7, 48, 32], 26: [8, 41, 23],
+    27: [6, 40, 24], 28: [9, 42, 22], 29: [9, 43, 25], 30: [8, 43, 25], 31: [11, 45, 21], 32: [6, 40, 24], 33: [11, 45, 20],
+    34: [10, 44, 21], 35: [10, 44, 23], 36: [9, 44, 23], 37: [11, 45, 20], 38: [11, 45, 25], 39: [10, 44, 26], 40: [6, 40, 23],
+    41: [12, 54, 27], 42: [13, 56, 27], 43: [13, 55, 26], 44: [11, 53, 37], 45: [8, 50, 26], 46: [10, 52, 28], 47: [11, 52, 30],
+    48: [13, 56, 28], 49: [13, 55, 28], 50: [11, 62, 33], 51: [9, 51, 28], 52: [12, 54, 28], 53: [12, 54, 27], 54: [13, 54, 29],
+    55: [12, 53, 31], 56: [11, 53, 30], 57: [10, 51, 28], 58: [9, 50, 26], 59: [8, 51, 30], 60: [10, 51, 25], 61: [13, 62, 34],
+    62: [14, 64, 28], 63: [9, 57, 34], 64: [13, 63, 33], 65: [14, 64, 36], 66: [14, 64, 41], 67: [10, 58, 33], 68: [10, 58, 36],
+    69: [10, 58, 32], 70: [11, 59, 41], 71: [10, 58, 42], 72: [10, 59, 33], 73: [11, 59, 41], 74: [11, 60, 34], 75: [12, 70, 45],
+    76: [12, 61, 35], 77: [10, 58, 34], 78: [11, 59, 34], 79: [14, 64, 33], 80: [9, 58, 35], 81: [15, 68, 37], 82: [10, 63, 36],
+    83: [10, 63, 34], 84: [13, 67, 38], 85: [14, 68, 34], 86: [17, 71, 33], 87: [16, 70, 36], 88: [13, 68, 35], 89: [10, 63, 43],
+    90: [14, 68, 38], 91: [11, 64, 38], 92: [13, 67, 37], 93: [13, 67, 40], 94: [14, 68, 37], 95: [16, 70, 37], 96: [14, 68, 35],
+    97: [16, 70, 33], 98: [17, 71, 36], 99: [13, 67, 39], 100: [14, 78, 39],
+  };
+  // FNV-1a of JSON.stringify(buildSchedule(w)) for the flyer-free waves 1..5, joined by '\n', on the
+  // same branch point.
+  const PRE_SWARM_NO_FLYER_HASH = 'ee8c2036';
+
+  const factor = (w) => (w <= 20 ? 2 : w <= 50 ? 3 : 4);
+  check(flyerSwarmFactor(20) === 2 && flyerSwarmFactor(21) === 3 && flyerSwarmFactor(50) === 3 && flyerSwarmFactor(51) === 4,
+    'flyer swarms: band factors are 2x to 20, 3x to 50, 4x from 51');
+
+  // 1 + 2. Counts per band; capped waves trim chaff, never flyers, and land exactly on the cap.
+  let countsOk = true;
+  let cappedOk = true;
+  const capped = [];
+  for (let w = 6; w <= 100; w++) {
+    const [oldFlyers, oldTotal] = PRE_SWARM[w];
+    const want = Math.round(oldFlyers * factor(w));
+    const sched = buildSchedule(w);
+    const flyers = sched.filter((sp) => sp.kind === 'flyer').length;
+    if (flyers !== want) {
+      countsOk = false;
+      console.log(`  wave ${w}: ${flyers} flyers, expected ${want}`);
+    }
+    if (oldTotal - oldFlyers + want > WAVE_ENEMY_CAP) {
+      capped.push(w);
+      // Only chaff (grunt/runner) may shrink; every other non-flyer kind keeps its pre-swarm count.
+      if (sched.length !== WAVE_ENEMY_CAP || flyers !== want) cappedOk = false;
+    } else if (sched.length !== oldTotal - oldFlyers + want) {
+      cappedOk = false;
+      console.log(`  wave ${w}: total ${sched.length}, expected ${oldTotal - oldFlyers + want} (uncapped)`);
+    }
+  }
+  check(countsOk, 'flyer swarms: waves 6..100 carry round(old * band factor) flyers');
+  check(capped.length > 0, `flyer swarms: some late waves hit the cap (${capped.join(', ')})`);
+  check(cappedOk, 'flyer swarms: capped waves keep every multiplied flyer and total exactly WAVE_ENEMY_CAP; uncapped totals grow by the added flyers only');
+  check(buildSchedule(6).filter((sp) => sp.kind === 'flyer').length === 6 &&
+    buildSchedule(10).filter((sp) => sp.kind === 'flyer').length === 16,
+    'flyer swarms: tutorial wave 6 flies 6 flyers and wave 10 flies 16');
+
+  // Every wave: the only kinds whose counts move are flyers (up) and chaff (down, only when capped);
+  // the chaff loss is exactly the overflow.
+  let trimChaffOnly = true;
+  for (let w = 6; w <= 100; w++) {
+    const sched = buildSchedule(w);
+    const flyers = sched.filter((sp) => sp.kind === 'flyer').length;
+    const chaff = sched.filter((sp) => sp.kind === 'grunt' || sp.kind === 'runner').length;
+    const [oldFlyers, oldTotal, oldChaff] = PRE_SWARM[w];
+    const overflow = Math.max(0, oldTotal - oldFlyers + flyers - WAVE_ENEMY_CAP);
+    const otherNow = sched.length - flyers - chaff;
+    if (chaff !== oldChaff - overflow || otherNow !== oldTotal - oldFlyers - oldChaff) {
+      trimChaffOnly = false;
+      console.log(`  wave ${w}: chaff ${chaff} (was ${oldChaff}, overflow ${overflow}), other ${otherNow}`);
+    }
+  }
+  check(trimChaffOnly, 'flyer swarms: the cap trims chaff (grunt/runner), never flyers or other kinds');
+
+  // 2. No wave over the cap, through the run and well into endless.
+  let worst = 0;
+  for (let w = 1; w <= 400; w++) worst = Math.max(worst, buildSchedule(w).length);
+  check(worst <= WAVE_ENEMY_CAP, `flyer swarms: no wave 1..400 exceeds WAVE_ENEMY_CAP (largest ${worst})`);
+
+  // 3. Flights: within a flyer group the longest gap is at most 0.9 s + the intra-flight interval,
+  // no flight has more than six members, and the first flight starts at the group's delay.
+  const maxGap = secondsToTicks(0.9) + secondsToTicks(0.15);
+  let gapOk = true;
+  let flightOk = true;
+  let delayOk = true;
+  let largestGap = 0;
+  let largestFlight = 0;
+  for (let w = 6; w <= 300; w++) {
+    const groups = waveDef(w).groups.filter((grp) => grp.kind === 'flyer');
+    if (groups.length !== 1) { gapOk = false; continue; }
+    const ticks = buildSchedule(w).filter((sp) => sp.kind === 'flyer').map((sp) => sp.tick);
+    if (ticks[0] !== groups[0].delay) delayOk = false;
+    let run = 1;
+    for (let i = 1; i < ticks.length; i++) {
+      const gap = ticks[i] - ticks[i - 1];
+      largestGap = Math.max(largestGap, gap);
+      if (gap > maxGap) gapOk = false;
+      if (gap <= FLYER_FLIGHT_MEMBER_TICKS) run++;
+      else run = 1;
+      largestFlight = Math.max(largestFlight, run);
+      if (run > FLYER_FLIGHT_SIZE) flightOk = false;
+    }
+  }
+  check(gapOk, `flyer swarms: longest gap inside a flyer group is ${largestGap} ticks (<= ${maxGap})`);
+  check(flightOk && largestFlight === 6, `flyer swarms: no flight exceeds six members (largest ${largestFlight})`);
+  check(delayOk, 'flyer swarms: the first flight starts at the group delay');
+  // The doc's example: a 24-flyer group (wave 30, 8 x 3) is four flights, airborne in about 5 s
+  // (3 x (5 x 0.15 + 0.9) + 5 x 0.15 = 5.7 s) instead of a 36 s trickle.
+  const w30 = buildSchedule(30).filter((sp) => sp.kind === 'flyer').map((sp) => sp.tick);
+  const w30Flights = 1 + w30.slice(1).filter((t, i) => t - w30[i] > FLYER_FLIGHT_MEMBER_TICKS).length;
+  const w30Span = w30[w30.length - 1] - w30[0];
+  check(w30.length === 24 && w30Flights === 4 && w30Span <= secondsToTicks(6),
+    `flyer swarms: wave 30's 24 flyers fly as ${w30Flights} flights, airborne in ${(w30Span / TICK_HZ).toFixed(2)} s`);
+
+  // 4. Waves with no flyers are byte-identical to the pre-swarm build.
+  const noFlyer = [];
+  for (let w = 1; w <= 100; w++) if (!buildSchedule(w).some((sp) => sp.kind === 'flyer')) noFlyer.push(w);
+  check(noFlyer.join(',') === '1,2,3,4,5', `flyer swarms: only waves 1..5 carry no flyers (${noFlyer.join(',')})`);
+  const text = noFlyer.map((w) => JSON.stringify(buildSchedule(w))).join('\n');
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  check((h >>> 0).toString(16) === PRE_SWARM_NO_FLYER_HASH,
+    `flyer swarms: flyer-free schedules are byte-identical to the pre-swarm build (hash ${(h >>> 0).toString(16)})`);
+
+  // 5. Cross-run determinism: the same wave produces the same schedule every time.
+  let same = true;
+  for (const w of [6, 10, 24, 51, 86, 100, 101, 187, 300]) {
+    if (JSON.stringify(buildSchedule(w)) !== JSON.stringify(buildSchedule(w))) same = false;
+    if (JSON.stringify(waveDef(w)) !== JSON.stringify(waveDef(w))) same = false;
+  }
+  check(same, 'flyer swarms: schedules are identical across runs');
+
+  // The schedule shape is unchanged: { tick, kind } only, tick-ordered, length = waveEnemyCount.
+  let shapeOk = true;
+  for (let w = 1; w <= 120; w++) {
+    const sched = buildSchedule(w);
+    if (sched.length !== waveEnemyCount(w)) shapeOk = false;
+    for (let i = 0; i < sched.length; i++) {
+      const keys = Object.keys(sched[i]).join(',');
+      if (keys !== 'tick,kind' || (i > 0 && sched[i].tick < sched[i - 1].tick)) shapeOk = false;
+    }
+  }
+  check(shapeOk, 'flyer swarms: schedule shape unchanged ({tick, kind}, ordered, length = waveEnemyCount)');
+}
+
 // --- 16b. Endless curve: 1-100 unchanged, HP bands, count/interval, modifier stacking ---------
 {
   // Waves 1..100 must be byte-identical: hash the full balance table (HP scale, value scale,
   // enemy count and kill value per wave) and compare against the committed hash. The hash changed
-  // when the milestone waves swapped the generic boss for their mapped type boss (v0.41).
+  // when the milestone waves swapped the generic boss for their mapped type boss (v0.41), and again
+  // when flyer swarms multiplied the flyer groups (docs/FLYER-SWARMS.md).
   let table = '';
   for (let w = 1; w <= 100; w++) {
     table += `${waveHpScale(w)}|${waveValueScale(w)}|${waveEnemyCount(w)}|${waveKillValue(w)}\n`;
@@ -1845,7 +1994,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     h ^= table.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
-  check((h >>> 0).toString(16) === '5b6e087d', `waves 1..100 balance table unchanged (hash ${(h >>> 0).toString(16)})`);
+  check((h >>> 0).toString(16) === 'c3581b15', `waves 1..100 balance table unchanged (hash ${(h >>> 0).toString(16)})`);
 }
 
 {
@@ -7520,7 +7669,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     h ^= table.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
-  check((h >>> 0).toString(16) === '5b6e087d', 'waves 1..100 balance table unchanged with cheats off');
+  check((h >>> 0).toString(16) === 'c3581b15', 'waves 1..100 balance table unchanged with cheats off');
 }
 
 // --- 45. The Restore tree ----------------------------------------------------------------
