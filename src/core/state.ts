@@ -18,7 +18,28 @@ import {
   type Route,
 } from './levels.ts';
 import { buildAirField, buildField, buildRouteField, isSealed, pathTiles, stepToward } from './pathfield.ts';
-import type { UpgradeId } from './upgrades.ts';
+import {
+  AUTOLOADER_INTERVAL_MULT,
+  BOUNTY_HP_MULT,
+  BOUNTY_VALUE_MULT,
+  BULK_DISCOUNT_CAP,
+  BULK_DISCOUNT_PER_COPY,
+  CHAIN_RADIUS,
+  CHAIN_SPLASH_MULT,
+  CHAIN_TARGETS,
+  COMPOUND_INTEREST_RATE,
+  COOLANT_OVERCLOCK_CAP,
+  DOUBLE_BUFFER_MULT,
+  EMERGENCY_PATCH_INTEGRITY,
+  hasUpgrade,
+  SALVAGE_CONTRACT_MULT,
+  TELEMETRY_SPLASH_MULT,
+  TELEMETRY_SPLASH_RANGE,
+  WARRANTY_DAMAGE_MULT,
+  WARRANTY_REPAIR_MULT,
+  WIDE_RETICLE_SLACK,
+  type UpgradeId,
+} from './upgrades.ts';
 import {
   BASTION_SHIELD_LAYER_VALUE,
   baseEnemyKind,
@@ -32,6 +53,7 @@ import {
   createEnemy,
   ENEMY_STATS,
   isFlyerKind,
+  isBossKind,
   isPopupEnemy,
   isWeakPointHit,
   PACER_AURA_RADIUS,
@@ -198,9 +220,30 @@ export function pointerDamageMult(s: RunState): number {
   return 1 + SPEC_DAMAGE_PCT_PER_POINT * s.specs.gpu + s.treeEffects.pointerDamagePct + s.rpEarned * PRESTIGE_DAMAGE_PCT_PER_LEVEL;
 }
 
-/** The build cost of a tower kind, after the tree's cost multiplier. */
+/**
+ * The build cost of a tower kind, after the tree's cost multiplier. Bulk Requisition takes 4 % off
+ * per copy of the kind already on the board, to -40 %; walls never count (docs/GLOBAL-UPGRADES.md).
+ */
 export function towerCost(s: RunState, kind: TowerKind): number {
-  return Math.round(TOWER_STATS[kind].cost * s.treeEffects.costMultiplier);
+  const base = Math.round(TOWER_STATS[kind].cost * s.treeEffects.costMultiplier);
+  if (kind === 'wall' || !hasUpgrade(s, 'bulk-requisition')) return base;
+  const copies = s.towers.filter((t) => t.kind === kind).length;
+  return Math.floor(base * (1 - Math.min(BULK_DISCOUNT_CAP, BULK_DISCOUNT_PER_COPY * copies)));
+}
+
+/** The run-local overclock cap: 12, or 16 once Coolant Loop is owned. */
+export function overclockCap(s: RunState): number {
+  return hasUpgrade(s, 'coolant') ? COOLANT_OVERCLOCK_CAP : MAX_OVERCLOCK_LEVEL;
+}
+
+/** Double-Buffered Click: the click and hold damage multiplier (1 without it). */
+function pointerUpgradeMult(s: RunState): number {
+  return hasUpgrade(s, 'double-buffer') ? DOUBLE_BUFFER_MULT : 1;
+}
+
+/** Wide Reticle: extra click hit-test slack (0 without it). */
+function clickSlackBonus(s: RunState): number {
+  return hasUpgrade(s, 'wide-reticle') ? WIDE_RETICLE_SLACK : 0;
 }
 
 /** Whether a tower kind is unlocked for this run (Early Access unlocks everything at wave 1). */
@@ -1109,6 +1152,9 @@ export function startRepair(s: RunState, col: number, row: number): boolean {
   t.repairStartHp = t.hp;
   t.repairMissing = repairHpToRestore(t);
   t.repairDurationTicks = repairDurationTicks(t, s.treeEffects.repairSpeedMult);
+  if (hasUpgrade(s, 'structural-warranty')) {
+    t.repairDurationTicks = Math.max(1, Math.round(t.repairDurationTicks * WARRANTY_REPAIR_MULT));
+  }
   t.repairReadyAt = s.clock + t.repairDurationTicks;
 
   // The tile is off the field while the repair runs, so the route re-paths immediately. Any breacher
@@ -1162,7 +1208,7 @@ function pushEnemyOffTile(s: RunState, e: Enemy, col: number, row: number): void
 export function toggleGate(s: RunState, col: number, row: number): boolean {
   const t = towerAt(s, col, row);
   if (!t || !isToggleGate(t)) return false;
-  if (isGateLocked(t, s.clock)) return false;
+  if (isGateLocked(t, s.clock) && !hasUpgrade(s, 'shutter-licence')) return false;
 
   if (t.open) {
     const blocked = groundBlocked(s);
@@ -1174,7 +1220,7 @@ export function toggleGate(s: RunState, col: number, row: number): boolean {
   }
 
   const closing = !t.open;
-  t.toggleReadyAt = s.clock + TOGGLE_LOCK_TICKS;
+  t.toggleReadyAt = hasUpgrade(s, 'shutter-licence') ? s.clock : s.clock + TOGGLE_LOCK_TICKS;
   s.toggleFlips++;
   s.idleTicks = 0;
   rebuildField(s);
@@ -1272,7 +1318,7 @@ export function upgradePointer(s: RunState): boolean {
   }
   const overclockCost = nextOverclockCost(s.pointer);
   if (overclockCost === null) return false;
-  if (s.pointer.clickLevel + 1 > overclockCeiling(s.wave)) return false;
+  if (s.pointer.clickLevel + 1 > overclockCeiling(s.wave, overclockCap(s))) return false;
   // The ceiling is a guard, not a tax: it only ever rises with the wave counter, so a level bought
   // earlier is never taken away when a run is restored or the wave count is odd.
   if (!spend(s.economy, overclockCost)) return false;
@@ -1560,7 +1606,7 @@ export function pointerDown(s: RunState, x: number, y: number): boolean {
   const previousTargetId = s.pointer.targetId;
   s.pointer.held = true;
   const relay = relayPointerBonus(s, x, y);
-  const target = enemyAt(s, x, y, CLICK_SLACK + relay.slack);
+  const target = enemyAt(s, x, y, CLICK_SLACK + relay.slack + clickSlackBonus(s));
   const weak = target ? isWeakPointHit(target, x, y) : false;
   s.events.push({ type: 'click', x, y, hit: !!target });
   if (!target) {
@@ -1576,7 +1622,7 @@ export function pointerDown(s: RunState, x: number, y: number): boolean {
   const roll = nextCritRoll(s.rng, marked, weak);
   s.rng = roll.next;
   s.pointer.targetId = target.id;
-  const base = clickDamage(s.pointer) * relay.damage * pointerDamageMult(s);
+  const base = clickDamage(s.pointer) * relay.damage * pointerDamageMult(s) * pointerUpgradeMult(s);
   const amount =
     base *
     comboMultiplier(s.pointer) *
@@ -1584,12 +1630,38 @@ export function pointerDown(s: RunState, x: number, y: number): boolean {
     (marked ? MARKED_DAMAGE_MULT : 1) *
     (roll.crit ? CRIT_MULTIPLIER : 1);
   damageEnemy(s, target, amount, 'pointer', true, undefined, weak, roll.crit, marked);
+  if (target.dead && hasUpgrade(s, 'chain-reaction')) chainReaction(s, target, amount);
   if (weak) {
     s.weakPointHits++;
     s.pointer.combo++;
     s.pointer.comboTicks = COMBO_TICKS;
   }
   return true;
+}
+
+/** True while a Chain Reaction splash is being dealt, so a splash kill can never start a second chain. */
+let chainInProgress = false;
+
+/**
+ * Chain Reaction: a killing click deals 25 % of the killing blow to the two nearest live enemies
+ * within 1.5 tiles of the victim. The splash is plain pointer damage — no crit, no mark, no weak
+ * point — and it never chains again (docs/GLOBAL-UPGRADES.md §4).
+ */
+function chainReaction(s: RunState, victim: Enemy, blow: number): void {
+  if (chainInProgress || blow <= 0) return;
+  const r2 = CHAIN_RADIUS * CHAIN_RADIUS;
+  const near = s.enemies
+    .filter((e) => !e.dead && e.id !== victim.id && !isPopupEnemy(e))
+    .map((e) => ({ e, d2: (e.x - victim.x) ** 2 + (e.y - victim.y) ** 2 }))
+    .filter((n) => n.d2 <= r2)
+    .sort((a, b) => a.d2 - b.d2 || a.e.id - b.e.id)
+    .slice(0, CHAIN_TARGETS);
+  chainInProgress = true;
+  try {
+    for (const { e } of near) damageEnemy(s, e, blow * CHAIN_SPLASH_MULT, 'pointer', true);
+  } finally {
+    chainInProgress = false;
+  }
 }
 
 export function pointerMove(s: RunState, x: number, y: number): void {
@@ -1925,7 +1997,9 @@ function spawnDue(s: RunState): void {
       // A pop-up respects the "at most N alive" cap: if one is already walking (e.g. an early
       // call overlapped waves), this wave's pop-up is skipped rather than breaking the cap.
       if (sp.kind === 'popup' && livingPopups(s) >= popupAliveCap(run.wave)) continue;
-      const hpMult = milestoneBossKind(run.wave) === sp.kind ? milestoneBossHpMult(run.wave) : 1;
+      const milestoneMult = milestoneBossKind(run.wave) === sp.kind ? milestoneBossHpMult(run.wave) : 1;
+      const bountyMult = isBossKind(sp.kind) && hasUpgrade(s, 'bounty-board') ? BOUNTY_HP_MULT : 1;
+      const hpMult = milestoneMult * bountyMult;
       const enemy = createEnemy(s.nextId++, sp.kind, run.wave, spawnTile(s), exitTile(s), hpMult);
       enemy.routeIndex = nextRouteIndex(s);
       enemy.spawnTick = s.tick;
@@ -2183,6 +2257,7 @@ function destroyWall(s: RunState, wall: Tower): void {
  */
 function damageTower(s: RunState, tower: Tower, amount: number): void {
   if (amount <= 0 || tower.maxHp <= 0) return;
+  if (hasUpgrade(s, 'structural-warranty')) amount *= WARRANTY_DAMAGE_MULT;
   if (isWall(tower)) {
     damageWall(s, tower, amount);
     return;
@@ -2260,7 +2335,15 @@ function leak(s: RunState, e: Enemy): void {
   s.wavesClearedSinceLeak = 0;
   s.leaksByWave.set(e.wave, (s.leaksByWave.get(e.wave) ?? 0) + 1);
   if (baseEnemyKind(e.kind) === 'flyer') s.flyerLeaksByWave.set(e.wave, (s.flyerLeaksByWave.get(e.wave) ?? 0) + 1);
-  if (!s.godMode) s.integrity = Math.max(0, s.integrity - ENEMY_STATS[e.kind].integrity);
+  if (!s.godMode) {
+    const after = s.integrity - ENEMY_STATS[e.kind].integrity;
+    if (after <= 0 && hasUpgrade(s, 'emergency-patch') && !s.emergencyPatchSpent) {
+      s.integrity = EMERGENCY_PATCH_INTEGRITY;
+      s.emergencyPatchSpent = true;
+    } else {
+      s.integrity = Math.max(0, after);
+    }
+  }
   if (s.integrity < s.integrityLowWater) s.integrityLowWater = s.integrity;
   s.events.push({ type: 'leak', x: e.x, y: e.y });
   if (s.pointer.targetId === e.id) s.pointer.targetId = null;
@@ -2305,6 +2388,12 @@ function inRange(t: Tower, e: Enemy, range: number): boolean {
 
 function intervalTicks(fireInterval: number): number {
   return Math.max(1, Math.round(fireInterval));
+}
+
+/** A tower's fire interval in ticks, after Autoloader: `max(1, floor(interval * 0.87))`. */
+export function towerIntervalTicks(s: RunState, fireInterval: number): number {
+  const ticks = intervalTicks(fireInterval);
+  return hasUpgrade(s, 'autoloader') ? Math.max(1, Math.floor(ticks * AUTOLOADER_INTERVAL_MULT)) : ticks;
 }
 
 function dist2(e: Enemy, x: number, y: number): number {
@@ -2882,7 +2971,7 @@ function fireTowers(s: RunState): void {
     if (!aimToward(t, bearingTo(t, targets[0]), st.turnRate)) continue;
 
     if (st.beams > 1) {
-      t.cooldown = intervalTicks(st.fireInterval) - 1;
+      t.cooldown = towerIntervalTicks(s, st.fireInterval) - 1;
       for (const tg of targets) {
         s.events.push({ type: 'shot', towerId: t.id, x: tg.x, y: tg.y, splash: st.splash });
         fireBeam(s, t, st, tg, dmg * st.beamDamage);
@@ -2891,7 +2980,7 @@ function fireTowers(s: RunState): void {
     }
 
     const target = targets[0];
-    t.cooldown = intervalTicks(st.fireInterval) - 1;
+    t.cooldown = towerIntervalTicks(s, st.fireInterval) - 1;
 
     // The AA's tier-3 branches fire projectiles rather than hitscan. Its base form (no branch) falls
     // through to the ordinary single-target hit below, which already applies the flyer-only targeting
@@ -3133,6 +3222,28 @@ function burstShell(s: RunState, p: Projectile): void {
     if (baseEnemyKind(e.kind) === 'flyer') hitEnemy(s, tower, st, e, p.damage);
     else hitEnemy(s, tower, st, e, p.damage * 0.5);
   }
+  const target = p.targetId !== null ? s.enemies.find((e) => e.id === p.targetId) : undefined;
+  if (target) telemetrySplash(s, tower, st, target, p.damage);
+}
+
+/**
+ * Ballistic Telemetry: a shell or missile that connects deals half its damage again to the nearest
+ * other flyer within one tile of the enemy it hit (docs/GLOBAL-UPGRADES.md §4).
+ */
+function telemetrySplash(s: RunState, tower: Tower, st: EffectiveStats, hit: Enemy, damage: number): void {
+  if (!hasUpgrade(s, 'ballistic-telemetry')) return;
+  let best: Enemy | undefined;
+  let bestD2 = TELEMETRY_SPLASH_RANGE * TELEMETRY_SPLASH_RANGE;
+  for (const e of s.enemies) {
+    if (e.id === hit.id || e.dead || baseEnemyKind(e.kind) !== 'flyer') continue;
+    if (!towerCanHurt(s, e)) continue;
+    const d2 = (e.x - hit.x) ** 2 + (e.y - hit.y) ** 2;
+    if (d2 <= bestD2) {
+      bestD2 = d2;
+      best = e;
+    }
+  }
+  if (best) hitEnemy(s, tower, st, best, damage * TELEMETRY_SPLASH_MULT);
 }
 
 /** Advance every projectile one tick: shells fly and burst, missiles home and detonate. */
@@ -3169,6 +3280,7 @@ function tickProjectiles(s: RunState): void {
       if (tower && towerCanHurt(s, target)) {
         const st = effectiveStats(tower);
         hitEnemy(s, tower, st, target, p.damage);
+        telemetrySplash(s, tower, st, target, p.damage);
       }
       // Otherwise the missile is spent on a pop-up-shielded target: it lands, but nothing is hurt.
     } else if (p.lifetime <= 0) {
@@ -3204,7 +3316,7 @@ function applyReticle(s: RunState): void {
   damageEnemy(
     s,
     target,
-    dpt * relay.damage * comboMultiplier(p) * pointerDamageMult(s) * (roll.crit ? CRIT_MULTIPLIER : 1),
+    dpt * relay.damage * comboMultiplier(p) * pointerDamageMult(s) * pointerUpgradeMult(s) * (roll.crit ? CRIT_MULTIPLIER : 1),
     'pointer',
     true,
     undefined,
@@ -3321,11 +3433,14 @@ function damageEnemy(
     if (tower && tower.kind === 'aa') s.aaKills++;
     // A Carrier releases twice its brood on death, the one boss that fights on after it falls.
     if (e.kind === 'flyer-boss') releaseBrood(s, e, CARRIER_DEATH_BROOD_COUNT);
-    const value = e.value * (s.modifiers.includes('rush') ? 1.1 : 1);
+    const bounty = e.isBoss && hasUpgrade(s, 'bounty-board') ? BOUNTY_VALUE_MULT : 1;
+    const value = e.value * bounty * (s.modifiers.includes('rush') ? 1.1 : 1);
     const reward =
       source === 'pointer' && weak
         ? recordKillAt(s.economy, value, source, WEAK_POINT_KILL_BONUS)
-        : recordKill(s.economy, value, source);
+        : source === 'tower' && hasUpgrade(s, 'salvage-contract')
+          ? recordKillAt(s.economy, Math.floor(Math.round(value) * SALVAGE_CONTRACT_MULT), source, 1)
+          : recordKill(s.economy, value, source);
     if (tower) {
       tower.kills++;
       tower.earned += reward;
@@ -3343,6 +3458,7 @@ function clearDue(s: RunState): void {
     if (s.enemies.some((e) => e.wave === run.wave)) continue;
     const bonus = waveClearBonus(run.wave);
     earn(s.economy, bonus);
+    if (hasUpgrade(s, 'compound-interest')) earn(s.economy, Math.floor(s.economy.salvage * COMPOUND_INTEREST_RATE));
     s.events.push({ type: 'waveCleared', wave: run.wave, bonus });
     const waveLeaks = s.leaksByWave.get(run.wave) ?? 0;
     if (waveLeaks === 0) {

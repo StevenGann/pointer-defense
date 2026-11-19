@@ -598,7 +598,7 @@ export function fmtClickDamage(n: number): string {
 }
 
 /** Tooltip for the pointer Upgrade button: the next stage or overclock level's click damage and cost. */
-export function pointerTooltipLines(p: PointerState, salvage: number, wave: number): TooltipLine[] {
+export function pointerTooltipLines(p: PointerState, salvage: number, wave: number, cap: number = MAX_OVERCLOCK_LEVEL): TooltipLine[] {
   const stageCost = nextStageCost(p);
   if (stageCost !== null) {
     if (salvage < stageCost) return [cannotAffordText(salvage, stageCost)];
@@ -612,10 +612,10 @@ export function pointerTooltipLines(p: PointerState, salvage: number, wave: numb
     ]];
   }
 
-  if (p.clickLevel >= MAX_OVERCLOCK_LEVEL) return ['Max level'];
+  if (p.clickLevel >= cap) return ['Max level'];
 
   const nextLevel = p.clickLevel + 1;
-  if (nextLevel > overclockCeiling(wave)) {
+  if (nextLevel > overclockCeiling(wave, cap)) {
     return [`Wave ${overclockUnlockWave(nextLevel)} unlocks overclock ${nextLevel}`];
   }
 

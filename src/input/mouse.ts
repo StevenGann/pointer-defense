@@ -1,4 +1,5 @@
 import type { Application } from 'pixi.js';
+import { hasUpgrade } from '../core/upgrades.ts';
 import { menuItemAt, menuNameAt, pixelToWorld, pointInRect, type Layout, type MenuName } from '../view/chrome.ts';
 import { hudButtonAt, hudControlAt, modalRestartAt, victoryButtonAt, type HudAction } from '../view/hud.ts';
 import { adCloseRect } from '../view/ad.ts';
@@ -305,7 +306,7 @@ export class MouseController {
       if (tower) {
         selectPlacedTower(s, tower);
         if (isToggleGate(tower)) {
-          if (isGateLocked(tower, s.clock)) {
+          if (isGateLocked(tower, s.clock) && !hasUpgrade(s, 'shutter-licence')) {
             this.ctx.notice(`Gate locked for ${gateLockRemainingSeconds(tower, s.clock).toFixed(1)} s`);
           } else if (!toggleGate(s, col, row)) {
             this.ctx.notice('That would seal the route.');

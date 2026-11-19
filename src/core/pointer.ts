@@ -70,9 +70,12 @@ export const OVERCLOCK_WAVE_DIVISOR = 8;
 /** The overclock ladder's hard top, so click power stops ahead of the content. */
 export const MAX_OVERCLOCK_LEVEL = 12;
 
-/** The highest overclock level the current wave permits: `floor(wave / 8)`, clamped to 0..12. */
-export function overclockCeiling(wave: number): number {
-  return Math.max(0, Math.min(MAX_OVERCLOCK_LEVEL, Math.floor(wave / OVERCLOCK_WAVE_DIVISOR)));
+/**
+ * The highest overclock level the current wave permits: `floor(wave / 8)`, clamped to 0..cap. The cap
+ * is `MAX_OVERCLOCK_LEVEL` unless the run owns Coolant Loop (docs/GLOBAL-UPGRADES.md), which passes 16.
+ */
+export function overclockCeiling(wave: number, cap: number = MAX_OVERCLOCK_LEVEL): number {
+  return Math.max(0, Math.min(cap, Math.floor(wave / OVERCLOCK_WAVE_DIVISOR)));
 }
 
 /** The wave at which an overclock level first becomes buyable (`level * 8`). */

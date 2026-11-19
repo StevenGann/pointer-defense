@@ -11,6 +11,7 @@ import {
   noBuildActive,
   NO_BUILD_MESSAGE,
   notifyAchievement,
+  overclockCap,
   pointerDamageMult,
   restartPointsGained,
   restartWindows,
@@ -1211,7 +1212,7 @@ function hudTooltipLines(action: HudAction, s: RunState): TooltipLine[] {
   const tower = selectedTower(s);
   switch (action) {
     case 'pointer':
-      return pointerTooltipLines(s.pointer, s.economy.salvage, s.wave);
+      return pointerTooltipLines(s.pointer, s.economy.salvage, s.wave, overclockCap(s));
     case 'override':
       return noBuildActive(s)
         ? ['Manual Override: every tower in range of the marked enemy drops its own priority and shoots it.', 'No-Build: towers cannot be retargeted this wave.']
