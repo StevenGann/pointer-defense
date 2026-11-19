@@ -1542,8 +1542,12 @@ the run keeps going behind it, and it never stops a wave.
   pages. Only a control that works is drawn — Back and Forward grey out when there is nothing to visit.
 - Tree rows are 18 px, 11 px text, with the standard expand/collapse brackets for chapters. The selected
   row uses the Win95 selection (dark blue fill, white text).
-- Page text is 11 px, wraps to the panel width, with a heading and short paragraphs. No scrolling: a
-  page that would overflow is shortened instead.
+- Page text is 11 px, wraps to the panel width, with a heading and short paragraphs. The page panel
+  gains a vertical scrollbar: the mouse wheel scrolls three lines per notch while the pointer is over
+  the page, Page Up / Page Down scroll a window at a time while the Help window has focus, the thumb
+  is proportional and sits in a sunken track on the panel's right edge, and the scrollbar is hidden
+  when the page fits. Scrolling clamps at the first line and at the last line plus the panel height,
+  and the page text is clipped to the panel so it never draws over the toolbar or the status bar.
 
 ### 21.3 Content and gating
 
@@ -1555,7 +1559,15 @@ interval, branches and what it is for).
 
 Pages state **how the thing works and how to answer it**, never what is coming later. The numbers are
 read from the balance tables in `towers.ts` / `enemies.ts`, not retyped, so a rebalance updates the
-Help text for free.
+Help text for free. Each tower page carries a generated stat block above the role prose: cost and
+unlock wave, the base range / damage / fire interval / turn rate, the special traits, DPS, the tier-2
+line, and one line per branch at tiers 3-5. Every figure comes from `effectiveStats` on a synthetic
+tower at that tier and branch, `upgradeCost` for the prices, and the named constants for the mechanics
+that live outside `effectiveStats` (mines, missiles, chain and beam counts, slow and aura magnitudes,
+wall hit points by tier, repair heal and radius by tier, cursor rate / radius / click fraction, the
+AA's flyer multiplier and the Gun's off-kind flyer chip). The mechanics pages carry the same rule:
+the pointer's click damage, crit and mark percentages, the overclock ceiling, the spec percentages and
+cost formula, the Restore-point payout and the early-call bonus are all read from their functions.
 
 The gates:
 

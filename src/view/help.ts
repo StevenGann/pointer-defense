@@ -42,6 +42,12 @@ export const HELP_PAGE_PAD = 8;
 export const HELP_TREE_PAD = 4;
 export const HELP_LINE_H = 15;
 export const HELP_HEADING_H = 20;
+/** Column reserved on the page panel's right edge for the scrollbar track. */
+export const HELP_SCROLL_W = 12;
+/** Width of the scrollbar track itself, inside the reserved column. */
+export const HELP_SCROLL_TRACK_W = 8;
+/** Lines the page scrolls per mouse-wheel notch. */
+export const HELP_SCROLL_LINES = 3;
 const HELP_INDENT = 14;
 const HELP_MIN_VISIBLE = 32;
 
@@ -83,7 +89,7 @@ export function computeHelpLayout(x: number, y: number): HelpLayout {
   const pageText: Rect = {
     x: pagePanel.x + HELP_PAGE_PAD,
     y: pagePanel.y + HELP_PAGE_PAD,
-    w: pagePanel.w - HELP_PAGE_PAD * 2,
+    w: pagePanel.w - HELP_PAGE_PAD * 2 - HELP_SCROLL_W,
     h: pagePanel.h - HELP_PAGE_PAD * 2,
   };
 
@@ -153,6 +159,39 @@ export function pageBodyHeight(page: HelpPage, maxWidth: number): number {
     h += wrapText(text, width).length * HELP_LINE_H + 4;
   }
   return h;
+}
+
+/** The scroll geometry for a page: how far it can scroll, plus the track and thumb rectangles. */
+export interface HelpScroll {
+  /** The maximum scroll offset in pixels (0 when the page fits its panel). */
+  maxScroll: number;
+  /** The scroll offset, clamped to 0..maxScroll. */
+  scroll: number;
+  /** The sunken track on the page panel's right edge. */
+  scrollbar: Rect;
+  /** The proportional thumb inside the track. */
+  thumb: Rect;
+}
+
+/**
+ * The page's scroll range and thumb geometry. `maxScroll` is the page height minus the panel height,
+ * so scrolling clamps at the first line (offset 0) and at the last line plus the panel's height.
+ */
+export function computeHelpScroll(page: HelpPage | undefined, pageText: Rect, scroll: number): HelpScroll {
+  const contentH = page ? pageBodyHeight(page, pageText.w) : 0;
+  const maxScroll = Math.max(0, contentH - pageText.h);
+  const s = Math.min(Math.max(0, scroll), maxScroll);
+  const scrollbar: Rect = {
+    x: pageText.x + pageText.w + 2,
+    y: pageText.y,
+    w: HELP_SCROLL_TRACK_W,
+    h: pageText.h,
+  };
+  const trackH = scrollbar.h;
+  const thumbH = maxScroll > 0 ? Math.max(14, Math.round(trackH * (pageText.h / Math.max(1, contentH)))) : trackH;
+  const thumbY = maxScroll > 0 ? Math.round((trackH - thumbH) * (s / maxScroll)) : 0;
+  const thumb: Rect = { x: scrollbar.x, y: scrollbar.y + thumbY, w: scrollbar.w, h: thumbH };
+  return { maxScroll, scroll: s, scrollbar, thumb };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -244,6 +283,8 @@ export class HelpSession {
   readonly visited = new Set<string>([HELP_PAGES[0].id]);
   /** True once a drag pushed the window against the clamped edge (for the shadow-drag rule). */
   draggedToEdge = false;
+  /** Vertical scroll offset of the open page, in pixels (clamped when read). */
+  scroll = 0;
 
   private history: string[] = [HELP_PAGES[0].id];
   private index = 0;
@@ -309,12 +350,14 @@ export class HelpSession {
     if (this.index <= 0) return;
     this.index -= 1;
     this.pageId = this.history[this.index];
+    this.scroll = 0;
   }
 
   forward(): void {
     if (this.index >= this.history.length - 1) return;
     this.index += 1;
     this.pageId = this.history[this.index];
+    this.scroll = 0;
   }
 
   canBack(): boolean {
@@ -330,6 +373,17 @@ export class HelpSession {
     this.expanded = null;
   }
 
+  /** Scroll the open page by `dy` pixels, clamped to the page's range. */
+  scrollBy(dy: number, hl: HelpLayout): void {
+    const page = this.pageId ? pageById(this.pageId) : undefined;
+    this.scroll = computeHelpScroll(page, hl.pageText, this.scroll + dy).scroll;
+  }
+
+  /** Scroll one panel height up (dir < 0) or down (dir > 0). */
+  scrollPage(dir: number, hl: HelpLayout): void {
+    this.scrollBy(dir * hl.pageText.h, hl);
+  }
+
   private select(id: string): void {
     this.visited.add(id);
     if (this.history[this.index] === id) return;
@@ -337,6 +391,7 @@ export class HelpSession {
     this.history.push(id);
     this.index = this.history.length - 1;
     this.pageId = id;
+    this.scroll = 0;
   }
 
   /** Handle a click on a tree row: chapters toggle, locked pages explain, unlocked pages open. */
@@ -382,6 +437,9 @@ export class HelpView {
   private readonly heading: Text;
   private readonly treeTexts: Text[] = [];
   private readonly bodyTexts: Text[] = [];
+  /** The heading and body lines, scrolled and clipped as one block to the page panel. */
+  private readonly pageLayer = new Container();
+  private readonly pageMask = new Graphics();
 
   constructor() {
     this.titleText = makeText('Pointer Defense Help', FONT_SIZE.body, true, PAL.titleInverse);
@@ -397,7 +455,10 @@ export class HelpView {
     this.heading = makeText('', FONT_SIZE.body, true, PAL.text);
     this.heading.anchor.set(0, 0);
 
-    this.root.addChild(this.g, this.titleText, this.toolbarBack, this.toolbarForward, this.toolbarContents, this.statusText, this.heading);
+    this.root.addChild(this.g, this.titleText, this.toolbarBack, this.toolbarForward, this.toolbarContents, this.statusText);
+    this.pageLayer.addChild(this.heading);
+    this.pageLayer.mask = this.pageMask;
+    this.root.addChild(this.pageLayer);
 
     for (let i = 0; i < MAX_TREE_ROWS; i++) {
       const t = makeText('', FONT_SIZE.small, false, PAL.text);
@@ -409,7 +470,7 @@ export class HelpView {
       const t = makeText('', FONT_SIZE.small, false, PAL.text);
       t.anchor.set(0, 0);
       this.bodyTexts.push(t);
-      this.root.addChild(t);
+      this.pageLayer.addChild(t);
     }
   }
 
@@ -456,9 +517,17 @@ export class HelpView {
     bevel(g, hl.status, false, PAL.face);
 
     this.drawTree(g, hl, rows, session, hover);
-    this.drawPage(hl, session);
 
     const page = session.pageId ? pageById(session.pageId) : undefined;
+    const scroll = computeHelpScroll(page, hl.pageText, session.scroll);
+    this.pageMask.clear();
+    this.pageMask.rect(hl.pageText.x, hl.pageText.y, hl.pageText.w, hl.pageText.h).fill(0xffffff);
+    if (scroll.maxScroll > 0) {
+      g.rect(scroll.scrollbar.x, scroll.scrollbar.y, scroll.scrollbar.w, scroll.scrollbar.h).fill(PAL.shadow);
+      bevel(g, scroll.thumb, true, PAL.face);
+    }
+    this.drawPage(hl, session, scroll.scroll);
+
     const status = session.status !== '' ? session.status : page ? chapterTitle(page.category) : 'Select a topic from the contents';
     this.statusText.text = status;
     this.statusText.position.set(hl.status.x + 4, hl.status.y + Math.floor(HELP_STATUS_H / 2));
@@ -499,7 +568,7 @@ export class HelpView {
       t = makeText('', FONT_SIZE.small, false, PAL.text);
       t.anchor.set(0, 0);
       this.bodyTexts.push(t);
-      this.root.addChild(t);
+      this.pageLayer.addChild(t);
     }
     return t;
   }
@@ -539,7 +608,7 @@ export class HelpView {
     for (let i = rows.length; i < this.treeTexts.length; i++) this.treeTexts[i].text = '';
   }
 
-  private drawPage(hl: HelpLayout, session: HelpSession): void {
+  private drawPage(hl: HelpLayout, session: HelpSession, scrollOffset: number): void {
     const page = session.pageId ? pageById(session.pageId) : undefined;
     if (!page) {
       this.heading.text = '';
@@ -548,10 +617,10 @@ export class HelpView {
     }
 
     this.heading.text = page.title;
-    this.heading.position.set(hl.pageText.x, hl.pageText.y);
+    this.heading.position.set(hl.pageText.x, hl.pageText.y - scrollOffset);
 
     let lineIndex = 0;
-    let y = hl.pageText.y + HELP_HEADING_H;
+    let y = hl.pageText.y + HELP_HEADING_H - scrollOffset;
     for (const item of page.body) {
       const bullet = item.startsWith('• ');
       const text = bullet ? item.slice(2) : item;

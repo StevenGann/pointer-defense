@@ -51,7 +51,7 @@ import { FloatingNumbersView } from './view/numbers.ts';
 import { MenuView, type OpenMenu } from './view/menu.ts';
 import { AchievementGridView, AchievementSession, achievementGridHitAt, buildAchievementGrid, computeAchievementGrid, type AchievementGridModel } from './view/dialog.ts';
 import { DialogView, type DialogModel } from './view/dialog.ts';
-import { HelpSession, HelpView, computeHelpLayout, helpHitAt, helpRows } from './view/help.ts';
+import { HelpSession, HelpView, computeHelpLayout, helpHitAt, helpRows, HELP_LINE_H, HELP_SCROLL_LINES } from './view/help.ts';
 import { RestoreView, computeRestoreLayout, restoreHitAt } from './view/restore.ts';
 import { MouseController, type Screen } from './input/mouse.ts';
 import { EffectsView } from './view/effects.ts';
@@ -772,6 +772,14 @@ const mouse = new MouseController(app, {
     }
     helpSession.endDrag();
   },
+  helpScrollBy: (dy: number) => {
+    const hl = computeHelpLayout(helpSession.x, helpSession.y);
+    helpSession.scrollBy(dy, hl);
+  },
+  helpPage: (dir: number) => {
+    const hl = computeHelpLayout(helpSession.x, helpSession.y);
+    helpSession.scrollPage(dir, hl);
+  },
   closeHelp: () => helpSession.hide(),
   achievementOpen: () => achievementSession.open,
   achievementPointerDown,
@@ -986,8 +994,17 @@ app.canvas.addEventListener('pointerup', (e) => {
 });
 
 app.canvas.addEventListener('wheel', (e) => {
-  if (!achievementSession.open) return;
   const { x, y } = canvasPoint(e as unknown as PointerEvent);
+  // The Help window scrolls its page three lines per notch while the pointer is over the page panel.
+  if (helpSession.open) {
+    const hl = computeHelpLayout(helpSession.x, helpSession.y);
+    if (pointInRect(hl.pagePanel, x, y)) {
+      e.preventDefault();
+      helpSession.scrollBy(Math.sign(e.deltaY) * HELP_LINE_H * HELP_SCROLL_LINES, hl);
+      return;
+    }
+  }
+  if (!achievementSession.open) return;
   const { al } = achievementHit(x, y);
   if (!pointInRect(al.window, x, y)) return;
   e.preventDefault();

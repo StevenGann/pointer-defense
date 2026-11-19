@@ -50,7 +50,7 @@ import { FLYER_OFF_KIND_DAMAGE,
   NO_BUILD_MESSAGE,
   AUTO_WAVE_DELAY_TICKS,
 } from '../src/core/state.ts';
-import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE } from '../src/core/towers.ts';
+import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE, MINE_BLAST_RADIUS, CURSOR_CLICK_DAMAGE_FACTOR, repairHealRate, repairRadius } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { WAVE_COUNT, buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, FLYER_FLIGHT_MEMBER_TICKS, FLYER_FLIGHT_SIZE, flyerSwarmFactor, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers, WAVE_ENEMY_CAP } from '../src/core/waves.ts';
@@ -75,7 +75,7 @@ import {
   editorTileAt,
 } from '../src/core/editor.ts';
 import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, ENEMY_KINDS, BOSS_KINDS, isBossKind, isBossVariant, isPopupEnemy, isFlyerKind, slowFactorFor, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS, CARRIER_BROOD_COUNT, CARRIER_BROOD_INTERVAL_TICKS, CARRIER_BROOD_SCATTER_TICKS, CARRIER_DEATH_BROOD_COUNT, DREADNOUGHT_PLATING, WIRECUTTER_EMP_RADIUS, WIRECUTTER_EMP_TICKS, RAM_TOWER_DPS, RAM_TURRET_DAMAGE, RAM_TURRET_RANGE } from '../src/core/enemies.ts';
-import { missileSeed } from '../src/core/projectiles.ts';
+import { missileSeed, AA_SALVO_COUNT } from '../src/core/projectiles.ts';
 import { rngNext } from '../src/core/rng.ts';
 import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS } from '../src/core/ads.ts';
 import {
@@ -138,7 +138,7 @@ import {
 } from '../src/view/bossBars.ts';
 import { backingStorePixelSize } from '../src/view/screen.ts';
 import { HELP_PAGES, pageUnlocked, lockedReason, pageById } from '../src/content/help.ts';
-import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, HelpSession, HELP_W, HELP_H } from '../src/view/help.ts';
+import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, computeHelpScroll, HelpSession, HELP_W, HELP_H, HELP_LINE_H, HELP_SCROLL_LINES } from '../src/view/help.ts';
 import { buildAchievementGrid, gridRowCount, gridCellRect, ACH_COLUMNS, ACH_CELL, ACH_GUTTER, computeAchievementGrid, achievementGridHitAt, AchievementSession } from '../src/view/dialog.ts';
 import {
   ART_MANIFEST,
@@ -7423,17 +7423,183 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(treeRowLabel(unlockedRow) === 'Flyer', 'an unlocked row reads the enemy name');
 }
 
+// --- 44f. Help numbers: every tower block is recomputed from the sim's functions -----------------
+
+function helpFmt2(n) { return n.toFixed(2); }
+function helpFmtTrim(n) { return n.toFixed(2).replace(/\.?0+$/, ''); }
+function helpFmtPct(n) { return `${Math.round(n * 100)}%`; }
+function helpFmtDps(damage, fireTicks) { return fireTicks <= 0 ? '—' : helpFmt2((damage * TICK_HZ) / fireTicks); }
+function helpFmtFire(fireTicks) { return fireTicks <= 0 ? '—' : `${helpFmt2(fireTicks / TICK_HZ)} s (${helpFmt2(TICK_HZ / fireTicks)}/s)`; }
+function helpFmtTurn(turnRate) { return turnRate > 0 ? `${turnRate} °/s` : 'instant'; }
+
+function helpSynthTower(kind, tier, branch) {
+  const t = createTower(0, kind, 0, 0);
+  t.tier = tier;
+  t.branch = branch;
+  return t;
+}
+function helpNextCost(kind, tier, branch) {
+  return upgradeCost(helpSynthTower(kind, tier, branch));
+}
+function helpBranches(kind) {
+  if (kind === 'repair') return [];
+  return kind === 'wall' || kind === 'cursor' ? ['A', 'B', 'C'] : ['A', 'B'];
+}
+function helpCombatTraits(kind, eff) {
+  const parts = [];
+  if (eff.splash > 0) parts.push(`Splash ${helpFmt2(eff.splash)}`);
+  if (eff.pierce > 0) parts.push(`Pierce ${eff.pierce}`);
+  if (eff.ignoresArmour) parts.push('Ignores armour');
+  if (eff.slowFactor < 1) parts.push(`Slows to ${helpFmtPct(eff.slowFactor)} for ${helpFmt2(eff.slowTicks / TICK_HZ)} s`);
+  if (eff.targetsFlyersOnly) parts.push('Flyers only');
+  if (eff.flyerDamageMult !== 1) parts.push(`${helpFmtTrim(eff.flyerDamageMult)}× vs flyers`);
+  if (kind === 'gun') parts.push(`${helpFmtTrim(FLYER_OFF_KIND_DAMAGE)}× vs flyers`);
+  if (eff.chainCount > 0) parts.push(`Chains to ${eff.chainCount} at ${helpFmtPct(eff.chainDamage)}`);
+  if (eff.beams > 1) parts.push(`${eff.beams} beams at ${helpFmtPct(eff.beamDamage)}`);
+  if (eff.shieldedDamageMult !== 1) parts.push(`${helpFmtTrim(eff.shieldedDamageMult)}× vs shields`);
+  return parts.length > 0 ? parts.join(' · ') : '—';
+}
+
+/** Rebuild a tower's stat block line-for-line, exactly as src/content/help.ts does. */
+function helpRecomputeBlock(kind) {
+  const st = TOWER_STATS[kind];
+  const unlock = Math.max(1, towerUnlockWave(kind));
+  const lines = [`Cost $${st.cost} · unlocks wave ${unlock}`];
+  if (kind === 'beacon') {
+    const base = effectiveStats(helpSynthTower('beacon', 1, null));
+    lines.push(`Range ${helpFmt2(base.range)} · +${helpFmtPct(base.auraDamage)} damage to towers in radius`);
+    const t2 = effectiveStats(helpSynthTower('beacon', 2, null));
+    lines.push(`Tier 2 — $${helpNextCost('beacon', 1, null)}: range ${helpFmt2(t2.range)}`);
+    const branchCost = helpNextCost('beacon', 2, null);
+    const command = effectiveStats(helpSynthTower('beacon', 3, 'A'));
+    lines.push(`Command — $${branchCost}: +${helpFmtPct(command.auraDamage)} damage to towers in radius`);
+    const relay = effectiveStats(helpSynthTower('beacon', 3, 'B'));
+    lines.push(`Relay — $${branchCost}: +${helpFmtPct(relay.auraDamage)} damage to towers · +${helpFmtPct(relay.auraPointerDamage)} pointer damage · +${helpFmtTrim(relay.auraPointerRange)} pointer range`);
+  } else if (kind === 'repair') {
+    const t1 = helpSynthTower('repair', 1, null);
+    lines.push(`Heals ${helpFmt2(repairHealRate(t1))} HP/s · radius ${helpFmt2(repairRadius(t1))} tiles`);
+    const t2 = helpSynthTower('repair', 2, null);
+    lines.push(`Tier 2 — $${helpNextCost('repair', 1, null)}: heals ${helpFmt2(repairHealRate(t2))} HP/s · radius ${helpFmt2(repairRadius(t2))} tiles`);
+    const t3 = helpSynthTower('repair', 3, null);
+    lines.push(`Tier 3 — $${helpNextCost('repair', 2, null)}: heals ${helpFmt2(repairHealRate(t3))} HP/s · radius ${helpFmt2(repairRadius(t3))} tiles`);
+  } else if (kind === 'wall') {
+    lines.push(`${wallMaxHp(1, null)} HP · blocks the route`);
+    lines.push(`Tier 2 — $${helpNextCost('wall', 1, null)}: ${wallMaxHp(2, null)} HP`);
+    const branchCost = helpNextCost('wall', 2, null);
+    lines.push(`Bulwark — $${branchCost}: ${wallMaxHp(3, 'A')} HP`);
+    lines.push(`Mesh — $${branchCost}: ${wallMaxHp(3, 'B')} HP · blocks flyers`);
+    lines.push(`Toggle — $${branchCost}: ${wallMaxHp(3, 'C')} HP · a gate you open and close`);
+  } else if (kind === 'cursor') {
+    const t1 = helpSynthTower('cursor', 1, null);
+    lines.push(`${helpFmt2(cursorClickRate(t1))} clicks/s · radius ${helpFmt2(cursorRadius(t1))} tiles · ${helpFmtPct(CURSOR_CLICK_DAMAGE_FACTOR)} of your click damage`);
+    const t2 = helpSynthTower('cursor', 2, null);
+    lines.push(`Tier 2 — $${helpNextCost('cursor', 1, null)}: ${helpFmt2(cursorClickRate(t2))} clicks/s · radius ${helpFmt2(cursorRadius(t2))} tiles`);
+    const branchCost = helpNextCost('cursor', 2, null);
+    const overclock = helpSynthTower('cursor', 3, 'A');
+    lines.push(`Overclock — $${branchCost}: ${helpFmt2(cursorClickRate(overclock))} clicks/s · ${helpFmtPct(CURSOR_CLICK_DAMAGE_FACTOR * cursorClickDamageFactor(overclock))} of your click damage`);
+    const wide = helpSynthTower('cursor', 3, 'B');
+    lines.push(`Wide Search — $${branchCost}: ${helpFmt2(cursorClickRate(wide))} clicks/s · radius ${helpFmt2(cursorRadius(wide))} tiles`);
+    const maintenance = helpSynthTower('cursor', 3, 'C');
+    lines.push(`Maintenance — $${branchCost}: ${helpFmt2(cursorClickRate(maintenance))} clicks/s · radius ${helpFmt2(cursorRadius(maintenance))} tiles · repairs towers below ${helpFmtPct(CURSOR_REPAIR_THRESHOLD)}`);
+  } else {
+    const base = effectiveStats(helpSynthTower(kind, 1, null));
+    lines.push(`Range ${helpFmt2(base.range)} · Damage ${helpFmt2(base.damage)} · Fire ${helpFmtFire(base.fireInterval)} · Turn ${helpFmtTurn(base.turnRate)}`);
+    lines.push(helpCombatTraits(kind, base));
+    lines.push(`DPS ${helpFmtDps(base.damage, base.fireInterval)}`);
+    const t2 = effectiveStats(helpSynthTower(kind, 2, null));
+    lines.push(`Tier 2 — $${helpNextCost(kind, 1, null)}: range ${helpFmt2(t2.range)} · damage ${helpFmt2(t2.damage)} · DPS ${helpFmtDps(t2.damage, t2.fireInterval)}`);
+    const branchCost = helpNextCost(kind, 2, null);
+    for (const branch of helpBranches(kind)) {
+      lines.push(`${branchName(kind, branch)} — $${branchCost}`);
+      if (kind === 'cannon' && branch === 'B') {
+        lines.push(`Lays a mine every ${helpFmt2(MINE_INTERVAL_TICKS / TICK_HZ)} s · arms in ${helpFmt2(MINE_ARM_TICKS / TICK_HZ)} s · ${MINE_LIVE_CAP} live cap · ${MINE_DAMAGE} damage in a ${helpFmt2(MINE_BLAST_RADIUS)} blast · expires in ${helpFmt2(MINE_EXPIRE_TICKS / TICK_HZ)} s`);
+        continue;
+      }
+      if (kind === 'aa' && branch === 'B') {
+        lines.push(`${AA_SALVO_COUNT} homing missiles per salvo · each ${helpFmtPct(1 / AA_SALVO_COUNT)} of a hit`);
+      }
+      for (const tier of [3, 4, 5]) {
+        const eff = effectiveStats(helpSynthTower(kind, tier, branch));
+        const label = tier === 3 ? 'Tier 3:' : `Tier ${tier} — $${helpNextCost(kind, tier - 1, branch)}:`;
+        lines.push(`${label} range ${helpFmt2(eff.range)} · damage ${helpFmt2(eff.damage)} · fire ${helpFmtFire(eff.fireInterval)} · DPS ${helpFmtDps(eff.damage, eff.fireInterval)}`);
+      }
+    }
+  }
+  return lines;
+}
+
 {
-  // 44f. Every page fits its panel at 1280x720 and 1600x900.
+  // 44f. Every tower page's stat block equals the recomputation, character for character.
+  for (const kind of TOWER_KINDS) {
+    const page = HELP_PAGES.find((p) => p.id === `tower-${kind}`);
+    const block = helpRecomputeBlock(kind);
+    check(page !== undefined && page.body.length >= block.length, `tower ${kind} has a page with a stat block (${block.length} lines)`);
+    const actual = page.body.slice(0, block.length).join('\n');
+    check(actual === block.join('\n'), `tower ${kind} stat block recomputes character for character`);
+  }
+}
+
+{
+  // 44f2. Tier and branch lines read effectiveStats on a synthetic tower at that tier and branch.
+  for (const kind of ['gun', 'cannon', 'taser', 'frost', 'laser', 'aa']) {
+    const page = HELP_PAGES.find((p) => p.id === `tower-${kind}`);
+    for (const branch of ['A', 'B']) {
+      if (kind === 'cannon' && branch === 'B') continue; // Minesweeper replaces tier lines with its mine line
+      for (const tier of [3, 4, 5]) {
+        const eff = effectiveStats(helpSynthTower(kind, tier, branch));
+        const label = tier === 3 ? 'Tier 3:' : `Tier ${tier} — $${helpNextCost(kind, tier - 1, branch)}:`;
+        const line = `${label} range ${helpFmt2(eff.range)} · damage ${helpFmt2(eff.damage)} · fire ${helpFmtFire(eff.fireInterval)} · DPS ${helpFmtDps(eff.damage, eff.fireInterval)}`;
+        check(page.body.includes(line), `tower ${kind} ${branch} tier ${tier} line matches effectiveStats`);
+      }
+    }
+  }
+}
+
+{
+  // 44f3. A long page reports a positive scroll range; a short page reports zero and draws no
+  // scrollbar; scrolling past either end clamps.
+  const l = computeLayout(1280, 720);
+  const pos = defaultHelpPosition(l);
+  const hl = computeHelpLayout(pos.x, pos.y);
+
+  const gunPage = HELP_PAGES.find((p) => p.id === 'tower-gun');
+  const longScroll = computeHelpScroll(gunPage, hl.pageText, 0);
+  check(longScroll.maxScroll > 0, `a tower page is longer than its panel (scroll range ${longScroll.maxScroll})`);
+  check(longScroll.scroll === 0, 'a fresh page starts scrolled to the first line');
+  check(computeHelpScroll(gunPage, hl.pageText, 1e9).scroll === longScroll.maxScroll,
+    'scrolling past the end clamps to the last line');
+  check(computeHelpScroll(gunPage, hl.pageText, -1e9).scroll === 0,
+    'scrolling past the top clamps to the first line');
+
+  const shortPage = HELP_PAGES.find((p) => p.id === 'mechanics-auto-start');
+  const shortScroll = computeHelpScroll(shortPage, hl.pageText, 0);
+  check(shortScroll.maxScroll === 0, 'a short page reports a zero scroll range (no scrollbar)');
+
+  const mid = computeHelpScroll(gunPage, hl.pageText, longScroll.maxScroll / 2);
+  check(mid.thumb.y >= mid.scrollbar.y && mid.thumb.y + mid.thumb.h <= mid.scrollbar.y + mid.scrollbar.h,
+    'the thumb stays inside its track');
+
+  const session = new HelpSession();
+  session.pageId = 'tower-gun';
+  const notch = HELP_LINE_H * HELP_SCROLL_LINES;
+  session.scrollBy(notch, hl);
+  check(session.scroll === notch, `a wheel notch scrolls ${HELP_SCROLL_LINES} lines (${notch}px)`);
+  const beforePage = session.scroll;
+  session.scrollPage(1, hl);
+  check(session.scroll > beforePage, 'Page Down scrolls a window toward the end');
+  session.scrollBy(1e9, hl);
+  check(session.scroll === longScroll.maxScroll, 'the session clamps to the bottom');
+  session.scrollBy(-1e9, hl);
+  check(session.scroll === 0, 'the session clamps to the top');
+}
+
+{
+  // 44f4. The help window still fits the client area at 1280x720 and 1600x900.
   for (const [vw, vh] of [[1280, 720], [1600, 900]]) {
     const l = computeLayout(vw, vh);
     const pos = defaultHelpPosition(l);
     const hl = computeHelpLayout(pos.x, pos.y);
     check(hl.window.w <= l.client.w && hl.window.h <= l.client.h, `the help window fits the client area at ${vw}x${vh}`);
-    for (const page of HELP_PAGES) {
-      const h = pageBodyHeight(page, hl.pageText.w);
-      check(h <= hl.pageText.h, `${page.id} fits its panel at ${vw}x${vh} (${h} <= ${hl.pageText.h})`);
-    }
   }
 }
 
