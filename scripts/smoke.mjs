@@ -53,7 +53,7 @@ import { FLYER_OFF_KIND_DAMAGE,
 import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
-import { buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, FLYER_FLIGHT_MEMBER_TICKS, FLYER_FLIGHT_SIZE, flyerSwarmFactor, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers, WAVE_ENEMY_CAP } from '../src/core/waves.ts';
+import { WAVE_COUNT, buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, FLYER_FLIGHT_MEMBER_TICKS, FLYER_FLIGHT_SIZE, flyerSwarmFactor, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers, WAVE_ENEMY_CAP } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
@@ -122,7 +122,7 @@ import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText
 import { BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
-import { computeHud, computeRightPanel, hudControlAt, textWidth } from '../src/view/hud.ts';
+import { computeHud, computeRightPanel, hudControlAt, textWidth, HudView, READOUT_FONT_SIZE, salvageReadoutText } from '../src/view/hud.ts';
 import {
   advanceBossBars,
   barFillPx,
@@ -8791,6 +8791,141 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   view.draw(s, layout, 0, hover);
   check(view.shadowSprites.every((x) => !x.visible), 'shadows: unused pooled shadow sprites hide');
   resetArt();
+}
+
+// --- UX pass 1 (docs/UX-PASS-1.md) -----------------------------------------------------------
+
+{
+  // ux1. computeHud exposes a salvage row below the integrity block and above the route line and the
+  // tower rows: sunken, 26 px tall, the panel's full inner width.
+  const l = computeLayout(1280, 720);
+  const s = createRunState();
+  const h = computeHud(l, s);
+  check(h.salvage !== undefined, 'ux1: computeHud exposes a salvage row');
+  check(h.salvage.h === 26, `ux1: the salvage readout is 26 px tall (${h.salvage.h})`);
+  check(h.salvage.x === h.integrity.x && h.salvage.w === h.integrity.w && h.salvage.w === l.leftPanel.w - 12,
+    'ux1: the salvage readout spans the panel inner width, like the integrity block');
+  check(h.salvage.y >= h.integrity.y + h.integrity.h, 'ux1: salvage sits below the integrity block');
+  check(h.route !== null && h.salvage.y + h.salvage.h <= h.route.y, 'ux1: salvage sits above the route line');
+  check(h.towers.every((t) => h.salvage.y + h.salvage.h <= t.rect.y), 'ux1: salvage sits above every tower row');
+
+  // Also present, and above the detail box, while a tower is selected for inspection.
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 5, 5);
+  selectPlacedTower(s, towerAt(s, 5, 5));
+  const hd = computeHud(l, s);
+  check(hd.detail !== null && hd.salvage.y + hd.salvage.h <= hd.detail.box.y,
+    'ux1: with a tower selected the salvage readout stays above the detail box');
+}
+
+{
+  // ux2. The left panel's tallest layout (palette with the map row, and every inspected tower at every
+  // tier/branch) still fits inside the panel at 1280x720 and 1600x900.
+  for (const [vw, vh] of [[1280, 720], [1600, 900]]) {
+    const l = computeLayout(vw, vh);
+    const bottom = l.leftPanel.y + l.leftPanel.h;
+    let tallest = 0;
+    let tallestName = '';
+    let measured = 0;
+    const measure = (name, h) => {
+      measured++;
+      const end = h.autoWave.y + h.autoWave.h;
+      if (end > tallest) { tallest = end; tallestName = name; }
+    };
+    const fresh = createRunState();
+    check(canCycleLevel(fresh), `ux2: a fresh run shows the map row at ${vw}x${vh}`);
+    measure('palette + map', computeHud(l, fresh));
+    for (const kind of TOWER_KINDS) {
+      for (const [tier, branch] of [[1, null], [2, null], [3, 'A'], [3, 'B'], [3, 'C']]) {
+        const s = allUnlocked();
+        s.economy.salvage = 1e9;
+        if (!placeTower(s, kind, 5, 5)) continue;
+        const t = towerAt(s, 5, 5);
+        t.tier = tier;
+        t.branch = tier === 3 && hasBranches(kind) ? branch : null;
+        selectPlacedTower(s, t);
+        measure(`${kind} T${tier}${t.branch ?? ''}`, computeHud(l, s));
+      }
+    }
+    check(measured > TOWER_KINDS.length * 2, `ux2: every tower kind's detail views were measured (${measured})`);
+    check(tallest > 0 && tallest <= bottom,
+      `ux2: the tallest left-panel layout (${tallestName}) fits at ${vw}x${vh} (${tallest} <= ${bottom})`);
+  }
+}
+
+{
+  // ux3. The readout prints $N (in the larger readout size, right-aligned) and --- under Blackout;
+  // the status bar no longer has a salvage pane or prints the salvage figure.
+  const l = computeLayout(1280, 720);
+  const s = createRunState();
+  s.economy.salvage = 1234;
+  check(salvageReadoutText(s) === '$1,234', `ux3: the readout prints $N (${salvageReadoutText(s)})`);
+  check(!('right' in l.statusPanes), 'ux3: the status bar has no salvage pane');
+
+  const view = new HudView();
+  const h = computeHud(l, s);
+  const texts = () => view.root.children.filter((c) => typeof c.text === 'string' && c.text !== '');
+  const inRect = (c, r) => c.position.x >= r.x && c.position.x <= r.x + r.w && c.position.y >= r.y && c.position.y <= r.y + r.h;
+  view.draw(s, l, null);
+  const readout = texts().filter((c) => inRect(c, h.salvage));
+  check(readout.length === 1 && readout[0].text === '$1,234', 'ux3: the left-panel readout draws $1,234');
+  check(readout.length === 1 && readout[0].anchor.x === 1 && readout[0].style.fontSize === READOUT_FONT_SIZE,
+    'ux3: the readout value is right-aligned in the readout size');
+  const integrityText = texts().find((c) => c.text.startsWith('Integrity:'));
+  check(integrityText !== undefined && readout[0].style.fontSize === integrityText.style.fontSize,
+    'ux3: the readout is set in the same size as the integrity figure');
+  check(!texts().some((c) => inRect(c, l.status) && c.text.includes('1,234')),
+    'ux3: the status bar no longer prints the salvage figure');
+
+  s.phase = 'wave';
+  s.modifiers = ['blackout'];
+  check(salvageReadoutText(s) === '---', 'ux3: Blackout masks the readout as ---');
+  view.draw(s, l, null);
+  const masked = texts().filter((c) => inRect(c, h.salvage));
+  check(masked.length === 1 && masked[0].text === '---', 'ux3: the drawn readout prints --- under Blackout');
+  check(!texts().some((c) => c.text.includes('1,234')), 'ux3: Blackout leaves no salvage figure on screen');
+  check(texts().some((c) => inRect(c, l.status) && c.text.startsWith('Wave ')) &&
+    texts().some((c) => inRect(c, l.status) && c.text.startsWith('×')),
+    'ux3: the status bar keeps wave and speed');
+}
+
+{
+  // ux4. selectTower('gun') then startWave disarms the build tool, and the placement hint goes with it.
+  const s = createRunState();
+  selectTower(s, 'gun');
+  check(s.selected === 'gun', 'ux4: the gun is armed');
+  check(startWave(s), 'ux4: the wave starts');
+  check(s.selected === null, 'ux4: starting a wave clears the armed build tool');
+  const view = new HudView();
+  const l = computeLayout(1280, 720);
+  view.draw(s, l, null);
+  check(!view.root.children.some((c) => typeof c.text === 'string' && c.text.startsWith('Click a tile to place')),
+    'ux4: the placement hint disappears with the selection');
+}
+
+{
+  // ux5. A startWave refused because a wave is already running leaves s.selected untouched. A
+  // mid-wave start is normally an accepted early call, so the refusal here is the final wave: it is
+  // running and there is no next wave to call.
+  const s = createRunState();
+  s.wave = WAVE_COUNT;
+  s.phase = 'wave';
+  selectTower(s, 'gun');
+  check(s.selected === 'gun', 'ux5: the gun is armed mid-wave');
+  check(!startWave(s), 'ux5: the start is refused');
+  check(s.selected === 'gun', 'ux5: a refused start leaves the armed tool alone');
+  check(s.wave === WAVE_COUNT && s.phase === 'wave', 'ux5: the refused start changed nothing else');
+}
+
+{
+  // ux6. selectPlacedTower(id) then startWave keeps the inspected tower selected.
+  const s = createRunState();
+  s.economy.salvage = 1000;
+  placeTower(s, 'gun', 5, 5);
+  const t = towerAt(s, 5, 5);
+  selectPlacedTower(s, t);
+  check(startWave(s), 'ux6: the wave starts');
+  check(s.selectedTowerId === t.id, 'ux6: the inspected tower stays selected through a wave start');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

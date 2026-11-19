@@ -1279,6 +1279,9 @@ export function startWave(s: RunState): boolean {
   // The early-call bonus is measured from the wave that just started, before we reset waveTick,
   // and paid as a fraction of the wave being called (s.wave + 1 once incremented below).
   const elapsed = s.waveTick;
+  // The start is accepted: drop the armed build tool so the next board click is not a stray
+  // placement. A tower selected for inspection (selectedTowerId) stays selected.
+  s.selected = null;
   s.wave += 1;
   s.runs.push({ wave: s.wave, startTick: s.clock, spawns: buildSchedule(s.wave) });
   s.waveSnapshots.set(s.wave, {

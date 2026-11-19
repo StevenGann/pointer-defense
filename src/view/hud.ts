@@ -33,7 +33,7 @@ import { ENEMY_STATS } from '../core/enemies.ts';
 import { branchName, fmtClickDamage, targetModeDisplay } from './tooltipText.ts';
 
 /**
- * The HUD: status-bar text (hint / wave / salvage), the integrity readout, the pointer stage and
+ * The HUD: status-bar text (hint / wave / speed), the integrity and salvage readouts, the pointer stage and
  * upgrade button, the build palette or selected-tower detail, the Start Wave button, and the
  * end-of-run modal.
  */
@@ -60,6 +60,14 @@ const NOTICE_TICKS = 150;
 const SPEC_FONT_SIZE = FONT_SIZE.small;
 const SPEC_BUTTON_PAD = 12;
 const SPEC_BUTTON_MAX = 64;
+
+/** The left panel's sunken readouts (integrity, salvage) share one text size. */
+export const READOUT_FONT_SIZE = FONT_SIZE.body;
+
+/** The salvage readout's value: `$1,234`, or `---` while a Blackout wave masks it. */
+export function salvageReadoutText(s: RunState): string {
+  return s.modifiers.includes('blackout') && s.phase === 'wave' ? '---' : `$${formatNumber(s.economy.salvage)}`;
+}
 
 let metricsText: Text | null = null;
 
@@ -143,6 +151,8 @@ interface MapRow {
 
 interface HudLayout {
   integrity: Rect;
+  /** The sunken salvage readout: under the integrity block, above the route line and the shop. */
+  salvage: Rect;
   route: Rect | null;
   detail: TowerDetailLayout | null;
   towers: ReadonlyArray<{ kind: TowerKind; rect: Rect }>;
@@ -214,6 +224,9 @@ export function computeHud(l: Layout, s: RunState): HudLayout {
 
   let cy = y;
   const integrity: Rect = { x, y: cy, w, h: 26 };
+  cy += 26 + 4;
+  // Salvage sits directly above the shop (or the detail view), present in both layouts.
+  const salvage: Rect = { x, y: cy, w, h: 26 };
   cy += 26 + 4;
 
   const tower = selectedTower(s);
@@ -308,7 +321,7 @@ export function computeHud(l: Layout, s: RunState): HudLayout {
   const autoWave: Rect = { x: x + 4, y: cy, w: w - 8, h: 22 };
   cy += 22 + 6;
 
-  return { integrity, route, detail, towers, wave, autoWave, map };
+  return { integrity, salvage, route, detail, towers, wave, autoWave, map };
 }
 
 const SECTION_TITLE_H = 18;
@@ -597,11 +610,11 @@ export class HudView {
 
   private readonly statusHint = makeText('');
   private readonly statusWave = makeText('');
-  private readonly statusSalvage = makeText('');
   private readonly statusSpeed = makeText('');
   private readonly statusPaused = makeText('', true);
   private readonly cheatMarker = makeText('');
   private readonly integrity = makeText('');
+  private readonly salvage = makeText('');
   private readonly route = makeText('');
   private readonly towerName = makeText('', true);
   private readonly towerStats = makeText('');
@@ -642,11 +655,11 @@ export class HudView {
     for (const t of [
       this.statusHint,
       this.statusWave,
-      this.statusSalvage,
       this.statusSpeed,
       this.statusPaused,
       this.cheatMarker,
       this.integrity,
+      this.salvage,
       this.route,
       this.towerName,
       this.towerStats,
@@ -679,6 +692,9 @@ export class HudView {
     }
     for (const t of this.branchButtons) t.anchor.set(0.5, 0.5);
     this.targetValue.anchor.set(1, 0.5);
+    this.salvage.anchor.set(1, 0.5);
+    this.integrity.style.fontSize = READOUT_FONT_SIZE;
+    this.salvage.style.fontSize = READOUT_FONT_SIZE;
     this.mapNext.anchor.set(0.5, 0.5);
     this.root.addChild(this.modalG);
     for (const t of [this.modalTitle, this.modalMessage, this.modalRestart, this.modalButton2]) {
@@ -775,9 +791,6 @@ export class HudView {
     this.statusWave.position.set(sp.middle.x + 4, sp.middle.y + Math.floor(sp.middle.h / 2));
     this.statusSpeed.text = `×${s.speed}`;
     this.statusSpeed.position.set(sp.speed.x + 4, sp.speed.y + Math.floor(sp.speed.h / 2));
-    this.statusSalvage.text =
-      s.modifiers.includes('blackout') && s.phase === 'wave' ? '---' : `$${formatNumber(s.economy.salvage)}`;
-    this.statusSalvage.position.set(sp.right.x + 4, sp.right.y + Math.floor(sp.right.h / 2));
 
     // Toolbar.
     const h = computeHud(l, s);
@@ -785,6 +798,10 @@ export class HudView {
     bevel(g, h.integrity, false, PAL.face);
     this.integrity.text = `Integrity: ${s.integrity}/${STARTING_INTEGRITY}`;
     this.integrity.position.set(h.integrity.x + 6, h.integrity.y + Math.floor(h.integrity.h / 2));
+
+    bevel(g, h.salvage, false, PAL.face);
+    this.salvage.text = salvageReadoutText(s);
+    this.salvage.position.set(h.salvage.x + h.salvage.w - 6, h.salvage.y + Math.floor(h.salvage.h / 2));
 
     this.drawTowerControls(s, h, hoverHud);
 

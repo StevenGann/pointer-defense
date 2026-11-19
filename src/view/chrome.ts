@@ -70,10 +70,10 @@ export interface BoardGeometry {
   cell: number;
 }
 
+/** Hint | wave | speed. Salvage lives in the left panel, above the shop, not here. */
 export interface StatusPanes {
   left: Rect;
   middle: Rect;
-  right: Rect;
   speed: Rect;
 }
 
@@ -127,8 +127,7 @@ export function computeLayout(vw: number, vh: number): Layout {
   const oy = Math.round((inner.h - boardH) / 2);
   const board: BoardGeometry = { x: inner.x + ox, y: inner.y + oy, cell };
 
-  const right: Rect = { x: status.x + status.w - 120, y: status.y, w: 120, h: status.h };
-  const speed: Rect = { x: right.x - 46, y: status.y, w: 44, h: status.h };
+  const speed: Rect = { x: status.x + status.w - 44, y: status.y, w: 44, h: status.h };
   const middle: Rect = { x: speed.x - 180, y: status.y, w: 178, h: status.h };
   const left: Rect = { x: status.x, y: status.y, w: middle.x - 2 - status.x, h: status.h };
 
@@ -141,7 +140,7 @@ export function computeLayout(vw: number, vh: number): Layout {
     boardCol,
     rightPanel,
     status,
-    statusPanes: { left, middle, right, speed },
+    statusPanes: { left, middle, speed },
     board,
     boardW,
     boardH,
@@ -375,6 +374,5 @@ export class ChromeView {
     bevel(g, l.statusPanes.left, false, PAL.face);
     bevel(g, l.statusPanes.middle, false, PAL.face);
     bevel(g, l.statusPanes.speed, false, PAL.face);
-    bevel(g, l.statusPanes.right, false, PAL.face);
   }
 }
