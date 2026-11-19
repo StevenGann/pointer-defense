@@ -780,7 +780,7 @@ curve.
 
 From wave 51 each wave takes one modifier from a small pool: **fog** (range −20 %), **no-build**
 (the whole board is frozen for the wave), **fast forward** (speed +15 %), **blackout** (salvage
-hidden until the wave ends), **rush** (spawn interval −25 %, value +10 %).
+hidden until the wave ends — the left panel's salvage readout prints `---`), **rush** (spawn interval −25 %, value +10 %).
 
 During a **no-build** wave the player cannot change their board or their towers: no placing a tower
 anywhere, no upgrades, no branch choices, no repairs (by hand or by a Maintenance cursor), no
@@ -888,7 +888,12 @@ already been earned, so it never pays the early-call bonus. The countdown is arm
 build tick after a clear (`wave > 0`, so a fresh run at wave 0 never auto-starts), reads
 `Auto: next wave in 1.2 s` in the status bar, and holds at `Auto: waiting for repairs` while any
 tower is off the field mid-repair. A manual Next Wave resets the countdown; toggling Auto off
-cancels it. The setting is off by default and persists in the profile like sound and volume.
+cancels it.
+
+Any accepted wave start — the button, `Enter`, an early call or Auto — disarms the build tool
+(`s.selected = null` in `startWave`), so the next board click cannot place a tower the player had
+forgotten was armed; the `Click a tile to place …` hint goes with it. A tower selected for inspection
+stays selected, and a refused start leaves the armed tool alone. The setting is off by default and persists in the profile like sound and volume.
 
 ---
 
@@ -1192,6 +1197,17 @@ Tahoma / MS Sans Serif. The type scale is **13 px** for body text, list rows and
 floating damage numbers at 12/16 px. Chrome geometry is derived from one window rect: title bar 22,
 menu bar 22, client well, status bar 22, all inset 2, with two 168 px side panels flanking the board.
 
+The **status bar** has three sunken panes: the hint line (or `PAUSED`, plus a `CHEATS` chip), the wave
+(`Wave 12 / 100`, with the active modifiers mid-wave) and the speed (`×2`). Salvage is not in it.
+
+The **left panel** stacks, top to bottom: the sunken **integrity** readout (26 px); the sunken
+**salvage** readout (26 px, full inner width, `$1,234` right-aligned in the same 13 px readout size as
+the integrity figure, `---` while a Blackout wave masks it); then either the route line and the tower
+purchase list, or — while a placed tower is selected for inspection — the tower detail box; then the
+`MAP` row (before the first tower only), Start / Call Wave and the Auto checkbox. Salvage sits directly
+above the shop so the price list and the money to spend are read together, and it stays in place when
+the detail view replaces the list. Every layout fits the panel at 1280x720 and 1600x900.
+
 ### 13.4 Motion
 
 Short and mechanical, measured in ticks at 60 Hz:
@@ -1288,7 +1304,8 @@ One master volume, remembered in `localStorage`. No music at launch.
   a tower, then click a tile"*, and the Gun button pulses once. No modal, no text wall.
 - **Errors are explained where they happen.** Placing on the path, sealing the route, insufficient
   salvage — each has its own status-bar sentence.
-- **Legible at a glance:** route length, integrity, salvage, wave, kills by source.
+- **Legible at a glance:** route length, integrity and salvage (left panel, salvage directly above
+  the shop), wave and speed (status bar), kills by source.
 - **Pause** on `P`, **×2 fast forward** on `Space` once wave 1 is cleared, **×3** after wave 50.
 - **No confirmation dialogs.** Selling is reversible by rebuilding.
 - Keyboard: `1–9` select a tower, `Esc` cancels, `Enter` starts the wave.
