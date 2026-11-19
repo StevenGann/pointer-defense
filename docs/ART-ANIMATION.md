@@ -26,6 +26,8 @@ are ignored, and the build warns you (see §7), so a dropped `x.1.svg` is never 
 | Death ring | **yes** — lifetime | effect age | — | same |
 | Shield arc | **yes** — lifetime | effect age | — | a one- or two-frame pulse is enough |
 | Shutter (toggle wall) | **yes** — lifetime | ticks since the flip | — | plays once across 18 ticks, then holds (see §4) |
+| Mine (`mines/`) | **yes** — fps | `now − placedTick` | mine id | armed and unarmed are separate assets; the clock does not restart when the mine arms |
+| Projectile (`projectiles/`) | **yes** — fps | the run clock | projectile id | a projectile keeps no spawn tick, so use a short loop that can start on any frame |
 | Branch marks | **static** | — | — | a permanent badge, not motion |
 | Board tiles | **static** | — | — | chrome that already changes with state |
 | Wall face | **static** | — | — | tinted/bevelled per state by code |

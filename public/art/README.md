@@ -237,10 +237,19 @@ Every tower that fires something has a fire-effect file: the muzzle flash at the
 
 Ordnance and mines have their own files, rotated or not by the renderer:
 
-- `projectiles/shell.svg` — drawn pointing up, rotated to its velocity.
-- `projectiles/missile.svg` — drawn pointing up, rotated to its velocity.
+- `projectiles/shell.svg` — drawn pointing up, rotated to its velocity. A brass flak shell. It is drawn
+  at 0.16 of a cell (about 5 px), so it fills the box and has a 3-unit outline. Two frames at 20 fps
+  flicker the tracer.
+- `projectiles/missile.svg` — drawn pointing up, rotated to its velocity. Drawn at half a cell. Three
+  frames at 20 fps flicker the motor flame; the body is the same in every frame.
 - `mines/mine-armed.svg` and `mines/mine-unarmed.svg` — not rotated. The armed file's lamp should read
   as live; the unarmed one is drawn at half alpha by the renderer, so do not bake the dimness in.
+  Both are a spiked steel ball drawn at half a cell. The armed mine has four frames at 6 fps that
+  blink its red lamp; the body is the same in every frame and in both files, so arming does not pop.
+
+Mines and projectiles animate on the fps clock, like towers (see the support matrix in
+[`docs/ART-ANIMATION.md`](../../docs/ART-ANIMATION.md)). A projectile keeps no spawn tick, so its
+loop can start on any frame: draw a flicker, not a sequence with a beginning.
 
 ## The runtime effects that recolour art
 

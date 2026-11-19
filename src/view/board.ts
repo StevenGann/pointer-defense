@@ -396,7 +396,8 @@ export class BoardView {
     let mineArtIndex = 0;
     for (const m of state.mines) {
       const armed = state.clock >= m.armedAtTick;
-      const tex = getArtTexture(armed ? 'mine-armed' : 'mine-unarmed', Math.round(cell * 0.5));
+      // Mines animate on the fps clock from the tick they were laid; the id spreads the blink phases.
+      const tex = frameTexture(armed ? 'mine-armed' : 'mine-unarmed', Math.round(cell * 0.5), state.clock - m.placedTick, m.id);
       if (tex === null) {
         drawMine(this.mines, m, board, cell, state.clock);
         continue;
@@ -1266,7 +1267,8 @@ function drawProjectiles(
     const sin = Math.sin(heading);
     // The SVGs are drawn nose-up, so the sprite's rotation is the heading plus a quarter turn.
     const size = p.kind === 'shell' ? Math.round(cell * 0.16) : Math.round(cell * 0.5);
-    const tex = getArtTexture(p.kind, size);
+    // A projectile carries no spawn tick, so it animates on the run clock; its id spreads the phases.
+    const tex = frameTexture(p.kind, size, state.clock, p.id);
     if (tex !== null) {
       const spr = spriteAt(artIndex++);
       spr.texture = tex;
