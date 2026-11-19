@@ -105,6 +105,8 @@ export interface MouseContext {
   helpPointerDown: (x: number, y: number, button: number) => boolean;
   helpPointerMove: (x: number, y: number) => void;
   helpPointerUp: () => void;
+  helpScrollBy: (dy: number) => void;
+  helpPage: (dir: number) => void;
   closeHelp: () => void;
   achievementOpen: () => boolean;
   achievementPointerDown: (x: number, y: number, button: number) => boolean;
@@ -474,6 +476,20 @@ export class MouseController {
       return;
     }
     if (this.ctx.menu() || this.ctx.dialog()) return;
+
+    // The Help window owns Page Up / Page Down while it is open: a window of the page at a time.
+    if (this.ctx.helpOpen()) {
+      if (e.key === 'PageUp') {
+        e.preventDefault();
+        this.ctx.helpPage(-1);
+        return;
+      }
+      if (e.key === 'PageDown') {
+        e.preventDefault();
+        this.ctx.helpPage(1);
+        return;
+      }
+    }
 
     // The Global Upgrades dialog owns Up / Down / Enter while it is open; U toggles it shut.
     if (this.ctx.upgradesOpen()) {

@@ -1,8 +1,49 @@
 import { BOSS_KINDS, ENEMY_KINDS, ENEMY_STATS, type EnemyKind } from '../core/enemies.ts';
-import { TOWER_KINDS, TOWER_STATS, towerUnlockWave, type Branch, type TowerKind } from '../core/towers.ts';
+import {
+  TOWER_KINDS,
+  TOWER_STATS,
+  towerUnlockWave,
+  createTower,
+  effectiveStats,
+  upgradeCost,
+  wallMaxHp,
+  repairHealRate,
+  repairRadius,
+  cursorRadius,
+  cursorClickRate,
+  cursorClickDamageFactor,
+  CURSOR_CLICK_DAMAGE_FACTOR,
+  CURSOR_REPAIR_THRESHOLD,
+  MINE_INTERVAL_TICKS,
+  MINE_ARM_TICKS,
+  MINE_EXPIRE_TICKS,
+  MINE_LIVE_CAP,
+  MINE_DAMAGE,
+  MINE_BLAST_RADIUS,
+  type Branch,
+  type EffectiveStats,
+  type Tier,
+  type Tower,
+  type TowerKind,
+} from '../core/towers.ts';
 import { TICK_HZ } from '../core/time.ts';
+import { AA_SALVO_COUNT } from '../core/projectiles.ts';
+import { FLYER_OFF_KIND_DAMAGE, RAM_SALVAGE_PER_POINT } from '../core/state.ts';
+import {
+  CRIT_BASE_CHANCE,
+  CRIT_MARKED_CHANCE,
+  CRIT_MULTIPLIER,
+  CRIT_WEAK_CHANCE,
+  MARKED_DAMAGE_MULT,
+  MAX_OVERCLOCK_LEVEL,
+  OVERCLOCK_DAMAGE_GROWTH,
+  OVERCLOCK_MILESTONES,
+  OVERCLOCK_WAVE_DIVISOR,
+  POINTER_STAGES,
+} from '../core/pointer.ts';
+import { SPEC_CAPS, rpGain, specLevelCost, specEffectCompactText, type Profile } from '../core/save.ts';
+import { earlyCallBonus } from '../core/waves.ts';
 import { branchName } from '../view/tooltipText.ts';
-import type { Profile } from '../core/save.ts';
 
 /**
  * The Help viewer's content: one page per mechanic, enemy, boss and tower.
@@ -83,10 +124,34 @@ function fmt(n: number): string {
   return n.toFixed(2).replace(/\.?0+$/, '');
 }
 
-/** Ticks to a seconds string (0.5 s, 1.6 s), or an em-dash for towers that never fire. */
-function fmtSeconds(ticks: number): string {
-  if (ticks <= 0) return '—';
-  return fmt(ticks / TICK_HZ);
+/** A value to exactly two decimals (3 -> "3.00", 0.5 -> "0.50") for the stat block. */
+function fmt2(n: number): string {
+  return n.toFixed(2);
+}
+
+/** A multiplier to at most two decimals, no trailing zeroes (0.1 -> "0.1", 2 -> "2"). */
+function fmtMult(n: number): string {
+  return fmt(n);
+}
+
+/** A fraction as a whole percentage (0.6 -> "60%"). */
+function fmtPct(n: number): string {
+  return `${Math.round(n * 100)}%`;
+}
+
+/** Damage per second at a given damage and fire interval (ticks), or an em-dash when it never fires. */
+function fmtDps(damage: number, fireTicks: number): string {
+  return fireTicks <= 0 ? '—' : fmt2((damage * TICK_HZ) / fireTicks);
+}
+
+/** Fire interval and shots-per-second as one phrase, or an em-dash when the tower never fires. */
+function fmtFire(fireTicks: number): string {
+  return fireTicks <= 0 ? '—' : `${fmt2(fireTicks / TICK_HZ)} s (${fmt2(TICK_HZ / fireTicks)}/s)`;
+}
+
+/** Turn rate as whole degrees per second, or "instant" for towers that need no aiming. */
+function fmtTurn(turnRate: number): string {
+  return turnRate > 0 ? `${turnRate} °/s` : 'instant';
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -116,7 +181,9 @@ const mechanicsPages: readonly HelpPage[] = [
     category: 'mechanics',
     gate: { kind: 'none' },
     body: [
-      'The pointer upgrades through stages, then through overclock levels, buying more click damage with salvage.',
+      `A bare click deals ${fmt(POINTER_STAGES[1].clickDamage)} damage; the Reticle deals ${fmt(POINTER_STAGES[2].clickDamage)} and holds for ${fmt(POINTER_STAGES[2].holdDps)} damage per second.`,
+      `Overclock levels multiply click damage by ${fmt(OVERCLOCK_DAMAGE_GROWTH)} each, ${OVERCLOCK_MILESTONES.map(([level, mult]) => `×${mult} at level ${level}`).join(' and ')}, capped at ${MAX_OVERCLOCK_LEVEL}; one unlocks every ${OVERCLOCK_WAVE_DIVISOR} waves.`,
+      `A click crits for ${fmt(CRIT_MULTIPLIER)}× — ${fmtPct(CRIT_BASE_CHANCE)} base, +${fmtPct(CRIT_MARKED_CHANCE)} on a marked enemy, +${fmtPct(CRIT_WEAK_CHANCE)} on the weak point. The mark adds ${fmtPct(MARKED_DAMAGE_MULT - 1)} damage.`,
       'Clicks ignore armour and wear shields down, so the pointer is the answer to enemies your towers cannot touch.',
       'Upgrade the pointer from the right-hand panel during a run.',
     ],
@@ -128,8 +195,10 @@ const mechanicsPages: readonly HelpPage[] = [
     gate: { kind: 'none' },
     body: [
       'Salvage is the run\'s currency: kills pay it, and you spend it on towers, upgrades and the pointer.',
-      'Specs are permanent. A reboot banks specs from the run\'s lifetime salvage, and they carry into the next run.',
-      'Each spec has an effect: CPU adds tower damage, GPU adds pointer damage, RAM adds starting salvage, Disk adds starting integrity.',
+      'Specs are permanent. A reboot banks Restore Points from the run\'s lifetime salvage, and they carry into the next run.',
+      `Each spec has an effect: CPU ${specEffectCompactText('cpu', 1)} tower damage, GPU ${specEffectCompactText('gpu', 1)} pointer damage, RAM +${RAM_SALVAGE_PER_POINT} starting salvage, Disk ${specEffectCompactText('disk', 1)} starting integrity (caps ${SPEC_CAPS.cpu}/${SPEC_CAPS.ram}/${SPEC_CAPS.gpu}/${SPEC_CAPS.disk}).`,
+      `A spec level costs ${specLevelCost(0)} Restore Points at level 0, ${specLevelCost(1)} at level 1, ${specLevelCost(2)} at level 2, ${specLevelCost(3)} at level 3, and keeps climbing.`,
+      `A reboot banks ${rpGain(20000)} Restore Points at 20,000 lifetime salvage and ${rpGain(60000)} at 60,000.`,
     ],
   },
   {
@@ -150,6 +219,7 @@ const mechanicsPages: readonly HelpPage[] = [
     gate: { kind: 'none' },
     body: [
       'You can call the next wave while one is still running. The earlier you call, the bigger the salvage bonus.',
+      `A full-early call pays ${earlyCallBonus(0, 2)} salvage at wave 2, decaying toward a floor of 5 the later you wait.`,
       'Two waves can run at once, so an early call is risk for reward.',
     ],
   },
@@ -319,22 +389,130 @@ function towerBranches(kind: TowerKind): readonly Branch[] {
   return kind === 'wall' || kind === 'cursor' ? (['A', 'B', 'C'] as const) : (['A', 'B'] as const);
 }
 
-function towerStatsLine(kind: TowerKind): string {
-  const st = TOWER_STATS[kind];
-  if (kind === 'wall') return `Cost $${st.cost} · 60 HP, blocks the route.`;
-  if (kind === 'beacon') return `Cost $${st.cost} · range ${fmt(st.range)} tiles · +60% damage to towers in radius.`;
-  if (kind === 'repair') return `Cost $${st.cost} · range ${fmt(st.range)} tiles · heals 2 HP/s.`;
-  if (kind === 'cursor') return `Cost $${st.cost} · range ${fmt(st.range)} tiles · clicks for 50% of your click damage.`;
-  let line = `Cost $${st.cost} · range ${fmt(st.range)} tiles · damage ${fmt(st.damage)}`;
-  if (st.fireInterval > 0) line += ` · every ${fmtSeconds(st.fireInterval)} s`;
-  if (kind === 'aa') line += ' · flyers only, 2× damage';
-  else {
-    if (st.ignoresArmour) line += ' · ignores armour';
-    if (st.splash > 0) line += ` · splash ${fmt(st.splash)}`;
-    if (st.slowFactor < 1) line += ` · slows to ${Math.round(st.slowFactor * 100)}% speed`;
-    if (st.pierce > 0) line += ` · pierces ${st.pierce}`;
+/** A synthetic tower at a tier and branch, so the block reads exactly what the sim would use. */
+function synthTower(kind: TowerKind, tier: Tier, branch: Branch | null): Tower {
+  const t = createTower(0, kind, 0, 0);
+  t.tier = tier;
+  t.branch = branch;
+  return t;
+}
+
+/** The price of the upgrade after the given tier and branch, or null at the top of the ladder. */
+function nextUpgradeCost(kind: TowerKind, tier: Tier, branch: Branch | null): number | null {
+  return upgradeCost(synthTower(kind, tier, branch));
+}
+
+/** Special traits shared by the six combat towers, joined with a middle dot (or an em-dash). */
+function combatTraits(kind: TowerKind, eff: EffectiveStats): string {
+  const parts: string[] = [];
+  if (eff.splash > 0) parts.push(`Splash ${fmt2(eff.splash)}`);
+  if (eff.pierce > 0) parts.push(`Pierce ${eff.pierce}`);
+  if (eff.ignoresArmour) parts.push('Ignores armour');
+  if (eff.slowFactor < 1) parts.push(`Slows to ${fmtPct(eff.slowFactor)} for ${fmt2(eff.slowTicks / TICK_HZ)} s`);
+  if (eff.targetsFlyersOnly) parts.push('Flyers only');
+  if (eff.flyerDamageMult !== 1) parts.push(`${fmtMult(eff.flyerDamageMult)}× vs flyers`);
+  if (kind === 'gun') parts.push(`${fmtMult(FLYER_OFF_KIND_DAMAGE)}× vs flyers`);
+  if (eff.chainCount > 0) parts.push(`Chains to ${eff.chainCount} at ${fmtPct(eff.chainDamage)}`);
+  if (eff.beams > 1) parts.push(`${eff.beams} beams at ${fmtPct(eff.beamDamage)}`);
+  if (eff.shieldedDamageMult !== 1) parts.push(`${fmtMult(eff.shieldedDamageMult)}× vs shields`);
+  return parts.length > 0 ? parts.join(' · ') : '—';
+}
+
+/** The block for the six combat towers: base stats, traits, DPS, tier 2 and both branch ladders. */
+function combatStatBlock(kind: TowerKind, lines: string[]): void {
+  const base = effectiveStats(synthTower(kind, 1, null));
+  lines.push(`Range ${fmt2(base.range)} · Damage ${fmt2(base.damage)} · Fire ${fmtFire(base.fireInterval)} · Turn ${fmtTurn(base.turnRate)}`);
+  lines.push(combatTraits(kind, base));
+  lines.push(`DPS ${fmtDps(base.damage, base.fireInterval)}`);
+
+  const t2 = effectiveStats(synthTower(kind, 2, null));
+  lines.push(`Tier 2 — $${nextUpgradeCost(kind, 1, null)}: range ${fmt2(t2.range)} · damage ${fmt2(t2.damage)} · DPS ${fmtDps(t2.damage, t2.fireInterval)}`);
+
+  const branchCost = nextUpgradeCost(kind, 2, null);
+  for (const branch of towerBranches(kind)) {
+    lines.push(`${branchName(kind, branch)} — $${branchCost}`);
+    if (kind === 'cannon' && branch === 'B') {
+      lines.push(`Lays a mine every ${fmt2(MINE_INTERVAL_TICKS / TICK_HZ)} s · arms in ${fmt2(MINE_ARM_TICKS / TICK_HZ)} s · ${MINE_LIVE_CAP} live cap · ${MINE_DAMAGE} damage in a ${fmt2(MINE_BLAST_RADIUS)} blast · expires in ${fmt2(MINE_EXPIRE_TICKS / TICK_HZ)} s`);
+      continue;
+    }
+    if (kind === 'aa' && branch === 'B') {
+      lines.push(`${AA_SALVO_COUNT} homing missiles per salvo · each ${fmtPct(1 / AA_SALVO_COUNT)} of a hit`);
+    }
+    for (const tier of [3, 4, 5] as const) {
+      const eff = effectiveStats(synthTower(kind, tier, branch));
+      const label = tier === 3 ? 'Tier 3:' : `Tier ${tier} — $${nextUpgradeCost(kind, (tier - 1) as Tier, branch)}:`;
+      lines.push(`${label} range ${fmt2(eff.range)} · damage ${fmt2(eff.damage)} · fire ${fmtFire(eff.fireInterval)} · DPS ${fmtDps(eff.damage, eff.fireInterval)}`);
+    }
   }
-  return line + '.';
+}
+
+function beaconStatBlock(lines: string[]): void {
+  const base = effectiveStats(synthTower('beacon', 1, null));
+  lines.push(`Range ${fmt2(base.range)} · +${fmtPct(base.auraDamage)} damage to towers in radius`);
+  const t2 = effectiveStats(synthTower('beacon', 2, null));
+  lines.push(`Tier 2 — $${nextUpgradeCost('beacon', 1, null)}: range ${fmt2(t2.range)}`);
+  const branchCost = nextUpgradeCost('beacon', 2, null);
+  const command = effectiveStats(synthTower('beacon', 3, 'A'));
+  lines.push(`Command — $${branchCost}: +${fmtPct(command.auraDamage)} damage to towers in radius`);
+  const relay = effectiveStats(synthTower('beacon', 3, 'B'));
+  lines.push(`Relay — $${branchCost}: +${fmtPct(relay.auraDamage)} damage to towers · +${fmtPct(relay.auraPointerDamage)} pointer damage · +${fmtMult(relay.auraPointerRange)} pointer range`);
+}
+
+function repairStatBlock(lines: string[]): void {
+  const t1 = synthTower('repair', 1, null);
+  lines.push(`Heals ${fmt2(repairHealRate(t1))} HP/s · radius ${fmt2(repairRadius(t1))} tiles`);
+  const t2 = synthTower('repair', 2, null);
+  lines.push(`Tier 2 — $${nextUpgradeCost('repair', 1, null)}: heals ${fmt2(repairHealRate(t2))} HP/s · radius ${fmt2(repairRadius(t2))} tiles`);
+  const t3 = synthTower('repair', 3, null);
+  lines.push(`Tier 3 — $${nextUpgradeCost('repair', 2, null)}: heals ${fmt2(repairHealRate(t3))} HP/s · radius ${fmt2(repairRadius(t3))} tiles`);
+}
+
+function wallStatBlock(lines: string[]): void {
+  lines.push(`${wallMaxHp(1, null)} HP · blocks the route`);
+  lines.push(`Tier 2 — $${nextUpgradeCost('wall', 1, null)}: ${wallMaxHp(2, null)} HP`);
+  const branchCost = nextUpgradeCost('wall', 2, null);
+  lines.push(`Bulwark — $${branchCost}: ${wallMaxHp(3, 'A')} HP`);
+  lines.push(`Mesh — $${branchCost}: ${wallMaxHp(3, 'B')} HP · blocks flyers`);
+  lines.push(`Toggle — $${branchCost}: ${wallMaxHp(3, 'C')} HP · a gate you open and close`);
+}
+
+function cursorStatBlock(lines: string[]): void {
+  const t1 = synthTower('cursor', 1, null);
+  lines.push(`${fmt2(cursorClickRate(t1))} clicks/s · radius ${fmt2(cursorRadius(t1))} tiles · ${fmtPct(CURSOR_CLICK_DAMAGE_FACTOR)} of your click damage`);
+  const t2 = synthTower('cursor', 2, null);
+  lines.push(`Tier 2 — $${nextUpgradeCost('cursor', 1, null)}: ${fmt2(cursorClickRate(t2))} clicks/s · radius ${fmt2(cursorRadius(t2))} tiles`);
+  const branchCost = nextUpgradeCost('cursor', 2, null);
+  const overclock = synthTower('cursor', 3, 'A');
+  lines.push(`Overclock — $${branchCost}: ${fmt2(cursorClickRate(overclock))} clicks/s · ${fmtPct(CURSOR_CLICK_DAMAGE_FACTOR * cursorClickDamageFactor(overclock))} of your click damage`);
+  const wide = synthTower('cursor', 3, 'B');
+  lines.push(`Wide Search — $${branchCost}: ${fmt2(cursorClickRate(wide))} clicks/s · radius ${fmt2(cursorRadius(wide))} tiles`);
+  const maintenance = synthTower('cursor', 3, 'C');
+  lines.push(`Maintenance — $${branchCost}: ${fmt2(cursorClickRate(maintenance))} clicks/s · radius ${fmt2(cursorRadius(maintenance))} tiles · repairs towers below ${fmtPct(CURSOR_REPAIR_THRESHOLD)}`);
+}
+
+/** The numeric stat block for a tower kind, built entirely from the sim's functions. */
+function towerStatBlock(kind: TowerKind): string[] {
+  const st = TOWER_STATS[kind];
+  const unlock = Math.max(1, towerUnlockWave(kind));
+  const lines: string[] = [`Cost $${st.cost} · unlocks wave ${unlock}`];
+  switch (kind) {
+    case 'beacon':
+      beaconStatBlock(lines);
+      break;
+    case 'repair':
+      repairStatBlock(lines);
+      break;
+    case 'wall':
+      wallStatBlock(lines);
+      break;
+    case 'cursor':
+      cursorStatBlock(lines);
+      break;
+    default:
+      combatStatBlock(kind, lines);
+      break;
+  }
+  return lines;
 }
 
 function branchesLine(kind: TowerKind): string {
@@ -350,7 +528,7 @@ function towerPage(kind: TowerKind): HelpPage {
     title: TOWER_STATS[kind].name,
     category: 'towers',
     gate: { kind: 'tower', tower: kind },
-    body: [towerStatsLine(kind), TOWER_ROLE[kind], branchesLine(kind)],
+    body: [...towerStatBlock(kind), TOWER_ROLE[kind], branchesLine(kind)],
   };
 }
 
