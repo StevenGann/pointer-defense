@@ -91,6 +91,7 @@ import {
   holdDps,
   nextOverclockCost,
   nextPointerCost,
+  pointerUpgradeState,
   nextCritRoll,
   critChance,
   CRIT_MULTIPLIER,
@@ -118,11 +119,11 @@ import {
   WALL_FACE_DISABLED,
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
-import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName } from '../src/view/tooltipText.ts';
+import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName, TOOLTIP_BLUE } from '../src/view/tooltipText.ts';
 import { BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
-import { computeHud, computeRightPanel, hudControlAt, textWidth, HudView, READOUT_FONT_SIZE, salvageReadoutText } from '../src/view/hud.ts';
+import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, READOUT_FONT_SIZE, salvageReadoutText } from '../src/view/hud.ts';
 import {
   advanceBossBars,
   barFillPx,
@@ -3362,19 +3363,92 @@ function chokeWalls(gaps) {
   check(upgradePointer(g) === false, 'overclock 1 is refused before wave 8');
   check(g.pointer.clickLevel === 0, 'a refused buy leaves clickLevel at 0');
   check(
-    tooltipText(pointerTooltipLines(g.pointer, g.economy.salvage, g.wave)[0]) === 'Wave 8 unlocks overclock 1',
+    tooltipText(pointerTooltipLines(g.pointer, g.economy.salvage, g.wave)[0]) === 'Needs wave 8 — one overclock level every 8 waves.',
     'the tooltip names the unlocking wave',
   );
   g.wave = 8;
   check(upgradePointer(g), 'overclock 1 buys once wave 8 arrives');
   check(g.pointer.clickLevel === 1, 'clickLevel becomes 1');
   check(upgradePointer(g) === false, 'overclock 2 is refused before wave 16');
-  check(tooltipText(pointerTooltipLines(g.pointer, g.economy.salvage, g.wave)[0]) === 'Wave 16 unlocks overclock 2',
+  check(tooltipText(pointerTooltipLines(g.pointer, g.economy.salvage, g.wave)[0]) === 'Needs wave 16 — one overclock level every 8 waves.',
     'the tooltip names the next unlocking wave');
   g.wave = 16;
   check(upgradePointer(g), 'overclock 2 buys once wave 16 arrives');
   g.pointer.clickLevel = MAX_OVERCLOCK_LEVEL;
   check(pointerTooltipLines(g.pointer, g.economy.salvage, g.wave)[0] === 'Max level', 'the ladder reads Max level at the cap');
+}
+
+{
+  // Pointer upgrade gate (docs/POINTER-UPGRADE-GATE.md): the Upgrade button keys off the same ceiling
+  // and cap the purchase does, so it greys out on a wave block instead of looking live and refusing.
+  const s = createRunState();
+  s.pointer.stage = 2;
+  s.pointer.clickLevel = 0;
+
+  // 1. Wave 7, stage 2, clickLevel 0: the first overclock level is gated by wave 8.
+  const gated = pointerUpgradeState(7, MAX_OVERCLOCK_LEVEL, s.pointer);
+  check(gated.block === 'wave' && gated.unlockWave === 8 && gated.cost === 1845,
+    `wave 7 gates the first overclock (${gated.block}, unlock ${gated.unlockWave}, cost ${gated.cost})`);
+
+  // 2. Wave 8 lifts the block: the same state is buyable.
+  const lifted = pointerUpgradeState(8, MAX_OVERCLOCK_LEVEL, s.pointer);
+  check(lifted.block === null && lifted.unlockWave === null && lifted.cost === 1845,
+    `wave 8 lifts the gate (${lifted.block}, cost ${lifted.cost})`);
+
+  // 3. At the ladder's top the block is maxed and the cost is null.
+  const maxed = pointerUpgradeState(200, MAX_OVERCLOCK_LEVEL, { ...s.pointer, clickLevel: MAX_OVERCLOCK_LEVEL });
+  check(maxed.block === 'maxed' && maxed.cost === null, 'the ladder top reads maxed with no cost');
+}
+
+{
+  // 4. Coolant Loop's raised cap: a level above 12 is still a wave gate, not maxed.
+  const cooled = createRunState();
+  cooled.economy.salvage = 1_000_000;
+  cooled.wave = 100;
+  check(buyUpgrade(cooled, 'coolant'), 'coolant is bought for the raised-cap check');
+  check(overclockCap(cooled) === 16, 'coolant raises the run-local cap to 16');
+  cooled.pointer.stage = 2;
+  cooled.pointer.clickLevel = 12;
+  const st = pointerUpgradeState(cooled.wave, overclockCap(cooled), cooled.pointer);
+  check(st.block === 'wave' && st.unlockWave === 104,
+    `a level above 12 is a wave gate under coolant, not maxed (${st.block}, ${st.unlockWave})`);
+}
+
+{
+  // 5. The HUD's Upgrade button hit-tests disabled on a wave block and enabled once the wave arrives.
+  const l = computeLayout(1280, 720);
+  const centre = (r) => [r.x + r.w / 2, r.y + r.h / 2];
+  const s = createRunState();
+  s.pointer.stage = 2;
+  s.pointer.clickLevel = 0;
+  s.wave = 7;
+  s.economy.salvage = 100000;
+
+  const blocked = computeRightPanel(l, s).pointer.upgrade;
+  const blockedHit = hudControlAt(l, s, ...centre(blocked));
+  check(blockedHit?.action === 'pointer' && blockedHit.enabled === false,
+    'the wave-blocked Upgrade button hit-tests disabled');
+  check(hudButtonAt(l, s, ...centre(blocked)) === null, 'hudButtonAt refuses the wave-blocked Upgrade');
+
+  s.wave = 8;
+  const open = computeRightPanel(l, s).pointer.upgrade;
+  const openHit = hudControlAt(l, s, ...centre(open));
+  check(openHit?.action === 'pointer' && openHit.enabled === true,
+    'the Upgrade button re-enables once the wave arrives');
+  check(hudButtonAt(l, s, ...centre(open)) === 'pointer', 'hudButtonAt hits the Upgrade once the wave arrives');
+}
+
+{
+  // 6. The tooltip names the unlocking wave, in blue.
+  const s = createRunState();
+  s.pointer.stage = 2;
+  s.pointer.clickLevel = 1;
+  s.wave = 8;
+  s.economy.salvage = 100000;
+  const line = pointerTooltipLines(s.pointer, s.economy.salvage, s.wave)[0];
+  check(tooltipText(line) === 'Needs wave 16 — one overclock level every 8 waves.',
+    `the tooltip names the unlocking wave (${tooltipText(line)})`);
+  check(typeof line !== 'string' && line.some((seg) => seg.color === TOOLTIP_BLUE), 'the wave line is blue');
 }
 
 {

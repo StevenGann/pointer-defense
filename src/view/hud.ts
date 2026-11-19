@@ -4,7 +4,7 @@ import { getArtTexture } from './art.ts';
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
 import { BUFF_NAMES, buffSecondsLeft, hasUpgrade, revealedUpgrades, upgradeBuff } from '../core/upgrades.ts';
-import { clickDamage, comboMultiplier, critChance, nextPointerCost, overclockCeiling, pointerInfo } from '../core/pointer.ts';
+import { clickDamage, comboMultiplier, critChance, overclockCeiling, pointerInfo, pointerUpgradeState } from '../core/pointer.ts';
 import { autoWaveStatus, canCycleLevel, currentPath, cursorMaintenanceStatus, isFinalWave, noBuildActive, NO_BUILD_MESSAGE, overclockCap, pointerDamageMult, selectedTower, STARTING_INTEGRITY, towerCost, towerUnlocked, type RunState } from '../core/state.ts';
 
 import {
@@ -425,8 +425,9 @@ function computePointerSection(s: RunState, x: number, y: number, w: number): Po
   const upgrade: Rect = { x: innerX, y: upgradeY, w: innerW, h: 24 };
   const override: Rect | null = hasOverride ? { x: innerX, y: upgradeY + 24, w: innerW, h: 22 } : null;
 
-  const cost = nextPointerCost(s.pointer);
-  const upgradeEnabled = cost !== null && canAfford(s.economy, cost);
+  const state = pointerUpgradeState(s.wave, overclockCap(s), s.pointer);
+  const cost = state.cost;
+  const upgradeEnabled = state.block === null && cost !== null && canAfford(s.economy, cost);
   const upgradeText = cost === null ? 'Max level' : `Upgrade $${formatNumber(cost)}`;
 
   return { rect, rows: rowRects, upgrade, upgradeText, upgradeEnabled, override };
