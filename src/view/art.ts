@@ -76,12 +76,8 @@ const BOARD_NAMES = ['tile', 'path-tile', 'obstacle', 'block'] as const;
 /** Achievement icons: one file per id, plus the `_placeholder` every missing file falls back to. */
 const ACHIEVEMENT_NAMES = ['_placeholder', ...ACHIEVEMENTS.map((a) => a.id)] as const;
 
-/**
- * The global-upgrade placeholder's lookup name. Every other asset is keyed by its bare file name, but
- * `upgrades/_placeholder.svg` shares its file name with the achievements' placeholder, so it keeps
- * its folder to stay distinct (see `bareName`).
- */
-export const UPGRADE_PLACEHOLDER = 'upgrades/_placeholder';
+/** The global-upgrade placeholder (`upgrades/_upgrade-placeholder.svg`), keyed by its bare name. */
+export const UPGRADE_PLACEHOLDER = '_upgrade-placeholder';
 
 /** Global-upgrade icons (docs/GLOBAL-UPGRADES.md §7): one 44x44 file per id. */
 const UPGRADE_NAMES = GLOBAL_UPGRADES.map((u) => u.id);
@@ -170,8 +166,7 @@ export const ART_MANIFEST: readonly ArtEntry[] = [
   ...entries('ui', 'ui', UI_NAMES),
   ...entries('wall', 'wall', WALL_NAMES),
   ...entries('achievements', 'achievements', ACHIEVEMENT_NAMES),
-  { name: UPGRADE_PLACEHOLDER, category: 'upgrades', file: `${UPGRADE_PLACEHOLDER}.svg` },
-  ...entries('upgrades', 'upgrades', UPGRADE_NAMES),
+  ...entries('upgrades', 'upgrades', [UPGRADE_PLACEHOLDER, ...UPGRADE_NAMES]),
   ...entries('projectiles', 'projectiles', PROJECTILE_NAMES),
   ...entries('mines', 'mines', MINE_NAMES),
 ];
@@ -273,7 +268,6 @@ export interface ManifestAsset {
 
 /** The bare asset name (the part after the last `/`) used by every texture lookup. */
 function bareName(assetName: string): string {
-  if (assetName === UPGRADE_PLACEHOLDER) return UPGRADE_PLACEHOLDER;
   return assetName.slice(assetName.lastIndexOf('/') + 1);
 }
 

@@ -5,6 +5,7 @@ import { createTower, recomputeAuras } from './towers.ts';
 import { COLS, ROWS, tileAt } from './grid.ts';
 import { buildField, isSealed } from './pathfield.ts';
 import { rngNext } from './rng.ts';
+import { buffKillMult } from './upgrades.ts';
 
 /**
  * Desktop ads: rare timed bonuses that appear on the desktop during a wave and pay when their close
@@ -271,7 +272,7 @@ function applyScreensaver(s: RunState): void {
     if (e.hp <= 1e-9) {
       e.hp = 0;
       e.dead = true;
-      const reward = recordKill(s.economy, e.value, 'tower');
+      const reward = recordKill(s.economy, e.value * buffKillMult(s), 'tower');
       s.events.push({ type: 'kill', x: e.x, y: e.y, reward, source: 'tower', kind: e.kind, heading: e.heading });
       if (s.pointer.targetId === e.id) s.pointer.targetId = null;
     }

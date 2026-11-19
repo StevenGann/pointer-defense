@@ -2,6 +2,7 @@ import { Container, Graphics, Text } from 'pixi.js';
 import { bevel, CONTROL_BOX_H, CONTROL_BOX_W, FONT, FONT_SIZE, PAL, TITLE_H, type Rect } from './chrome.ts';
 import { AD_SPECS, type Ad } from '../core/ads.ts';
 import type { RunState } from '../core/state.ts';
+import { TRAY_LIFETIME_TICKS, type TrayPopup } from '../core/upgrades.ts';
 
 /**
  * Draws the live desktop ad as a Windows 95 dialog at the main window's own scale: the title bar
@@ -90,5 +91,68 @@ export class AdView {
     const bodyTop = ad.y + 2 + TITLE_H;
     const bodyH = ad.h - TITLE_H - 4;
     this.message.position.set(ad.x + 6, bodyTop + Math.floor(bodyH / 2));
+  }
+}
+
+/** The System Update pop-up is clickable anywhere in its frame (docs/GLOBAL-UPGRADES.md §5). */
+export function trayHit(tray: TrayPopup, x: number, y: number): boolean {
+  return x >= tray.x && x < tray.x + tray.w && y >= tray.y && y < tray.y + tray.h;
+}
+
+/**
+ * System Tray's System Update pop-up: a 120x64 Windows 95 window in the field's top-right corner,
+ * drawn with the same chrome as the desktop ads. The sim owns its rect so input and view agree.
+ */
+export class TrayView {
+  readonly root = new Container();
+  private readonly g = new Graphics();
+  private readonly title = makeText('');
+  private readonly message = makeText('');
+  private seenId: number | null = null;
+  private bornTick = 0;
+
+  constructor() {
+    this.root.addChild(this.g);
+    this.title.anchor.set(0, 0.5);
+    this.title.style.fontWeight = 'bold';
+    this.message.anchor.set(0, 0.5);
+    this.root.addChild(this.title, this.message);
+  }
+
+  draw(state: RunState): void {
+    const g = this.g;
+    g.clear();
+    const tray = state.tray;
+    if (!tray) {
+      this.title.text = '';
+      this.message.text = '';
+      this.seenId = null;
+      return;
+    }
+    if (tray.id !== this.seenId) {
+      this.seenId = tray.id;
+      this.bornTick = state.tick;
+    }
+    const rect = { x: tray.x, y: tray.y, w: tray.w, h: tray.h };
+    bevel(g, rect, true, PAL.face);
+    const age = state.tick - this.bornTick;
+    if (age < AD_APPEAR_TICKS) {
+      g.rect(tray.x, tray.y, tray.w, tray.h).stroke({ width: 2, color: PAL.highlight, alpha: 1 - age / AD_APPEAR_TICKS });
+    }
+    g.rect(tray.x + 2, tray.y + 2, tray.w - 4, TITLE_H).fill(PAL.title);
+    this.title.text = 'System Update';
+    this.title.style.fill = PAL.titleInverse;
+    this.title.position.set(tray.x + 6, tray.y + 2 + Math.floor(TITLE_H / 2));
+
+    // The countdown to self-close, as a thin bar along the bottom of the body.
+    const left = Math.max(0, tray.until - state.clock);
+    const body = { x: tray.x + 6, y: tray.y + tray.h - 8, w: tray.w - 12, h: 3 };
+    g.rect(body.x, body.y, body.w, body.h).fill(PAL.shadow);
+    g.rect(body.x, body.y, Math.round((body.w * left) / TRAY_LIFETIME_TICKS), body.h).fill(PAL.title);
+
+    this.message.text = 'Click to install';
+    this.message.style.fill = PAL.text;
+    const bodyTop = tray.y + 2 + TITLE_H;
+    this.message.position.set(tray.x + 6, bodyTop + Math.floor((tray.h - TITLE_H - 12) / 2));
   }
 }

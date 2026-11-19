@@ -38,6 +38,12 @@ import {
   WARRANTY_DAMAGE_MULT,
   WARRANTY_REPAIR_MULT,
   WIDE_RETICLE_SLACK,
+  buffIntervalMult,
+  buffKillMult,
+  buffPointerMult,
+  tickSystemTray,
+  type BuffKind,
+  type TrayPopup,
   type UpgradeId,
 } from './upgrades.ts';
 import {
@@ -236,9 +242,12 @@ export function overclockCap(s: RunState): number {
   return hasUpgrade(s, 'coolant') ? COOLANT_OVERCLOCK_CAP : MAX_OVERCLOCK_LEVEL;
 }
 
-/** Double-Buffered Click: the click and hold damage multiplier (1 without it). */
+/**
+ * The global-upgrade click and hold damage multiplier: Double-Buffered Click's x2, times System
+ * Tray's Overdrive x2 while it is live (1 with neither).
+ */
 function pointerUpgradeMult(s: RunState): number {
-  return hasUpgrade(s, 'double-buffer') ? DOUBLE_BUFFER_MULT : 1;
+  return (hasUpgrade(s, 'double-buffer') ? DOUBLE_BUFFER_MULT : 1) * buffPointerMult(s);
 }
 
 /** Wide Reticle: extra click hit-test slack (0 without it). */
@@ -268,6 +277,8 @@ export type GameEvent =
   | { type: 'towerOffline'; x: number; y: number; towerId: number }
   | { type: 'adSpawned'; kind: AdKind }
   | { type: 'adDismissed'; kind: AdKind }
+  | { type: 'traySpawned' }
+  | { type: 'trayClaimed'; kind: BuffKind }
   | { type: 'toggleChanged'; index: number; open: boolean }
   | { type: 'towerUnlocked'; kinds: TowerKind[] }
   | { type: 'mineDetonated'; x: number; y: number }
@@ -463,6 +474,8 @@ export interface RunState {
    * free. Phase 2 — see docs/GLOBAL-UPGRADES.md §5.
    */
   buff: { kind: 'turbo' | 'overdrive' | 'windfall'; until: number } | null;
+  /** System Tray's System Update pop-up while one is on screen (at most one). */
+  tray: TrayPopup | null;
 
   // --- Achievement counters (populated by buildStats once per tick) --------------------------
   /** Pointer hits that landed on an enemy this run. */
@@ -690,6 +703,7 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     upgrades: [],
     emergencyPatchSpent: false,
     buff: null,
+    tray: null,
     pointerHits: 0,
     towersBuilt: 0,
     towersSold: 0,
@@ -1688,7 +1702,7 @@ export function closePopupEnemy(s: RunState, id: number): boolean {
   if (!e) return false;
   e.dead = true;
   e.hp = 0;
-  const reward = recordKillAt(s.economy, e.value, 'pointer', 1);
+  const reward = recordKillAt(s.economy, e.value * buffKillMult(s), 'pointer', 1);
   s.events.push({ type: 'kill', x: e.x, y: e.y, reward, source: 'pointer', kind: e.kind, heading: e.heading });
   if (s.pointer.targetId === e.id) s.pointer.targetId = null;
   return true;
@@ -1811,6 +1825,8 @@ export function tick(s: RunState): void {
     tickMines(s); // drop and expire mines between waves (nothing walks into them yet)
   }
   s.clock++;
+  // After the clock advances, so a pop-up or buff ends on exactly its `until` tick.
+  tickSystemTray(s);
   tickAutoWave(s);
 }
 
@@ -2390,10 +2406,16 @@ function intervalTicks(fireInterval: number): number {
   return Math.max(1, Math.round(fireInterval));
 }
 
-/** A tower's fire interval in ticks, after Autoloader: `max(1, floor(interval * 0.87))`. */
+/**
+ * A tower's fire interval in ticks, after Autoloader (`max(1, floor(interval * 0.87))`) and then
+ * System Tray's Turbo (`max(1, floor(interval * 0.6))`) while it is live.
+ */
 export function towerIntervalTicks(s: RunState, fireInterval: number): number {
-  const ticks = intervalTicks(fireInterval);
-  return hasUpgrade(s, 'autoloader') ? Math.max(1, Math.floor(ticks * AUTOLOADER_INTERVAL_MULT)) : ticks;
+  let ticks = intervalTicks(fireInterval);
+  if (hasUpgrade(s, 'autoloader')) ticks = Math.max(1, Math.floor(ticks * AUTOLOADER_INTERVAL_MULT));
+  const turbo = buffIntervalMult(s);
+  if (turbo !== 1) ticks = Math.max(1, Math.floor(ticks * turbo));
+  return ticks;
 }
 
 function dist2(e: Enemy, x: number, y: number): number {
@@ -3215,15 +3237,23 @@ function burstShell(s: RunState, p: Projectile): void {
   const r = st.splash;
   const cx = p.x;
   const cy = p.y;
+  // The impact: the enemy nearest the burst point among those the burst actually damaged. The
+  // shell's designated target may have moved, died or never been in the radius at all.
+  let impact: Enemy | undefined;
+  let impactD2 = Infinity;
   for (const e of s.enemies) {
     if (!towerCanHurt(s, e)) continue;
     const rr = r + radiusOf(e);
-    if ((e.x - cx) ** 2 + (e.y - cy) ** 2 > rr * rr) continue;
+    const d2 = (e.x - cx) ** 2 + (e.y - cy) ** 2;
+    if (d2 > rr * rr) continue;
     if (baseEnemyKind(e.kind) === 'flyer') hitEnemy(s, tower, st, e, p.damage);
     else hitEnemy(s, tower, st, e, p.damage * 0.5);
+    if (d2 < impactD2) {
+      impactD2 = d2;
+      impact = e;
+    }
   }
-  const target = p.targetId !== null ? s.enemies.find((e) => e.id === p.targetId) : undefined;
-  if (target) telemetrySplash(s, tower, st, target, p.damage);
+  if (impact) telemetrySplash(s, tower, st, impact, p.damage);
 }
 
 /**
@@ -3434,7 +3464,7 @@ function damageEnemy(
     // A Carrier releases twice its brood on death, the one boss that fights on after it falls.
     if (e.kind === 'flyer-boss') releaseBrood(s, e, CARRIER_DEATH_BROOD_COUNT);
     const bounty = e.isBoss && hasUpgrade(s, 'bounty-board') ? BOUNTY_VALUE_MULT : 1;
-    const value = e.value * bounty * (s.modifiers.includes('rush') ? 1.1 : 1);
+    const value = e.value * bounty * (s.modifiers.includes('rush') ? 1.1 : 1) * buffKillMult(s);
     const reward =
       source === 'pointer' && weak
         ? recordKillAt(s.economy, value, source, WEAK_POINT_KILL_BONUS)

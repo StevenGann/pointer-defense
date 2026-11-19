@@ -179,7 +179,23 @@ import { animFrame, currentAnimFrame, DEFAULT_ANIM, entityOffset } from '../src/
 import { scanArt } from './art-manifest.mjs';
 import { runAchArt } from './ach-art.mjs';
 import { runUpgradeArt } from './upgrade-art.mjs';
-import { GLOBAL_UPGRADES, buyUpgrade, revealedUpgrades } from '../src/core/upgrades.ts';
+import {
+  GLOBAL_UPGRADES,
+  buyUpgrade,
+  revealedUpgrades,
+  upgradeBuff,
+  trayRollDue,
+  tickSystemTray,
+  spawnTray,
+  claimTray,
+  TRAY_BUFF_TICKS,
+  TRAY_LIFETIME_TICKS,
+  TRAY_SETTLE_TICKS,
+  TRAY_ROLL_TICKS,
+  TRAY_W,
+  TRAY_H,
+} from '../src/core/upgrades.ts';
+import { buffRowText } from '../src/view/hud.ts';
 import { EffectsView, muzzleAssetFor, muzzleLife, FIRE_KINDS } from '../src/view/effects.ts';
 
 import { fileURLToPath } from 'node:url';
@@ -7683,6 +7699,16 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   }
 
   // 50.11 Chain Reaction: a killing click splashes the two nearest neighbours, and never chains on.
+  //
+  // Geometry (tiles): the victim at (5.5, 5.5); n1 and n2 0.8 either side of it, both in the 1.5
+  // radius and both killed by the splash; `far` 1.4 below, in range but third nearest; `outer` at
+  // (7.4, 5.5) — 1.9 from the victim (outside 1.5) but 1.1 from n1 (inside 1.5). Only a second
+  // chain started by n1's death could reach `outer`, so it must take no damage at all.
+  //
+  // Note: chainReaction is called from pointerDown only, and the splash goes through damageEnemy,
+  // which never calls it — so today the re-entry guard is unreachable and deleting it alone does not
+  // fail this test. What this does catch is the regression the guard exists for: moving the hook
+  // into damageEnemy (where §3 places it) without the guard makes n1's splash kill chain to `outer`.
   {
     const s = fullState();
     buyUpgrade(s, 'chain-reaction');
@@ -7690,21 +7716,24 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
     const victim = stationary(80001, 'grunt', 1, 5.5, 5.5);
     victim.hp = 0.5;
-    // Both neighbours die to the splash; if a splash kill chained, the outer ring would be hit too.
     const n1 = stationary(80002, 'grunt', 1, 6.3, 5.5);
     const n2 = stationary(80003, 'grunt', 1, 4.7, 5.5);
-    const far = stationary(80004, 'grunt', 1, 5.5, 6.9); // in range, but third nearest
-    const outer = stationary(80005, 'grunt', 1, 7.4, 5.5); // only reachable from a chained n1
+    const far = stationary(80004, 'grunt', 1, 5.5, 6.9);
+    const outer = stationary(80005, 'grunt', 1, 7.4, 5.5);
     n1.hp = 0.01;
     n2.hp = 0.01;
     s.enemies.push(victim, n1, n2, far, outer);
+    const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    const geometryOk = d(n1, victim) <= 1.5 && d(n2, victim) <= 1.5 && d(outer, victim) > 1.5 && d(outer, n1) <= 1.5;
     const farHp = far.hp;
     const outerHp = outer.hp;
+    s.events = [];
     pointerDown(s, 5.5, 5.5);
     pointerUp(s);
+    const outerHits = s.events.filter((ev) => ev.type === 'damage' && ev.id === outer.id).length;
     check(
-      victim.dead && n1.dead && n2.dead && far.hp === farHp && outer.hp === outerHp,
-      'chain-reaction splashes the two nearest neighbours on a killing click and does not chain further',
+      geometryOk && victim.dead && n1.dead && n2.dead && far.hp === farHp && outer.hp === outerHp && outerHits === 0,
+      `chain-reaction splashes the two nearest neighbours on a killing click and a splash kill never chains (outer hp ${outer.hp}/${outerHp}, ${outerHits} hits)`,
     );
   }
 
@@ -7748,7 +7777,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     try {
       const dir = join(tmp, 'upgrades');
       mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, '_placeholder.svg'), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44"/>');
+      writeFileSync(join(dir, '_upgrade-placeholder.svg'), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44"/>');
       const custom = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44"><!-- artist work --></svg>';
       writeFileSync(join(dir, 'coolant.svg'), custom);
       const first = runUpgradeArt(tmp);
@@ -7761,6 +7790,246 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
+  }
+
+  // 50.15 Ballistic Telemetry centres its splash on the enemy the shell burst on, not the shell's
+  // designated target. The shell bursts at (6, 6) and catches `hit` 1.3 tiles off-centre (the Flak
+  // burst reaches 1.2 + the flyer's 0.22). `side` is 0.9 beyond `hit` — inside the 1-tile telemetry
+  // reach of the impact, outside the burst — so only telemetry can touch it. The designated target
+  // `aim` is far away with its own flyer neighbour `aimMate`, which the old target-centred splash hit.
+  {
+    const s = allUnlocked();
+    s.wave = 45;
+    s.economy.salvage = 1_000_000;
+    buyUpgrade(s, 'ballistic-telemetry');
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const aa = createTower(90001, 'aa', 0, 0);
+    aa.tier = 3;
+    aa.branch = 'A';
+    s.towers.push(aa);
+    s.towerDisabled.set(aa.id, 1e9); // it must not fire on its own; only the hand-placed shell lands
+    const beefy = (e) => {
+      e.maxHp = 1000;
+      e.hp = 1000;
+      return e;
+    };
+    const hit = beefy(stationary(90010, 'flyer', 1, 7.3, 6.0));
+    const side = beefy(stationary(90011, 'flyer', 1, 8.2, 6.0));
+    const aim = beefy(stationary(90012, 'flyer', 1, 12.0, 2.0));
+    const aimMate = beefy(stationary(90013, 'flyer', 1, 12.5, 2.0));
+    s.enemies.push(hit, side, aim, aimMate);
+    s.projectiles.push({ id: 90020, kind: 'shell', x: 6.0, y: 6.0, vx: 0, vy: 0, targetId: aim.id, towerId: aa.id, damage: 10, lifetime: 1 });
+    tick(s);
+    const hitLoss = 1000 - hit.hp;
+    const sideLoss = 1000 - side.hp;
+    check(
+      hitLoss > 0 && Math.abs(sideLoss - hitLoss * 0.5) < 1e-6 && aim.hp === 1000 && aimMate.hp === 1000,
+      `ballistic-telemetry splashes the flyer next to the impact, not the shell's designated target (hit -${hitLoss}, side -${sideLoss}, aim's mate -${1000 - aimMate.hp})`,
+    );
+  }
+
+  // 50.16 System Tray (§5): the spawn gate. Unowned, below wave 55, outside a wave, or inside a
+  // wave's first 5 s it never rolls (and never draws from the RNG); otherwise it rolls once a second
+  // at about 1.5 %, with at most one pop-up on screen.
+  {
+    const trayState = (owned, wave) => {
+      const s = fullState();
+      if (owned) buyUpgrade(s, 'system-tray');
+      s.wave = wave;
+      s.phase = 'wave';
+      return s;
+    };
+    // Drive the spawner over `seconds` of wave time starting at waveTick 0; close each pop-up as it
+    // opens. Returns the spawn count and the earliest waveTick a spawn landed at.
+    const drive = (s, seconds) => {
+      let spawns = 0;
+      let earliest = Infinity;
+      const rng0 = s.rng;
+      for (let wt = 0; wt < seconds * 60; wt++) {
+        s.waveTick = wt;
+        tickSystemTray(s);
+        if (s.tray) {
+          spawns++;
+          earliest = Math.min(earliest, wt);
+          s.tray = null;
+        }
+        s.clock++;
+      }
+      return { spawns, earliest, rngMoved: s.rng !== rng0 };
+    };
+    const unowned = drive(trayState(false, 80), 4000);
+    const early = drive(trayState(true, 54), 4000);
+    const build = trayState(true, 80);
+    build.phase = 'build';
+    const inBuild = drive(build, 4000);
+    const owned = drive(trayState(true, 80), 20000);
+    const rate = owned.spawns / (20000 - TRAY_SETTLE_TICKS / 60);
+    // The first five seconds of many fresh waves: never a pop-up, whatever the seed.
+    let settleSpawns = 0;
+    for (let seed = 1; seed <= 400; seed++) {
+      const s = trayState(true, 80);
+      s.rng = seed * 2654435761;
+      for (let wt = 0; wt < TRAY_SETTLE_TICKS; wt++) {
+        s.waveTick = wt;
+        tickSystemTray(s);
+        if (s.tray) settleSpawns++;
+        s.clock++;
+      }
+    }
+    const gateTicks = [0, 1, 59, 60, 299].every((wt) => !trayRollDue({ ...trayState(true, 80), waveTick: wt }));
+    const rollTicks = trayRollDue({ ...trayState(true, 80), waveTick: TRAY_SETTLE_TICKS }) &&
+      !trayRollDue({ ...trayState(true, 80), waveTick: TRAY_SETTLE_TICKS + 1 }) &&
+      trayRollDue({ ...trayState(true, 80), waveTick: TRAY_SETTLE_TICKS + TRAY_ROLL_TICKS });
+    const oneAtATime = (() => {
+      const s = trayState(true, 80);
+      const a = spawnTray(s);
+      const b = spawnTray(s);
+      return a !== null && b === null && !trayRollDue({ ...s, waveTick: TRAY_SETTLE_TICKS });
+    })();
+    check(
+      unowned.spawns === 0 && !unowned.rngMoved && early.spawns === 0 && !early.rngMoved && inBuild.spawns === 0 &&
+        settleSpawns === 0 && owned.earliest >= TRAY_SETTLE_TICKS && gateTicks && rollTicks && oneAtATime &&
+        rate > 0.01 && rate < 0.02,
+      `system-tray rolls 1.5%/s only when owned, at wave 55+, in a wave, after 5 s, one at a time (rate ${(rate * 100).toFixed(2)}%, unowned ${unowned.spawns}, wave 54 ${early.spawns}, build ${inBuild.spawns}, first 5 s ${settleSpawns})`,
+    );
+  }
+
+  // 50.17 The pop-up: 120x64 in the field's top-right, closes itself after 12 s, and a click grants
+  // one of the three buffs for exactly 1200 ticks of sim clock.
+  {
+    const s = fullState();
+    buyUpgrade(s, 'system-tray');
+    s.phase = 'build';
+    s.autoWave = false;
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const field = s.viewport.boardCol;
+    const tray = spawnTray(s);
+    const placed = tray.w === TRAY_W && tray.h === TRAY_H && TRAY_W === 120 && TRAY_H === 64 &&
+      tray.x + tray.w <= field.x + field.w && tray.x > field.x + field.w / 2 && tray.y >= field.y && tray.y < field.y + field.h / 4;
+    for (let i = 0; i < TRAY_LIFETIME_TICKS - 1; i++) tick(s);
+    const stillUp = s.tray !== null;
+    tick(s);
+    const selfClosed = s.tray === null && TRAY_LIFETIME_TICKS === 720;
+    const wrongId = (() => {
+      const t2 = spawnTray(s);
+      return claimTray(s, t2.id + 1) === null && s.tray === t2 && s.buff === null;
+    })();
+    const kind = claimTray(s, s.tray.id);
+    const start = s.clock;
+    const claimed = s.tray === null && s.buff !== null && s.buff.kind === kind && s.buff.until === start + 1200 && TRAY_BUFF_TICKS === 1200;
+    const hudLive = buffRowText(s) !== null && buffRowText(s).includes('20 s');
+    for (let i = 0; i < 1199; i++) tick(s);
+    const liveAt1199 = upgradeBuff(s) !== null && buffRowText(s).includes('1 s');
+    tick(s);
+    const goneAt1200 = s.clock - start === 1200 && upgradeBuff(s) === null && s.buff === null && buffRowText(s) === null;
+    // A paused (unticked) run keeps the buff: it is clock-based, not wall time.
+    const p = fullState();
+    buyUpgrade(p, 'system-tray');
+    claimTray(p, spawnTray(p).id, 'turbo');
+    const pausedKeeps = upgradeBuff(p) !== null;
+    // The roll is uniform: all three kinds turn up across seeds, each roughly a third of the time.
+    const counts = { turbo: 0, overdrive: 0, windfall: 0 };
+    for (let seed = 1; seed <= 3000; seed++) {
+      const u = fullState();
+      u.rng = Math.imul(seed, 0x9e3779b1);
+      counts[claimTray(u, spawnTray(u).id)]++;
+    }
+    const uniform = Object.values(counts).every((n) => n > 850 && n < 1150);
+    check(
+      placed && stillUp && selfClosed && wrongId && claimed && hudLive && liveAt1199 && goneAt1200 && pausedKeeps && uniform,
+      `system-tray pop-up sits top-right at 120x64, closes after 12 s, and its buff lasts exactly 1200 ticks (${kind}; ${JSON.stringify(counts)})`,
+    );
+  }
+
+  // 50.18 A new buff replaces the old one outright: no stacking, a fresh 20 s.
+  {
+    const s = fullState();
+    buyUpgrade(s, 'system-tray');
+    claimTray(s, spawnTray(s).id, 'turbo');
+    s.clock += 600;
+    claimTray(s, spawnTray(s).id, 'overdrive');
+    const replaced = s.buff.kind === 'overdrive' && s.buff.until === s.clock + 1200;
+    const gun = TOWER_STATS.gun.fireInterval;
+    const plain = fullState();
+    const notTurbo = towerIntervalTicks(s, gun) === towerIntervalTicks(plain, gun);
+    claimTray(s, spawnTray(s).id, 'overdrive');
+    const sameKindRefresh = s.buff.until === s.clock + 1200;
+    check(
+      replaced && notTurbo && sameKindRefresh,
+      'system-tray: a new buff replaces the active one (turbo -> overdrive drops turbo) and never stacks',
+    );
+  }
+
+  // 50.19 Each buff moves its own number: Turbo the fire interval, Overdrive click damage,
+  // Windfall kill value.
+  {
+    const gun = TOWER_STATS.gun.fireInterval;
+    const plain = fullState();
+    const turbo = fullState();
+    buyUpgrade(turbo, 'system-tray');
+    claimTray(turbo, spawnTray(turbo).id, 'turbo');
+    const base = towerIntervalTicks(plain, gun);
+    const fast = towerIntervalTicks(turbo, gun);
+    const turboOk = fast === Math.max(1, Math.floor(base * 0.6)) && fast < base && towerIntervalTicks(turbo, 1) === 1;
+
+    // Click damage: the same click on the same enemy, with the same RNG, with and without Overdrive.
+    const clickOnce = (buff) => {
+      const s = fullState();
+      buyUpgrade(s, 'system-tray');
+      if (buff) claimTray(s, spawnTray(s).id, buff);
+      s.phase = 'wave';
+      s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+      const e = stationary(91001, 'grunt', 1, 5.5, 5.5);
+      e.maxHp = 1e6;
+      e.hp = 1e6;
+      s.enemies.push(e);
+      s.events = [];
+      pointerDown(s, 5.5, 5.5);
+      pointerUp(s);
+      return s.events.filter((ev) => ev.type === 'damage').reduce((n, ev) => n + ev.amount, 0);
+    };
+    const dPlain = clickOnce(null);
+    const dOver = clickOnce('overdrive');
+    const dTurbo = clickOnce('turbo');
+    const overdriveOk = dPlain > 0 && Math.abs(dOver - dPlain * 2) < 1e-9 && dTurbo === dPlain;
+
+    // Kill value: the same killing click with and without Windfall.
+    const killOnce = (buff) => {
+      const s = fullState();
+      buyUpgrade(s, 'system-tray');
+      if (buff) claimTray(s, spawnTray(s).id, buff);
+      s.phase = 'wave';
+      s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+      const e = stationary(91002, 'grunt', 1, 5.5, 5.5);
+      e.value = 100;
+      e.hp = 0.001;
+      s.enemies.push(e);
+      const before = s.economy.salvage;
+      pointerDown(s, 5.5, 5.5);
+      pointerUp(s);
+      return e.dead ? s.economy.salvage - before : -1;
+    };
+    const vPlain = killOnce(null);
+    const vWind = killOnce('windfall');
+    const vOver = killOnce('overdrive');
+    const windfallOk = vPlain > 0 && Math.abs(vWind - vPlain * 1.25) <= 1 && vOver === vPlain;
+    check(
+      turboOk && overdriveOk && windfallOk,
+      `system-tray buffs: turbo ${base} -> ${fast} ticks, overdrive click ${dPlain} -> ${dOver}, windfall kill $${vPlain} -> $${vWind}`,
+    );
+  }
+
+  // 50.20 The upgrade placeholder is looked up by its ordinary bare name, like every other asset.
+  {
+    const entry = manifestEntry('_upgrade-placeholder');
+    check(
+      entry !== undefined && entry.file === 'upgrades/_upgrade-placeholder.svg' &&
+        existsSync(join(artDir, 'upgrades', '_upgrade-placeholder.svg')) &&
+        !existsSync(join(artDir, 'upgrades', '_placeholder.svg')) &&
+        manifestEntry('_placeholder')?.file === 'achievements/_placeholder.svg',
+      'the upgrade placeholder is upgrades/_upgrade-placeholder.svg under its bare name, distinct from the achievements placeholder',
+    );
   }
 
   // 50.14 Row lines fit in 46 characters, and every detail is written.

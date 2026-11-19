@@ -3,7 +3,7 @@ import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from
 import { getArtTexture } from './art.ts';
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
-import { hasUpgrade, revealedUpgrades, upgradesAvailable } from '../core/upgrades.ts';
+import { BUFF_NAMES, buffSecondsLeft, hasUpgrade, revealedUpgrades, upgradeBuff, upgradesAvailable } from '../core/upgrades.ts';
 import { clickDamage, comboMultiplier, critChance, nextPointerCost, overclockCeiling, pointerInfo } from '../core/pointer.ts';
 import { autoWaveStatus, canCycleLevel, currentPath, cursorMaintenanceStatus, isFinalWave, noBuildActive, NO_BUILD_MESSAGE, overclockCap, pointerDamageMult, selectedTower, STARTING_INTEGRITY, towerCost, towerUnlocked, type RunState } from '../core/state.ts';
 
@@ -175,6 +175,8 @@ export interface PointerSection {
 export interface GlobalUpgradesSection extends InfoSection {
   restore: Rect;
   upgrades: Rect;
+  /** The System Tray buff readout while a buff is live; display only, not a link. */
+  buff: Rect | null;
 }
 
 export interface RightPanelLayout {
@@ -182,6 +184,12 @@ export interface RightPanelLayout {
   kills: InfoSection;
   pointer: PointerSection;
   globalUpgrades: GlobalUpgradesSection;
+}
+
+/** The System Tray buff row while a buff is live (`Turbo — 14 s`), or null when none is. */
+export function buffRowText(s: RunState): string | null {
+  const b = upgradeBuff(s);
+  return b ? `${BUFF_NAMES[b.kind]} — ${buffSecondsLeft(s)} s` : null;
 }
 
 /** The Upgrades row's text: how many revealed upgrades are buyable now, or why none are. */
@@ -356,12 +364,17 @@ export function computeRightPanel(l: Layout, s: RunState): RightPanelLayout {
   y += pointer.rect.h + SECTION_GAP;
 
   const rowY = (i: number): number => y + SECTION_PAD_TOP + SECTION_TITLE_H + i * SECTION_ROW_H;
+  // A live System Tray buff adds a third, non-clickable row under the two links.
+  const buff = buffRowText(s);
+  const globalRows = [`Restore — ${formatNumber(s.rp)} RP`, upgradesRowText(s)];
+  if (buff) globalRows.push(buff);
   const globalUpgrades: GlobalUpgradesSection = {
-    rect: { x, y, w, h: infoSectionHeight(2) },
+    rect: { x, y, w, h: infoSectionHeight(globalRows.length) },
     title: 'GLOBAL UPGRADES',
-    rows: [`Restore — ${formatNumber(s.rp)} RP`, upgradesRowText(s)],
+    rows: globalRows,
     restore: { x: x + 2, y: rowY(0), w: w - 4, h: SECTION_ROW_H },
     upgrades: { x: x + 2, y: rowY(1), w: w - 4, h: SECTION_ROW_H },
+    buff: buff ? { x: x + 2, y: rowY(2), w: w - 4, h: SECTION_ROW_H } : null,
   };
 
   return { nextWave, kills, pointer, globalUpgrades };
@@ -473,6 +486,7 @@ export function hudControlAt(l: Layout, s: RunState, px: number, py: number): Hu
   }
 
   if (pointInRect(right.globalUpgrades.upgrades, px, py)) return { action: 'upgrades', enabled: true };
+  if (right.globalUpgrades.buff && pointInRect(right.globalUpgrades.buff, px, py)) return null;
   if (pointInRect(right.globalUpgrades.rect, px, py)) return { action: 'restore', enabled: true };
 
   return null;
@@ -614,7 +628,7 @@ export class HudView {
   private readonly pointerTitle = makeText('POINTER', true);
   private readonly pointerRows: Text[] = [makeText(''), makeText(''), makeText(''), makeText('')];
   private readonly globalTitle = makeText('GLOBAL UPGRADES', true);
-  private readonly globalRows: Text[] = [makeText(''), makeText('')];
+  private readonly globalRows: Text[] = [makeText(''), makeText(''), makeText('')];
 
   constructor() {
     this.towerButtons = TOWER_KINDS.map(() => makeText(''));
@@ -1042,6 +1056,7 @@ export class HudView {
     this.drawInfoSection(g, this.globalTitle, this.globalRows, rp.globalUpgrades);
     this.globalRows[0].style.fill = PAL.title;
     this.globalRows[1].style.fill = upgradesAvailable(s).length > 0 ? PAL.title : PAL.text;
+    this.globalRows[2].style.fill = PAL.text;
   }
 
   private drawInfoSection(g: Graphics, title: Text, rows: Text[], section: InfoSection): void {

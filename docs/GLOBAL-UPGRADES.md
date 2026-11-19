@@ -279,7 +279,8 @@ New `src/view/upgrades.ts`, modelled on `restore.ts` (same header, close box, ro
 - Folder: `public/art/upgrades/`.
 - One file per upgrade: `<id>.svg`, `viewBox="0 0 44 44"`, exactly like the achievement icons, and
   the raised Windows 95 frame is **baked into the artwork** the same way.
-- `public/art/upgrades/_placeholder.svg` is the fallback.
+- `public/art/upgrades/_upgrade-placeholder.svg` is the fallback. Its bare name differs from the
+  achievements' `_placeholder`, so it resolves by the ordinary bare-name lookup like every other asset.
 - `scripts/upgrade-art.mjs` mirrors `ach-art.mjs`: for every `GLOBAL_UPGRADES` id, copy the
   placeholder into place **only if the file does not exist**. Never overwrite. Wire it into `predev`
   and `prebuild` before `art:manifest`, and export `runUpgradeArt(artDir)` for the harness. Add it
@@ -288,7 +289,7 @@ New `src/view/upgrades.ts`, modelled on `restore.ts` (same header, close box, ro
 
 ### 7.2 The placeholder
 
-A 44×44 tile with the standard frame and a centred dark-grey glyph: a gear over three stacked
+`_upgrade-placeholder.svg` is a 44×44 tile with the standard frame and a centred dark-grey glyph: a gear over three stacked
 horizontal bars, at `#808080` on `#c0c0c0`, black 1 px outline. It must read as "not drawn yet" and
 must never be mistaken for one of the real icons.
 

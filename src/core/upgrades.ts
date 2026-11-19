@@ -1,5 +1,7 @@
 import { spend } from './economy.ts';
+import { rngNext } from './rng.ts';
 import type { RunState } from './state.ts';
+import { secondsToTicks } from './time.ts';
 
 /**
  * Global upgrades: expensive, one-shot, per-run purchases paid in salvage (docs/GLOBAL-UPGRADES.md).
@@ -75,6 +77,21 @@ export const BOUNTY_VALUE_MULT = 2;
 export const BOUNTY_HP_MULT = 1.1;
 /** Coolant Loop: the run-local overclock cap. */
 export const COOLANT_OVERCLOCK_CAP = 16;
+/** System Tray (§5): spawn chance per roll, ticks between rolls, and the wave's quiet opening. */
+export const TRAY_SPAWN_CHANCE = 0.015;
+export const TRAY_ROLL_TICKS = secondsToTicks(1);
+export const TRAY_SETTLE_TICKS = secondsToTicks(5);
+/** System Tray: how long the pop-up stays up, and how long a claimed buff lasts. */
+export const TRAY_LIFETIME_TICKS = secondsToTicks(12);
+export const TRAY_BUFF_TICKS = secondsToTicks(20);
+/** System Tray: the pop-up window's size, and its inset from the field's top-right corner. */
+export const TRAY_W = 120;
+export const TRAY_H = 64;
+const TRAY_MARGIN = 8;
+/** System Tray buffs: Turbo's fire interval, Overdrive's click/hold damage, Windfall's kill value. */
+export const TURBO_INTERVAL_MULT = 0.6;
+export const OVERDRIVE_MULT = 2;
+export const WINDFALL_MULT = 1.25;
 
 export const GLOBAL_UPGRADES: readonly UpgradeDef[] = [
   // Pointer
@@ -270,4 +287,121 @@ export function buyUpgrade(s: UpgradeState & Partial<Pick<RunState, 'salvageSpen
 export function upgradeBuff(s: Pick<RunState, 'buff' | 'clock'>): RunState['buff'] {
   if (s.buff === null || s.clock >= s.buff.until) return null;
   return s.buff;
+}
+
+// --- System Tray (docs/GLOBAL-UPGRADES.md §5) -----------------------------------------------------
+
+export type BuffKind = NonNullable<RunState['buff']>['kind'];
+
+/** The three buffs, in the order a uniform roll indexes them. */
+export const BUFF_KINDS: readonly BuffKind[] = ['turbo', 'overdrive', 'windfall'];
+
+/** The name the HUD and notices show for a buff. */
+export const BUFF_NAMES: Readonly<Record<BuffKind, string>> = {
+  turbo: 'Turbo',
+  overdrive: 'Overdrive',
+  windfall: 'Windfall',
+};
+
+/** One line for the notice shown when a buff is claimed. */
+export const BUFF_LINES: Readonly<Record<BuffKind, string>> = {
+  turbo: 'Turbo: towers fire faster for 20 s',
+  overdrive: 'Overdrive: click damage x2 for 20 s',
+  windfall: 'Windfall: kills pay +25% for 20 s',
+};
+
+/** The System Update pop-up: a small clickable window parked in the field's top-right corner. */
+export interface TrayPopup {
+  readonly id: number;
+  /** The sim clock tick at which it closes itself. */
+  readonly until: number;
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+  readonly h: number;
+}
+
+/** Whole seconds left on the active buff (rounded up), or 0 when none is live. */
+export function buffSecondsLeft(s: Pick<RunState, 'buff' | 'clock'>): number {
+  const b = upgradeBuff(s);
+  return b ? Math.ceil((b.until - s.clock) / 60) : 0;
+}
+
+/**
+ * Whether this tick is a System Tray roll: the upgrade is owned (and its wave reached), a wave is
+ * running, the wave is past its first 5 s, it is a whole-second mark, and no pop-up is on screen.
+ */
+export function trayRollDue(
+  s: Pick<RunState, 'upgrades' | 'wave' | 'phase' | 'waveTick' | 'tray'>,
+): boolean {
+  if (!hasUpgrade(s, 'system-tray')) return false;
+  if (s.wave < (DEFS_BY_ID.get('system-tray')?.wave ?? Infinity)) return false;
+  if (s.phase !== 'wave' || s.tray !== null) return false;
+  if (s.waveTick < TRAY_SETTLE_TICKS) return false;
+  return s.waveTick % TRAY_ROLL_TICKS === 0;
+}
+
+/** Open the System Update pop-up now (the roll already passed; tests call it directly). */
+export function spawnTray(s: RunState): TrayPopup | null {
+  if (s.tray) return null;
+  const field = s.viewport.boardCol;
+  const tray: TrayPopup = {
+    id: s.nextId++,
+    until: s.clock + TRAY_LIFETIME_TICKS,
+    x: field.x + field.w - TRAY_MARGIN - TRAY_W,
+    y: field.y + TRAY_MARGIN,
+    w: TRAY_W,
+    h: TRAY_H,
+  };
+  s.tray = tray;
+  s.events.push({ type: 'traySpawned' });
+  return tray;
+}
+
+/**
+ * Called once per sim tick, in every phase. Closes an expired pop-up, drops an expired buff, and
+ * on a roll tick opens a new pop-up with `TRAY_SPAWN_CHANCE`. The roll draws from the run's seeded
+ * stream only when the gate is open, so a run that does not own the upgrade is untouched.
+ */
+export function tickSystemTray(s: RunState): void {
+  if (s.tray && s.clock >= s.tray.until) s.tray = null;
+  if (s.buff && s.clock >= s.buff.until) s.buff = null;
+  if (!trayRollDue(s)) return;
+  const r = rngNext(s.rng);
+  s.rng = r.next;
+  if (r.value < TRAY_SPAWN_CHANCE) spawnTray(s);
+}
+
+/**
+ * Click the System Update pop-up: close it and grant one of the three buffs, chosen uniformly, for
+ * 20 s of sim clock. A new buff replaces whatever was running; buffs never stack. `pick` forces the
+ * buff (tests); otherwise it is drawn from the seeded stream.
+ */
+export function claimTray(s: RunState, id: number, pick?: BuffKind): BuffKind | null {
+  if (!s.tray || s.tray.id !== id) return null;
+  s.tray = null;
+  let kind = pick;
+  if (!kind) {
+    const r = rngNext(s.rng);
+    s.rng = r.next;
+    kind = BUFF_KINDS[Math.min(BUFF_KINDS.length - 1, Math.floor(r.value * BUFF_KINDS.length))];
+  }
+  s.buff = { kind, until: s.clock + TRAY_BUFF_TICKS };
+  s.events.push({ type: 'trayClaimed', kind });
+  return kind;
+}
+
+/** Turbo's fire-interval multiplier (1 when it is not live). */
+export function buffIntervalMult(s: Pick<RunState, 'buff' | 'clock'>): number {
+  return upgradeBuff(s)?.kind === 'turbo' ? TURBO_INTERVAL_MULT : 1;
+}
+
+/** Overdrive's click and hold damage multiplier (1 when it is not live). */
+export function buffPointerMult(s: Pick<RunState, 'buff' | 'clock'>): number {
+  return upgradeBuff(s)?.kind === 'overdrive' ? OVERDRIVE_MULT : 1;
+}
+
+/** Windfall's kill value multiplier (1 when it is not live). */
+export function buffKillMult(s: Pick<RunState, 'buff' | 'clock'>): number {
+  return upgradeBuff(s)?.kind === 'windfall' ? WINDFALL_MULT : 1;
 }

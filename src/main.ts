@@ -34,7 +34,7 @@ import { BoardView } from './view/board.ts';
 import { HudView, hudControlAt, paletteTowerAt, type HudAction } from './view/hud.ts';
 import { paletteTooltipLines, TooltipView, towerTooltipLines } from './view/tooltip.ts';
 import { computeUpgradesLayout, upgradeRowBuyable, upgradesHitAt, UpgradesSession, globalUpgradeTooltipLines, UpgradesView } from './view/upgrades.ts';
-import { buyUpgrade, GLOBAL_UPGRADES, type UpgradeId } from './core/upgrades.ts';
+import { BUFF_LINES, buyUpgrade, GLOBAL_UPGRADES, type UpgradeId } from './core/upgrades.ts';
 import {
   branchTooltipLines,
   enemyTooltipLines,
@@ -46,7 +46,7 @@ import {
   upgradeTooltipLines,
   type TooltipLine,
 } from './view/tooltipText.ts';
-import { AdView } from './view/ad.ts';
+import { AdView, TrayView } from './view/ad.ts';
 import { FloatingNumbersView } from './view/numbers.ts';
 import { MenuView, type OpenMenu } from './view/menu.ts';
 import { AchievementGridView, AchievementSession, achievementGridHitAt, buildAchievementGrid, computeAchievementGrid, type AchievementGridModel } from './view/dialog.ts';
@@ -159,6 +159,7 @@ const bossBars = new BossBarView((seen) => {
 bossBars.syncSeen(profile.seenBossKinds);
 const hud = new HudView();
 const ad = new AdView();
+const trayView = new TrayView();
 const numbers = new FloatingNumbersView();
 const menuView = new MenuView();
 const dialogView = new DialogView();
@@ -184,7 +185,7 @@ void preloadArt().then(() => drawCursorArrow());
 
 const root = new Container();
 app.stage.addChild(root);
-root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, helpView.root, restoreView.root, upgradesView.root, achievementView.root, ad.root, menuView.root, dialogView.root, tooltip.root, menuScreenView.root, loadDialogView.root, editorView.root);
+root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, helpView.root, restoreView.root, upgradesView.root, achievementView.root, ad.root, trayView.root, menuView.root, dialogView.root, tooltip.root, menuScreenView.root, loadDialogView.root, editorView.root);
 
 sfx.setEnabled(profile.soundOn);
 sfx.setVolume(profile.volume);
@@ -1116,6 +1117,13 @@ function drainEvents(): void {
       case 'adDismissed':
         sfx.play('adClose');
         break;
+      case 'traySpawned':
+        sfx.play('ad');
+        break;
+      case 'trayClaimed':
+        sfx.play('adClose');
+        hud.showNotice(BUFF_LINES[ev.kind]);
+        break;
       case 'toggleChanged':
         hud.showNotice(`Shutter ${ev.index} ${ev.open ? 'opened' : 'closed'}`, 120);
         break;
@@ -1187,6 +1195,7 @@ app.ticker.add((ticker) => {
     bossBars.draw(state, layout, profile.shakeOn);
     hud.draw(state, layout, mouse.hover.hud);
     ad.draw(state);
+    trayView.draw(state);
     helpView.draw(helpSession, profile, mouse.hover.x, mouse.hover.y);
     restoreView.draw(restoreOpen, profile, layout);
     // The run ending (or a new run starting) takes the dialog down with it.

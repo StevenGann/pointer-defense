@@ -1,8 +1,8 @@
 import type { Application } from 'pixi.js';
-import { hasUpgrade } from '../core/upgrades.ts';
+import { claimTray, hasUpgrade } from '../core/upgrades.ts';
 import { menuItemAt, menuNameAt, pixelToWorld, pointInRect, type Layout, type MenuName } from '../view/chrome.ts';
 import { hudButtonAt, hudControlAt, modalRestartAt, victoryButtonAt, type HudAction } from '../view/hud.ts';
-import { adCloseRect } from '../view/ad.ts';
+import { adCloseRect, trayHit } from '../view/ad.ts';
 import { menuEntryAt, type OpenMenu } from '../view/menu.ts';
 import { dialogButtonAt, type DialogModel } from '../view/dialog.ts';
 import { dismissAd } from '../core/ads.ts';
@@ -259,6 +259,12 @@ export class MouseController {
     // A desktop ad's close box.
     if (s.ad && pointInRect(adCloseRect(s.ad), x, y)) {
       dismissAd(s, s.ad.id);
+      return;
+    }
+
+    // System Tray's System Update pop-up: a click anywhere on it installs the buff.
+    if (s.tray && trayHit(s.tray, x, y)) {
+      claimTray(s, s.tray.id);
       return;
     }
 

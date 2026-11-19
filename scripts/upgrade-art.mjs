@@ -18,7 +18,7 @@ const ART_DIR = fileURLToPath(new URL('../public/art', import.meta.url));
 /** Copy the placeholder into every missing id file under `artDir`. Never overwrites. */
 export function runUpgradeArt(artDir = ART_DIR) {
   const dir = join(artDir, 'upgrades');
-  const placeholder = join(dir, '_placeholder.svg');
+  const placeholder = join(dir, '_upgrade-placeholder.svg');
   if (!existsSync(placeholder)) {
     return { copied: 0, skipped: GLOBAL_UPGRADES.length, missingPlaceholder: true };
   }
@@ -42,7 +42,7 @@ const invoked = process.argv[1] && fileURLToPath(import.meta.url) === process.ar
 if (invoked) {
   const { copied, skipped, missingPlaceholder } = runUpgradeArt();
   if (missingPlaceholder) {
-    console.warn('[upgrade-art] missing upgrades/_placeholder.svg; no copies made');
+    console.warn('[upgrade-art] missing upgrades/_upgrade-placeholder.svg; no copies made');
   } else {
     console.log(`[upgrade-art] copied ${copied}, kept ${skipped} existing`);
   }
