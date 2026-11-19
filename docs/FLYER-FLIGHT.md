@@ -31,9 +31,14 @@ Two terms, both measured perpendicular to the direction of travel (right-hand no
 `dist` is the distance travelled along the base path. The pendulum therefore repeats every 12 tiles:
 a 48-tile route swoops four times.
 
-Both terms taper to zero at the ends of the journey — linearly over the last 3 tiles before the exit
-and over the first 0.75 tiles after spawn — so a flyer enters and leaves on the route and still
+Both terms taper to zero at the ends of the journey: over the first 0.75 tiles after spawn, and over
+3 tiles before the exit, finishing 2 tiles short of it. The last two tiles are flown on the route
+itself, because a 4-tile lane plus a 3-tile sway cannot decay to under a quarter tile in the three
+tiles a straight fade would allow. The result still enters and leaves on the route, and every flyer
 reaches the exit tile to leak.
+
+The direction the offset is measured from is smoothed at path corners — at most 0.4 rad of turn per
+tile — so a large lane offset cannot jump across the board at a right-angle turn in the air field.
 
 The final position is clamped inside the board, so a large lane offset near an edge cannot fly off the
 canvas.
