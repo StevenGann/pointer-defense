@@ -119,7 +119,7 @@ import {
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
 import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName } from '../src/view/tooltipText.ts';
-import { BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre } from '../src/view/board.ts';
+import { BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
 import { computeHud, computeRightPanel, hudControlAt, textWidth } from '../src/view/hud.ts';
@@ -8586,9 +8586,16 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(SHADOW_ALPHA > 0 && SHADOW_ALPHA < 1, `shadows: SHADOW_ALPHA is between 0 and 1 (${SHADOW_ALPHA})`);
   check(
     SHADOW_OFFSET_FLYER.x > SHADOW_OFFSET.x && SHADOW_OFFSET_FLYER.y > SHADOW_OFFSET.y &&
-      shadowOffsetFor('flyer') === SHADOW_OFFSET_FLYER && shadowOffsetFor('flyer-boss') === SHADOW_OFFSET_FLYER &&
-      shadowOffsetFor('grunt') === SHADOW_OFFSET,
+      shadowOffsetFor('flyer') === SHADOW_OFFSET_FLYER && shadowOffsetFor('grunt') === SHADOW_OFFSET,
     'shadows: the flyer offset exceeds the ground offset, and flyers use it',
+  );
+  const carrierOff = shadowOffsetFor('flyer-boss');
+  check(
+    carrierOff === SHADOW_OFFSET_FLYER_BOSS &&
+      carrierOff.x === Math.round(SHADOW_OFFSET_FLYER.x * SHADOW_OFFSET_FLYER_BOSS_SCALE) &&
+      carrierOff.y === Math.round(SHADOW_OFFSET_FLYER.y * SHADOW_OFFSET_FLYER_BOSS_SCALE) &&
+      carrierOff.x > SHADOW_OFFSET_FLYER.x && carrierOff.y > SHADOW_OFFSET_FLYER.y,
+    `shadows: the Carrier's offset (${carrierOff.x},${carrierOff.y}) is the scaled flyer offset and larger than a plain flyer's`,
   );
   const li = (n) => BOARD_LAYER_ORDER.indexOf(n);
   check(

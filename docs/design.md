@@ -1635,8 +1635,10 @@ cycle therefore casts an animated shadow for free, because both sprites read the
 enemies — a shadow lies on the desktop; nothing lies on a shadow.
 
 **Offset.** `(+2, +3)` CSS px for everything on the ground. Flyers are airborne, so their shadow is
-thrown further: `(+4, +6)`. The offset is applied in screen space after the cell scaling, so it does
-not grow with the board.
+thrown further: `(+7, +10)`, far enough from the sprite to read as height. The Carrier (`flyer-boss`)
+is a bigger airborne body and throws its shadow further still: 1.5x the flyer offset, rounded to whole
+pixels, `(+11, +15)`. The offset is applied in screen space after the cell scaling, so it does not
+grow with the board.
 
 **What does not get one.** Pop-up enemies are windows, not creatures, and cast nothing. An enemy whose
 artwork has not decoded yet falls back to the procedural shape, which is drawn into a `Graphics` and
@@ -1645,7 +1647,8 @@ as grounded. The old flyer-only ellipse is removed — the flyer now casts a rea
 with the larger offset standing in for altitude.
 
 **Tests.** The shadow constants and the layer order are exported so the smoke harness can assert
-them: the tint is exactly black, the flyer offset exceeds the ground offset, `shadows` sorts before
+them: the tint is exactly black, the flyer offset exceeds the ground offset, the Carrier's offset
+exceeds the flyer's, `shadows` sorts before
 `towers` and `enemies`, and a pop-up is excluded.
 
 ---

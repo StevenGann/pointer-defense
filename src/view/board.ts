@@ -161,10 +161,20 @@ export const SHADOW_TINT = 0x000000;
 export const SHADOW_ALPHA = 0.32;
 export const SHADOW_OFFSET: Readonly<{ x: number; y: number }> = Object.freeze({ x: 2, y: 3 });
 /** Flyers are airborne, so their shadow is thrown further. */
-export const SHADOW_OFFSET_FLYER: Readonly<{ x: number; y: number }> = Object.freeze({ x: 4, y: 6 });
+export const SHADOW_OFFSET_FLYER: Readonly<{ x: number; y: number }> = Object.freeze({ x: 7, y: 10 });
+/** The Carrier (flyer-boss) is a bigger airborne body: 1.5x the flyer offset, rounded to whole px. */
+export const SHADOW_OFFSET_FLYER_BOSS_SCALE = 1.5;
+export const SHADOW_OFFSET_FLYER_BOSS: Readonly<{ x: number; y: number }> = Object.freeze({
+  x: Math.round(SHADOW_OFFSET_FLYER.x * SHADOW_OFFSET_FLYER_BOSS_SCALE),
+  y: Math.round(SHADOW_OFFSET_FLYER.y * SHADOW_OFFSET_FLYER_BOSS_SCALE),
+});
 
-/** The screen-space shadow offset for an enemy kind: the flyer offset for flyers, the ground one otherwise. */
+/**
+ * The screen-space shadow offset for an enemy kind: the Carrier's scaled offset for the flyer-boss,
+ * the flyer offset for other flyers, the ground one otherwise.
+ */
 export function shadowOffsetFor(kind: EnemyKind): Readonly<{ x: number; y: number }> {
+  if (kind === 'flyer-boss') return SHADOW_OFFSET_FLYER_BOSS;
   return isFlyerKind(kind) ? SHADOW_OFFSET_FLYER : SHADOW_OFFSET;
 }
 
