@@ -243,11 +243,11 @@ export class RestoreView {
         bt.text = 'OWNED';
         bt.style.fill = PAL.shadow;
       } else if (unlocked && row.canBuy) {
-        bt.text = `Buy $${formatNumber(row.node.cost)}`;
+        bt.text = `Buy ${formatNumber(row.node.cost)} RP`;
         bt.style.fill = PAL.text;
         drawBuy(g, row.buy);
       } else {
-        bt.text = `Buy $${formatNumber(row.node.cost)}`;
+        bt.text = `Buy ${formatNumber(row.node.cost)} RP`;
         bt.style.fill = PAL.shadow;
         drawDisabled(g, row.buy);
       }
