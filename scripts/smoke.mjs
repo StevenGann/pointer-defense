@@ -99,7 +99,7 @@ import {
 import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies, allHelpUnlocked, checkProfileAchievements, rpGain, specLevelCost } from '../src/core/save.ts';
 import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES } from '../src/core/tree.ts';
 import { ACHIEVEMENTS } from '../src/core/achievements.ts';
-import { restartWindows, checkAchievements, enterEndless, pointerDamageMult } from '../src/core/state.ts';
+import { restartWindows, checkAchievements, enterEndless, pointerDamageMult, towerCost, overclockCap, towerIntervalTicks } from '../src/core/state.ts';
 import { cheatsEnabled, setCheatsVisibleForTests, SPAWN_KINDS } from '../src/core/cheats.ts';
 import { dashRects, offsetSegment, routeOffset } from '../src/view/route.ts';
 import { enemyDrawOrder, popupCloseHit, popupCloseRect, popupWindowRect, POPUP_TITLE_H, POPUP_CLOSE_W, POPUP_CLOSE_H } from '../src/view/popupEnemy.ts';
@@ -178,6 +178,8 @@ import { tmpdir } from 'node:os';
 import { animFrame, currentAnimFrame, DEFAULT_ANIM, entityOffset } from '../src/view/anim.ts';
 import { scanArt } from './art-manifest.mjs';
 import { runAchArt } from './ach-art.mjs';
+import { runUpgradeArt } from './upgrade-art.mjs';
+import { GLOBAL_UPGRADES, buyUpgrade, revealedUpgrades } from '../src/core/upgrades.ts';
 import { EffectsView, muzzleAssetFor, muzzleLife, FIRE_KINDS } from '../src/view/effects.ts';
 
 import { fileURLToPath } from 'node:url';
@@ -7498,6 +7500,272 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   const bytes = readFileSync(new URL('../public/art/achievements/first-blood.svg', import.meta.url));
   const expected = createHash('sha1').update(bytes).digest('hex').slice(0, 10);
   check(entry.rev === expected, 'the hash is the file content, so new art means a new URL');
+}
+
+// --- 50. Global upgrades (docs/GLOBAL-UPGRADES.md §8) ------------------------------------------
+{
+  const artDir = fileURLToPath(new URL('../public/art', import.meta.url));
+  const fullState = () => {
+    const s = createRunState();
+    s.economy.salvage = 1_000_000;
+    s.wave = 100;
+    return s;
+  };
+
+  // 50.1 Fourteen entries, unique ids, each with its icon on disk.
+  const ids = GLOBAL_UPGRADES.map((u) => u.id);
+  const noArt = ids.filter((id) => !existsSync(join(artDir, 'upgrades', `${id}.svg`)));
+  check(
+    GLOBAL_UPGRADES.length === 14 && new Set(ids).size === 14 && noArt.length === 0,
+    `14 global upgrades with unique ids, each with public/art/upgrades/<id>.svg (${noArt.join(', ') || 'none missing'})`,
+  );
+
+  // 50.2 Waves 20-60 and costs 1,000-30,000.
+  const outOfBand = GLOBAL_UPGRADES.filter((u) => u.wave < 20 || u.wave > 60 || u.cost < 1000 || u.cost > 30000);
+  check(outOfBand.length === 0, `every upgrade's wave is 20-60 and cost 1,000-30,000 (${outOfBand.map((u) => u.id).join(', ') || 'all in band'})`);
+
+  // 50.3 Revealed at exactly def.wave, hidden one wave before.
+  const revealOk = GLOBAL_UPGRADES.every((u) => {
+    const atWave = revealedUpgrades({ wave: u.wave }).some((d) => d.id === u.id);
+    const before = revealedUpgrades({ wave: u.wave - 1 }).some((d) => d.id === u.id);
+    return atWave && !before;
+  }) && revealedUpgrades({ wave: 19 }).length === 0;
+  check(revealOk, 'revealedUpgrades hides everything above the current wave and reveals at exactly def.wave');
+
+  // 50.4 buyUpgrade refuses unrevealed, repeat and unaffordable; a success costs exactly def.cost once.
+  {
+    const s = createRunState();
+    const def = GLOBAL_UPGRADES.find((u) => u.id === 'salvage-contract');
+    s.economy.salvage = 1_000_000;
+    s.wave = def.wave - 1;
+    const refusedHidden = !buyUpgrade(s, def.id);
+    s.wave = def.wave;
+    s.economy.salvage = def.cost - 1;
+    const refusedPoor = !buyUpgrade(s, def.id);
+    s.economy.salvage = def.cost + 5;
+    const bought = buyUpgrade(s, def.id);
+    const paid = s.economy.salvage === 5;
+    s.economy.salvage = 1_000_000;
+    const refusedTwice = !buyUpgrade(s, def.id);
+    check(
+      refusedHidden && refusedPoor && bought && paid && refusedTwice &&
+        s.upgrades.filter((id) => id === def.id).length === 1 && s.economy.salvage === 1_000_000,
+      'buyUpgrade refuses unrevealed, unaffordable and repeat purchases, and charges exactly def.cost once',
+    );
+  }
+
+  // 50.5 A fresh run carries no upgrades.
+  {
+    const s = createRunState();
+    check(
+      Array.isArray(s.upgrades) && s.upgrades.length === 0 && s.emergencyPatchSpent === false && s.buff === null,
+      'a fresh createRunState has upgrades: [], emergencyPatchSpent: false, buff: null',
+    );
+  }
+
+  // 50.6 Bulk Requisition: -4 % per owned copy, floored at -40 %, walls ignored.
+  {
+    const s = allUnlocked();
+    s.economy.salvage = 1_000_000;
+    const base = towerCost(s, 'gun');
+    const wallBase = towerCost(s, 'wall');
+    s.wave = 40;
+    buyUpgrade(s, 'bulk-requisition');
+    const zeroCopies = towerCost(s, 'gun');
+    const fakeGuns = (n) => {
+      s.towers = s.towers.filter((t) => t.kind !== 'gun');
+      for (let i = 0; i < n; i++) s.towers.push(createTower(9000 + i, 'gun', 0, 0));
+    };
+    fakeGuns(1);
+    const one = towerCost(s, 'gun');
+    fakeGuns(3);
+    const three = towerCost(s, 'gun');
+    fakeGuns(20);
+    const capped = towerCost(s, 'gun');
+    s.towers = [];
+    for (let i = 0; i < 5; i++) s.towers.push(createTower(9100 + i, 'wall', 0, 0));
+    const wallAfter = towerCost(s, 'wall');
+    check(
+      zeroCopies === base &&
+        one === Math.floor(base * 0.96) &&
+        three === Math.floor(base * 0.88) &&
+        capped === Math.floor(base * 0.6) &&
+        wallAfter === wallBase,
+      `bulk-requisition takes 4% per copy to -40% and ignores walls (${base} -> ${one}, ${three}, ${capped}; wall ${wallAfter})`,
+    );
+  }
+
+  // 50.7 Emergency Patch eats the first killing leak and only the first.
+  {
+    const leakOne = (s, id) => {
+      const e = createEnemy(id, 'grunt', 1, SPAWN, EXIT);
+      e.x = EXIT.col + 0.5;
+      e.y = EXIT.row + 0.5;
+      e.col = EXIT.col;
+      e.row = EXIT.row;
+      s.enemies.push(e);
+      s.phase = 'wave';
+      // Walk it the last step: aim it at the exit tile it already stands on.
+      e.targetCol = EXIT.col;
+      e.targetRow = EXIT.row;
+      e.x -= 0.01;
+      for (let i = 0; i < 5 && !e.dead; i++) tick(s);
+      return e.dead;
+    };
+    const s = fullState();
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    s.runs = [];
+    buyUpgrade(s, 'emergency-patch');
+    s.integrity = 1;
+    const firstLeaked = leakOne(s, 70001);
+    const savedAt = s.integrity;
+    const spent = s.emergencyPatchSpent;
+    const phaseAfterFirst = s.phase;
+    s.integrity = 1;
+    leakOne(s, 70002);
+    check(
+      firstLeaked && savedAt === 1 && spent && phaseAfterFirst !== 'halted' && s.integrity === 0 && s.phase === 'halted',
+      `emergency-patch leaves 1 integrity on the first killing leak, then a second leak behaves normally (${savedAt}, ${s.integrity}, ${s.phase})`,
+    );
+  }
+
+  // 50.8 Compound Interest: floor(salvage * 0.015) once per cleared wave, nothing in build.
+  {
+    const s = fullState();
+    s.wave = 30;
+    buyUpgrade(s, 'compound-interest');
+    s.economy.salvage = 10_000;
+    s.phase = 'build';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    tick(s);
+    const buildUnchanged = s.economy.salvage === 10_000;
+    startWave(s);
+    const wave = s.wave;
+    s.runs[0].spawns = [];
+    s.enemies = [];
+    const before = s.economy.salvage;
+    tick(s);
+    const afterBonus = before + waveClearBonus(wave);
+    const expected = afterBonus + Math.floor(afterBonus * 0.015);
+    const once = s.economy.salvage === expected;
+    const settled = s.economy.salvage;
+    tick(s);
+    check(
+      buildUnchanged && once && s.economy.salvage === settled,
+      `compound-interest pays floor(salvage * 0.015) once per clear and nothing in build (${before} -> ${settled}, want ${expected})`,
+    );
+  }
+
+  // 50.9 Autoloader: a gun's interval drops by 13 %, never below one tick.
+  {
+    const plain = fullState();
+    const loaded = fullState();
+    buyUpgrade(loaded, 'autoloader');
+    const gun = TOWER_STATS.gun.fireInterval;
+    const before = towerIntervalTicks(plain, gun);
+    const after = towerIntervalTicks(loaded, gun);
+    check(
+      after === Math.max(1, Math.floor(before * 0.87)) && after < before && towerIntervalTicks(loaded, 1) === 1,
+      `autoloader shortens the gun's interval by 13% and never below one tick (${before} -> ${after})`,
+    );
+  }
+
+  // 50.10 Coolant Loop: the run-local overclock cap is 16 with it, 12 without.
+  {
+    const plain = fullState();
+    const cooled = fullState();
+    buyUpgrade(cooled, 'coolant');
+    check(
+      overclockCap(plain) === 12 && overclockCap(cooled) === 16 &&
+        overclockCeiling(200, overclockCap(plain)) === 12 && overclockCeiling(200, overclockCap(cooled)) === 16,
+      'coolant raises the run-local overclock cap to 16 and leaves it at 12 without it',
+    );
+  }
+
+  // 50.11 Chain Reaction: a killing click splashes the two nearest neighbours, and never chains on.
+  {
+    const s = fullState();
+    buyUpgrade(s, 'chain-reaction');
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const victim = stationary(80001, 'grunt', 1, 5.5, 5.5);
+    victim.hp = 0.5;
+    // Both neighbours die to the splash; if a splash kill chained, the outer ring would be hit too.
+    const n1 = stationary(80002, 'grunt', 1, 6.3, 5.5);
+    const n2 = stationary(80003, 'grunt', 1, 4.7, 5.5);
+    const far = stationary(80004, 'grunt', 1, 5.5, 6.9); // in range, but third nearest
+    const outer = stationary(80005, 'grunt', 1, 7.4, 5.5); // only reachable from a chained n1
+    n1.hp = 0.01;
+    n2.hp = 0.01;
+    s.enemies.push(victim, n1, n2, far, outer);
+    const farHp = far.hp;
+    const outerHp = outer.hp;
+    pointerDown(s, 5.5, 5.5);
+    pointerUp(s);
+    check(
+      victim.dead && n1.dead && n2.dead && far.hp === farHp && outer.hp === outerHp,
+      'chain-reaction splashes the two nearest neighbours on a killing click and does not chain further',
+    );
+  }
+
+  // 50.12 Bounty Board: double boss kill value, 1.1x spawn HP.
+  {
+    const plain = fullState();
+    const bounty = fullState();
+    buyUpgrade(bounty, 'bounty-board');
+    const kind = 'grunt-boss';
+    const spawnBoss = (s) => {
+      s.phase = 'wave';
+      s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+      s.runs = [{ wave: 50, startTick: s.clock, spawns: [{ tick: 0, kind }] }];
+      tick(s);
+      return s.enemies.find((e) => e.kind === kind);
+    };
+    const a = spawnBoss(plain);
+    const b = spawnBoss(bounty);
+    const killFor = (s, e) => {
+      e.hp = 0.001;
+      e.shield = 0;
+      e.shieldsRemaining = 0;
+      const before = s.economy.salvage;
+      e.stunUntilTick = 1e9;
+      pointerDown(s, e.x, e.y);
+      pointerUp(s);
+      return e.dead ? s.economy.salvage - before : -1;
+    };
+    const hpOk = a && b && Math.abs(b.maxHp / a.maxHp - 1.1) < 0.01;
+    const plainReward = a ? killFor(plain, a) : -1;
+    const bountyReward = b ? killFor(bounty, b) : -1;
+    check(
+      hpOk && plainReward > 0 && Math.abs(bountyReward - plainReward * 2) <= 1,
+      `bounty-board doubles a boss's kill value and gives it 1.1x HP (${a?.maxHp} -> ${b?.maxHp}; $${plainReward} -> $${bountyReward})`,
+    );
+  }
+
+  // 50.13 runUpgradeArt copies only what is missing, never overwrites, and is idempotent.
+  {
+    const tmp = mkdtempSync(join(tmpdir(), 'pd-upg-'));
+    try {
+      const dir = join(tmp, 'upgrades');
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(join(dir, '_placeholder.svg'), '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44"/>');
+      const custom = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44"><!-- artist work --></svg>';
+      writeFileSync(join(dir, 'coolant.svg'), custom);
+      const first = runUpgradeArt(tmp);
+      const kept = readFileSync(join(dir, 'coolant.svg'), 'utf8') === custom;
+      const second = runUpgradeArt(tmp);
+      check(
+        first.copied === 13 && first.skipped === 1 && kept && second.copied === 0 && second.skipped === 14,
+        `upgrade-art copies only missing files, never overwrites, and is idempotent (${first.copied}/${first.skipped}, then ${second.copied})`,
+      );
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  }
+
+  // 50.14 Row lines fit in 46 characters, and every detail is written.
+  const badText = GLOBAL_UPGRADES.filter((u) => u.line.length > 46 || u.detail.trim().length === 0);
+  check(badText.length === 0, `every upgrade line is <= 46 chars and every detail is non-empty (${badText.map((u) => u.id).join(', ') || 'all fit'})`);
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
