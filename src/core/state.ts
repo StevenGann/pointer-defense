@@ -95,6 +95,7 @@ import {
   isGateLocked,
   isGateOpen,
   isDown,
+  isEmpDisabled,
   isMinesweeper,
   isOffline,
   isRepairing,
@@ -902,6 +903,80 @@ export function noBuildActive(s: RunState): boolean {
 /** Tower range multiplier from the fog modifier (docs/design.md §8.3). */
 export function towerRangeMult(s: RunState): number {
   return s.modifiers.includes('fog') ? 0.8 : 1;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tower status helpers (docs/TOWER-AURAS.md)
+
+/**
+ * Ids of the towers a Repair tower is healing this tick. Recomputes the exact targets
+ * `tickRepairAuras` reads (`repairHealTargets`), so a visual can never claim a heal the sim did not
+ * apply. A tower healed by several Repair towers still appears once.
+ */
+export function healedTowerIds(s: RunState): Set<number> {
+  const ids = new Set<number>();
+  for (const h of s.towers) {
+    if (h.kind !== 'repair' || isDown(h, s.clock)) continue;
+    if (isRepairing(h, s.clock)) continue;
+    for (const t of repairHealTargets(s.towers, h, s.clock)) ids.add(t.id);
+  }
+  return ids;
+}
+
+/**
+ * The buffs on each tower id: `beacon` when a live Beacon's aura reaches it, `override` when Manual
+ * Override has a marked target in range. Reads the same geometry `recomputeAuras` and `fireTowers`
+ * use, so the view and the sim cannot drift apart.
+ */
+export function towerAuraSources(s: RunState): Map<number, Set<'beacon' | 'override'>> {
+  const out = new Map<number, Set<'beacon' | 'override'>>();
+  for (const t of s.towers) out.set(t.id, new Set());
+
+  for (const b of s.towers) {
+    if (b.kind !== 'beacon' || isDown(b, s.clock)) continue;
+    const st = effectiveStats(b);
+    if (st.auraDamage <= 0 && st.auraRange <= 0) continue;
+    const r = st.range;
+    for (const t of s.towers) {
+      if (t.id === b.id) continue;
+      if (t.kind === 'cursor') continue; // pointer-derived damage; tower auras never reach it
+      const dx = t.col + 0.5 - (b.col + 0.5);
+      const dy = t.row + 0.5 - (b.row + 0.5);
+      if (dx * dx + dy * dy <= r * r) out.get(t.id)!.add('beacon');
+    }
+  }
+
+  if (s.pointer.manualOverride && s.pointer.targetId !== null) {
+    const marked = s.enemies.find((e) => e.id === s.pointer.targetId && !e.dead);
+    if (marked) {
+      for (const t of s.towers) {
+        if ((s.towerDisabled.get(t.id) ?? 0) > 0) continue; // disabled by Blue Screen
+        if (isDown(t, s.clock)) continue;
+        if (isMinesweeper(t)) continue;
+        const st = effectiveStats(t);
+        if (st.damage <= 0 || st.fireInterval <= 0) continue;
+        const range = (st.range + t.auraRange) * towerRangeMult(s);
+        if (
+          towerCanHurt(s, marked) &&
+          (!st.targetsFlyersOnly || baseEnemyKind(marked.kind) === 'flyer') &&
+          inRange(t, marked, range)
+        ) {
+          out.get(t.id)!.add('override');
+        }
+      }
+    }
+  }
+
+  return out;
+}
+
+/** Ids of towers currently knocked out by a Wirecutter EMP or a Blue Screen ad. */
+export function disabledTowerIds(s: RunState): Set<number> {
+  const ids = new Set<number>();
+  for (const t of s.towers) {
+    if (isEmpDisabled(t, s.clock) || (s.towerDisabled.get(t.id) ?? 0) > 0) ids.add(t.id);
+  }
+  return ids;
 }
 
 // ---------------------------------------------------------------------------------------------
