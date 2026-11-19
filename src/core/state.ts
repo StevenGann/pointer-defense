@@ -18,6 +18,7 @@ import {
   type Route,
 } from './levels.ts';
 import { buildAirField, buildField, buildRouteField, isSealed, pathTiles, stepToward } from './pathfield.ts';
+import type { UpgradeId } from './upgrades.ts';
 import {
   BASTION_SHIELD_LAYER_VALUE,
   baseEnemyKind,
@@ -410,6 +411,15 @@ export interface RunState {
   godMode: boolean;
   /** Cheats: true the moment any cheat is used this run; the run then records nothing. */
   cheatsUsed: boolean;
+  /** Global upgrades bought this run, in purchase order. Cleared by createRunState. */
+  upgrades: UpgradeId[];
+  /** Emergency Patch: set once it has eaten a killing leak. */
+  emergencyPatchSpent: boolean;
+  /**
+   * System Tray's active buff. `until` is a sim clock tick, not wall time, so pause and speed are
+   * free. Phase 2 — see docs/GLOBAL-UPGRADES.md §5.
+   */
+  buff: { kind: 'turbo' | 'overdrive' | 'windfall'; until: number } | null;
 
   // --- Achievement counters (populated by buildStats once per tick) --------------------------
   /** Pointer hits that landed on an enemy this run. */
@@ -634,6 +644,9 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     autoWaveAtTick: 0,
     godMode: false,
     cheatsUsed: false,
+    upgrades: [],
+    emergencyPatchSpent: false,
+    buff: null,
     pointerHits: 0,
     towersBuilt: 0,
     towersSold: 0,
