@@ -170,6 +170,13 @@ import {
   onArtInvalidate,
   artFileUrl,
   PRELOAD_CONCURRENCY,
+  EAGER_ART,
+  requestArt,
+  preloadArt,
+  artQueueLength,
+  artLoadStats,
+  setArtTransport,
+  setArtIdleScheduler,
 } from '../src/view/art.ts';
 import { Texture } from 'pixi.js';
 import { readdirSync, existsSync, readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
@@ -5275,6 +5282,153 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   setArtDpr(before);
   await flushMicrotasks();
   resetArt();
+}
+
+// --- 37m. Lazy art loading (docs/ART-LOADING.md) ----------------------------------------------
+// A fake transport stands in for fetch + decode, and a manual idle scheduler stands in for
+// requestIdleCallback, so the queue is driven deterministically with no DOM and no network.
+{
+  const realManifest = JSON.parse(readFileSync(new URL('../public/art/manifest.json', import.meta.url), 'utf8')).assets;
+  const idleSlices = [];
+  const manualIdle = (cb) => {
+    idleSlices.push(cb);
+    return () => {
+      const i = idleSlices.indexOf(cb);
+      if (i >= 0) idleSlices.splice(i, 1);
+    };
+  };
+  const runIdleSlice = () => {
+    const cb = idleSlices.shift();
+    if (cb) cb({ didTimeout: false, timeRemaining: () => 10 });
+    return cb !== undefined;
+  };
+  const makeTransport = (assets, { fail = new Set() } = {}) => {
+    const t = {
+      order: [],
+      attempts: new Map(),
+      manifest: async () => assets,
+      load: async (asset) => {
+        const bare = asset.name.slice(asset.name.lastIndexOf('/') + 1);
+        t.order.push(bare);
+        t.attempts.set(bare, (t.attempts.get(bare) ?? 0) + 1);
+        if (fail.has(bare)) throw new Error('HTTP 404');
+        return Array.from({ length: Math.max(1, asset.frames) }, () => ({ fake: bare }));
+      },
+    };
+    return t;
+  };
+  const settle = async () => {
+    for (let i = 0; i < 5; i++) await flushMicrotasks();
+  };
+
+  // 1. The same name requested twice is queued once.
+  resetArt();
+  requestArt('grunt', 'idle');
+  requestArt('grunt', 'idle');
+  requestArt('grunt', 'now');
+  check(artQueueLength() === 1 && artLoadStats().requested === 1,
+    `lazy art: a name requested twice is queued once (${artQueueLength()})`);
+  requestArt('not-an-asset', 'now');
+  check(artQueueLength() === 1, 'lazy art: a name outside the manifest is not queued');
+
+  // 2. A getArtFrames miss returns an empty list and queues the asset.
+  resetArt();
+  const miss = getArtFrames('runner', 32);
+  check(Array.isArray(miss) && miss.length === 0, 'lazy art: a getArtFrames miss returns an empty list');
+  check(artQueueLength() === 1, 'lazy art: a getArtFrames miss queues the asset');
+  getArtFrames('runner', 32);
+  check(artQueueLength() === 1, 'lazy art: repeated misses on the draw path do not re-queue');
+
+  // 4. preloadArt loads only the eager set and leaves the long tail queued.
+  resetArt();
+  setArtIdleScheduler(manualIdle);
+  const t4 = makeTransport(realManifest);
+  setArtTransport(t4);
+  await preloadArt();
+  check(EAGER_ART.length === 8 && EAGER_ART.every((n) => hasArt(n)), 'lazy art: preloadArt resolves with every eager asset loaded');
+  check(t4.order.length === EAGER_ART.length && t4.order.every((n) => EAGER_ART.includes(n)),
+    `lazy art: preloadArt loads only the eager set (${t4.order.length} loads)`);
+  check(artQueueLength() === realManifest.length - EAGER_ART.length,
+    `lazy art: the rest of the manifest stays queued (${artQueueLength()} of ${realManifest.length - EAGER_ART.length})`);
+  const st4 = artLoadStats();
+  check(st4.requested === realManifest.length && st4.loaded === EAGER_ART.length && st4.failed === 0 &&
+    st4.firstMs !== null && st4.lastMs !== null && st4.lastMs >= st4.firstMs,
+    'lazy art: artLoadStats counts the requests and the eager loads');
+  // Idle slices drain the tail one asset at a time.
+  check(runIdleSlice(), 'lazy art: an idle slice is armed for the tail');
+  check(t4.order.length === EAGER_ART.length + 1, 'lazy art: one idle slice starts exactly one asset');
+  check(idleSlices.length === 0, 'lazy art: no second idle slice is armed while an idle asset is in flight');
+  for (let guard = 0; guard < 1000 && artQueueLength() > 0; guard++) {
+    await settle();
+    runIdleSlice();
+  }
+  await settle();
+  check(artQueueLength() === 0 && artLoadStats().loaded === realManifest.length,
+    `lazy art: the idle queue eventually loads the whole manifest (${artLoadStats().loaded})`);
+
+  // 3. A now request is served before an earlier-queued idle request, and preempts idle slices.
+  resetArt();
+  setArtIdleScheduler(manualIdle);
+  idleSlices.length = 0;
+  const small = [...EAGER_ART.map((n) => realManifest.find((a) => a.name.endsWith(`/${n}`))), 
+    { name: 'enemies/grunt', frames: 1 }, { name: 'enemies/runner', frames: 1 }, { name: 'enemies/flyer', frames: 1 }];
+  const t3 = makeTransport(small);
+  setArtTransport(t3);
+  await preloadArt();
+  t3.order.length = 0;
+  // grunt, runner, flyer sit in the idle queue in that order; flyer is asked for by a draw.
+  getArtFrames('flyer', 32);
+  check(t3.order[0] === 'flyer', `lazy art: a now request starts before earlier-queued idle work (${t3.order.join(',')})`);
+  runIdleSlice(); // fires while the now request is outstanding: must yield
+  check(t3.order.length === 1, 'lazy art: an idle slice yields while a now request is outstanding');
+  await settle();
+  for (let guard = 0; guard < 20 && artQueueLength() > 0; guard++) {
+    runIdleSlice();
+    await settle();
+  }
+  check(t3.order.join(',') === 'flyer,grunt,runner', `lazy art: idle work resumes in queue order (${t3.order.join(',')})`);
+
+  // 5. A completed asset triggers exactly one invalidation.
+  resetArt();
+  setArtIdleScheduler(manualIdle);
+  idleSlices.length = 0;
+  setArtTransport(makeTransport(small));
+  await preloadArt();
+  await settle();
+  let fires = 0;
+  const off = onArtInvalidate(() => fires++);
+  requestArt('grunt', 'now');
+  await settle();
+  check(hasArt('grunt') && fires === 1, `lazy art: a completed asset triggers exactly one invalidation (${fires})`);
+  off();
+
+  // 6. An absent asset returns the same empty list as before: one retry, one warning, fallback kept.
+  resetArt();
+  setArtIdleScheduler(manualIdle);
+  idleSlices.length = 0;
+  const t6 = makeTransport(small, { fail: new Set(['runner']) });
+  setArtTransport(t6);
+  await preloadArt();
+  const before = getArtFrames('runner', 32);
+  const warnings = [];
+  const warn = console.warn;
+  console.warn = (msg) => warnings.push(String(msg));
+  await settle();
+  console.warn = warn;
+  const after = getArtFrames('runner', 32);
+  check(before.length === 0 && after.length === 0 && before === after && after === getArtFrames('not-an-asset', 32),
+    'lazy art: an absent asset returns the same empty list before and after its failed load');
+  check(t6.attempts.get('runner') === 2, `lazy art: a failed asset is retried once (${t6.attempts.get('runner')} attempts)`);
+  check(warnings.length === 1 && warnings[0].includes('enemies/runner'), `lazy art: one warning for a failed asset (${warnings.length})`);
+  check(!hasArt('runner') && artLoadStats().failed === 1, 'lazy art: the failed asset stays absent');
+  getArtFrames('runner', 32);
+  await settle();
+  check(t6.attempts.get('runner') === 2, 'lazy art: a failed asset is not refetched on every draw');
+
+  setArtTransport(null);
+  setArtIdleScheduler(null);
+  resetArt();
+  await flushMicrotasks();
 }
 
 // --- 38. Tower unlocks -------------------------------------------------------------------------

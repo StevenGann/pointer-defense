@@ -378,7 +378,12 @@ export function getArtFrames(name: string, logicalPx: number): readonly Texture[
   if (injected !== undefined) return injected;
 
   const images = svgFrames.get(name);
-  if (images === undefined || images.length === 0) return EMPTY_FRAMES;
+  if (images === undefined || images.length === 0) {
+    // A miss is also a request (docs/ART-LOADING.md): the caller draws its fallback this frame and
+    // picks up the art on the invalidation that follows the load. Known names return at a Map lookup.
+    requestArt(name, 'now');
+    return EMPTY_FRAMES;
+  }
   if (typeof document === 'undefined') return EMPTY_FRAMES;
 
   const pixelSize = rasterPixelSize(logicalPx, currentDpr);
@@ -488,7 +493,107 @@ export function resetArt(): void {
   frameCache.clear();
   injectedFrames.clear();
   applyManifest(fallbackManifest());
+  resetQueue();
 }
+
+// --- Loader: a priority queue (docs/ART-LOADING.md) ---------------------------------------------
+// Nothing is fetched speculatively at startup except the art the opening frame can show (the eager
+// set). Everything else is either asked for by a draw (`getArtFrames` on a miss queues it at `now`)
+// or warmed up during idle time, one asset per idle slice. Draws stay synchronous: a miss returns
+// the empty list, the caller keeps its procedural fallback, and the completed load fires
+// `scheduleArtInvalidate()` so the art appears on the next redraw.
+
+/**
+ * How many art files are fetched at once. The assets are tiny, but ~220 simultaneous requests is
+ * more than the browser or the CDN will carry: in a real load 188 of 217 came back as failed
+ * fetches. Six at a time matches the per-host connection limit.
+ */
+export const PRELOAD_CONCURRENCY = 6;
+
+/** The art the opening frame can show. `preloadArt()` resolves once these have settled. */
+export const EAGER_ART: readonly string[] = [
+  'tile',
+  'path-tile',
+  'obstacle',
+  'block',
+  'cursor-arrow',
+  'offline-wrench',
+  'shutter-open',
+  'shutter-closed',
+];
+
+/** `now`: something on screen asked for it this frame. `idle`: speculative warm-up. */
+export type ArtPriority = 'now' | 'idle';
+
+/** Counters since page start (or since the last `resetArt`). Times are `performance.now()` ms. */
+export interface ArtLoadStats {
+  /** Distinct assets that have entered the queue. */
+  readonly requested: number;
+  readonly loaded: number;
+  /** Assets that failed twice and were left absent. */
+  readonly failed: number;
+  /** When the first asset finished loading, or null before any has. */
+  readonly firstMs: number | null;
+  /** When the most recent asset finished loading, or null before any has. */
+  readonly lastMs: number | null;
+}
+
+/**
+ * How assets reach the loader. Production uses `fetch` + `Image.decode`; the smoke test swaps in a
+ * fake so the queue can be driven without a DOM or a network.
+ */
+export interface ArtTransport {
+  /** The runtime manifest's asset list. */
+  manifest(): Promise<ManifestAsset[]>;
+  /** Every frame of one asset, decoded and ready to rasterise. Rejects on any failure. */
+  load(asset: ManifestAsset): Promise<HTMLImageElement[]>;
+}
+
+/** The slice of `IdleDeadline` the queue reads. */
+export interface ArtIdleDeadline {
+  readonly didTimeout: boolean;
+  timeRemaining(): number;
+}
+
+/** Schedules one idle callback and returns a function that cancels it. */
+export type ArtIdleScheduler = (callback: (deadline: ArtIdleDeadline) => void) => () => void;
+
+/** The idle fallback delay where `requestIdleCallback` is unavailable (Safari). */
+const IDLE_FALLBACK_MS = 200;
+
+interface QueuedAsset {
+  priority: ArtPriority;
+  status: 'queued' | 'loading' | 'loaded' | 'failed';
+  attempts: number;
+  /** The lane the current attempt runs in, so promotion mid-flight does not skew the counters. */
+  lane: ArtPriority;
+}
+
+/** Every name the queue has seen. The `getArtFrames` miss path is one lookup here and an early return. */
+const queued = new Map<string, QueuedAsset>();
+const nowQueue: string[] = [];
+const idleQueue: string[] = [];
+let inFlight = 0;
+let nowInFlight = 0;
+let idleInFlight = 0;
+/**
+ * True until `preloadArt` has the runtime manifest. Requests made before then (a draw that runs ahead
+ * of startup) are queued but not started, so no file is fetched without its content hash.
+ */
+let manifestPending = true;
+/** Bumped by `resetArt`, so a load that settles after a reset is ignored. */
+let generation = 0;
+let cancelIdle: (() => void) | null = null;
+const settleWaiters = new Map<string, Array<() => void>>();
+
+let statRequested = 0;
+let statLoaded = 0;
+let statFailed = 0;
+let statFirstMs: number | null = null;
+let statLastMs: number | null = null;
+
+let testTransport: ArtTransport | null = null;
+let testIdleScheduler: ArtIdleScheduler | null = null;
 
 function svgDataUrl(svg: string): string {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
@@ -506,15 +611,13 @@ async function decodeSvg(file: string, rev?: string): Promise<HTMLImageElement> 
   return image;
 }
 
-async function preloadAsset(asset: ManifestAsset): Promise<void> {
-  if (typeof Image === 'undefined' || typeof document === 'undefined') return;
+async function loadAssetFrames(asset: ManifestAsset): Promise<HTMLImageElement[]> {
   const count = Math.max(1, Math.floor(asset.frames));
   const files: string[] = [];
   for (let i = 0; i < count; i++) {
     files.push(i === 0 ? `${asset.name}.svg` : `${asset.name}.${i}.svg`);
   }
-  const images = await Promise.all(files.map((file) => decodeSvg(file, asset.rev)));
-  svgFrames.set(bareName(asset.name), images);
+  return Promise.all(files.map((file) => decodeSvg(file, asset.rev)));
 }
 
 async function loadManifestAssets(): Promise<ManifestAsset[]> {
@@ -533,51 +636,240 @@ async function loadManifestAssets(): Promise<ManifestAsset[]> {
   }
 }
 
-/**
- * How many art files are fetched at once. The assets are tiny, but ~220 simultaneous requests is
- * more than the browser or the CDN will carry: in a real load 188 of 217 came back as failed
- * fetches. Six at a time matches the per-host connection limit and finishes in about a second.
- */
-export const PRELOAD_CONCURRENCY = 6;
+/** The asset loader in use, or null where nothing can be decoded (headless, no test transport). */
+function activeLoader(): ((asset: ManifestAsset) => Promise<HTMLImageElement[]>) | null {
+  if (testTransport !== null) return testTransport.load;
+  if (typeof Image === 'undefined' || typeof document === 'undefined') return null;
+  return loadAssetFrames;
+}
 
-/** Run `job` over `items`, `limit` at a time, returning the items that threw. */
-async function loadInBatches<T>(
-  items: readonly T[],
-  job: (item: T) => Promise<void>,
-  limit = PRELOAD_CONCURRENCY,
-): Promise<T[]> {
-  const failed: T[] = [];
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    for (;;) {
-      const i = next++;
-      if (i >= items.length) return;
-      try {
-        await job(items[i]);
-      } catch {
-        failed.push(items[i]);
-      }
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return failed;
+function activeManifestSource(): () => Promise<ManifestAsset[]> {
+  return testTransport !== null ? testTransport.manifest : loadManifestAssets;
+}
+
+const defaultIdleScheduler: ArtIdleScheduler = (callback) => {
+  if (typeof requestIdleCallback === 'function') {
+    const handle = requestIdleCallback(callback);
+    return () => cancelIdleCallback(handle);
+  }
+  const handle = setTimeout(() => callback({ didTimeout: true, timeRemaining: () => 0 }), IDLE_FALLBACK_MS);
+  return () => clearTimeout(handle);
+};
+
+function nowMs(): number {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
 }
 
 /**
- * Load the runtime manifest, then preload every frame of every asset: fetch each SVG, decode it into
- * an `Image`, and store the per-asset frame list. A missing or malformed file logs a warning and
- * leaves the name absent, so `getArtFrames` returns an empty list and the caller's procedural
- * fallback takes over. Run once at startup; the decode is the only async work, so the per-frame draw
- * stays synchronous.
+ * Ask for an asset. A no-op when it is already loaded, in flight, failed for good, or queued at the
+ * same or a higher priority. A `now` request for an asset sitting in the idle queue moves it to the
+ * `now` queue (still one entry), which is how a draw preempts the warm-up. Names outside the manifest
+ * are ignored, so a speculative lookup (a boss with no art of its own) costs nothing.
+ */
+export function requestArt(name: string, priority: ArtPriority): void {
+  const entry = queued.get(name);
+  if (entry !== undefined) {
+    if (entry.status !== 'queued' || entry.priority === 'now' || priority === 'idle') return;
+    // Promote: idle -> now.
+    const at = idleQueue.indexOf(name);
+    if (at >= 0) idleQueue.splice(at, 1);
+    entry.priority = 'now';
+    nowQueue.push(name);
+    pump();
+    return;
+  }
+  if (svgFrames.has(name) || !manifestByName.has(name)) return;
+  queued.set(name, { priority, status: 'queued', attempts: 0, lane: priority });
+  statRequested++;
+  (priority === 'now' ? nowQueue : idleQueue).push(name);
+  pump();
+}
+
+/** Assets still queued or in flight. */
+export function artQueueLength(): number {
+  return nowQueue.length + idleQueue.length + inFlight;
+}
+
+/** Load counters since page start. Cheap: no per-asset timers. */
+export function artLoadStats(): ArtLoadStats {
+  return { requested: statRequested, loaded: statLoaded, failed: statFailed, firstMs: statFirstMs, lastMs: statLastMs };
+}
+
+/** Test-only: drive the loader through a fake transport. `null` restores fetch + decode. */
+export function setArtTransport(transport: ArtTransport | null): void {
+  testTransport = transport;
+}
+
+/** Test-only: replace the idle scheduler. `null` restores requestIdleCallback / setTimeout. */
+export function setArtIdleScheduler(scheduler: ArtIdleScheduler | null): void {
+  if (cancelIdle !== null) {
+    cancelIdle();
+    cancelIdle = null;
+  }
+  testIdleScheduler = scheduler;
+  pump();
+}
+
+/** Start every `now` request the network lanes allow, then arm an idle slice if nothing urgent is left. */
+function pump(): void {
+  if (manifestPending) return;
+  const load = activeLoader();
+  if (load === null) return;
+  while (inFlight < PRELOAD_CONCURRENCY && nowQueue.length > 0) {
+    startLoad(nowQueue.shift() as string, load);
+  }
+  scheduleIdle();
+}
+
+function scheduleIdle(): void {
+  if (cancelIdle !== null || idleQueue.length === 0) return;
+  if (nowQueue.length > 0 || nowInFlight > 0 || idleInFlight > 0) return;
+  const scheduler = testIdleScheduler ?? defaultIdleScheduler;
+  const gen = generation;
+  cancelIdle = scheduler((deadline) => {
+    if (gen !== generation) return;
+    cancelIdle = null;
+    runIdleSlice(deadline);
+  });
+}
+
+/** One idle slice: start at most one asset, and only when no `now` work is outstanding. */
+function runIdleSlice(deadline: ArtIdleDeadline): void {
+  if (manifestPending) return;
+  const load = activeLoader();
+  if (load === null) return;
+  // Urgent work or a running idle asset will call pump() when it settles, which re-arms the slice.
+  if (nowQueue.length > 0 || nowInFlight > 0 || idleInFlight > 0) return;
+  if (inFlight >= PRELOAD_CONCURRENCY) return;
+  if (!deadline.didTimeout && deadline.timeRemaining() <= 0) {
+    scheduleIdle();
+    return;
+  }
+  const name = idleQueue.shift();
+  if (name !== undefined) startLoad(name, load);
+}
+
+function startLoad(name: string, load: (asset: ManifestAsset) => Promise<HTMLImageElement[]>): void {
+  const entry = queued.get(name);
+  if (entry === undefined) return;
+  const asset = manifestByName.get(name);
+  if (asset === undefined) {
+    // Dropped by a manifest swap while it waited: forget it, so a later request can try again.
+    queued.delete(name);
+    statRequested--;
+    settle(name);
+    return;
+  }
+  entry.status = 'loading';
+  entry.attempts++;
+  entry.lane = entry.priority;
+  inFlight++;
+  if (entry.lane === 'now') nowInFlight++;
+  else idleInFlight++;
+  const gen = generation;
+  let pending: Promise<HTMLImageElement[]>;
+  try {
+    pending = load(asset);
+  } catch (err) {
+    pending = Promise.reject(err);
+  }
+  pending.then(
+    (images) => finishLoad(gen, name, asset, images),
+    () => finishLoad(gen, name, asset, null),
+  );
+}
+
+function finishLoad(gen: number, name: string, asset: ManifestAsset, images: HTMLImageElement[] | null): void {
+  if (gen !== generation) return;
+  const entry = queued.get(name);
+  if (entry === undefined) return;
+  inFlight--;
+  if (entry.lane === 'now') nowInFlight--;
+  else idleInFlight--;
+
+  if (images !== null) {
+    svgFrames.set(name, images);
+    entry.status = 'loaded';
+    statLoaded++;
+    const t = nowMs();
+    if (statFirstMs === null) statFirstMs = t;
+    statLastMs = t;
+    scheduleArtInvalidate();
+    settle(name);
+  } else if (entry.attempts < 2) {
+    // One retry. A burst of requests can have a few connections dropped by the browser or the CDN,
+    // and a dropped asset keeps its procedural fallback for the whole session — which is how the
+    // achievement grid came to show a wall of placeholders over art that was sitting on disk.
+    entry.status = 'queued';
+    (entry.priority === 'now' ? nowQueue : idleQueue).push(name);
+  } else {
+    entry.status = 'failed';
+    statFailed++;
+    console.warn(`[art] failed to load ${asset.name}`);
+    settle(name);
+  }
+  pump();
+}
+
+function settle(name: string): void {
+  const waiters = settleWaiters.get(name);
+  if (waiters === undefined) return;
+  settleWaiters.delete(name);
+  for (const resolve of waiters) resolve();
+}
+
+/** Resolves once `name` has loaded, failed for good, or left the queue. */
+function whenSettled(name: string): Promise<void> {
+  const entry = queued.get(name);
+  if (entry === undefined || entry.status === 'loaded' || entry.status === 'failed') return Promise.resolve();
+  return new Promise((resolve) => {
+    const list = settleWaiters.get(name);
+    if (list) list.push(resolve);
+    else settleWaiters.set(name, [resolve]);
+  });
+}
+
+/** Drop the queue, its counters, and any armed idle slice (part of `resetArt`). */
+function resetQueue(): void {
+  generation++;
+  if (cancelIdle !== null) {
+    cancelIdle();
+    cancelIdle = null;
+  }
+  queued.clear();
+  nowQueue.length = 0;
+  idleQueue.length = 0;
+  inFlight = 0;
+  nowInFlight = 0;
+  idleInFlight = 0;
+  manifestPending = true;
+  statRequested = 0;
+  statLoaded = 0;
+  statFailed = 0;
+  statFirstMs = null;
+  statLastMs = null;
+  const waiters = [...settleWaiters.values()].flat();
+  settleWaiters.clear();
+  for (const resolve of waiters) resolve();
+}
+
+/**
+ * Load the runtime manifest, then the eager set — the art the opening frame can show — at `now`
+ * priority, and resolve once those have settled. The rest of the manifest goes on the idle queue and
+ * loads one asset per idle slice, unless a draw asks for it first. A missing or malformed file is
+ * retried once, then logs a warning and stays absent, so `getArtFrames` returns an empty list and the
+ * caller's procedural fallback takes over.
  */
 export async function preloadArt(): Promise<void> {
-  const assets = await loadManifestAssets();
+  const gen = generation;
+  const assets = await activeManifestSource()();
+  if (gen !== generation) return;
   applyManifest(assets);
-  const first = await loadInBatches(assets, preloadAsset);
-  // One sequential retry. A burst of requests can have a few connections dropped by the browser or
-  // the CDN, and a dropped asset keeps its procedural fallback for the whole session — which is how
-  // the achievement grid came to show a wall of placeholders over art that was sitting on disk.
-  const second = first.length > 0 ? await loadInBatches(first, preloadAsset) : [];
-  for (const asset of second) console.warn(`[art] failed to load ${asset.name}`);
-  scheduleArtInvalidate();
+  manifestPending = false;
+  for (const name of EAGER_ART) requestArt(name, 'now');
+  for (const asset of assets) requestArt(bareName(asset.name), 'idle');
+  // Draws that missed while manifest.json was in flight are queued already; start them now.
+  pump();
+  if (activeLoader() === null) return;
+  await Promise.all(EAGER_ART.map(whenSettled));
 }
