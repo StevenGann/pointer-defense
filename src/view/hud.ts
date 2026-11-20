@@ -1,5 +1,5 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
-import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
+import { bevel, CONTROL_BOX_H, CONTROL_BOX_W, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
 import { getArtTexture } from './art.ts';
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
@@ -49,6 +49,7 @@ export type HudAction =
   | 'sell'
   | 'repairTower'
   | 'target'
+  | 'closeTower'
   | 'branchA'
   | 'branchB'
   | 'branchC'
@@ -135,6 +136,7 @@ interface BranchButton {
 interface TowerDetailLayout {
   box: Rect;
   name: Rect;
+  close: Rect;
   stats: Rect;
   route: Rect;
   target: Rect | null;
@@ -252,6 +254,14 @@ export function computeHud(l: Layout, s: RunState): HudLayout {
     const innerW = w - 8;
     cy += 6;
     const name: Rect = { x: x + 6, y: cy, w: w - 12, h: 20 };
+    // The detail pane's title row carries a Win95 close box on its right edge, the same control the
+    // help window uses, so the shop list is one click away instead of a click on the board.
+    const close: Rect = {
+      x: name.x + name.w - CONTROL_BOX_W,
+      y: name.y + Math.floor((name.h - CONTROL_BOX_H) / 2),
+      w: CONTROL_BOX_W,
+      h: CONTROL_BOX_H,
+    };
     cy += 20;
     const stats: Rect = { x: x + 6, y: cy, w: w - 12, h: 18 };
     cy += 18;
@@ -303,7 +313,7 @@ export function computeHud(l: Layout, s: RunState): HudLayout {
     const sell: Rect = { x: innerX, y: cy, w: innerW, h: 24 };
     cy += 24;
     const box: Rect = { x, y: boxTop, w, h: cy - boxTop + 6 };
-    detail = { box, name, stats, route: routeRow, target, upgrade, branches, repair, sell };
+    detail = { box, name, close, stats, route: routeRow, target, upgrade, branches, repair, sell };
     cy = box.y + box.h + 6;
   }
 
@@ -471,6 +481,7 @@ export function hudControlAt(l: Layout, s: RunState, px: number, py: number): Hu
   const frozen = noBuildActive(s);
   const tower = selectedTower(s);
   if (h.detail && tower) {
+    if (pointInRect(h.detail.close, px, py)) return { action: 'closeTower', enabled: true };
     const upgradePrice = upgradeCost(tower);
     const affordable = upgradePrice !== null && canAfford(s.economy, upgradePrice);
     if (h.detail.target && pointInRect(h.detail.target, px, py)) {
@@ -886,6 +897,13 @@ export class HudView {
       const branch = tower.branch === null ? '' : ` - ${branchName(tower.kind, tower.branch)}`;
       this.towerName.text = `${TOWER_STATS[tower.kind].name}  T${tower.tier}${branch}${isOffline(tower) ? ' — OFFLINE' : ''}`;
       this.towerName.position.set(d.name.x, d.name.y + Math.floor(d.name.h / 2));
+
+      // The detail pane's close box: a raised Win95 box with the same X glyph the help window uses.
+      bevel(g, d.close, true, PAL.face);
+      const ccx = d.close.x + Math.floor(d.close.w / 2);
+      const ccy = d.close.y + Math.floor(d.close.h / 2);
+      g.moveTo(ccx - 4, ccy - 4).lineTo(ccx + 4, ccy + 4).stroke({ width: 1, color: PAL.text });
+      g.moveTo(ccx + 4, ccy - 4).lineTo(ccx - 4, ccy + 4).stroke({ width: 1, color: PAL.text });
 
       if (tower.kind === 'wall') {
         this.towerStats.text = tower.branch === null ? `HP ${Math.ceil(tower.hp)}` : `HP ${Math.ceil(tower.hp)}/${tower.maxHp}`;

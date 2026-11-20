@@ -1181,6 +1181,64 @@ export function upgradeTower(s: RunState, col: number, row: number): boolean {
   return true;
 }
 
+/** The result of a Ctrl+click sweep upgrade. */
+export interface TowerSweep {
+  /** Towers whose tier was raised by the sweep. */
+  upgraded: number;
+  /** Tier-2 towers left alone because they need a branch choice the game never makes. */
+  needBranch: number;
+}
+
+/**
+ * Ctrl+click on a placed tower: upgrade every tower in the same place on the ladder — same kind,
+ * tier and branch — in ascending tower id (placement order), spending salvage until it runs out.
+ * The clicked tower is included. Towers that would need a branch choice at tier 2 are skipped, never
+ * chosen for the player, and counted so the status line can name them. Spending stops at the first
+ * tower that cannot be afforded; what was already bought stays bought.
+ */
+export function sweepUpgradeSame(s: RunState, source: Tower): TowerSweep {
+  const result: TowerSweep = { upgraded: 0, needBranch: 0 };
+  if (s.phase === 'halted' || s.phase === 'victory') return result;
+  if (noBuildActive(s)) return result;
+
+  const targets = s.towers
+    .filter((t) => t.kind === source.kind && t.tier === source.tier && t.branch === source.branch)
+    .sort((a, b) => a.id - b.id);
+
+  for (const t of targets) {
+    if (isDown(t, s.clock)) continue; // an offline (or EMP'd) tower cannot be upgraded, only repaired
+    const cost = upgradeCost(t);
+    if (cost === null) continue; // nothing left to buy
+    if (t.tier === 2 && t.kind !== 'repair') {
+      result.needBranch++; // 2 -> 3 is chooseBranch's job; the game never picks for the player
+      continue;
+    }
+    if (!spend(s.economy, cost)) break; // salvage ran out; everything already upgraded stays
+    s.salvageSpent += cost;
+    s.idleTicks = 0;
+    t.tier = (t.tier + 1) as Tier;
+    t.spent += cost;
+    s.upgradesBought++;
+    result.upgraded++;
+    refreshTowerHp(t);
+  }
+
+  if (result.upgraded > 0) recomputeAuras(s.towers, s.clock);
+  return result;
+}
+
+/**
+ * The status-bar line for a sweep: how many towers were upgraded, plus how many are left waiting for
+ * a branch choice when any were skipped. Returns null when nothing happened, so the status line stays
+ * untouched on a no-op.
+ */
+export function sweepUpgradeReport(upgraded: number, needBranch: number): string | null {
+  if (upgraded === 0 && needBranch === 0) return null;
+  let msg = `Upgraded ${upgraded} tower${upgraded === 1 ? '' : 's'}`;
+  if (needBranch > 0) msg += ` — ${needBranch} need a branch (click one to choose)`;
+  return msg;
+}
+
 export function chooseBranch(s: RunState, col: number, row: number, branch: Branch): boolean {
   if (s.phase === 'halted' || s.phase === 'victory') return false;
   if (noBuildActive(s)) return false;
