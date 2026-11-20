@@ -764,6 +764,33 @@ export const fr: Catalogue = {
   'screen.number.shield': 'SHD {amount}',
   'screen.number.crit': 'CRIT {amount}',
 
+  // Tower and enemy display names.
+  'name.tower.gun': 'Fusil',
+  'name.tower.cannon': 'Canon',
+  'name.tower.taser': 'Taser',
+  'name.tower.frost': 'Givre',
+  'name.tower.laser': 'Laser',
+  'name.tower.aa': 'AA',
+  'name.tower.beacon': 'Balise',
+  'name.tower.repair': 'Réparation',
+  'name.tower.wall': 'Mur',
+  'name.tower.cursor': 'Curseur',
+  'name.enemy.grunt': 'Fantassin',
+  'name.enemy.runner': 'Coureur',
+  'name.enemy.shielded': 'Blindé',
+  'name.enemy.flyer': 'Volant',
+  'name.enemy.armoured': 'Cuirassé',
+  'name.enemy.saboteur': 'Saboteur',
+  'name.enemy.breacher': 'Brècheur',
+  'name.enemy.popup': 'Pop-up',
+  'name.enemy.grunt-boss': 'Sergent',
+  'name.enemy.runner-boss': 'Meneur',
+  'name.enemy.shielded-boss': 'Bastion',
+  'name.enemy.flyer-boss': 'Porteur',
+  'name.enemy.armoured-boss': 'Dreadnought',
+  'name.enemy.saboteur-boss': 'Coupe-circuit',
+  'name.enemy.breacher-boss': 'Bélier',
+
   // Window title.
   'window.title': 'Pointer Defense',
 };

@@ -792,6 +792,33 @@ export const zh: Catalogue = {
   'screen.number.shield': '护盾 {amount}',
   'screen.number.crit': '暴击 {amount}',
 
+  // Tower and enemy display names.
+  'name.tower.gun': '枪',
+  'name.tower.cannon': '炮',
+  'name.tower.taser': '电击',
+  'name.tower.frost': '冰霜',
+  'name.tower.laser': '激光',
+  'name.tower.aa': 'AA',
+  'name.tower.beacon': '信标',
+  'name.tower.repair': '修理',
+  'name.tower.wall': '墙',
+  'name.tower.cursor': '光标',
+  'name.enemy.grunt': '步兵',
+  'name.enemy.runner': '跑者',
+  'name.enemy.shielded': '盾兵',
+  'name.enemy.flyer': '飞行者',
+  'name.enemy.armoured': '装甲兵',
+  'name.enemy.saboteur': '破坏者',
+  'name.enemy.breacher': '破城者',
+  'name.enemy.popup': '弹出窗口',
+  'name.enemy.grunt-boss': '军士',
+  'name.enemy.runner-boss': '领跑者',
+  'name.enemy.shielded-boss': '堡垒',
+  'name.enemy.flyer-boss': '运载者',
+  'name.enemy.armoured-boss': '无畏舰',
+  'name.enemy.saboteur-boss': '剪线者',
+  'name.enemy.breacher-boss': '冲撞者',
+
   // Window title.
   'window.title': 'Pointer Defense',
 };
