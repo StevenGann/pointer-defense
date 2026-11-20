@@ -21,6 +21,7 @@ export const he: Catalogue = {
   'menu.file.newRun': 'ריצה חדשה',
   'menu.file.exit': 'יציאה',
   'menu.view.records': 'רשומות',
+  'menu.view.language': 'שפה',
   'menu.view.shakeOn': 'רעידת מסך: פעיל',
   'menu.view.shakeOff': 'רעידת מסך: כבוי',
   'menu.cheats.godMode': 'מצב אלוהים',
