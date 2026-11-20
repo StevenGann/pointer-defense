@@ -186,15 +186,23 @@ intended and safe, because nothing about the role is stored.
 - **Layer.** New `synergy` layer in `BOARD_LAYER_ORDER`, inserted immediately before `towerSprites`
   — below every tower base, above the tiles, the path and the enemy shadows. The line belongs to the
   ground, not to the towers.
-- **Geometry.** One line per edge, never per cluster: the line joins the two cell centres, trimmed by
-  `0.28 × cell` at each end so it emerges from under the tower art instead of crossing it. A chain of
-  five AAs draws four lines; a ring draws its ring.
-- **Look.** `0xffe14d` at alpha `0.38`, width 2, dashed 4 on / 3 off, with a slow ±0.10 alpha pulse
-  at about 1.1 Hz driven by `state.clock`, so no new timer exists to fall out of step.
+- **Geometry.** A halo under every tower in a cluster, plus one link per edge trimmed by
+  `0.34 × cell` at each end. A chain of five AAs draws five halos and four links; a ring draws its
+  ring. Adjacent bases sit `0.18 × cell` apart, so the link is mostly covered by the two bases and
+  the halo ring is what carries the signal — the link supplies the bright pip in the gap.
+- **Art.** Two SVGs, not code: `public/art/ui/synergy-halo.svg` and `synergy-link.svg`, registered in
+  `ART_MANIFEST` and the manifest as `ui/synergy-halo` / `ui/synergy-link`. They are **white art**,
+  drawn with the synergy colour as a tint, so the artist can reshape the indicator without touching
+  colour and the engine can add a second synergy colour without an art change. The procedural
+  `Graphics` dash survives as a fallback drawn underneath the sprite layer, so the line is on screen
+  before the SVGs arrive and stays there if an asset is ever removed.
+- **Look.** `0xffe14d` at alpha `0.95`, halo at `0.75 ×` that, with a slow ±0.10 alpha pulse at about
+  1.1 Hz driven by `state.clock`, so no new timer exists to fall out of step. This was raised from
+  `0.38`: at that opacity the indicator read as a smudge on a busy board.
 - **Direction.** The dash offset drifts from leader to follower. This is the only place a pair's
   direction is visible, and it costs one animated offset per line rather than any new glyph.
-- **Quality.** `full` and `no-shadows` draw the pulse. `lean` draws the same lines flat at alpha
-  `0.30`, no drift — the governor may simplify presentation, never the information.
+- **Quality.** `full` and `no-shadows` draw the pulse. `lean` draws the same art flat at alpha
+  `0.90`, no drift — the governor may simplify presentation, never the information.
 - **Toggle.** View → **Synergy lines**, default on, session-only.
 - **Colour is never the only signal.** The dash pattern differs per synergy, so the amber dashed AA
   line stays distinguishable under deuteranopia. Greyscale screenshot check is part of review.

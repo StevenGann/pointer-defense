@@ -157,6 +157,9 @@ const PROJECTILE_NAMES = ['shell', 'missile'] as const;
 /** Mines, split by arming state so the lamp can change without tinting the file. */
 const MINE_NAMES = ['mine-armed', 'mine-unarmed'] as const;
 
+/** Synergy indicators (docs/SYNERGIES.md): white art, tinted by the engine to the synergy colour. */
+const SYNERGY_NAMES = ['synergy-halo', 'synergy-link'] as const;
+
 function entries(category: ArtCategory, dir: string, names: readonly string[]): ArtEntry[] {
   return names.map((name) => ({ name, category, file: `${dir}/${name}.svg` }));
 }
@@ -175,6 +178,7 @@ export const ART_MANIFEST: readonly ArtEntry[] = [
   ...entries('upgrades', 'upgrades', [UPGRADE_PLACEHOLDER, ...UPGRADE_NAMES]),
   ...entries('projectiles', 'projectiles', PROJECTILE_NAMES),
   ...entries('mines', 'mines', MINE_NAMES),
+  ...entries('ui', 'ui', SYNERGY_NAMES),
 ];
 
 const MANIFEST_BY_NAME: ReadonlyMap<string, ArtEntry> = new Map(ART_MANIFEST.map((e) => [e.name, e]));

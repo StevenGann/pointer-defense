@@ -5584,15 +5584,16 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   );
   check(missing.length === 0, `every shipped manifest file exists (${missing.map((m) => m.file).join(', ') || 'none missing'})`);
 
-  // Every fx and ui asset parses as SVG: a single 32x32-viewBox root that closes cleanly. A malformed
-  // file (truncated, wrong viewBox, unbalanced tags) would fail the rasteriser, so it is rejected here
-  // rather than silently falling back to the procedural drawing.
+  // Every fx and ui asset parses as SVG: an svg root with a numeric viewBox that closes cleanly. A
+  // malformed file (truncated, missing viewBox, unbalanced tags) would fail the rasteriser, so it is
+  // rejected here rather than silently falling back to the procedural drawing. The viewBox is not
+  // fixed to 32x32: a wide asset such as the synergy link is authored at its own aspect ratio.
   const svgLooksValid = (text) => {
     const t = text.trim();
     return (
       t.startsWith('<svg') &&
       t.endsWith('</svg>') &&
-      t.includes('viewBox="0 0 32 32"') &&
+      /viewBox="0 0 \d+(\.\d+)? \d+(\.\d+)?"/.test(t) &&
       (t.match(/</g) || []).length === (t.match(/>/g) || []).length
     );
   };
@@ -11870,11 +11871,33 @@ function dailyState(date) {
 // 16. Quality: lean draws flat lines with no drift; full pulses and drifts.
 {
   const period = SYNERGIES[0].dash + SYNERGIES[0].gap;
-  check(synergyEdgeStyle(0, 'lean', period).alpha === 0.3, 'lean draws flat lines at alpha 0.30');
-  check(synergyEdgeStyle(0, 'full', period).alpha === 0.38, 'full starts at alpha 0.38');
+  check(synergyEdgeStyle(0, 'lean', period).alpha === 0.9, 'lean draws flat art at alpha 0.90');
+  check(synergyEdgeStyle(0, 'full', period).alpha === 0.95, 'full starts at alpha 0.95');
+  check(synergyEdgeStyle(0, 'full', period).alpha > 0.5, 'the indicator is not a smudge: it draws above half opacity');
   check(synergyEdgeStyle(1, 'full', period).alpha !== synergyEdgeStyle(2, 'full', period).alpha, 'full pulses the alpha');
   check(synergyEdgeStyle(0, 'lean', period).offset === 0 && synergyEdgeStyle(50, 'lean', period).offset === 0, 'lean draws with no dash drift');
   check(synergyEdgeStyle(1, 'full', period).offset !== synergyEdgeStyle(2, 'full', period).offset, 'full drifts the dash offset');
+}
+
+// 16b. The indicator is an artist-editable SVG, registered in the manifest, and the art layer sits
+// above the procedural fallback so a missing texture degrades instead of disappearing.
+{
+  const manifest = JSON.parse(readFileSync(new URL('../public/art/manifest.json', import.meta.url), 'utf8')).assets;
+  const names = manifest.map((a) => a.name);
+  check(names.includes('ui/synergy-halo'), 'the synergy halo is in the art manifest');
+  check(names.includes('ui/synergy-link'), 'the synergy link is in the art manifest');
+  for (const file of ['synergy-halo', 'synergy-link']) {
+    const svg = readFileSync(new URL(`../public/art/ui/${file}.svg`, import.meta.url), 'utf8');
+    check(svg.includes('<svg') && svg.includes('viewBox'), `${file}.svg is a real SVG the artist can open`);
+  }
+  const boardSrc = readFileSync(new URL('../src/view/board.ts', import.meta.url), 'utf8');
+  check(boardSrc.includes("getArtTexture('synergy-halo'") && boardSrc.includes("getArtTexture('synergy-link'"),
+    'the board draws the synergy from the SVG assets');
+  const artSrc = readFileSync(new URL('../src/view/art.ts', import.meta.url), 'utf8');
+  check(artSrc.includes("'synergy-halo'") && artSrc.includes("'synergy-link'"),
+    'both synergy assets are in ART_MANIFEST, so the loader will actually request them');
+  check(/this\.synergyLayer\.addChild\(this\.synergy, this\.synergyArt\)/.test(boardSrc),
+    'the procedural fallback is drawn under the art, so a slow load does not blank the line');
 }
 
 // 17. RTL: edge positions are byte-identical under a dir:'rtl' locale.

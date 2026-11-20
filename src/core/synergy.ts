@@ -44,6 +44,8 @@ export interface SynergyEdge {
 export interface SynergyCluster {
   /** Member towers in lead order (shorter interval, then northmost, then westmost). */
   readonly members: readonly Tower[];
+  /** The line colour of the row that created the cluster, used for its halo. */
+  readonly color: number;
   /** `leaders[i]` holds the member indices that lead `members[i]` (they precede it in the order). */
   readonly leaders: readonly (readonly number[])[];
 }
@@ -134,7 +136,7 @@ export function buildSynergyLayout(towers: readonly Tower[]): SynergyLayout {
       }
     }
 
-    const cluster: SynergyCluster = { members, leaders };
+    const cluster: SynergyCluster = { members, leaders, color: SYNERGIES[0].color };
     clusters.push(cluster);
     for (const t of members) clusterOf.set(t.id, cluster);
   }

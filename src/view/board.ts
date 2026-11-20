@@ -16,7 +16,7 @@ import {
   type Mine,
   type RunState,
 } from '../core/state.ts';
-import type { SynergyEdge } from '../core/synergy.ts';
+import { SYNERGIES, type SynergyEdge } from '../core/synergy.ts';
 import {
   baseEnemyKind,
   isBossKind,
@@ -296,7 +296,13 @@ export class BoardView {
   private readonly shutterSprites = new Container();
   private readonly shutterSpritePool: Sprite[] = [];
   private readonly toggles = new Graphics();
+  // The synergy layer holds the procedural fallback first and the artist's sprites above it, so the
+  // line is visible even before the SVGs have finished loading.
+  private readonly synergyLayer = new Container();
   private readonly synergy = new Graphics();
+  private readonly synergyArt = new Container();
+  private readonly synergyHalos: Sprite[] = [];
+  private readonly synergyLinks: Sprite[] = [];
   private readonly towers = new Graphics();
   private readonly auras = new Container();
   private readonly auraSprites: Sprite[] = [];
@@ -346,7 +352,7 @@ export class BoardView {
       mineArt: this.mineArt,
       shutterSprites: this.shutterSprites,
       toggles: this.toggles,
-      synergy: this.synergy,
+      synergy: this.synergyLayer,
       towerSprites: this.towerSprites,
       towers: this.towers,
       auras: this.auras,
@@ -360,7 +366,32 @@ export class BoardView {
       overlay: this.overlay,
       projectileArt: this.projectileArt,
     };
+    this.synergyLayer.addChild(this.synergy, this.synergyArt);
     for (const name of BOARD_LAYER_ORDER) this.root.addChild(layers[name]);
+  }
+
+  /** The pooled halo sprite for the `index`-th clustered tower this frame, grown on demand. */
+  private synergyHaloSprite(index: number): Sprite {
+    let s = this.synergyHalos[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0.5, 0.5);
+      this.synergyArt.addChild(s);
+      this.synergyHalos[index] = s;
+    }
+    return s;
+  }
+
+  /** The pooled link sprite for the `index`-th synergy edge this frame, grown on demand. */
+  private synergyLinkSprite(index: number): Sprite {
+    let s = this.synergyLinks[index];
+    if (!s) {
+      s = new Sprite();
+      s.anchor.set(0.5, 0.5);
+      this.synergyArt.addChild(s);
+      this.synergyLinks[index] = s;
+    }
+    return s;
   }
 
   /** The pooled shadow sprite for the `index`-th shadow cast this frame, grown on demand. */
@@ -612,11 +643,50 @@ export class BoardView {
     this.overlay.clear();
 
     this.synergy.clear();
+    let haloIndex = 0;
+    let linkIndex = 0;
     if (showSynergy) {
-      for (const edge of synergyLayout(state).edges) {
-        drawSynergyEdge(this.synergy, edge, board, cell, state.clock, quality);
+      const layout = synergyLayout(state);
+      const { alpha } = synergyEdgeStyle(state.clock, quality, edgePeriod());
+      const haloPx = Math.round(cell * SYNERGY_HALO_CELLS);
+      const haloTex = getArtTexture('synergy-halo', haloPx);
+      const linkTex = getArtTexture('synergy-link', Math.round(haloPx * SYNERGY_LINK_TEXTURE_SCALE));
+      if (haloTex !== null && linkTex !== null) {
+        // The artist's SVG carries the shape; the engine owns the colour, the pulse and the layout.
+        for (const cluster of layout.clusters) {
+          for (const t of cluster.members) {
+            const spr = this.synergyHaloSprite(haloIndex++);
+            const size = cell * SYNERGY_HALO_CELLS;
+            spr.texture = haloTex;
+            spr.tint = cluster.color;
+            spr.width = size;
+            spr.height = size;
+            spr.rotation = 0;
+            spr.position.set(board.x + (t.col + 0.5) * cell, board.y + (t.row + 0.5) * cell);
+            spr.alpha = alpha * SYNERGY_HALO_ALPHA;
+            spr.visible = true;
+          }
+        }
+        for (const edge of layout.edges) {
+          const { x0, y0, x1, y1 } = synergyEdgeEndpoints(edge, board, cell);
+          const spr = this.synergyLinkSprite(linkIndex++);
+          spr.texture = linkTex;
+          spr.tint = edge.color;
+          spr.width = Math.hypot(x1 - x0, y1 - y0) + cell * SYNERGY_LINK_OVERLAP;
+          spr.height = cell * SYNERGY_LINK_HEIGHT;
+          // Adjacency is orthogonal, so the link is only ever horizontal or vertical.
+          spr.rotation = edge.lead.col === edge.follow.col ? Math.PI / 2 : 0;
+          spr.position.set((x0 + x1) / 2, (y0 + y1) / 2);
+          spr.alpha = alpha * SYNERGY_LINK_ALPHA;
+          spr.visible = true;
+        }
+      } else {
+        // Before the SVGs land (or if the artist removes them) the procedural line still draws.
+        for (const edge of layout.edges) drawSynergyEdge(this.synergy, edge, board, cell, state.clock, quality);
       }
     }
+    for (let i = haloIndex; i < this.synergyHalos.length; i++) this.synergyHalos[i].visible = false;
+    for (let i = linkIndex; i < this.synergyLinks.length; i++) this.synergyLinks[i].visible = false;
 
     this.toggles.clear();
     let shutterIndex = 0;
@@ -1041,12 +1111,29 @@ export function dashedLine(
 }
 
 /** Synergy edges (docs/SYNERGIES.md §5): amber dashed lines, trimmed off the tower art, pulsing. */
-const SYNERGY_ALPHA = 0.38;
-const SYNERGY_ALPHA_LEAN = 0.3;
+/** The opacity of the drawn indicator. Raised from 0.38: it read as a smudge on a busy board. */
+const SYNERGY_ALPHA = 0.95;
+const SYNERGY_ALPHA_LEAN = 0.9;
 const SYNERGY_PULSE = 0.1;
+/** Diameter of the halo under a clustered tower, in cells. Bigger than a base, so it spills out. */
+const SYNERGY_HALO_CELLS = 1.6;
+const SYNERGY_HALO_ALPHA = 1;
+/** The link is taller than the old 2 px line so its shape reads at a glance. */
+const SYNERGY_LINK_HEIGHT = 0.5;
+const SYNERGY_LINK_ALPHA = 1;
+/** The link tucks a little under each base, so no daylight shows at the ends. */
+const SYNERGY_LINK_OVERLAP = 0.3;
+/** The link texture is rasterised smaller than the halo; it is drawn stretched along the edge. */
+const SYNERGY_LINK_TEXTURE_SCALE = 0.55;
 const SYNERGY_PULSE_HZ = 1.1;
 const SYNERGY_WIDTH = 2;
-const SYNERGY_TRIM = 0.28;
+const SYNERGY_TRIM = 0.34;
+/** The catalogue's dash cycle, used for the pulse timing. */
+function edgePeriod(): number {
+  const row = SYNERGIES[0];
+  return row.dash + row.gap;
+}
+
 /** Dash drift speed in pixels per tick, so the pattern moves leader -> follower over time. */
 const SYNERGY_DRIFT = 0.25;
 

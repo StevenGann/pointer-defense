@@ -1397,6 +1397,16 @@
       "rev": "a92530c987"
     },
     {
+      "name": "ui/synergy-halo",
+      "frames": 1,
+      "rev": "872ccba4cc"
+    },
+    {
+      "name": "ui/synergy-link",
+      "frames": 1,
+      "rev": "918cb1ef7e"
+    },
+    {
       "name": "upgrades/_upgrade-placeholder",
       "frames": 1,
       "rev": "950da9994b"

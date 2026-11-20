@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!--
+    Synergy halo — drawn UNDER a tower base for every tower in a synergy cluster.
+
+    The artist owns this file. It is rasterised once at the tower's drawn size, tinted with the
+    synergy's colour by the engine, and never recoloured in the art: keep it white or pale grey so a
+    tint reads as the synergy colour rather than as a filter over an existing colour.
+
+    The engine draws it centred on the tower at about 1.6 cells across, and the middle is covered by
+    the tower's own base (roughly r=18 of this 64 px box). The interesting shape is the ring between
+    r=22 and r=31, and it has to read at 44 px on a pale grey floor — bold strokes, not a haze.
+  -->
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="68%" stop-color="#ffffff" stop-opacity="0.45"/>
+      <stop offset="84%" stop-color="#ffffff" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <circle cx="32" cy="32" r="31" fill="url(#glow)"/>
+
+  <!-- Soft under-stroke, then a solid bright ring on top: two strokes read as a glow with no filter. -->
+  <circle cx="32" cy="32" r="26" fill="none" stroke="#ffffff" stroke-opacity="0.5" stroke-width="9"/>
+  <circle cx="32" cy="32" r="26" fill="none" stroke="#ffffff" stroke-width="4"
+          stroke-dasharray="7 3.5" stroke-linecap="round"/>
+
+  <!-- Four ticks at the diagonals, outside the base, so the marker still reads when the ring tucks in. -->
+  <g stroke="#ffffff" stroke-width="3" stroke-linecap="round">
+    <line x1="45" y1="19" x2="50" y2="14"/>
+    <line x1="19" y1="19" x2="14" y2="14"/>
+    <line x1="45" y1="45" x2="50" y2="50"/>
+    <line x1="19" y1="45" x2="14" y2="50"/>
+  </g>
+</svg>
