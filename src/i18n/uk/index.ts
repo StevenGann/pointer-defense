@@ -1,4 +1,5 @@
 import type { Catalogue } from '../index.ts';
+import { help } from './help.ts';
 
 /**
  * Ukrainian catalogue.
@@ -11,6 +12,8 @@ import type { Catalogue } from '../index.ts';
  * `$`, `HP`, `DPS`, and `{placeholders}` are never translated or reordered.
  */
 export const uk: Catalogue = {
+  ...help,
+
   // Menu bar.
   'menu.file': 'Файл',
   'menu.view': 'Вигляд',
