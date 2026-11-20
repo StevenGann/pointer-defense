@@ -1387,11 +1387,15 @@ their hp and shield), so there is no fixed form to hand over.
 | Tests | `npm run smoke`: core scenarios, determinism at 23/60/144 Hz, and a balance harness |
 | Performance | 60 fps with 400 enemies and 60 towers on integrated graphics; the sim budget is 4 ms/tick |
 
-The **balance harness** matters more than the rest of the tests: a headless scripted player — builds
-greedily, clicks at a fixed rate, reboots at wave 60 — printing leaks, salvage and route length per
-wave across five scenarios (standard, a no-support control, the early-call run, an all-at-once call
-stress test, and the 25/50/75% early-call sweep, §8.5). Balance changes are judged by its output, not
-by feel.
+The **balance harness** is a diagnostic, not a gate: a headless scripted player — builds greedily,
+clicks at a fixed rate, reboots at wave 60 — printing leaks, salvage and route length per wave across
+five scenarios (standard, a no-support control, the early-call run, an all-at-once call stress test,
+and the 25/50/75% early-call sweep, §8.5).
+
+**Human testers are authoritative for balance.** Do not run the harness as part of a balance change,
+and do not treat its numbers as evidence for or against one, unless Sydney asks for it. It models a
+single scripted policy, it is not a player, and its output has been mistaken for a verdict before.
+
 
 The scripted player also **repairs** like a player now. Between waves, once its normal build policy has
 spent what it can, it repairs a non-wall tower that is offline or below 35% HP — the most valuable one
