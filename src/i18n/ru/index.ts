@@ -804,6 +804,33 @@ export const ru = {
   'tree.newGamePlus.name': 'Новая игра+',
   'tree.newGamePlus.description': 'башни ставятся на уровне 2',
 
+  // ── Names ─────────────────────────────────────────────────────────────────────────────────
+  'name.tower.gun': 'Стрелок',
+  'name.tower.cannon': 'Пушка',
+  'name.tower.taser': 'Тазер',
+  'name.tower.frost': 'Мороз',
+  'name.tower.laser': 'Лазер',
+  'name.tower.aa': 'AA',
+  'name.tower.beacon': 'Маяк',
+  'name.tower.repair': 'Ремонт',
+  'name.tower.wall': 'Стена',
+  'name.tower.cursor': 'Курсор',
+  'name.enemy.grunt': 'Пехотинец',
+  'name.enemy.runner': 'Бегун',
+  'name.enemy.shielded': 'Щитоносец',
+  'name.enemy.flyer': 'Летун',
+  'name.enemy.armoured': 'Броневик',
+  'name.enemy.saboteur': 'Диверсант',
+  'name.enemy.breacher': 'Проломщик',
+  'name.enemy.popup': 'Всплывающее окно',
+  'name.enemy.grunt-boss': 'Сержант',
+  'name.enemy.runner-boss': 'Вожак',
+  'name.enemy.shielded-boss': 'Бастион',
+  'name.enemy.flyer-boss': 'Носитель',
+  'name.enemy.armoured-boss': 'Дредноут',
+  'name.enemy.saboteur-boss': 'Кусачки',
+  'name.enemy.breacher-boss': 'Таран',
+
   // ── Window title ──────────────────────────────────────────────────────────────────────────
   'window.title': 'Pointer Defense',
 } as const satisfies Catalogue;

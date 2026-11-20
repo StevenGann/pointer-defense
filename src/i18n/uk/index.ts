@@ -806,6 +806,33 @@ export const uk: Catalogue = {
   'screen.number.shield': 'ЩИТ {amount}',
   'screen.number.crit': 'КРИТ {amount}',
 
+  // Tower and enemy names.
+  'name.tower.gun': 'Стрілець',
+  'name.tower.cannon': 'Гармата',
+  'name.tower.taser': 'Тазер',
+  'name.tower.frost': 'Мороз',
+  'name.tower.laser': 'Лазер',
+  'name.tower.aa': 'AA',
+  'name.tower.beacon': 'Маяк',
+  'name.tower.repair': 'Ремонт',
+  'name.tower.wall': 'Стіна',
+  'name.tower.cursor': 'Курсор',
+  'name.enemy.grunt': 'Піхотинець',
+  'name.enemy.runner': 'Бігун',
+  'name.enemy.shielded': 'Щитоносець',
+  'name.enemy.flyer': 'Літун',
+  'name.enemy.armoured': 'Броньовик',
+  'name.enemy.saboteur': 'Диверсант',
+  'name.enemy.breacher': 'Проривач',
+  'name.enemy.popup': 'Спливне вікно',
+  'name.enemy.grunt-boss': 'Сержант',
+  'name.enemy.runner-boss': 'Ватажок',
+  'name.enemy.shielded-boss': 'Бастіон',
+  'name.enemy.flyer-boss': 'Носій',
+  'name.enemy.armoured-boss': 'Дредноут',
+  'name.enemy.saboteur-boss': 'Кусачка',
+  'name.enemy.breacher-boss': 'Таран',
+
   // Window title.
   'window.title': 'Pointer Defense',
 };
