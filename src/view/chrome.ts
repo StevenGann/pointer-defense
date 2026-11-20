@@ -245,10 +245,10 @@ function drawArrowIcon(g: Graphics, x: number, y: number): void {
     .fill(PAL.titleInverse);
 }
 
-function drawControlGlyph(g: Graphics, spr: Sprite, r: Rect, kind: 'min' | 'max' | 'close'): void {
+function drawControlGlyph(g: Graphics, spr: Sprite, r: Rect, kind: 'help' | 'min' | 'max' | 'close'): void {
   const cx = r.x + Math.floor(r.w / 2);
   const cy = r.y + Math.floor(r.h / 2);
-  const name = kind === 'min' ? 'glyph-minimize' : kind === 'max' ? 'glyph-maximize' : 'glyph-close';
+  const name = kind === 'min' ? 'glyph-minimize' : kind === 'max' ? 'glyph-maximize' : kind === 'help' ? 'glyph-help' : 'glyph-close';
   const size = kind === 'min' ? 10 : kind === 'max' ? 12 : 14;
   const tex = getArtTexture(name, size);
   if (tex !== null) {
@@ -267,6 +267,8 @@ function drawControlGlyph(g: Graphics, spr: Sprite, r: Rect, kind: 'min' | 'max'
     } else if (kind === 'max') {
       g.rect(cx - 4, cy - 4, 9, 8).stroke({ width: 1, color: PAL.text });
       g.rect(cx - 4, cy - 4, 9, 2).fill(PAL.text);
+    } else if (kind === 'help') {
+      drawQuestionMark(g, cx, cy, PAL.text);
     } else {
       g.moveTo(cx - 4, cy - 4).lineTo(cx + 4, cy + 4).stroke({ width: 1, color: PAL.text });
       g.moveTo(cx + 4, cy - 4).lineTo(cx - 4, cy + 4).stroke({ width: 1, color: PAL.text });
@@ -275,17 +277,12 @@ function drawControlGlyph(g: Graphics, spr: Sprite, r: Rect, kind: 'min' | 'max'
 }
 
 function drawControlButtons(g: Graphics, sprites: readonly Sprite[], title: Rect): void {
-  const bw = CONTROL_BOX_W;
-  const bh = CONTROL_BOX_H;
-  const y = title.y + Math.floor((title.h - bh) / 2);
-  const right = title.x + title.w - 2;
-  const close: Rect = { x: right - bw, y, w: bw, h: bh };
-  const maxi: Rect = { x: close.x - 2 - bw, y, w: bw, h: bh };
-  const mini: Rect = { x: maxi.x - 2 - bw, y, w: bw, h: bh };
+  const controls = computeTitleControls(title);
   const boxes = [
-    [mini, 'min'],
-    [maxi, 'max'],
-    [close, 'close'],
+    [controls.minimize, 'min'],
+    [controls.maximize, 'max'],
+    [controls.close, 'close'],
+    [controls.help, 'help'],
   ] as const;
   for (let i = 0; i < boxes.length; i++) {
     const [r, kind] = boxes[i];
@@ -299,7 +296,7 @@ export class ChromeView {
   private readonly frame = new Graphics();
   private readonly glyphs = new Container();
   readonly arrowIcon = new Sprite();
-  readonly controlGlyphs: Sprite[] = [new Sprite(), new Sprite(), new Sprite()];
+  readonly controlGlyphs: Sprite[] = [new Sprite(), new Sprite(), new Sprite(), new Sprite()];
   private readonly titleText: Text;
   private readonly menuTexts: Text[];
 
@@ -403,6 +400,8 @@ export interface WindowChromeOpts {
   minimize?: boolean;
   /** The maximise box is live; otherwise disabled. */
   maximize?: boolean;
+  /** The context-help box is live; a dimmed box when false, and no box when absent. */
+  help?: boolean;
 }
 
 export interface WindowChromeGeom {
@@ -410,13 +409,22 @@ export interface WindowChromeGeom {
   minimize: Rect;
   maximize: Rect;
   close: Rect;
+  /** The context-help box, left of minimise (docs/CONTEXT-HELP.md). */
+  help: Rect;
   /** Anchor for the title text: 3 px indent, vertically centred in the bar. */
   titleX: number;
   titleY: number;
 }
 
-/** The classic title-bar control glyph, drawn into `g` (minimise, maximise or close). */
-function drawControlBoxGlyph(g: Graphics, r: Rect, kind: 'min' | 'max' | 'close', color: number): void {
+/** A drawn question mark (the context-help glyph before its art loads). */
+function drawQuestionMark(g: Graphics, cx: number, cy: number, color: number): void {
+  g.arc(cx, cy - 2, 3, Math.PI * 0.75, Math.PI * 1.85).stroke({ width: 1, color });
+  g.moveTo(cx + 2.2, cy - 0.4).lineTo(cx + 1, cy + 2).stroke({ width: 1, color });
+  g.circle(cx + 1, cy + 4.5, 1).fill(color);
+}
+
+/** The classic title-bar control glyph, drawn into `g` (help, minimise, maximise or close). */
+function drawControlBoxGlyph(g: Graphics, r: Rect, kind: 'help' | 'min' | 'max' | 'close', color: number): void {
   const cx = r.x + Math.floor(r.w / 2);
   const cy = r.y + Math.floor(r.h / 2);
   if (kind === 'min') {
@@ -424,46 +432,71 @@ function drawControlBoxGlyph(g: Graphics, r: Rect, kind: 'min' | 'max' | 'close'
   } else if (kind === 'max') {
     g.rect(cx - 4, cy - 4, 9, 8).stroke({ width: 1, color });
     g.rect(cx - 4, cy - 4, 9, 2).fill(color);
+  } else if (kind === 'help') {
+    drawQuestionMark(g, cx, cy, color);
   } else {
     g.moveTo(cx - 4, cy - 4).lineTo(cx + 4, cy + 4).stroke({ width: 1, color });
     g.moveTo(cx + 4, cy - 4).lineTo(cx - 4, cy + 4).stroke({ width: 1, color });
   }
 }
 
-/**
- * The outer raised face, the navy title bar with a 1 px highlight top bevel, and the three 16x14
- * control boxes (minimise / maximise / close) with the classic glyph marks. The title text itself is
- * the caller's job (a `Graphics` cannot draw text); `titleX` / `titleY` give the 3 px-indent anchor.
- */
-export function drawWindowChrome(g: Graphics, rect: Rect, opts: WindowChromeOpts = {}): WindowChromeGeom {
-  bevel(g, rect, true, PAL.face);
-  const titleBar: Rect = { x: rect.x + 2, y: rect.y + 2, w: rect.w - 4, h: TITLE_H };
-  g.rect(titleBar.x, titleBar.y, titleBar.w, titleBar.h).fill(PAL.title);
-  g.rect(titleBar.x, titleBar.y, titleBar.w, 1).fill(PAL.highlight);
+/** The four title-bar control boxes, derived from one title bar so drawing and hit-testing agree. */
+export interface TitleControls {
+  help: Rect;
+  minimize: Rect;
+  maximize: Rect;
+  close: Rect;
+}
 
-  const by = titleBar.y + Math.floor((TITLE_H - CONTROL_BOX_H) / 2);
-  const right = titleBar.x + titleBar.w - 2;
+/** Compute the help / minimise / maximise / close boxes for a title bar, left to right. */
+export function computeTitleControls(title: Rect): TitleControls {
+  const by = title.y + Math.floor((title.h - CONTROL_BOX_H) / 2);
+  const right = title.x + title.w - 2;
   const close: Rect = { x: right - CONTROL_BOX_W, y: by, w: CONTROL_BOX_W, h: CONTROL_BOX_H };
   const maximize: Rect = { x: close.x - 2 - CONTROL_BOX_W, y: by, w: CONTROL_BOX_W, h: CONTROL_BOX_H };
   const minimize: Rect = { x: maximize.x - 2 - CONTROL_BOX_W, y: by, w: CONTROL_BOX_W, h: CONTROL_BOX_H };
+  const help: Rect = { x: minimize.x - 2 - CONTROL_BOX_W, y: by, w: CONTROL_BOX_W, h: CONTROL_BOX_H };
+  return { help, minimize, maximize, close };
+}
 
-  for (const [r, kind, live] of [
-    [minimize, 'min', opts.minimize],
-    [maximize, 'max', opts.maximize],
-    [close, 'close', opts.close],
-  ] as const) {
+/** The pure geometry `drawWindowChrome` draws from, so the layout can be asserted without a renderer. */
+export function computeWindowChromeGeom(rect: Rect): WindowChromeGeom {
+  const titleBar: Rect = { x: rect.x + 2, y: rect.y + 2, w: rect.w - 4, h: TITLE_H };
+  const controls = computeTitleControls(titleBar);
+  return {
+    titleBar,
+    minimize: controls.minimize,
+    maximize: controls.maximize,
+    close: controls.close,
+    help: controls.help,
+    titleX: titleBar.x + 3,
+    titleY: titleBar.y + Math.floor(TITLE_H / 2),
+  };
+}
+
+/**
+ * The outer raised face, the navy title bar with a 1 px highlight top bevel, and the control boxes
+ * (help / minimise / maximise / close) with the classic glyph marks. The title text itself is the
+ * caller's job (a `Graphics` cannot draw text); `titleX` / `titleY` give the 3 px-indent anchor.
+ */
+export function drawWindowChrome(g: Graphics, rect: Rect, opts: WindowChromeOpts = {}): WindowChromeGeom {
+  bevel(g, rect, true, PAL.face);
+  const geom = computeWindowChromeGeom(rect);
+  g.rect(geom.titleBar.x, geom.titleBar.y, geom.titleBar.w, geom.titleBar.h).fill(PAL.title);
+  g.rect(geom.titleBar.x, geom.titleBar.y, geom.titleBar.w, 1).fill(PAL.highlight);
+
+  const boxes: [Rect, 'help' | 'min' | 'max' | 'close', boolean | undefined][] = [
+    [geom.minimize, 'min', opts.minimize],
+    [geom.maximize, 'max', opts.maximize],
+    [geom.close, 'close', opts.close],
+  ];
+  if (opts.help !== undefined) boxes.push([geom.help, 'help', opts.help]);
+  for (const [r, kind, live] of boxes) {
     bevel(g, r, true, PAL.face);
     drawControlBoxGlyph(g, r, kind, live ? PAL.text : PAL.shadow);
   }
 
-  return {
-    titleBar,
-    minimize,
-    maximize,
-    close,
-    titleX: titleBar.x + 3,
-    titleY: titleBar.y + Math.floor(TITLE_H / 2),
-  };
+  return geom;
 }
 
 /** The height of a property-sheet tab (the active tab is 2 px taller and lifted 2 px). */

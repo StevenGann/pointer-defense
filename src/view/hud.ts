@@ -658,6 +658,9 @@ export function victoryButtonAt(l: Layout, s: RunState, px: number, py: number):
   return null;
 }
 
+/** The status-bar hint while the context-help mode is on (docs/CONTEXT-HELP.md). */
+export const CONTEXT_HELP_HINT = 'Click something to read about it — Esc cancels';
+
 function hintFor(s: RunState): string {
   if (s.selected) return `Click a tile to place ${TOWER_STATS[s.selected].name} — right-click to cancel`;
   if (selectedTower(s)) return 'Click Upgrade, choose a branch, or sell — right-click to deselect';
@@ -834,7 +837,7 @@ export class HudView {
     }
   }
 
-  draw(s: RunState, l: Layout, hoverHud: HudAction | null, perf: HudPerf | null = null): void {
+  draw(s: RunState, l: Layout, hoverHud: HudAction | null, perf: HudPerf | null = null, helpMode = false): void {
     const g = this.g;
     g.clear();
     this.checkIndex = 0;
@@ -863,7 +866,9 @@ export class HudView {
       this.statusHint.text = '';
     } else {
       this.statusPaused.text = '';
-      this.statusHint.text = this.notice || autoWaveStatus(s) || (noBuildActive(s) ? NO_BUILD_MESSAGE : hintFor(s));
+      this.statusHint.text = helpMode
+        ? CONTEXT_HELP_HINT
+        : this.notice || autoWaveStatus(s) || (noBuildActive(s) ? NO_BUILD_MESSAGE : hintFor(s));
       this.statusHint.position.set(sp.left.x + 4, sp.left.y + Math.floor(sp.left.h / 2));
     }
 

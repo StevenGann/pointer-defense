@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import {
   bevel,
+  computeTitleControls,
   drawStatusBar,
   drawWindowChrome,
   dottedLine,
@@ -143,6 +144,11 @@ export function menuButtonAt(l: Layout, px: number, py: number, continueLabel: s
 /** Whether a point lands on the menu window's close box (which does nothing but a soft beep). */
 export function menuWindowCloseAt(l: Layout, px: number, py: number): boolean {
   return pointInRect(computeMenuWindow(l).close, px, py);
+}
+
+/** Whether a point lands on the menu window's context-help box (docs/CONTEXT-HELP.md). */
+export function menuWindowHelpAt(l: Layout, px: number, py: number): boolean {
+  return pointInRect(computeTitleControls(computeMenuWindow(l).titleBar).help, px, py);
 }
 
 /** The menubar word under a point, for the click-flash. */
@@ -516,7 +522,7 @@ export class MenuScreenView {
     }
 
     // --- The window.
-    const chromeGeom = drawWindowChrome(g, win.window, { close: true, minimize: false, maximize: false });
+    const chromeGeom = drawWindowChrome(g, win.window, { close: true, minimize: false, maximize: false, help: true });
     this.titleBarText.position.set(chromeGeom.titleX, chromeGeom.titleY);
     this.title.text = 'POINTER DEFENSE';
     this.title.position.set(win.client.x + 30, win.wordmark.y + win.wordmark.h / 2);
