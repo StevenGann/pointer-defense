@@ -34,7 +34,7 @@ const BUTTON_H = 44;
 const BUTTON_GAP = 12;
 
 export const MENU_CLIENT_W = 320;
-export const MENU_CLIENT_H = 380;
+export const MENU_CLIENT_H = 408;
 const MENU_MENU_H = 22;
 const MENU_STATUS_H = 22;
 /** The menu's backdrop tiles are 40 px, the same grid the board draws, seen from further away. */
@@ -91,7 +91,7 @@ export function computeMenuWindow(l: Layout): MenuWindowLayout {
   const statusBar: Rect = { x: window.x + 2, y: client.y + client.h, w: winW - 4, h: MENU_STATUS_H };
   const wordmark: Rect = { x: client.x, y: client.y + 2, w: MENU_CLIENT_W, h: 30 };
   const rule: Rect = { x: client.x + 10, y: client.y + 32, w: MENU_CLIENT_W - 20, h: 3 };
-  const marquee: Rect = { x: client.x + 10, y: client.y + 37, w: MENU_CLIENT_W - 20, h: 18 };
+  const marquee: Rect = { x: client.x + 10, y: client.y + 40, w: MENU_CLIENT_W - 20, h: 18 };
   const close: Rect = {
     x: titleBar.x + titleBar.w - 2 - 16,
     y: titleBar.y + Math.floor((TITLE_H - 14) / 2),
@@ -111,13 +111,19 @@ export function computeMenuScreen(l: Layout, continueLabel: string | null = null
   const labels: [MenuButtonId, string, string][] = [];
   if (continueLabel !== null) labels.push(['continue', continueLabel, 'C']);
   labels.push(['play', 'Play', 'Enter'], ['daily', daily?.label ?? 'Daily', 'D'], ['editor', 'Editor', 'E'], ['records', 'Records', 'R'], ['load', 'Load code', 'L']);
+  // The button block is centred in the space under the marquee, so five buttons (no save) and
+  // six (Continue) both sit with room above and below instead of crowding the tip strip.
+  const blockH = labels.length * BUTTON_H + (labels.length - 1) * BUTTON_GAP;
+  const regionTop = win.client.y + 71;
+  const regionBottom = win.client.y + MENU_CLIENT_H - 16;
+  const firstY = regionTop + Math.max(0, Math.floor((regionBottom - regionTop - blockH) / 2));
   const buttons: MenuButton[] = labels.map(([id, label, shortcut], i) => ({
     id,
     label,
     shortcut,
     rect: {
       x: win.client.x + Math.floor((MENU_CLIENT_W - BUTTON_W) / 2),
-      y: win.client.y + 56 + i * (BUTTON_H + BUTTON_GAP),
+      y: firstY + i * (BUTTON_H + BUTTON_GAP),
       w: BUTTON_W,
       h: BUTTON_H,
     },
