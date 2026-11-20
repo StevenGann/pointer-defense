@@ -1,0 +1,166 @@
+import type { Catalogue } from '../index.ts';
+
+/** Tooltip prose: spend previews, tower specs, branch names and the target-mode explanations. */
+export const tooltip = {
+  // Branch names.
+  'tooltip.branch.gunA': 'Marksman',
+  'tooltip.branch.gunB': 'Repeater',
+  'tooltip.branch.cannonA': 'Mortar',
+  'tooltip.branch.cannonB': 'Minesweeper',
+  'tooltip.branch.taserA': 'Arc',
+  'tooltip.branch.taserB': 'Overload',
+  'tooltip.branch.frostA': 'Deep Freeze',
+  'tooltip.branch.frostB': 'Shard',
+  'tooltip.branch.laserA': 'Focus',
+  'tooltip.branch.laserB': 'Prism',
+  'tooltip.branch.aaA': 'Flak',
+  'tooltip.branch.aaB': 'Missile',
+  'tooltip.branch.beaconA': 'Command',
+  'tooltip.branch.beaconB': 'Relay',
+  'tooltip.branch.wallA': 'Bulwark',
+  'tooltip.branch.wallB': 'Mesh',
+  'tooltip.branch.wallC': 'Toggle',
+  'tooltip.branch.cursorA': 'Overclock',
+  'tooltip.branch.cursorB': 'Wide Search',
+  'tooltip.branch.cursorC': 'Maintenance',
+
+  // Target modes and locks.
+  'tooltip.target.first': 'First',
+  'tooltip.target.strong': 'Strong',
+  'tooltip.target.close': 'Close',
+  'tooltip.target.closest': 'Closest',
+  'tooltip.target.shieldFirst': 'Shield first',
+  'tooltip.target.fixed': '{mode} (fixed)',
+  'tooltip.target.lockCursor': 'Shielded enemies first, then the nearest; this cannot be changed. The marked enemy overrides it.',
+  'tooltip.target.lockFrost': 'Frost always targets the closest enemy.',
+  'tooltip.target.lockClose': 'A Tesla coil discharges into whatever is nearest.',
+  'tooltip.target.lockFirst': 'A laser fires down the lane at the leading edge.',
+  'tooltip.target.lockStrong': 'A cannon swings at the biggest thing it can see.',
+
+  // Rate and turn lines.
+  'tooltip.rate': '{rate}/s',
+  'tooltip.turnsInstantly': 'Turns instantly',
+  'tooltip.turns': 'Turns {rate}°/s',
+
+  // Named traits.
+  'tooltip.trait.ignoresArmour': 'ignores armour',
+  'tooltip.trait.splash': 'splash',
+  'tooltip.trait.slow': 'slow',
+  'tooltip.trait.pierce': 'pierce',
+  'tooltip.trait.aura': 'aura',
+
+  // Locked palette line.
+  'tooltip.unlocksAtWave': 'Unlocks at wave {wave}',
+
+  // Palette tooltips.
+  'tooltip.palette.cursor': 'Cursor  $200',
+  'tooltip.palette.cursorDesc': 'a cursor that clicks for 50% of your click damage, 3.0 tiles',
+  'tooltip.palette.repair': 'Repair  $220',
+  'tooltip.palette.repairDesc': 'heals 2 HP/s to towers within 4.5 tiles',
+  'tooltip.palette.beacon': 'Beacon  ${cost}',
+  'tooltip.palette.beaconAura': '+{pct}% damage to every tower within {range} tiles',
+  'tooltip.palette.beaconNoDamage': 'It deals no damage itself — it makes the towers around it hit harder',
+  'tooltip.palette.beaconCursors': 'Cursors are pointer damage and take nothing from a Beacon',
+  'tooltip.palette.aa': 'AA  $40',
+  'tooltip.palette.aaDesc': 'anti-air: flyers only, 2x damage to flyers',
+  'tooltip.palette.aaStats': 'Range 3.4 · Damage 2.6 · 1.8/s',
+  'tooltip.palette.aaHold': 'Holds fire on ground-only waves',
+  'tooltip.palette.towerName': '{name}  ${cost}',
+  'tooltip.palette.wallBlocks': 'Blocks the route · 60 HP',
+  'tooltip.palette.wallUpgrades': 'Upgrades add hit points',
+  'tooltip.palette.stats': 'Range {range} · Damage {damage} · {rate}',
+  'tooltip.palette.statsNoRate': 'Range {range} · Damage {damage}',
+  'tooltip.palette.traits': 'Traits: {traits}',
+  'tooltip.palette.traitsNone': 'Traits: none',
+
+  // Placed-tower tooltips.
+  'tooltip.cursorName': 'Cursor T{tier}',
+  'tooltip.fullyUpgraded': 'Fully upgraded',
+  'tooltip.branchSuffix': ' — {branch}',
+  'tooltip.towerName': '{name} T{tier}',
+  'tooltip.repairHeals': 'Heals {heal} HP/s · Radius {radius}',
+  'tooltip.repairHealing': 'Healing {count} towers',
+  'tooltip.sell': 'Sell ${amount}',
+  'tooltip.hp': 'HP {hp}',
+  'tooltip.hpMax': 'HP {hp}/{max}',
+  'tooltip.wallBlocksBoth': 'Blocks ground and flyers',
+  'tooltip.gateLocked': 'Gate locked — {seconds} s',
+  'tooltip.gateOpen': 'Open — ground passes through',
+  'tooltip.gateClosed': 'Closed — blocks ground',
+  'tooltip.wallBlocksGround': 'Blocks ground only',
+  'tooltip.beaconAura': '+{pct}% damage to every tower within {range} tiles',
+  'tooltip.beaconNoDamage': 'Deals no damage itself · Cursors take nothing from it',
+  'tooltip.beaconRelay': 'Relay: +{pct}% pointer damage and +{range} tiles of click reach inside the same radius',
+  'tooltip.beaconCommand': 'Command: the aura is the whole of it, and it is stronger for it',
+  'tooltip.aaFlak': 'Flak: shells burst, full to flyers, half to ground',
+  'tooltip.aaMissile': 'Missile: 4 homing missiles per salvo',
+  'tooltip.aaFlyersOnly': 'Flyers only — never shoots ground',
+  'tooltip.aaDamage': 'Damage {damage} (2x vs flyers) · Range {range}',
+  'tooltip.aaRate': 'Rate {rate}/s · DPS {dps} (vs flyers)',
+  'tooltip.targetLine': 'Target: {mode}',
+  'tooltip.minesLays': 'Lays mines on the path; flyers pass over them',
+  'tooltip.minesStats': '{damage} dmg, {radius}-tile blast, {max} max, {seconds} s',
+  'tooltip.damageRange': 'Damage {damage} · Range {range}',
+  'tooltip.rateDps': 'Rate {rate} · DPS {dps}',
+
+  // Cursor tooltips.
+  'tooltip.cursorRepairs': 'Repairs damaged towers when its radius is clear',
+  'tooltip.cursorBelowHp': 'Below {pct}% HP',
+  'tooltip.cursorMaintenance': ' · {status}',
+  'tooltip.cursorNoCombat': 'No combat boost — an Overclock clicks 1.8× faster',
+  'tooltip.cursorRateRadius': 'Rate {rate}/s · Radius {radius}',
+  'tooltip.cursorClickDamage': 'Click damage {damage} (50% of {player})',
+
+  // Spend previews.
+  'tooltip.cannotAfford': 'Cannot afford (${salvage} of ${cost})',
+  'tooltip.tierOfMax': 'T{tier} of {max}',
+  'tooltip.cursorUpgradeRate': 'Cursor {tier} → {next} — rate {before} → ',
+  'tooltip.rngDelta': ' · rng {before} → ',
+  'tooltip.cost': ', ${cost}',
+  'tooltip.cursorBranchRepairs': '{name} — repairs damaged towers below {pct}% HP when its radius is clear; ',
+  'tooltip.cursorBranchNoBoost': 'no Overclock damage boost',
+  'tooltip.cursorBranchRate': '{name} — rate {before} → ',
+  'tooltip.clickDmgDelta': ' · click dmg ×{before} → ',
+  'tooltip.repairUpgrade': 'Repair {tier} → {next} — ',
+  'tooltip.rngDeltaBare': 'rng {before} → ',
+  'tooltip.healDelta': 'heal {before} → ',
+  'tooltip.beaconUpgrade': '{name} {tier} → {next} — aura +{pct}% → ',
+  'tooltip.wallUpgradeHp': 'Wall {tier} — HP {before} → ',
+  'tooltip.minesweeperUpgrade': 'Minesweeper {tier} → {next} — mines unchanged, ',
+  'tooltip.costBare': '${cost}',
+  'tooltip.upgradeDmg': '{name} {tier} → {next} — dmg {before} → ',
+
+  // Branch behaviour words.
+  'tooltip.behaviour.aaA': 'shells burst, half damage to ground',
+  'tooltip.behaviour.aaB': '4 homing missiles per salvo',
+  'tooltip.behaviour.taserA': 'chains to 3',
+  'tooltip.behaviour.frostB': 'no slow',
+  'tooltip.behaviour.laserB': 'splits into 3',
+  'tooltip.behaviour.beaconB': 'buff the pointer',
+  'tooltip.behaviour.wallB': 'blocks flyers',
+  'tooltip.behaviour.wallC': 'click to open/close',
+
+  // Branch tooltips.
+  'tooltip.beaconBranchAura': '{name} — aura +{pct}% → ',
+  'tooltip.beaconBranchRelay': ', plus +{pct}% pointer damage and +{range} tiles of click reach inside the radius',
+  'tooltip.branchMinesLays': '{name} — lays mines on the path; flyers pass over them · ',
+  'tooltip.wallBranchHp': '{name} — HP {before} → ',
+  'tooltip.statDelta': '{label} {before} → ',
+
+  // Enemy tooltips.
+  'tooltip.enemyHp': '{hp} / {max} HP',
+  'tooltip.shieldLayers': 'Shield layers: {layers}',
+
+  // Pointer tooltips.
+  'tooltip.maxLevel': 'Max level',
+  'tooltip.pointerStage': 'Pointer T{stage} → T{next} — click damage {before} → ',
+  'tooltip.needsWave': 'Needs wave {wave} — one overclock level every 8 waves.',
+  'tooltip.pointerClickDamage': 'Click damage {before} → ',
+
+  // Sell / repair tooltips.
+  'tooltip.sellWall': 'Sell for $0 (walls refund nothing)',
+  'tooltip.sellFor': 'Sell for ${value} ({pct}% of ${spent} spent)',
+  'tooltip.repairing': 'Repairing — {seconds} s',
+  'tooltip.noDamageRepair': 'No damage to repair',
+  'tooltip.repair': 'Repair {hp} HP — ${cost}, {seconds} s',
+} as const satisfies Catalogue;

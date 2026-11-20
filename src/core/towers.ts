@@ -4,6 +4,9 @@ export type TowerKind = 'gun' | 'cannon' | 'taser' | 'frost' | 'laser' | 'aa' | 
 
 export type Branch = 'A' | 'B' | 'C';
 
+/** Every branch identifier in order, for the HUD's branch buttons and any branch sweep. */
+export const BRANCHES: readonly Branch[] = ['A', 'B', 'C'];
+
 /**
  * The combat ladder's ceiling. Every combat kind (gun, cannon, taser, frost, laser, aa, beacon) runs
  * from tier 1 to MAX_TIER; the wall, repair and cursor towers keep their own shorter caps and are not

@@ -8,6 +8,7 @@ import { clickDamage, comboMultiplier, critChance, overclockCeiling, pointerInfo
 import { autoWaveStatus, canCycleLevel, currentPath, cursorMaintenanceStatus, isFinalWave, noBuildActive, NO_BUILD_MESSAGE, overclockCap, pointerDamageMult, selectedTower, STARTING_INTEGRITY, towerCost, towerUnlocked, type RunState } from '../core/state.ts';
 
 import {
+  BRANCHES,
   cursorClickDamage,
   cursorClickRate,
   cursorRadius,
@@ -70,7 +71,7 @@ export const READOUT_FONT_SIZE = FONT_SIZE.body;
 
 /** The salvage readout's value: `$1,234`, or `---` while a Blackout wave masks it. */
 export function salvageReadoutText(s: RunState): string {
-  return s.modifiers.includes('blackout') && s.phase === 'wave' ? '---' : `$${formatNumber(s.economy.salvage)}`;
+  return s.modifiers.includes('blackout') && s.phase === 'wave' ? '---' : t('hud.salvage', { amount: formatNumber(s.economy.salvage) });
 }
 
 /**
@@ -80,11 +81,11 @@ export function salvageReadoutText(s: RunState): string {
 export function waveLabel(s: RunState): string {
   const displayWave = s.phase === 'build' ? s.wave + 1 : s.wave;
   let label: string;
-  if (s.daily !== null) label = `Wave ${displayWave} / ${s.waveLimit} · Daily`;
-  else if (s.endless) label = `Wave ${displayWave}`;
-  else label = `Wave ${displayWave} / ${s.waveLimit}`;
+  if (s.daily !== null) label = t('hud.waveDaily', { wave: displayWave, total: s.waveLimit });
+  else if (s.endless) label = t('hud.wave', { wave: displayWave });
+  else label = t('hud.waveOf', { wave: displayWave, total: s.waveLimit });
   if (s.phase === 'wave' && s.modifiers.length > 0) {
-    label += ` · ${s.modifiers.map((m) => MODIFIER_NAMES[m]).join(' + ')}`;
+    label += t('hud.waveModifiers', { modifiers: s.modifiers.map((m) => MODIFIER_NAMES[m]).join(' + ') });
   }
   return label;
 }
@@ -102,7 +103,7 @@ export interface HudPerf {
 
 /** The status-bar speed slot: the multiplier alone. The perf readout has its own slot. */
 export function speedStatusText(speed: number): string {
-  return `×${speed}`;
+  return t('hud.speed', { speed });
 }
 
 /**
@@ -112,8 +113,8 @@ export function speedStatusText(speed: number): string {
 export function statusPerfText(perf: HudPerf | null): string {
   if (perf === null) return '';
   const parts: string[] = [];
-  if (perf.showFps) parts.push(`${perf.frameMs.toFixed(1)} ms`, `${perf.fps}/s`);
-  if (perf.quality !== 'full' || perf.showFps) parts.push(`Q: ${perf.quality}`);
+  if (perf.showFps) parts.push(t('hud.perfFrameMs', { ms: perf.frameMs.toFixed(1) }), t('hud.perfFps', { fps: perf.fps }));
+  if (perf.quality !== 'full' || perf.showFps) parts.push(t('hud.perfQuality', { quality: perf.quality }));
   return parts.join(' · ');
 }
 
@@ -164,7 +165,7 @@ function fitButtonText(preferred: string, fallbacks: readonly string[], maxWidth
 /** Short button labels for branch names too long for a full-width row; the tooltip keeps the full
  *  name and description. */
 const BRANCH_LABEL_FALLBACKS: Readonly<Partial<Record<TowerKind, Readonly<Partial<Record<Branch, string>>>>>> = {
-  cursor: { B: 'Wide' },
+  cursor: { B: t('hud.branchWide') },
 };
 
 /** The label a branch button shows: the full name, or a short form when the full name overflows. */
@@ -248,7 +249,7 @@ export interface RightPanelLayout {
 /** The System Tray buff row while a buff is live (`Turbo — 14 s`), or null when none is. */
 export function buffRowText(s: RunState): string | null {
   const b = upgradeBuff(s);
-  return b ? `${BUFF_NAMES[b.kind]} — ${buffSecondsLeft(s)} s` : null;
+  return b ? t('hud.buffRow', { name: BUFF_NAMES[b.kind], seconds: buffSecondsLeft(s) }) : null;
 }
 
 /** Revealed upgrades the run does not own yet — affordable or not. Drives the Upgrades row's text
@@ -259,10 +260,10 @@ export function upgradesNewCount(s: Pick<RunState, 'wave' | 'upgrades'>): number
 
 /** The Upgrades row's text: how many revealed upgrades are not owned yet, or why there are none. */
 export function upgradesRowText(s: RunState): string {
-  if (revealedUpgrades(s).length === 0) return 'Upgrades — none yet';
+  if (revealedUpgrades(s).length === 0) return t('hud.upgradesNone');
   const fresh = upgradesNewCount(s);
-  if (fresh === 0) return 'Upgrades — all owned';
-  return `Upgrades — ${fresh} new`;
+  if (fresh === 0) return t('hud.upgradesAllOwned');
+  return t('hud.upgradesNew', { count: fresh });
 }
 
 export function computeHud(l: Layout, s: RunState): HudLayout {
@@ -329,7 +330,7 @@ export function computeHud(l: Layout, s: RunState): HudLayout {
     const branches: BranchButton[] = [];
     if (tower.tier === 2 && hasBranches(tower.kind)) {
       const gap = 4;
-      const list: Branch[] = tower.kind === 'wall' || tower.kind === 'cursor' ? ['A', 'B', 'C'] : ['A', 'B'];
+      const list: readonly Branch[] = tower.kind === 'wall' || tower.kind === 'cursor' ? BRANCHES : BRANCHES.slice(0, 2);
       if (list.length > 2) {
         // A three-branch tower (wall, cursor) stacks its choices vertically — one full-width button
         // per row — so a long branch name shrinks to fit instead of overprinting its neighbour.
@@ -411,27 +412,27 @@ export function computeRightPanel(l: Layout, s: RunState): RightPanelLayout {
 
   const wave = s.wave + 1;
   const def = waveDef(wave);
-  const composition = def ? def.groups.map((grp) => `${grp.count} x ${grp.kind}`) : [];
+  const composition = def ? def.groups.map((grp) => t('hud.compositionEntry', { count: grp.count, kind: grp.kind })) : [];
   const mods = waveModifiers(wave);
-  if (mods.length > 0) composition.unshift(`mod: ${mods.map((m) => MODIFIER_NAMES[m]).join(' + ')}`);
+  if (mods.length > 0) composition.unshift(t('hud.compositionMods', { modifiers: mods.map((m) => MODIFIER_NAMES[m]).join(' + ') }));
   // Name the type boss ahead of time so its first appearance is telegraphed before it spawns.
   const typeBoss = typeBossKindForWave(wave);
-  if (typeBoss) composition.unshift(`BOSS: ${ENEMY_STATS[typeBoss].name}`);
+  if (typeBoss) composition.unshift(t('hud.compositionBoss', { name: ENEMY_STATS[typeBoss].name }));
 
   const nextWave: InfoSection = {
     rect: { x, y, w, h: infoSectionHeight(composition.length) },
-    title: 'NEXT WAVE',
+    title: t('hud.nextWaveTitle'),
     rows: composition,
   };
   y += nextWave.rect.h + SECTION_GAP;
 
   const kills: InfoSection = {
     rect: { x, y, w, h: infoSectionHeight(3) },
-    title: 'KILLS',
+    title: t('hud.killsTitle'),
     rows: [
-      `by towers: ${s.economy.kills.tower}`,
-      `by pointer: ${s.economy.kills.pointer}`,
-      `x${POINTER_KILL_BONUS} on pointer kills`,
+      t('hud.killsByTower', { count: s.economy.kills.tower }),
+      t('hud.killsByPointer', { count: s.economy.kills.pointer }),
+      t('hud.killsPointerBonus', { bonus: POINTER_KILL_BONUS }),
     ],
   };
   y += kills.rect.h + SECTION_GAP;
@@ -442,11 +443,11 @@ export function computeRightPanel(l: Layout, s: RunState): RightPanelLayout {
   const rowY = (i: number): number => y + SECTION_PAD_TOP + SECTION_TITLE_H + i * SECTION_ROW_H;
   // A live System Tray buff adds a third, non-clickable row under the two links.
   const buff = buffRowText(s);
-  const globalRows = [`Restore — ${formatNumber(s.rp)} RP`, upgradesRowText(s)];
+  const globalRows = [t('hud.restoreRow', { rp: formatNumber(s.rp) }), upgradesRowText(s)];
   if (buff) globalRows.push(buff);
   const globalUpgrades: GlobalUpgradesSection = {
     rect: { x, y, w, h: infoSectionHeight(globalRows.length) },
-    title: 'GLOBAL UPGRADES',
+    title: t('hud.globalUpgradesTitle'),
     rows: globalRows,
     restore: { x: x + 2, y: rowY(0), w: w - 4, h: SECTION_ROW_H },
     upgrades: { x: x + 2, y: rowY(1), w: w - 4, h: SECTION_ROW_H },
@@ -463,7 +464,7 @@ export function wrapRowText(text: string, maxWidth: number, size: number): strin
   const out: string[] = [];
   let current = '';
   for (const part of parts) {
-    const next = current === '' ? part : `${current} · ${part}`;
+    const next = current === '' ? part : current + ' · ' + part;
     if (current !== '' && Math.ceil(textWidth(next, size)) > maxWidth) {
       out.push(current);
       current = part;
@@ -480,13 +481,17 @@ function computePointerSection(s: RunState, x: number, y: number, w: number): Po
   const dmg = fmtClickDamage(clickDamage(s.pointer));
   const stage = s.pointer.stage;
   const overclock =
-    stage >= 2 ? `Overclock ${s.pointer.clickLevel} / ${overclockCeiling(s.wave, overclockCap(s))}` : 'Overclock —';
-  const crit = `Crit ${pct(critChance(false, false))}% · mark ${pct(critChance(true, false))}% · weak ${pct(critChance(false, true))}%`;
+    stage >= 2 ? t('hud.pointerOverclock', { level: s.pointer.clickLevel, ceiling: overclockCeiling(s.wave, overclockCap(s)) }) : t('hud.pointerOverclockNone');
+  const crit = t('hud.pointerCrit', {
+    crit: pct(critChance(false, false)),
+    mark: pct(critChance(true, false)),
+    weak: pct(critChance(false, true)),
+  });
 
   // The right column is 156 px wide: the crit line is too long to fit on one row, so every row is
   // wrapped at its separators rather than clipped or shrunk.
   const rowWidth = w - 12 - 4;
-  const rows = [`${name} · click ${dmg}`, overclock, crit].flatMap((text) =>
+  const rows = [t('hud.pointerNameClick', { name, damage: dmg }), overclock, crit].flatMap((text) =>
     wrapRowText(text, rowWidth, FONT_SIZE.body),
   );
 
@@ -509,7 +514,7 @@ function computePointerSection(s: RunState, x: number, y: number, w: number): Po
   const state = pointerUpgradeState(s.wave, overclockCap(s), s.pointer);
   const cost = state.cost;
   const upgradeEnabled = state.block === null && cost !== null && canAfford(s.economy, cost);
-  const upgradeText = cost === null ? 'Max level' : `Upgrade $${formatNumber(cost)}`;
+  const upgradeText = cost === null ? t('hud.maxLevel') : t('hud.pointerUpgrade', { cost: formatNumber(cost) });
 
   return { rect, rows: rowRects, upgrade, upgradeText, upgradeEnabled, override };
 }
@@ -561,7 +566,7 @@ export function hudControlAt(l: Layout, s: RunState, px: number, py: number): Hu
     if (h.detail.upgrade && pointInRect(h.detail.upgrade, px, py)) return { action: 'upgrade', enabled: !frozen && affordable };
     for (const b of h.detail.branches) {
       if (pointInRect(b.rect, px, py)) {
-        const action = b.branch === 'A' ? 'branchA' : b.branch === 'B' ? 'branchB' : 'branchC';
+        const action = b.branch === BRANCHES[0] ? 'branchA' : b.branch === BRANCHES[1] ? 'branchB' : 'branchC';
         return { action, enabled: !frozen && affordable };
       }
     }
@@ -724,16 +729,16 @@ export class HudView {
   private readonly mapNext = makeText('');
   private readonly modalTitle = makeText('', true);
   private readonly modalMessage = makeText('');
-  private readonly modalRestart = makeText('Restart');
+  private readonly modalRestart = makeText(t('hud.restart'));
   private readonly modalButton2 = makeText('');
-  private readonly nextWaveTitle = makeText('NEXT WAVE', true);
+  private readonly nextWaveTitle = makeText(t('hud.nextWaveTitle'), true);
   private readonly nextWaveRows: Text[] = [makeText(''), makeText(''), makeText(''), makeText(''), makeText('')];
-  private readonly killsTitle = makeText('KILLS', true);
+  private readonly killsTitle = makeText(t('hud.killsTitle'), true);
   private readonly killsRows: Text[] = [makeText(''), makeText(''), makeText('')];
   private readonly comboText = makeText('', true);
-  private readonly pointerTitle = makeText('POINTER', true);
+  private readonly pointerTitle = makeText(t('hud.pointerTitle'), true);
   private readonly pointerRows: Text[] = [makeText(''), makeText(''), makeText(''), makeText(''), makeText(''), makeText('')];
-  private readonly globalTitle = makeText('GLOBAL UPGRADES', true);
+  private readonly globalTitle = makeText(t('hud.globalUpgradesTitle'), true);
   private readonly globalRows: Text[] = [makeText(''), makeText(''), makeText('')];
 
   constructor() {
@@ -852,7 +857,7 @@ export class HudView {
     if (s.cheatsUsed) {
       const cr: Rect = { x: sp.left.x + sp.left.w - 64 - 4, y: sp.left.y + 2, w: 64, h: sp.left.h - 4 };
       bevel(g, cr, false, PAL.face);
-      this.cheatMarker.text = 'CHEATS';
+      this.cheatMarker.text = t('hud.cheats');
       this.cheatMarker.position.set(cr.x + 6, cr.y + Math.floor(cr.h / 2));
     } else {
       this.cheatMarker.text = '';
@@ -862,7 +867,7 @@ export class HudView {
     if (s.paused) {
       const pr: Rect = { x: sp.left.x + 4, y: sp.left.y + 2, w: 64, h: sp.left.h - 4 };
       bevel(g, pr, false, PAL.face);
-      this.statusPaused.text = 'PAUSED';
+      this.statusPaused.text = t('hud.paused');
       this.statusPaused.position.set(pr.x + 6, pr.y + Math.floor(pr.h / 2));
       this.statusHint.text = '';
     } else {
@@ -884,7 +889,7 @@ export class HudView {
     const h = computeHud(l, s);
 
     bevel(g, h.integrity, false, PAL.face);
-    this.integrity.text = `Integrity: ${s.integrity}/${STARTING_INTEGRITY}`;
+    this.integrity.text = t('hud.integrity', { current: s.integrity, max: STARTING_INTEGRITY });
     this.integrity.position.set(h.integrity.x + 6, h.integrity.y + Math.floor(h.integrity.h / 2));
 
     bevel(g, h.salvage, false, PAL.face);
@@ -894,7 +899,7 @@ export class HudView {
     this.drawTowerControls(s, h, hoverHud);
 
     if (h.route) {
-      this.route.text = `Route: ${currentPath(s).length} tiles`;
+      this.route.text = t('hud.route', { count: currentPath(s).length });
       this.route.position.set(h.route.x + 6, h.route.y + Math.floor(h.route.h / 2));
     } else {
       this.route.text = '';
@@ -903,10 +908,10 @@ export class HudView {
     if (h.map) {
       const name = s.level.name;
       drawButton(g, h.map.next, true, hoverHud === 'map');
-      this.mapNext.text = 'Next';
+      this.mapNext.text = t('hud.mapNext');
       this.mapNext.style.fill = PAL.text;
       this.mapNext.position.set(h.map.next.x + h.map.next.w / 2, h.map.next.y + Math.floor(h.map.next.h / 2));
-      this.mapLabel.text = `MAP  ${name}`;
+      this.mapLabel.text = t('hud.mapLabel', { name });
       this.mapLabel.position.set(h.map.row.x + 6, h.map.row.y + Math.floor(h.map.row.h / 2));
     } else {
       this.mapLabel.text = '';
@@ -918,13 +923,13 @@ export class HudView {
       drawButton(g, h.wave, enabled, hoverHud === 'wave');
       this.waveButton.text =
         s.phase === 'build'
-          ? `Start Wave ${s.wave + 1}`
-          : `Call Wave ${s.wave + 1}  +$${earlyCallBonus(s.waveTick, s.wave + 1)}`;
+          ? t('hud.startWave', { wave: s.wave + 1 })
+          : t('hud.callWave', { wave: s.wave + 1, bonus: earlyCallBonus(s.waveTick, s.wave + 1) });
       this.waveButton.style.fill = enabled ? PAL.text : PAL.shadow;
       this.waveButton.position.set(h.wave.x + 6, h.wave.y + Math.floor(h.wave.h / 2));
 
       this.drawCheckbox(g, h.autoWave, s.autoWave);
-      this.autoWaveButton.text = 'Auto';
+      this.autoWaveButton.text = t('hud.auto');
       this.autoWaveButton.style.fill = PAL.text;
       this.autoWaveButton.position.set(h.autoWave.x + 20, h.autoWave.y + Math.floor(h.autoWave.h / 2));
     } else {
@@ -970,8 +975,8 @@ export class HudView {
       this.targetValue.visible = d.target !== null;
       for (const text of this.branchButtons) text.visible = true;
 
-      const branch = tower.branch === null ? '' : ` - ${branchName(tower.kind, tower.branch)}`;
-      this.towerName.text = `${TOWER_STATS[tower.kind].name}  T${tower.tier} of ${kindMaxTier(tower.kind)}${branch}${isOffline(tower) ? ' — OFFLINE' : ''}`;
+      const branch = tower.branch === null ? '' : t('hud.towerBranch', { branch: branchName(tower.kind, tower.branch) });
+      this.towerName.text = t('hud.towerName', { name: TOWER_STATS[tower.kind].name, tier: tower.tier, max: kindMaxTier(tower.kind) }) + branch + (isOffline(tower) ? t('hud.towerOffline') : '');
       this.towerName.position.set(d.name.x, d.name.y + Math.floor(d.name.h / 2));
 
       // The detail pane's close box: a raised Win95 box with the same X glyph the help window uses.
@@ -982,36 +987,36 @@ export class HudView {
       g.moveTo(ccx + 4, ccy - 4).lineTo(ccx - 4, ccy + 4).stroke({ width: 1, color: PAL.text });
 
       if (tower.kind === 'wall') {
-        this.towerStats.text = tower.branch === null ? `HP ${Math.ceil(tower.hp)}` : `HP ${Math.ceil(tower.hp)}/${tower.maxHp}`;
+        this.towerStats.text = tower.branch === null ? t('hud.wallHp', { hp: Math.ceil(tower.hp) }) : t('hud.wallHpMax', { hp: Math.ceil(tower.hp), max: tower.maxHp });
       } else if (tower.kind === 'cursor') {
-        if (tower.tier >= 3 && tower.branch === 'C') {
-          this.towerStats.text = cursorMaintenanceStatus(s, tower) ?? 'Idle';
+        if (tower.tier >= 3 && tower.branch === BRANCHES[2]) {
+          this.towerStats.text = cursorMaintenanceStatus(s, tower) ?? t('hud.idle');
         } else {
           const rate = cursorClickRate(tower);
           const radius = cursorRadius(tower);
           const dmg = cursorClickDamage(tower, clickDamage(s.pointer), pointerDamageMult(s));
-          this.towerStats.text = `${rate.toFixed(1)}/s  dmg ${fmtClickDamage(dmg)}  rng ${radius.toFixed(1)}`;
+          this.towerStats.text = t('hud.cursorStats', { rate: rate.toFixed(1), damage: fmtClickDamage(dmg), radius: radius.toFixed(1) });
         }
       } else if (tower.kind === 'repair') {
         const heal = repairHealRate(tower);
         const radius = repairRadius(tower);
         const healed = repairHealingCount(s.towers, tower, s.clock);
-        this.towerStats.text = `${heal.toFixed(1)} HP/s  rng ${radius.toFixed(1)}  healing ${healed}`;
+        this.towerStats.text = t('hud.repairStats', { heal: heal.toFixed(1), radius: radius.toFixed(1), count: healed });
       } else {
         const st = effectiveStats(tower);
         const damage = st.damage * tower.auraDamage;
         const range = st.range + tower.auraRange;
-        this.towerStats.text = `dmg ${damage.toFixed(1)}  rng ${range.toFixed(1)}`;
+        this.towerStats.text = t('hud.combatStats', { damage: damage.toFixed(1), range: range.toFixed(1) });
       }
       this.towerStats.position.set(d.stats.x, d.stats.y + Math.floor(d.stats.h / 2));
 
-      this.towerRoute.text = `Route: ${currentPath(s).length} tiles`;
+      this.towerRoute.text = t('hud.route', { count: currentPath(s).length });
       this.towerRoute.position.set(d.route.x, d.route.y + Math.floor(d.route.h / 2));
 
       if (d.target) {
         const fixed = frozen || TOWER_STATS[tower.kind].targetLock !== null || tower.kind === 'cursor';
         drawButton(g, d.target, !fixed, hoverHud === 'target' && !fixed);
-        this.targetButton.text = 'Target';
+        this.targetButton.text = t('hud.target');
         this.targetButton.style.fill = fixed ? PAL.shadow : PAL.text;
         this.targetButton.position.set(d.target.x + 6, d.target.y + Math.floor(d.target.h / 2));
         this.targetValue.text = targetModeDisplay(tower);
@@ -1026,7 +1031,7 @@ export class HudView {
       if (d.upgrade && price !== null) {
         const enabled = !frozen && canAfford(s.economy, price);
         drawButton(g, d.upgrade, enabled, hoverHud === 'upgrade');
-        this.upgradeButton.text = `Upgrade $${formatNumber(price)}`;
+        this.upgradeButton.text = t('hud.upgrade', { cost: formatNumber(price) });
         this.upgradeButton.style.fill = enabled ? PAL.text : PAL.shadow;
         this.upgradeButton.position.set(d.upgrade.x + 6, d.upgrade.y + Math.floor(d.upgrade.h / 2));
       } else {
@@ -1045,7 +1050,7 @@ export class HudView {
           g,
           b.rect,
           enabled,
-          hoverHud === (b.branch === 'A' ? 'branchA' : b.branch === 'B' ? 'branchB' : 'branchC'),
+          hoverHud === (b.branch === BRANCHES[0] ? 'branchA' : b.branch === BRANCHES[1] ? 'branchB' : 'branchC'),
         );
         text.text = b.label;
         text.style.fill = enabled ? PAL.text : PAL.shadow;
@@ -1059,10 +1064,10 @@ export class HudView {
         const enabled = !frozen && !repairing && hp > 0 && canAfford(s.economy, cost);
         drawButton(g, d.repair, enabled, hoverHud === 'repairTower');
         this.repairButton.text = repairing
-          ? `Repairing — ${repairRemainingSeconds(tower, s.clock).toFixed(1)} s`
+          ? t('hud.repairing', { seconds: repairRemainingSeconds(tower, s.clock).toFixed(1) })
           : hp <= 0
-            ? 'No damage'
-            : `Repair ${Math.ceil(hp)} HP  $${formatNumber(cost)}`;
+            ? t('hud.noDamage')
+            : t('hud.repair', { hp: Math.ceil(hp), cost: formatNumber(cost) });
         this.repairButton.style.fill = enabled ? PAL.text : PAL.shadow;
         this.repairButton.position.set(d.repair.x + 6, d.repair.y + Math.floor(d.repair.h / 2));
       } else {
@@ -1070,7 +1075,7 @@ export class HudView {
       }
 
       drawButton(g, d.sell, !frozen, hoverHud === 'sell');
-      this.sellButton.text = `Sell $${formatNumber(sellValue(tower, s.treeEffects.sellRefund))}`;
+      this.sellButton.text = t('hud.sell', { amount: formatNumber(sellValue(tower, s.treeEffects.sellRefund)) });
       this.sellButton.style.fill = frozen ? PAL.shadow : PAL.text;
       this.sellButton.position.set(d.sell.x + 6, d.sell.y + Math.floor(d.sell.h / 2));
       return;
@@ -1109,10 +1114,10 @@ export class HudView {
       if (pulse) {
         g.rect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2).stroke({ width: 2, color: PAL.title });
       }
-      const t = this.towerButtons[i];
-      t.text = `${TOWER_STATS[kind].name}  $${formatNumber(towerCost(s, kind))}`;
-      t.style.fill = enabled ? (armed ? PAL.title : PAL.text) : PAL.shadow;
-      t.position.set(rect.x + 6, rect.y + Math.floor(rect.h / 2));
+      const btn = this.towerButtons[i];
+      btn.text = t('hud.towerButton', { name: TOWER_STATS[kind].name, cost: formatNumber(towerCost(s, kind)) });
+      btn.style.fill = enabled ? (armed ? PAL.title : PAL.text) : PAL.shadow;
+      btn.position.set(rect.x + 6, rect.y + Math.floor(rect.h / 2));
     }
   }
 
@@ -1123,7 +1128,7 @@ export class HudView {
     // Combo readout: visible while the multiplier is above x1, so the timer ticking down is legible.
     const mult = comboMultiplier(s.pointer);
     if (mult > 1) {
-      this.comboText.text = `COMBO x${mult.toFixed(1)}`;
+      this.comboText.text = t('hud.combo', { multiplier: mult.toFixed(1) });
       this.comboText.position.set(rp.nextWave.rect.x + 2, rp.nextWave.rect.y - 10);
       this.comboText.visible = true;
     } else {
@@ -1136,7 +1141,7 @@ export class HudView {
 
     // POINTER: the pointer's home — stage, click damage, overclock, crits, the upgrade and Override.
     bevel(g, rp.pointer.rect, false, PAL.face);
-    this.pointerTitle.text = 'POINTER';
+    this.pointerTitle.text = t('hud.pointerTitle');
     this.pointerTitle.position.set(
       rp.pointer.rect.x + 6,
       rp.pointer.rect.y + SECTION_PAD_TOP + SECTION_TITLE_H / 2,
@@ -1160,7 +1165,7 @@ export class HudView {
     );
     if (rp.pointer.override) {
       this.drawCheckbox(g, rp.pointer.override, s.pointer.manualOverride);
-      this.pointerOverrideButton.text = 'Override';
+      this.pointerOverrideButton.text = t('hud.override');
       this.pointerOverrideButton.style.fill = PAL.text;
       this.pointerOverrideButton.position.set(
         rp.pointer.override.x + 20,
@@ -1202,16 +1207,16 @@ export class HudView {
 
     bevel(g, m, true, PAL.face);
     g.rect(m.x + 2, m.y + 2, m.w - 4, 20).fill(PAL.title);
-    this.modalTitle.text = 'Game Over';
+    this.modalTitle.text = t('hud.gameOver');
     this.modalTitle.position.set(m.x + 6, m.y + 2 + 10);
 
-    this.modalMessage.text = `The lane broke at wave ${s.wave}.`;
+    this.modalMessage.text = t('hud.gameOverMessage', { wave: s.wave });
     this.modalMessage.position.set(m.x + 12, m.y + 2 + 20 + 16);
     this.modalButton2.text = '';
 
     const r = restartRect(m);
     bevel(g, r, true, PAL.face);
-    this.modalRestart.text = 'Restart';
+    this.modalRestart.text = t('hud.restart');
     this.modalRestart.position.set(r.x + r.w / 2, r.y + r.h / 2);
   }
 
@@ -1222,28 +1227,28 @@ export class HudView {
 
     bevel(g, m, true, PAL.face);
     g.rect(m.x + 2, m.y + 2, m.w - 4, 20).fill(PAL.title);
-    this.modalTitle.text = 'Victory';
+    this.modalTitle.text = t('hud.victory');
     this.modalTitle.position.set(m.x + 6, m.y + 2 + 10);
 
     this.modalMessage.text = [
-      s.daily !== null ? 'Daily complete — all thirty waves cleared.' : 'All one hundred waves cleared.',
-      `Kills — towers ${s.economy.kills.tower} · pointer ${s.economy.kills.pointer}`,
-      `Salvage earned: $${formatNumber(s.economy.earned)}`,
-      `Integrity remaining: ${s.integrity}`,
+      s.daily !== null ? t('hud.victoryDaily') : t('hud.victoryAll'),
+      t('hud.victoryKills', { tower: s.economy.kills.tower, pointer: s.economy.kills.pointer }),
+      t('hud.victorySalvage', { earned: formatNumber(s.economy.earned) }),
+      t('hud.victoryIntegrity', { integrity: s.integrity }),
     ].join('\n');
     this.modalMessage.position.set(m.x + 12, m.y + 2 + 20 + 16);
 
     const b = victoryButtons(m);
     if (s.daily === null) {
       bevel(g, b.endless, true, PAL.face);
-      this.modalButton2.text = 'Endless';
+      this.modalButton2.text = t('hud.endless');
       this.modalButton2.position.set(b.endless.x + b.endless.w / 2, b.endless.y + b.endless.h / 2);
     } else {
       this.modalButton2.text = '';
     }
 
     bevel(g, b.restart, true, PAL.face);
-    this.modalRestart.text = 'Restart Windows';
+    this.modalRestart.text = t('hud.restartWindows');
     this.modalRestart.position.set(b.restart.x + b.restart.w / 2, b.restart.y + b.restart.h / 2);
   }
 }
