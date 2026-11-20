@@ -893,7 +893,15 @@ export function effectiveStats(tower: Tower): EffectiveStats {
     if (e !== undefined) {
       if (e.damageMul !== undefined) damage *= scaledMultiplier(e.damageMul, strength);
       if (e.rangeMul !== undefined) range *= scaledMultiplier(e.rangeMul, strength);
-      if (e.intervalMul !== undefined) fireInterval *= scaledMultiplier(e.intervalMul, strength);
+      if (e.intervalMul !== undefined) {
+        // A multiplier below 1 shrinks the interval and must decay geometrically — `intervalMul ^
+        // (tier - 2)` is the "fires twice as fast" ladder a branch advertises. The linear rule would
+        // interpolate through zero (0.5 -> 0.25 -> 0.00) and turn the tower off at tier 5. At or
+        // above 1 the linear rule is correct, so Cannon's Mortar and AA's Flak keep it.
+        fireInterval *= e.intervalMul < 1
+          ? Math.pow(e.intervalMul, tower.tier - 2)
+          : scaledMultiplier(e.intervalMul, strength);
+      }
       if (e.splashAdd !== undefined) splash += e.splashAdd * strength;
       if (e.damageAdd !== undefined) damage += e.damageAdd * strength;
       if (e.flyerDamageMul !== undefined) flyerDamageMult = scaledMultiplier(e.flyerDamageMul, strength);
@@ -915,6 +923,11 @@ export function effectiveStats(tower: Tower): EffectiveStats {
       if (e.auraPointerRange !== undefined) auraPointerRange = e.auraPointerRange;
     }
   }
+
+  // A tower that deals damage must never report a non-positive fire interval: the sim reads a
+  // `fireInterval <= 0` as "beacon never fires" and would skip it forever. The geometric branch
+  // scaling above keeps intervals positive, so this is a backstop, not the fix.
+  if (damage > 0) fireInterval = Math.max(1, fireInterval);
 
   return {
     range,
