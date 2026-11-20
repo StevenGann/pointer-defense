@@ -1,4 +1,5 @@
 import type { Catalogue } from '../index.ts';
+import { help } from './help.ts';
 
 /**
  * Russian (ru) UI catalogue — machine draft, pending native review.
@@ -9,6 +10,8 @@ import type { Catalogue } from '../index.ts';
  * Отмена); game nouns use what Russian players read (босс, крит, разгон). See docs/GLOSSARY.md.
  */
 export const ru = {
+  ...help,
+
   // ── Achievements ──────────────────────────────────────────────────────────────────────────
   'ach.firstBlood.name': 'Первая кровь',
   'ach.firstBlood.description': 'Первое убийство за любой забег',
