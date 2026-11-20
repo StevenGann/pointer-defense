@@ -20,7 +20,8 @@
     "preview": "vite preview",
     "pack": "npm run build:steam && electron-builder",
     "pack:win": "npm run build:steam && electron-builder --win",
-    "pack:linux": "npm run build:steam && electron-builder --linux"
+    "pack:linux": "npm run build:steam && electron-builder --linux",
+    "i18n:missing": "node scripts/i18n-missing.mjs"
   },
   "devDependencies": {
     "electron": "^45.3.4",
