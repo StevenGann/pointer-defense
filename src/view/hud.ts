@@ -33,6 +33,7 @@ import { earlyCallBonus, MODIFIER_NAMES, typeBossKindForWave, waveDef, waveModif
 import { ENEMY_STATS } from '../core/enemies.ts';
 import type { QualityLevel } from '../core/quality.ts';
 import { branchName, fmtClickDamage, targetModeDisplay } from './tooltipText.ts';
+import { t } from '../i18n/index.ts';
 
 /**
  * The HUD: status-bar text (hint / wave / speed), the integrity and salvage readouts, the pointer stage and
@@ -659,22 +660,22 @@ export function victoryButtonAt(l: Layout, s: RunState, px: number, py: number):
 }
 
 /** The status-bar hint while the context-help mode is on (docs/CONTEXT-HELP.md). */
-export const CONTEXT_HELP_HINT = 'Click something to read about it — Esc cancels';
+export const CONTEXT_HELP_HINT = t('status.contextHelp');
 
 function hintFor(s: RunState): string {
-  if (s.selected) return `Click a tile to place ${TOWER_STATS[s.selected].name} — right-click to cancel`;
-  if (selectedTower(s)) return 'Click Upgrade, choose a branch, or sell — right-click to deselect';
+  if (s.selected) return t('status.placeTower', { name: TOWER_STATS[s.selected].name });
+  if (selectedTower(s)) return t('status.inspectTower');
   switch (s.phase) {
     case 'build':
-      return s.towers.length === 0 ? 'Pick a tower, then click a tile' : 'Click Start Wave when you are ready';
+      return s.towers.length === 0 ? t('status.pickTower') : t('status.startWave');
     case 'wave':
       return s.calledEarly
-        ? 'Click enemies to shoot — aim for the notch'
-        : 'Call the next wave early for a salvage bonus — two waves at once';
+        ? t('status.shoot')
+        : t('status.callEarly');
     case 'halted':
-      return 'The lane broke. Click Restart to try again';
+      return t('status.laneBroke');
     case 'victory':
-      return 'All waves cleared!';
+      return t('status.victory');
   }
 }
 

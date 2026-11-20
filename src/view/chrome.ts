@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { COLS, ROWS } from '../core/grid.ts';
 import { cheatsEnabled } from '../core/cheats.ts';
 import { getArtTexture } from './art.ts';
+import { t } from '../i18n/index.ts';
 
 /**
  * Windows 95 chrome primitives and the single window model.
@@ -199,16 +200,16 @@ interface MenuItem {
 export function menuItems(): readonly MenuItem[] {
   if (cheatsEnabled()) {
     return [
-      { name: 'file', label: 'File' },
-      { name: 'view', label: 'View' },
-      { name: 'cheats', label: 'Cheats' },
-      { name: 'help', label: 'Help' },
+      { name: 'file', label: t('menu.file') },
+      { name: 'view', label: t('menu.view') },
+      { name: 'cheats', label: t('menu.cheats') },
+      { name: 'help', label: t('menu.help') },
     ];
   }
   return [
-    { name: 'file', label: 'File' },
-    { name: 'view', label: 'View' },
-    { name: 'help', label: 'Help' },
+    { name: 'file', label: t('menu.file') },
+    { name: 'view', label: t('menu.view') },
+    { name: 'help', label: t('menu.help') },
   ];
 }
 
@@ -310,7 +311,7 @@ export class ChromeView {
     }
     this.glyphs.addChild(this.arrowIcon, ...this.controlGlyphs);
     this.titleText = new Text({
-      text: 'Pointer Defense',
+      text: t('window.title'),
       style: { fontFamily: FONT, fontSize: FONT_SIZE.body, fontWeight: 'bold', fill: PAL.titleInverse },
     });
     this.titleText.anchor.set(0, 0.5);

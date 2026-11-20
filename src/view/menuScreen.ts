@@ -15,6 +15,7 @@ import {
 } from './chrome.ts';
 import { artNameForEnemy, getArtTexture } from './art.ts';
 import { textWidth } from './hud.ts';
+import { t } from '../i18n/index.ts';
 import type { Tile } from '../core/grid.ts';
 import type { EnemyKind } from '../core/enemies.ts';
 
@@ -337,14 +338,14 @@ export class MenuScreenView {
 
   constructor() {
     this.root.addChild(this.g, this.creepLayer);
-    this.titleBarText = makeText('Pointer Defense', PAL.titleInverse, true, FONT_SIZE.body);
+    this.titleBarText = makeText(t('window.title'), PAL.titleInverse, true, FONT_SIZE.body);
     this.titleBarText.anchor.set(0, 0.5);
     this.root.addChild(this.titleBarText);
     this.title = makeText('POINTER DEFENSE', PAL.title, true, 26);
     this.title.anchor.set(0, 0.5);
     this.root.addChild(this.title);
 
-    for (const word of ['File', 'View', 'Help']) {
+    for (const word of [t('menu.file'), t('menu.view'), t('menu.help')]) {
       const t = makeText(word, PAL.text, false, FONT_SIZE.small);
       t.anchor.set(0, 0.5);
       this.menuWordTexts.push(t);
