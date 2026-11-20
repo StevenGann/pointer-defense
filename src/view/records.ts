@@ -14,6 +14,7 @@ import {
 import type { Profile, RunRecord } from '../core/save.ts';
 import { bestByMap, runTotals } from '../core/runs.ts';
 import { t } from '../i18n/index.ts';
+import { isRtl } from './direction.ts';
 
 /**
  * The Records viewer (docs/RUN-RECORDS.md): a fixed Windows 95 window reachable from the main menu
@@ -141,7 +142,7 @@ export function computeRecordsLayout(l: Layout, runs: readonly RunRecord[], scro
 
   const colMap = Math.max(40, data.w - SCROLL_W - COL_RANK - COL_WAVE - COL_OUTCOME - COL_DATE);
 
-  const scrollbar: Rect = { x: data.x + data.w - SCROLL_W, y: data.y + 1, w: SCROLL_W, h: Math.max(0, data.h - 2) };
+  const scrollbar: Rect = { x: isRtl() ? data.x : data.x + data.w - SCROLL_W, y: data.y + 1, w: SCROLL_W, h: Math.max(0, data.h - 2) };
   const trackH = scrollbar.h;
   const thumbH = maxScroll > 0 ? Math.max(14, Math.round(trackH * (data.h / Math.max(1, contentH)))) : trackH;
   const thumbY = maxScroll > 0 ? Math.round((trackH - thumbH) * (s / maxScroll)) : 0;
@@ -290,17 +291,34 @@ export class RecordsView {
 
     // Sunken table with a fixed header row.
     bevel(g, rl.table, false, PAL.face);
-    const x0 = rl.data.x;
-    const xWave = x0 + COL_RANK;
-    const xMap = xWave + COL_WAVE;
-    const xOutcome = xMap + rl.colMap;
-    const xDate = xOutcome + COL_OUTCOME;
+    // Column order reverses in RTL: the LTR rightmost column (Date) becomes the leftmost, with the
+    // scrollbar on the left edge (docs/RTL.md).
+    const rtl = isRtl();
+    let rankX: number;
+    let waveX: number;
+    let mapX: number;
+    let outcomeX: number;
+    let dateX: number;
+    if (rtl) {
+      dateX = rl.data.x + SCROLL_W;
+      outcomeX = dateX + COL_DATE;
+      mapX = outcomeX + COL_OUTCOME;
+      waveX = mapX + rl.colMap;
+      rankX = waveX + COL_WAVE;
+    } else {
+      rankX = rl.data.x;
+      waveX = rankX + COL_RANK;
+      mapX = waveX + COL_WAVE;
+      outcomeX = mapX + rl.colMap;
+      dateX = outcomeX + COL_OUTCOME;
+    }
+    const colX = [rankX, waveX, mapX, outcomeX, dateX];
+    const colW = [COL_RANK, COL_WAVE, rl.colMap, COL_OUTCOME, COL_DATE];
     const headerY = rl.headerRow.y + Math.floor(RECORDS_ROW_H / 2);
-    this.headerTexts[0].position.set(x0, headerY);
-    this.headerTexts[1].position.set(xWave, headerY);
-    this.headerTexts[2].position.set(xMap, headerY);
-    this.headerTexts[3].position.set(xOutcome, headerY);
-    this.headerTexts[4].position.set(xDate, headerY);
+    for (let i = 0; i < 5; i++) {
+      this.headerTexts[i].anchor.x = rtl ? 1 : 0;
+      this.headerTexts[i].position.set(rtl ? colX[i] + colW[i] - 2 : colX[i], headerY);
+    }
 
     // Clip the scrolling rows to the data panel.
     this.dataMask.clear();
@@ -324,7 +342,7 @@ export class RecordsView {
           sep.text = t('dlg.records.earlier');
           sep.style.fill = PAL.title;
           sep.style.fontWeight = 'bold';
-          sep.position.set(x0, cy);
+          sep.position.set(rankX, cy);
           continue;
         }
 
@@ -336,31 +354,31 @@ export class RecordsView {
         rankT.text = row.kind === 'ranked' ? String(row.rank) : '';
         rankT.style.fill = row.rank === 1 ? PAL.highlight : PAL.text;
         rankT.style.fontWeight = 'bold';
-        rankT.position.set(x0, cy);
+        rankT.position.set(rankX, cy);
 
         const waveT = this.cellAt(cellIndex++);
         waveT.text = String(record.wave);
         waveT.style.fill = row.rank === 1 ? PAL.highlight : PAL.text;
         waveT.style.fontWeight = row.rank === 1 ? 'bold' : 'normal';
-        waveT.position.set(xWave, cy);
+        waveT.position.set(waveX, cy);
 
         const mapT = this.cellAt(cellIndex++);
         mapT.text = record.mapName;
         mapT.style.fill = row.rank === 1 ? PAL.highlight : PAL.text;
         mapT.style.fontWeight = 'normal';
-        mapT.position.set(xMap, cy);
+        mapT.position.set(mapX, cy);
 
         const outT = this.cellAt(cellIndex++);
         outT.text = outcomeLabel(record.outcome);
         outT.style.fill = row.rank === 1 ? PAL.highlight : PAL.text;
         outT.style.fontWeight = 'normal';
-        outT.position.set(xOutcome, cy);
+        outT.position.set(outcomeX, cy);
 
         const dateT = this.cellAt(cellIndex++);
         dateT.text = formatRecordDate(record.at);
         dateT.style.fill = row.rank === 1 ? PAL.highlight : PAL.text;
         dateT.style.fontWeight = 'normal';
-        dateT.position.set(xDate, cy);
+        dateT.position.set(dateX, cy);
       }
       for (let i = cellIndex; i < this.cells.length; i++) this.cells[i].text = '';
     }

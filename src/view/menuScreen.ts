@@ -16,6 +16,7 @@ import {
 import { artNameForEnemy, getArtTexture } from './art.ts';
 import { textWidth } from './hud.ts';
 import { t } from '../i18n/index.ts';
+import { isRtl, mirrorIfRtl } from './direction.ts';
 import type { Tile } from '../core/grid.ts';
 import type { EnemyKind } from '../core/enemies.ts';
 
@@ -94,12 +95,12 @@ export function computeMenuWindow(l: Layout): MenuWindowLayout {
   const wordmark: Rect = { x: client.x, y: client.y + 2, w: MENU_CLIENT_W, h: 30 };
   const rule: Rect = { x: client.x + 10, y: client.y + 32, w: MENU_CLIENT_W - 20, h: 3 };
   const marquee: Rect = { x: client.x + 10, y: client.y + 40, w: MENU_CLIENT_W - 20, h: 18 };
-  const close: Rect = {
+  const close: Rect = mirrorIfRtl({
     x: titleBar.x + titleBar.w - 2 - 16,
     y: titleBar.y + Math.floor((TITLE_H - 14) / 2),
     w: 16,
     h: 14,
-  };
+  }, titleBar);
   return { window, titleBar, menuBar, client, statusBar, wordmark, rule, marquee, close };
 }
 
@@ -301,7 +302,7 @@ export function computeLoadDialog(l: Layout): LoadDialogLayout {
   const status: Rect = { x: rect.x + DLG_PAD, y: field.y + field.h + 2, w: w - DLG_PAD * 2, h: DLG_ROW_H };
   const ok: Rect = { x: rect.x + w - DLG_PAD - DLG_BUTTON_W * 2 - 6, y: rect.y + h - DLG_PAD - DLG_BUTTON_H, w: DLG_BUTTON_W, h: DLG_BUTTON_H };
   const cancel: Rect = { x: ok.x + DLG_BUTTON_W + 6, y: ok.y, w: DLG_BUTTON_W, h: DLG_BUTTON_H };
-  return { rect, field, status, ok, cancel };
+  return { rect, field, status, ok: mirrorIfRtl(ok, rect), cancel: mirrorIfRtl(cancel, rect) };
 }
 
 export function loadDialogButtonAt(l: Layout, px: number, py: number): 'ok' | 'cancel' | null {
@@ -536,7 +537,8 @@ export class MenuScreenView {
 
     // --- The window.
     const chromeGeom = drawWindowChrome(g, win.window, { close: true, minimize: false, maximize: false, help: true });
-    this.titleBarText.position.set(chromeGeom.titleX, chromeGeom.titleY);
+    this.titleBarText.anchor.x = isRtl() ? 1 : 0;
+    this.titleBarText.position.set(isRtl() ? win.titleBar.x + win.titleBar.w - 3 : chromeGeom.titleX, chromeGeom.titleY);
     this.title.text = t('shell.menu.wordmark');
     this.title.position.set(win.client.x + 30, win.wordmark.y + win.wordmark.h / 2);
     // pointer-arrow glyph to the left of the wordmark
@@ -546,13 +548,15 @@ export class MenuScreenView {
     g.rect(win.rule.x, win.rule.y, win.rule.w, 2).fill(PAL.navy);
     g.rect(win.rule.x, win.rule.y + 2, win.rule.w, 1).fill(PAL.highlight);
 
-    // Menubar words.
+    // Menubar words: laid out from the right edge in RTL, so File is the far-right word (docs/RTL.md).
     g.rect(win.menuBar.x, win.menuBar.y, win.menuBar.w, win.menuBar.h).fill(PAL.face);
-    let mwx = win.menuBar.x + 6;
+    let mwx = isRtl() ? win.menuBar.x + win.menuBar.w - 6 : win.menuBar.x + 6;
     for (let i = 0; i < this.menuWordTexts.length; i++) {
       const t = this.menuWordTexts[i];
+      if (isRtl()) mwx -= t.width;
       t.position.set(mwx, win.menuBar.y + Math.floor(win.menuBar.h / 2));
-      mwx += t.width + 8;
+      if (isRtl()) mwx -= 8;
+      else mwx += t.width + 8;
     }
 
     // Marquee, masked to its 18 px strip so the tips never run across the window or desktop.

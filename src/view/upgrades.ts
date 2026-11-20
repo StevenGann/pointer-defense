@@ -26,6 +26,7 @@ import {
 import { getArtTexture, UPGRADE_PLACEHOLDER } from './art.ts';
 import { textWidth } from './hud.ts';
 import { t } from '../i18n/index.ts';
+import { mirrorIfRtl, textX } from './direction.ts';
 import { formatNumber } from '../core/format.ts';
 import type { RunState } from '../core/state.ts';
 import {
@@ -99,12 +100,12 @@ export function computeUpgradesLayout(l: Layout, s: RunState, tab: UpgradesTab =
     h,
   };
   const titleBar: Rect = { x: window.x + 2, y: window.y + 2, w: w - 4, h: TITLE_H };
-  const close: Rect = {
+  const close: Rect = mirrorIfRtl({
     x: titleBar.x + titleBar.w - 2 - CONTROL_BOX_W,
     y: titleBar.y + Math.floor((TITLE_H - CONTROL_BOX_H) / 2),
     w: CONTROL_BOX_W,
     h: CONTROL_BOX_H,
-  };
+  }, titleBar);
 
   const toolbar: Rect = { x: window.x + 2, y: titleBar.y + titleBar.h, w: w - 4, h: TOOLBAR_H };
   const btnH = 24;
@@ -131,8 +132,8 @@ export function computeUpgradesLayout(l: Layout, s: RunState, tab: UpgradesTab =
   const cancel: Rect = { x: statusBar.x + statusBar.w - BUTTON_W - 6, y: buttonRowY, w: BUTTON_W, h: BUTTON_H };
   const ok: Rect = { x: cancel.x - BUTTON_W - 6, y: buttonRowY, w: BUTTON_W, h: BUTTON_H };
   const buttons: UpgradesButton[] = [
-    { id: 'ok', label: t('dlg.upgrades.ok'), rect: ok, default: true },
-    { id: 'cancel', label: t('dlg.upgrades.cancel'), rect: cancel, default: false },
+    { id: 'ok', label: t('dlg.upgrades.ok'), rect: mirrorIfRtl(ok, window), default: true },
+    { id: 'cancel', label: t('dlg.upgrades.cancel'), rect: mirrorIfRtl(cancel, window), default: false },
   ];
   const descStrip: Rect = { x: window.x + 8, y: buttonRowY - 6 - DESC_H, w: w - 16, h: DESC_H };
 
@@ -413,7 +414,9 @@ export class UpgradesView {
 
     drawWindowChrome(g, ul.window, { close: true, minimize: false, maximize: false });
     this.titleText.text = t('dlg.upgrades.title');
-    this.titleText.position.set(ul.titleBar.x + 6, ul.titleBar.y + TITLE_H / 2);
+    const tp = textX(ul.titleBar, 'start');
+    this.titleText.anchor.x = tp.anchor;
+    this.titleText.position.set(tp.x, ul.titleBar.y + TITLE_H / 2);
 
     // Toolbar.
     g.rect(ul.toolbar.x, ul.toolbar.y, ul.toolbar.w, ul.toolbar.h).fill(PAL.face);
@@ -446,7 +449,9 @@ export class UpgradesView {
     for (let i = 0; i < ul.columns.length; i++) {
       const t = this.headerTextAt(i);
       t.text = ul.columns[i].title;
-      t.position.set(ul.list.colX[i] + 4, ul.list.header.y + Math.floor(ul.list.header.h / 2));
+      const hp = textX({ x: ul.list.colX[i], y: 0, w: ul.list.colW[i], h: 0 }, 'start', 4);
+      t.anchor.x = hp.anchor;
+      t.position.set(hp.x, ul.list.header.y + Math.floor(ul.list.header.h / 2));
     }
     // Rows.
     let ti = 0;
