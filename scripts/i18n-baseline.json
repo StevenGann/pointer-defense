@@ -1,14 +1,6 @@
 [
-  "src/input/mouse.ts",
-  "src/main.ts",
   "src/view/art.ts",
-  "src/view/board.ts",
-  "src/view/bossBars.ts",
   "src/view/chrome.ts",
-  "src/view/contexthelp.ts",
-  "src/view/help.ts",
   "src/view/helpMarkdown.ts",
-  "src/view/menuScreen.ts",
-  "src/view/numbers.ts",
   "src/view/wallAppearance.ts"
 ]

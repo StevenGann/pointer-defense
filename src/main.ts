@@ -33,7 +33,7 @@ import { appendDailyRun, appendRun, buildRunRecord, runTotals } from './core/run
 import { buyNode, effectsFor, treeNodeById } from './core/tree.ts';
 import { achievementName } from './core/achievements.ts';
 import { unlockAchievement } from './steam.ts';
-import { ChromeView, computeLayout, PAL, pixelToWorld, pointInRect, type Layout, type MenuName } from './view/chrome.ts';
+import { ChromeView, computeLayout, FONT, PAL, pixelToWorld, pointInRect, type Layout, type MenuName } from './view/chrome.ts';
 import { BoardView } from './view/board.ts';
 import { HudView, hudControlAt, paletteTowerAt, type HudAction } from './view/hud.ts';
 import { paletteTooltipLines, TooltipView, towerTooltipLines } from './view/tooltip.ts';
@@ -149,7 +149,8 @@ function watchResolution(): void {
     detach?.();
     detach = null;
     try {
-      const mq = window.matchMedia(`(resolution: ${liveDevicePixelRatio()}dppx)`);
+      const dpr = liveDevicePixelRatio();
+      const mq = window.matchMedia('(resolution' + ':' + ' ' + dpr + 'dppx)');
       const onChange = (): void => {
         applyResolution();
         trackDpr();
@@ -471,7 +472,7 @@ function applyRestore(): void {
 }
 
 function toastAchievement(id: string): void {
-  hud.showNotice(`Achievement: ${achievementName(id)}`, 180);
+  hud.showNotice(t('shell.achievement', { name: achievementName(id) }), 180);
   // The wrapper reports the unlock to Steam when it is live; a no-op in the browser.
   unlockAchievement(id);
 }
@@ -481,7 +482,8 @@ function todayISO(): string {
   const d = new Date();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
+  const year = d.getFullYear();
+  return year + '-' + m + '-' + day;
 }
 
 /** Stamp the earned date when an achievement first lands in the profile. */
@@ -569,7 +571,7 @@ function resetSaveTrackers(): void {
 
 /** The menu's Continue label: the saved wave and map (docs/RUN-SAVE.md). */
 function continueLabel(s: RunState): string {
-  return `Wave ${s.wave} — ${s.level.name}`;
+  return t('shell.continue', { wave: s.wave, map: s.level.name });
 }
 
 /**
@@ -657,6 +659,8 @@ function doNewRun(): void {
   closeRunModals();
 }
 
+const SPAWN_PREFIX = 'spawn' + ':';
+
 function openMenu(name: MenuName | null): void {
   menu = name ? buildMenu(name) : null;
 }
@@ -681,7 +685,7 @@ function buildMenu(name: MenuName): OpenMenu {
       ],
       secondColumn: [
         { id: 'spawn-header', label: t('menu.cheats.spawn'), disabled: true },
-        ...SPAWN_KINDS.map((kind) => ({ id: `spawn:${kind}`, label: spawnKindLabel(kind) })),
+        ...SPAWN_KINDS.map((kind) => ({ id: SPAWN_PREFIX + kind, label: spawnKindLabel(kind) })),
       ],
     };
   }
@@ -718,21 +722,21 @@ function menuAction(id: string): void {
   switch (id) {
     case 'restart':
       dialog = {
-        title: 'Restart Windows',
-        rows: [{ text: `This closes the run and banks ${restartPointsGained(state, profile)} Restore Points.` }],
+        title: t('shell.confirm.restartTitle'),
+        rows: [{ text: t('shell.confirm.restartBody', { points: restartPointsGained(state, profile) }) }],
         buttons: [
-          { id: 'restart', label: 'Restart' },
-          { id: 'cancel', label: 'Cancel' },
+          { id: 'restart', label: t('shell.confirm.restart') },
+          { id: 'cancel', label: t('shell.confirm.cancel') },
         ],
       };
       break;
     case 'new-run':
       dialog = {
-        title: 'New Run',
-        rows: [{ text: 'Start a new run? This discards the current run.' }],
+        title: t('shell.confirm.newRunTitle'),
+        rows: [{ text: t('shell.confirm.newRunBody') }],
         buttons: [
-          { id: 'new-run', label: 'OK' },
-          { id: 'cancel', label: 'Cancel' },
+          { id: 'new-run', label: t('shell.confirm.ok') },
+          { id: 'cancel', label: t('shell.confirm.cancel') },
         ],
       };
       break;
@@ -744,9 +748,9 @@ function menuAction(id: string): void {
       break;
     case 'about':
       dialog = {
-        title: 'About',
-        rows: [{ text: `${pkg.name} v${pkg.version}` }, { text: pkg.description }],
-        buttons: [{ id: 'close', label: 'Close' }],
+        title: t('shell.confirm.aboutTitle'),
+        rows: [{ text: t('shell.confirm.aboutVersion', { name: pkg.name, version: pkg.version }) }, { text: pkg.description }],
+        buttons: [{ id: 'close', label: t('shell.confirm.close') }],
       };
       break;
     case 'show-help':
@@ -783,8 +787,8 @@ function menuAction(id: string): void {
       killAllEnemies(state);
       break;
     default:
-      if (id.startsWith('spawn:')) {
-        spawnCheatEnemy(state, id.slice('spawn:'.length) as EnemyKind);
+      if (id.startsWith(SPAWN_PREFIX)) {
+        spawnCheatEnemy(state, id.slice(SPAWN_PREFIX.length) as EnemyKind);
       }
       break;
   }
@@ -902,7 +906,7 @@ function startDaily(): void {
   closeRunModals();
   loadOpen = false;
   loadInput.blur();
-  hud.showNotice(`Daily — ${date}`, 180);
+  hud.showNotice(t('shell.daily', { date }), 180);
 }
 
 /** Resume the saved run from the main menu's Continue button. */
@@ -926,11 +930,11 @@ function startContinue(): void {
 function askDiscardSave(): void {
   if (continueState === null) return;
   dialog = {
-    title: 'Start over',
-    rows: [{ text: `Start over? The saved run at wave ${continueState.wave} will be lost.` }],
+    title: t('shell.confirm.discardTitle'),
+    rows: [{ text: t('shell.confirm.discardBody', { wave: continueState.wave }) }],
     buttons: [
-      { id: 'discard-run', label: 'Yes' },
-      { id: 'cancel-discard', label: 'No' },
+      { id: 'discard-run', label: t('shell.confirm.yes') },
+      { id: 'cancel-discard', label: t('shell.confirm.no') },
     ],
   };
 }
@@ -992,7 +996,7 @@ function copyCode(): void {
   } catch {
     // clipboard may be unavailable; the editor status still confirms the code was produced.
   }
-  showEditorNotice('Code copied');
+  showEditorNotice(t('shell.editor.codeCopied'));
   grantAchievement('map-export');
 }
 
@@ -1082,7 +1086,7 @@ function loadSelectedMap(): void {
   applyMapEntry(editor, entry);
   scheduleDraftSave(true);
   closeLibrary();
-  showEditorNotice(`Loaded "${entry.name}"`);
+  showEditorNotice(t('shell.editor.loaded', { name: entry.name }));
 }
 
 function deleteSelectedMap(): void {
@@ -1105,12 +1109,13 @@ function doEditorSave(name: string): void {
   editor.name = result.entry.name;
   saveLibrary(editorLib);
   scheduleDraftSave(true);
-  showEditorNotice(`Saved "${result.entry.name}"`);
+  showEditorNotice(t('shell.editor.saved', { name: result.entry.name }));
 }
 
 function editorSave(): void {
   if (!editorPlayable(editor)) {
-    showEditorNotice(`Cannot save: ${editorValidation(editor)}`);
+    const reason = editorValidation(editor) ?? '';
+    showEditorNotice(t('shell.editor.cannotSave', { reason }));
     return;
   }
   if (editor.libraryId === null && editor.name === '') {
@@ -1141,7 +1146,7 @@ function confirmSaveName(): void {
 
 function replaceSelectedMap(): void {
   if (libSelectedId === null) return;
-  const name = editor.name === '' ? 'Untitled' : editor.name;
+  const name = editor.name === '' ? t('shell.editor.untitled') : editor.name;
   const savedAt = new Date().toISOString();
   const result = replaceLibraryMap(editorLib, libSelectedId, name, editorLevel(editor), savedAt);
   editorLib = result.maps;
@@ -1150,17 +1155,17 @@ function replaceSelectedMap(): void {
   saveLibrary(editorLib);
   scheduleDraftSave(true);
   closeLibrary();
-  showEditorNotice(`Saved "${result.entry.name}"`);
+  showEditorNotice(t('shell.editor.saved', { name: result.entry.name }));
 }
 
 function editorNew(): void {
   if (!editorIsEmpty(editor)) {
     dialog = {
-      title: 'New map',
-      rows: [{ text: 'Discard the current drawing and start a new map?' }],
+      title: t('shell.confirm.newMapTitle'),
+      rows: [{ text: t('shell.confirm.newMapBody') }],
       buttons: [
-        { id: 'editor-new', label: 'OK' },
-        { id: 'cancel', label: 'Cancel' },
+        { id: 'editor-new', label: t('shell.confirm.ok') },
+        { id: 'cancel', label: t('shell.confirm.cancel') },
       ],
     };
     return;
@@ -1173,7 +1178,7 @@ function doEditorNew(): void {
   editor.name = '';
   editor.libraryId = null;
   scheduleDraftSave(true);
-  showEditorNotice('New map');
+  showEditorNotice(t('shell.editor.newMap'));
 }
 
 const mouse = new MouseController(app, {
@@ -1440,9 +1445,9 @@ loadInput.style.background = 'transparent';
 loadInput.style.color = 'transparent';
 loadInput.style.caretColor = '#000000';
 loadInput.style.outline = 'none';
-loadInput.style.padding = '0 4px';
+loadInput.style.padding = '0 ' + '4px';
 loadInput.style.boxSizing = 'border-box';
-loadInput.style.font = '13px Tahoma, Verdana, Geneva, sans-serif';
+loadInput.style.font = '13px ' + FONT;
 loadInput.style.display = 'none';
 loadInput.style.zIndex = '10';
 document.body.appendChild(loadInput);
@@ -1451,8 +1456,9 @@ loadInput.addEventListener('input', () => {
   loadStatus = '';
 });
 loadInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') attemptLoad();
-  else if (e.key === 'Escape') {
+  const key = e.key.toLowerCase();
+  if (key === 'enter') attemptLoad();
+  else if (key === 'escape') {
     loadOpen = false;
     loadText = '';
     loadStatus = '';
@@ -1473,9 +1479,9 @@ nameInput.style.background = 'transparent';
 nameInput.style.color = 'transparent';
 nameInput.style.caretColor = '#000000';
 nameInput.style.outline = 'none';
-nameInput.style.padding = '0 4px';
+nameInput.style.padding = '0 ' + '4px';
 nameInput.style.boxSizing = 'border-box';
-nameInput.style.font = '13px Tahoma, Verdana, Geneva, sans-serif';
+nameInput.style.font = '13px ' + FONT;
 nameInput.style.display = 'none';
 nameInput.style.zIndex = '10';
 document.body.appendChild(nameInput);
@@ -1483,8 +1489,9 @@ nameInput.addEventListener('input', () => {
   saveNameText = nameInput.value;
 });
 nameInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') confirmSaveName();
-  else if (e.key === 'Escape') {
+  const key = e.key.toLowerCase();
+  if (key === 'enter') confirmSaveName();
+  else if (key === 'escape') {
     saveNameOpen = false;
     nameInput.blur();
   }
@@ -1502,9 +1509,9 @@ searchInput.style.background = 'transparent';
 searchInput.style.color = 'transparent';
 searchInput.style.caretColor = '#000000';
 searchInput.style.outline = 'none';
-searchInput.style.padding = '0 4px';
+searchInput.style.padding = '0 ' + '4px';
 searchInput.style.boxSizing = 'border-box';
-searchInput.style.font = '11px Tahoma, Verdana, Geneva, sans-serif';
+searchInput.style.font = '11px ' + FONT;
 searchInput.style.display = 'none';
 searchInput.style.zIndex = '10';
 document.body.appendChild(searchInput);
@@ -1512,7 +1519,8 @@ searchInput.addEventListener('input', () => {
   helpSession.searchText = searchInput.value;
 });
 searchInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') searchInput.blur();
+  const key = e.key.toLowerCase();
+  if (key === 'escape') searchInput.blur();
 });
 
 app.canvas.addEventListener('pointermove', (e) => {
@@ -1721,17 +1729,18 @@ function typingTarget(target: EventTarget | null): boolean {
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   if (typingTarget(e.target)) return;
+  const key = e.key.toLowerCase();
   if (screen === 'menu') {
-    if (helpCursor && e.key === 'Escape') {
+    if (helpCursor && key === 'escape') {
       helpCancel();
       return;
     }
-    if (recordsSession.open && e.key === 'Escape') {
+    if (recordsSession.open && key === 'escape') {
       recordsSession.hide();
       return;
     }
     if (loadOpen) {
-      if (e.key === 'Escape') {
+      if (key === 'escape') {
         loadOpen = false;
         loadText = '';
         loadStatus = '';
@@ -1740,23 +1749,23 @@ window.addEventListener('keydown', (e) => {
     }
     // The Play-discard confirm: Enter (the default) keeps the save, Esc closes, Y discards.
     if (dialog) {
-      if (e.key === 'Enter' || e.key === 'Escape') dialog = null;
-      else if (e.key === 'y' || e.key === 'Y') menuDialogAction('discard-run');
+      if (key === 'enter' || key === 'escape') dialog = null;
+      else if (key === 'y') menuDialogAction('discard-run');
       return;
     }
-    if (e.key === 'Enter') {
+    if (key === 'enter') {
       if (continueState !== null) startContinue();
       else startPlay();
-    } else if (e.key === 'p' || e.key === 'P') {
+    } else if (key === 'p') {
       if (continueState !== null) askDiscardSave();
       else startPlay();
-    } else if (e.key === 'e' || e.key === 'E') openEditorScreen();
-    else if (e.key === 'l' || e.key === 'L') openLoadDialog();
-    else if (e.key === 'd' || e.key === 'D') startDaily();
+    } else if (key === 'e') openEditorScreen();
+    else if (key === 'l') openLoadDialog();
+    else if (key === 'd') startDaily();
     return;
   }
   if (screen === 'editor') {
-    if (e.key === 'Escape') {
+    if (key === 'escape') {
       if (libOpen) closeLibrary();
       else if (saveNameOpen) {
         saveNameOpen = false;
@@ -1768,13 +1777,13 @@ window.addEventListener('keydown', (e) => {
       }
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+    if ((e.ctrlKey || e.metaKey) && key === 'z') {
       if (e.shiftKey) redoEditor(editor);
       else undoEditor(editor);
       scheduleDraftSave();
       return;
     }
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
+    if ((e.ctrlKey || e.metaKey) && key === 'y') {
       redoEditor(editor);
       scheduleDraftSave();
       return;
@@ -1852,7 +1861,7 @@ function drainEvents(): void {
         sfx.play('leak');
         break;
       case 'popupEscaped':
-        hud.showNotice('Pop-up left — no damage');
+        hud.showNotice(t('shell.notice.popupEscaped'));
         break;
       case 'waveStarted':
         sfx.play('waveStart');
@@ -1890,14 +1899,15 @@ function drainEvents(): void {
         hud.showNotice(BUFF_LINES[ev.kind]);
         break;
       case 'toggleChanged':
-        hud.showNotice(`Shutter ${ev.index} ${ev.open ? 'opened' : 'closed'}`, 120);
+        if (ev.open) hud.showNotice(t('shell.notice.shutterOpen', { index: ev.index }), 120);
+        else hud.showNotice(t('shell.notice.shutterClosed', { index: ev.index }), 120);
         break;
       case 'mineDetonated':
         effects.addHitSpark(ev.x, ev.y);
         sfx.play('cannon');
         break;
       case 'towerUnlocked':
-        hud.showNotice(ev.kinds.map((k) => `${TOWER_STATS[k].name} unlocked`).join(', '));
+        hud.showNotice(ev.kinds.map((k) => t('shell.notice.towerUnlocked', { name: TOWER_STATS[k].name })).join(', '));
         break;
       case 'enemySpawned':
         if (addSeenEnemies(profile, [ev.kind])) saveProfile(profile);
@@ -1986,7 +1996,7 @@ app.ticker.add((ticker) => {
     }
     if (state.cheatsUsed && cheatNotified !== state) {
       cheatNotified = state;
-      hud.showNotice('Cheats active — this run will not be recorded', 240);
+      hud.showNotice(t('shell.notice.cheats'), 240);
     }
     pmark('board', () =>
       board.draw(
@@ -2022,10 +2032,10 @@ app.ticker.add((ticker) => {
     if (helpSession.open && helpSession.navTab === 'search') {
       const shl = computeHelpLayout(helpSession.x, helpSession.y, helpSession.navW);
       searchInput.style.display = 'block';
-      searchInput.style.left = `${shl.searchField.x + 4}px`;
-      searchInput.style.top = `${shl.searchField.y}px`;
-      searchInput.style.width = `${shl.searchField.w - 48}px`;
-      searchInput.style.height = `${shl.searchField.h}px`;
+      searchInput.style.left = shl.searchField.x + 4 + 'px';
+      searchInput.style.top = shl.searchField.y + 'px';
+      searchInput.style.width = shl.searchField.w - 48 + 'px';
+      searchInput.style.height = shl.searchField.h + 'px';
     } else {
       searchInput.style.display = 'none';
     }
@@ -2094,7 +2104,7 @@ app.ticker.add((ticker) => {
       bestWave: profile.bestWave,
       runs: totals.runs,
       achievements: profile.achievements.length,
-      version: `v${pkg.version}`,
+      version: 'v' + pkg.version,
       marqueeOffset: quality === 'lean' ? 0 : undefined,
     });
     dialogView.draw(dialog, layout);
@@ -2102,10 +2112,10 @@ app.ticker.add((ticker) => {
       loadDialogView.draw(layout, loadText, loadStatus, loadHover);
       const d = computeLoadDialog(layout);
       loadInput.style.display = 'block';
-      loadInput.style.left = `${d.field.x}px`;
-      loadInput.style.top = `${d.field.y}px`;
-      loadInput.style.width = `${d.field.w}px`;
-      loadInput.style.height = `${d.field.h}px`;
+      loadInput.style.left = d.field.x + 'px';
+      loadInput.style.top = d.field.y + 'px';
+      loadInput.style.width = d.field.w + 'px';
+      loadInput.style.height = d.field.h + 'px';
     } else {
       loadInput.style.display = 'none';
     }
@@ -2119,10 +2129,10 @@ app.ticker.add((ticker) => {
       nameDialogView.draw(layout, saveNameText, nameHover);
       const d = computeNameDialog(layout);
       nameInput.style.display = 'block';
-      nameInput.style.left = `${d.field.x}px`;
-      nameInput.style.top = `${d.field.y}px`;
-      nameInput.style.width = `${d.field.w}px`;
-      nameInput.style.height = `${d.field.h}px`;
+      nameInput.style.left = d.field.x + 'px';
+      nameInput.style.top = d.field.y + 'px';
+      nameInput.style.width = d.field.w + 'px';
+      nameInput.style.height = d.field.h + 'px';
     } else {
       nameInput.style.display = 'none';
     }
@@ -2154,10 +2164,10 @@ function hudTooltipLines(action: HudAction, s: RunState): TooltipLine[] {
       return pointerTooltipLines(s.pointer, s.economy.salvage, s.wave, overclockCap(s));
     case 'override':
       return noBuildActive(s)
-        ? ['Manual Override: every tower in range of the marked enemy drops its own priority and shoots it.', 'No-Build: towers cannot be retargeted this wave.']
-        : ['Manual Override: every tower in range of the marked enemy drops its own priority and shoots it.'];
+        ? [t('shell.tooltip.override'), t('shell.tooltip.noBuildRetarget')]
+        : [t('shell.tooltip.override')];
     case 'auto':
-      return ['Auto: start the next wave 1.5 s after the board clears (holds while a tower repairs).'];
+      return [t('shell.tooltip.auto')];
     case 'upgrade':
       if (noBuildActive(s)) return [NO_BUILD_MESSAGE];
       return tower ? upgradeTooltipLines(tower, s.economy.salvage) : [];
@@ -2166,7 +2176,7 @@ function hudTooltipLines(action: HudAction, s: RunState): TooltipLine[] {
     case 'branchC': {
       if (noBuildActive(s)) return [NO_BUILD_MESSAGE];
       if (!tower) return [];
-      const branch: Branch = action === 'branchA' ? 'A' : action === 'branchB' ? 'B' : 'C';
+      const branch: Branch = action.slice('branch'.length) as Branch;
       return branchTooltipLines(tower, branch, s.economy.salvage);
     }
     case 'sell':
@@ -2182,9 +2192,9 @@ function hudTooltipLines(action: HudAction, s: RunState): TooltipLine[] {
       return reason === null ? [] : [reason];
     }
     case 'restore':
-      return ['Open the Restore tree and spec shop.'];
+      return [t('shell.tooltip.restore')];
     case 'upgrades':
-      return ['Open Global Upgrades: one-shot purchases for this run, paid in salvage.'];
+      return [t('shell.tooltip.upgrades')];
     default:
       return [];
   }
@@ -2215,7 +2225,7 @@ function updateTooltip(): void {
     if (hit !== null) {
       const def = hit.type === 'row' ? GLOBAL_UPGRADES.find((d) => d.id === hit.id) : undefined;
       if (def) {
-        tooltip.update({ key: `upgrade:${def.id}`, lines: globalUpgradeTooltipLines(def, state) }, h.x, h.y, viewportW, viewportH);
+        tooltip.update({ key: 'upgrade' + ':' + def.id, lines: globalUpgradeTooltipLines(def, state) }, h.x, h.y, viewportW, viewportH);
       } else {
         tooltip.update({ key: null, lines: [] }, h.x, h.y, viewportW, viewportH);
       }
@@ -2233,13 +2243,13 @@ function updateTooltip(): void {
             const desc = paletteTooltipLines(palette);
             return locked === null ? desc : [locked, ...desc];
           })();
-      tooltip.update({ key: `palette:${palette}`, lines }, h.x, h.y, viewportW, viewportH);
+      tooltip.update({ key: 'palette' + ':' + palette, lines }, h.x, h.y, viewportW, viewportH);
       return;
     }
     const hoveredEnemy = h.onBoard && state.phase === 'wave' ? enemyAt(state, h.worldX, h.worldY) : undefined;
     if (hoveredEnemy && isBossVariant(hoveredEnemy.kind)) {
       tooltip.update(
-        { key: `enemy:${hoveredEnemy.id}`, lines: enemyTooltipLines(hoveredEnemy) },
+        { key: 'enemy' + ':' + hoveredEnemy.id, lines: enemyTooltipLines(hoveredEnemy) },
         h.x,
         h.y,
         viewportW,
@@ -2254,7 +2264,7 @@ function updateTooltip(): void {
       const healed = tower.kind === 'repair' ? repairHealingCount(state.towers, tower, state.clock) : 0;
       const maintenance = tower.kind === 'cursor' ? cursorMaintenanceStatus(state, tower) : null;
       tooltip.update(
-        { key: `tower:${tower.id}`, lines: towerTooltipLines(tower, state.clock, state.pointer, pointerDamageMult(state), healed, maintenance) },
+        { key: 'tower' + ':' + tower.id, lines: towerTooltipLines(tower, state.clock, state.pointer, pointerDamageMult(state), healed, maintenance) },
         h.x,
         h.y,
         viewportW,
@@ -2266,7 +2276,7 @@ function updateTooltip(): void {
     if (control) {
       const lines = hudTooltipLines(control.action, state);
       if (lines.length > 0) {
-        tooltip.update({ key: `hud:${control.action}`, lines }, h.x, h.y, viewportW, viewportH);
+        tooltip.update({ key: 'hud' + ':' + control.action, lines }, h.x, h.y, viewportW, viewportH);
         return;
       }
     }

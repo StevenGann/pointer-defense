@@ -62,6 +62,7 @@ import {
   popupWindowRect,
 } from './popupEnemy.ts';
 import type { QualityLevel } from '../core/quality.ts';
+import { t } from '../i18n/index.ts';
 
 export { dashRects, offsetSegment, routeOffset } from './route.ts';
 
@@ -102,7 +103,13 @@ export function staticLayerKey(
   state: Pick<RunState, 'levelId' | 'grid'>,
   board: BoardGeometry,
 ): string {
-  return `${state.levelId}|${state.grid.cols}x${state.grid.rows}|${board.x},${board.y},${board.cell}`;
+  const levelId = state.levelId;
+  const cols = state.grid.cols;
+  const rows = state.grid.rows;
+  const bx = board.x;
+  const by = board.y;
+  const cell = board.cell;
+  return levelId + '|' + cols + 'x' + rows + '|' + bx + ',' + by + ',' + cell;
 }
 
 /**
@@ -113,8 +120,18 @@ export function staticLayerKey(
  */
 export function routeKey(state: RunState): string {
   const routes = currentRoutes(state);
+  const count = routes.length;
   return routes
-    .map((route, i) => `${routes.length}:${i}:${route.map((t) => `${t.col},${t.row}`).join('|')}`)
+    .map((route, i) => {
+      const cells = route
+        .map((t) => {
+          const col = t.col;
+          const row = t.row;
+          return col + ',' + row;
+        })
+        .join('|');
+      return count + ':' + i + ':' + cells;
+    })
     .join(';');
 }
 
@@ -686,9 +703,9 @@ export class BoardView {
       drawPopupWindow(this.popupGfx, e, board, overClose(e));
       const r = popupWindowRect(e, board);
       const titleH = popupTitleH(r);
-      title.text = 'Pop-up';
+      title.text = t('screen.board.popupTitle');
       title.position.set(r.x + 5, r.y + 2 + Math.floor(titleH / 2));
-      message.text = 'This program has performed an illegal operation';
+      message.text = t('screen.board.popupMessage');
       message.style.wordWrapWidth = Math.max(20, r.w - 8);
       const bodyTop = r.y + 2 + titleH;
       message.position.set(r.x + 4, bodyTop + Math.floor((r.h - titleH - 4) / 2));

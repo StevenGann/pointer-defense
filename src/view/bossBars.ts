@@ -10,6 +10,7 @@ import {
 } from '../core/enemies.ts';
 import type { RunState } from '../core/state.ts';
 import { TICK_HZ } from '../core/time.ts';
+import { t } from '../i18n/index.ts';
 
 /**
  * Boss bars: the Minecraft-style announcement across the top of the field. A living boss draws its
@@ -74,19 +75,19 @@ export function bossName(kind: EnemyKind): string {
 export function bossGimmick(kind: EnemyKind): string | null {
   switch (kind) {
     case 'grunt-boss':
-      return 'shrugs off damage';
+      return t('screen.boss.gimmick.grunt');
     case 'runner-boss':
-      return 'anything near it keeps pace';
+      return t('screen.boss.gimmick.runner');
     case 'shielded-boss':
-      return 'three layers of shielding';
+      return t('screen.boss.gimmick.shielded');
     case 'flyer-boss':
-      return 'hatches flyers as it flies';
+      return t('screen.boss.gimmick.flyer');
     case 'armoured-boss':
-      return 'plated and slow to chill';
+      return t('screen.boss.gimmick.armoured');
     case 'saboteur-boss':
-      return 'shorts out towers as it passes';
+      return t('screen.boss.gimmick.saboteur');
     case 'breacher-boss':
-      return 'eats through your towers';
+      return t('screen.boss.gimmick.breacher');
     default:
       return null;
   }
@@ -441,7 +442,7 @@ export class BossBarView {
       shadow.alpha = frame.alpha;
       name.alpha = frame.alpha;
       if (frame.showNew) {
-        tag.text = 'NEW';
+        tag.text = t('screen.boss.new');
         tag.position.set(r.x + Math.ceil(name.width) + 6, r.nameY);
         tag.alpha = frame.alpha;
       } else {

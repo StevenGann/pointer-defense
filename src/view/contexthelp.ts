@@ -37,9 +37,9 @@ export function nextHelpMode(mode: boolean, action: HelpModeAction): boolean {
 export function contextHelpPage(hit: ContextHelpHit): string | null {
   switch (hit.kind) {
     case 'tower':
-      return hit.tower === 'wall' ? 'mechanics-walls' : `tower-${hit.tower}`;
+      return hit.tower === 'wall' ? 'mechanics-walls' : 'tower-' + hit.tower;
     case 'enemy':
-      return isBossVariant(hit.enemy) ? `boss-${hit.enemy}` : `enemy-${hit.enemy}`;
+      return isBossVariant(hit.enemy) ? 'boss-' + hit.enemy : 'enemy-' + hit.enemy;
     case 'control':
       switch (hit.control) {
         case 'pointer':
