@@ -1834,6 +1834,29 @@ function drainEvents(): void {
   state.events = [];
 }
 
+const PERF_HIDDEN: ReadonlySet<string> = (() => {
+  const raw = new URLSearchParams(location.search).get('hide');
+  return new Set(raw ? raw.split(',').filter(Boolean) : []);
+})();
+
+/** Debug-only per-stage timings: `?prof=1`, read back from `window.__perf`. */
+const PERF_PROF = new URLSearchParams(location.search).get('prof') === '1';
+function pmark(name: string, fn: () => void): void {
+  if (!PERF_PROF) {
+    fn();
+    return;
+  }
+  const t0 = performance.now();
+  fn();
+  const w = window as unknown as { __perf?: Record<string, { sum: number; max: number; n: number }> };
+  const all = (w.__perf ??= {});
+  const s = (all[name] ??= { sum: 0, max: 0, n: 0 });
+  const dt = performance.now() - t0;
+  s.sum += dt;
+  s.n += 1;
+  if (dt > s.max) s.max = dt;
+}
+
 app.ticker.add((ticker) => {
   const running = screen === 'run';
   if (running) {
@@ -1873,19 +1896,21 @@ app.ticker.add((ticker) => {
       cheatNotified = state;
       hud.showNotice('Cheats active — this run will not be recorded', 240);
     }
-    board.draw(
-      state,
-      layout,
-      alpha,
-      { col: mouse.hover.col, row: mouse.hover.row, onBoard: mouse.hover.onBoard, x: mouse.hover.x, y: mouse.hover.y },
-      (id, tick) => effects.knockbackOffset(id, tick),
+    pmark('board', () =>
+      board.draw(
+        state,
+        layout,
+        alpha,
+        { col: mouse.hover.col, row: mouse.hover.row, onBoard: mouse.hover.onBoard, x: mouse.hover.x, y: mouse.hover.y },
+        (id, tick) => effects.knockbackOffset(id, tick),
+      ),
     );
-    effects.draw(state, layout);
-    numbers.draw(state, layout);
-    bossBars.draw(state, layout, profile.shakeOn);
-    hud.draw(state, layout, mouse.hover.hud);
-    ad.draw(state);
-    trayView.draw(state);
+    if (!PERF_HIDDEN.has('fx')) pmark('effects', () => effects.draw(state, layout));
+    if (!PERF_HIDDEN.has('fx')) pmark('numbers', () => numbers.draw(state, layout));
+    pmark('bossBars', () => bossBars.draw(state, layout, profile.shakeOn));
+    pmark('hud', () => hud.draw(state, layout, mouse.hover.hud));
+    pmark('ad', () => ad.draw(state));
+    pmark('tray', () => trayView.draw(state));
     helpView.draw(helpSession, profile, mouse.hover.x, mouse.hover.y);
     if (helpSession.open && helpSession.navTab === 'search') {
       const shl = computeHelpLayout(helpSession.x, helpSession.y, helpSession.navW);

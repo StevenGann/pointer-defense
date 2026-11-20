@@ -90,6 +90,13 @@ export const TOWER_COLOR: Record<TowerKind, number> = {
  * The layer is redrawn only when this key changes, so a map cycle rebuilds the walls while a
  * resize-free frame leaves them alone.
  */
+/** Debug-only layer switches for profiling: `?hide=route,shadows,enemies`. Never set in play. */
+const PERF_HIDDEN: ReadonlySet<string> = (() => {
+  if (typeof location === 'undefined') return new Set<string>();
+  const raw = new URLSearchParams(location.search).get('hide');
+  return new Set(raw ? raw.split(',').filter(Boolean) : []);
+})();
+
 export function staticLayerKey(
   state: Pick<RunState, 'levelId' | 'grid'>,
   board: BoardGeometry,
@@ -500,7 +507,7 @@ export class BoardView {
       this.drawStatic(state.grid, board, cell);
     }
 
-    this.drawRoute(currentRoutes(state), board, cell);
+    if (!PERF_HIDDEN.has('route')) this.drawRoute(currentRoutes(state), board, cell);
 
     this.mines.clear();
     let mineArtIndex = 0;
@@ -618,7 +625,7 @@ export class BoardView {
     }
 
     // Pop-up windows draw beneath every other enemy (the shield is blind to towers, not the player).
-    const layers = enemyDrawOrder(state.enemies);
+    const layers = PERF_HIDDEN.has('enemies') ? { popups: [], others: [] } : enemyDrawOrder(state.enemies);
     const overClose = (e: Enemy): boolean => hover.onBoard && popupCloseHit(e, board, hover.x, hover.y);
     let pi = 0;
     for (const e of layers.popups) {
@@ -642,6 +649,7 @@ export class BoardView {
 
     let spriteIndex = 0;
     let shadowIndex = 0;
+    const drawShadows = !PERF_HIDDEN.has('shadows');
     for (const e of layers.others) {
       if (e.dead) continue;
       const kb = knockbackFor ? knockbackFor(e.id, state.tick) : null;
@@ -651,7 +659,7 @@ export class BoardView {
       // The shadow copies the body sprite exactly (same frame texture, size, rotation, knockback-
       // adjusted position) and is only cast when the body is sprite-backed; a procedural fallback
       // has no texture to copy.
-      if (body.visible && shadowVisibleFor(e.kind)) {
+      if (drawShadows && body.visible && shadowVisibleFor(e.kind)) {
         const off = shadowOffsetFor(e.kind);
         const sh = this.shadowSprite(shadowIndex++);
         sh.texture = body.texture;
