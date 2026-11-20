@@ -40,6 +40,8 @@ import {
   sellTower,
   startRepair,
   startWave,
+  sweepUpgradeSame,
+  sweepUpgradeReport,
   toggleAtTile,
   toggleGate,
   toggleManualOverride,
@@ -55,7 +57,7 @@ import {
   type RunState,
 } from '../core/state.ts';
 import { cheatsEnabled } from '../core/cheats.ts';
-import { escapeTarget } from './escape.ts';
+import { escapeAction } from './escape.ts';
 
 /**
  * Hit testing and gestures against the run state, the menus and the modal dialogs. Tracks the
@@ -320,6 +322,13 @@ export class MouseController {
       const row = Math.floor(w.y);
       const tower = towerAt(s, col, row);
       if (tower) {
+        // Ctrl+click upgrades every tower in the same place on the ladder; a plain click only selects.
+        if (e.ctrlKey || e.metaKey) {
+          const sweep = sweepUpgradeSame(s, tower);
+          const report = sweepUpgradeReport(sweep.upgraded, sweep.needBranch);
+          if (report) this.ctx.notice(report);
+          return;
+        }
         selectPlacedTower(s, tower);
         if (isToggleGate(tower)) {
           if (isGateLocked(tower, s.clock) && !hasUpgrade(s, 'shutter-licence')) {
@@ -402,6 +411,9 @@ export class MouseController {
         if (tower) cycleTargetMode(s, tower.col, tower.row);
         break;
       }
+      case 'closeTower':
+        cancelSelection(s);
+        break;
       case 'restore':
         this.ctx.openRestore();
         break;
@@ -430,19 +442,22 @@ export class MouseController {
     if (e.key === 'Escape') {
       const s = this.ctx.state();
       // A modal dialog or open menu closes first, then Help, achievements, Restore and Global
-      // Upgrades; only with none of them open does Esc clear the selection or exit the run.
-      const target = escapeTarget({
-        menuOrDialog: this.ctx.menu() !== null || this.ctx.dialog() !== null,
-        help: this.ctx.helpOpen(),
-        achievements: this.ctx.achievementOpen(),
-        restore: this.ctx.restoreOpen(),
-        upgrades: this.ctx.upgradesOpen(),
-      });
-      switch (target) {
+      // Upgrades; only with none of them open does Esc clear the selection or exit the run. Closing
+      // a modal never touches a selected tower — Esc keeps its existing jobs first.
+      const action = escapeAction(
+        {
+          menuOrDialog: this.ctx.menu() !== null || this.ctx.dialog() !== null,
+          help: this.ctx.helpOpen(),
+          achievements: this.ctx.achievementOpen(),
+          restore: this.ctx.restoreOpen(),
+          upgrades: this.ctx.upgradesOpen(),
+        },
+        s.selected !== null || s.selectedTowerId !== null,
+      );
+      switch (action.target) {
         case 'menuOrDialog':
           this.ctx.openMenu(null);
           this.ctx.closeDialog();
-          cancelSelection(s);
           return;
         case 'help':
           this.ctx.closeHelp();
@@ -456,12 +471,10 @@ export class MouseController {
         case 'upgrades':
           this.ctx.closeUpgrades();
           return;
-        case 'run': {
-          const hadSelection = s.selected !== null || s.selectedTowerId !== null;
-          cancelSelection(s);
-          if (!hadSelection) this.ctx.exitRun();
+        case 'run':
+          if (action.clearSelection) cancelSelection(s);
+          if (action.exitRun) this.ctx.exitRun();
           return;
-        }
       }
     }
 

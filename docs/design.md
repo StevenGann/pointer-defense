@@ -587,6 +587,21 @@ if a stale selection still points at it. The wave that unlocks a tower shows a o
 (`Frost unlocked`), and the build phase after that wave is the first time the button is live. Unlocks
 never re-lock, so a tower bought once stays available through endless.
 
+### 6.11 Sweep upgrade (Ctrl+click)
+
+Ctrl+clicking a placed tower upgrades every tower in the **same place on the ladder** — same kind,
+same tier and same branch — in placement order (tower id ascending), spending salvage until it runs
+out. The clicked tower is included. A Ctrl+click on a tier-1 Gun upgrades the other tier-1 Guns and
+nothing else; a Ctrl+click on a tier-3 Marksman upgrades the other tier-3 Marksmen.
+
+Towers that would need a **branch choice** are skipped, never chosen for the player: a tier-2 tower has
+two mutually exclusive branches, so the sweep leaves every tier-2 tower alone and counts it. The
+status line reports the result — `Upgraded 4 towers — 2 need a branch (click one to choose)` — and a
+sweep that could not upgrade anything reports nothing. Walls are a three-tier tower that branches at
+tier 2, so the same rule applies: Ctrl+click a tier-1 wall upgrades tier-1 walls, and the branch step
+is skipped. Spending stops at the first tower that cannot be afforded; what was already bought stays.
+A plain click still only selects the tower for inspection — only the Ctrl modifier changes the meaning.
+
 ---
 
 ## 7. Enemies
@@ -1208,8 +1223,12 @@ The **status bar** has three sunken panes: the hint line (or `PAUSED`, plus a `C
 The **left panel** stacks, top to bottom: the sunken **integrity** readout (26 px); the sunken
 **salvage** readout (26 px, full inner width, `$1,234` right-aligned in the same 13 px readout size as
 the integrity figure, `---` while a Blackout wave masks it); then either the route line and the tower
-purchase list, or — while a placed tower is selected for inspection — the tower detail box; then the
-`MAP` row (before the first tower only), Start / Call Wave and the Auto checkbox. Salvage sits directly
+purchase list, or — while a placed tower is selected for inspection — the tower detail box, whose
+title row carries a Win95 close box (the same 16×14 control the help window uses) that clears
+`selectedTowerId` and restores the list, exactly as a click away does; then the
+`MAP` row (before the first tower only), Start / Call Wave and the Auto checkbox. Esc does the same
+while a placed tower is selected — it closes any open dialog first and only deselects once nothing
+else wants it. Salvage sits directly
 above the shop so the price list and the money to spend are read together, and it stays in place when
 the detail view replaces the list. Every layout fits the panel at 1280x720 and 1600x900.
 

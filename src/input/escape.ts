@@ -23,3 +23,22 @@ export function escapeTarget(open: EscapeFlags): EscapeTarget {
   if (open.upgrades) return 'upgrades';
   return 'run';
 }
+
+export interface EscapeAction {
+  target: EscapeTarget;
+  /** Whether Esc clears the selection (an armed build kind or a selected placed tower). */
+  clearSelection: boolean;
+  /** Whether Esc exits the run (only when nothing is selected and no modal is open). */
+  exitRun: boolean;
+}
+
+/**
+ * What Esc does this press, folding the selection into the decision. Closing a modal never touches
+ * the selection — Esc keeps its existing jobs first — and only with nothing else open does Esc clear
+ * a selected tower and, with nothing selected, exit the run.
+ */
+export function escapeAction(open: EscapeFlags, hasSelection: boolean): EscapeAction {
+  const target = escapeTarget(open);
+  if (target !== 'run') return { target, clearSelection: false, exitRun: false };
+  return { target: 'run', clearSelection: hasSelection, exitRun: !hasSelection };
+}

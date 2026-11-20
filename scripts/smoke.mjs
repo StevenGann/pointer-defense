@@ -29,6 +29,8 @@ import { FLYER_OFF_KIND_DAMAGE,
   upgradeTower,
   chooseBranch,
   sellTower,
+  sweepUpgradeSame,
+  sweepUpgradeReport,
   towerAt,
   towerUnlocked,
   cycleLevel,
@@ -209,7 +211,7 @@ import {
   TRAY_H,
 } from '../src/core/upgrades.ts';
 import { buffRowText, upgradesRowText, upgradesNewCount } from '../src/view/hud.ts';
-import { escapeTarget } from '../src/input/escape.ts';
+import { escapeAction, escapeTarget } from '../src/input/escape.ts';
 import { EffectsView, muzzleAssetFor, muzzleLife, FIRE_KINDS } from '../src/view/effects.ts';
 
 import { fileURLToPath } from 'node:url';
@@ -9203,6 +9205,113 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     check(existsSync(`${artDir}/fx/${name}.json`), `fx/${name}.json ships with the frames`);
   }
   check(errors.length === 0, `the aura assets pass the manifest checks (${errors.join(', ') || 'no errors'})`);
+}
+
+// --- UX-PASS-2: detail close box, Esc, and Ctrl+click sweep ------------------------------------
+{
+  // Test 1: the detail close box clears selectedTowerId and the shop returns.
+  const s = allUnlocked();
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 5, 5);
+  const t = towerAt(s, 5, 5);
+  selectPlacedTower(s, t);
+  check(s.selectedTowerId === t.id, 'ux2: selecting a placed tower sets selectedTowerId');
+
+  const layout = computeLayout(1280, 800);
+  const withDetail = computeHud(layout, s);
+  check(withDetail.detail !== null && withDetail.towers.length === 0,
+    'ux2: a selected tower replaces the shop list with the detail pane');
+
+  const close = withDetail.detail.close;
+  check(close.w === CONTROL_BOX_W && close.h === CONTROL_BOX_H,
+    `ux2: the detail close box is ${CONTROL_BOX_W}x${CONTROL_BOX_H} like the help window`);
+  const hit = hudControlAt(layout, s, close.x + Math.floor(close.w / 2), close.y + Math.floor(close.h / 2));
+  check(hit !== null && hit.action === 'closeTower', 'ux2: the close box hit-tests as closeTower');
+
+  cancelSelection(s); // what clicking the close box dispatches
+  check(s.selectedTowerId === null, 'ux2: clicking the close box clears selectedTowerId');
+
+  const after = computeHud(layout, s);
+  check(after.detail === null && after.towers.length > 0, 'ux2: the shop list returns after the close box');
+}
+{
+  // Test 2: Esc with a tower selected clears it; Esc with a dialog open closes the dialog and leaves the tower.
+  const closed = { menuOrDialog: false, help: false, achievements: false, restore: false, upgrades: false };
+  const withTower = escapeAction(closed, true);
+  check(withTower.target === 'run' && withTower.clearSelection && !withTower.exitRun,
+    'ux2: Esc with a tower selected clears it and does not exit the run');
+  const withDialog = escapeAction({ ...closed, menuOrDialog: true }, true);
+  check(withDialog.target === 'menuOrDialog' && !withDialog.clearSelection && !withDialog.exitRun,
+    'ux2: Esc with a dialog open closes the dialog and leaves the tower selected');
+  const empty = escapeAction(closed, false);
+  check(empty.target === 'run' && !empty.clearSelection && empty.exitRun,
+    'ux2: Esc with nothing selected exits the run');
+}
+{
+  // Test 3: Ctrl+click on a tier-1 Gun upgrades every tier-1 Gun and no other kind or tier.
+  const s = allUnlocked();
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 3, 6);
+  placeTower(s, 'gun', 4, 6);
+  placeTower(s, 'gun', 5, 6);
+  placeTower(s, 'cannon', 6, 6);
+  placeTower(s, 'gun', 7, 6);
+  upgradeTower(s, 7, 6); // a pre-upgraded tier-2 gun on a different rung of the ladder
+
+  const result = sweepUpgradeSame(s, towerAt(s, 3, 6));
+  check(result.upgraded === 3, `ux2: Ctrl+click upgrades every tier-1 gun (${result.upgraded})`);
+  check(s.towers.filter((x) => x.kind === 'gun' && x.tier === 2).length === 4,
+    'ux2: the three swept guns and the pre-upgraded gun are tier 2');
+  check(towerAt(s, 6, 6).tier === 1, 'ux2: a cannon is untouched by a gun sweep');
+  check(towerAt(s, 7, 6).tier === 2 && towerAt(s, 7, 6).branch === null,
+    'ux2: a tier-2 gun on another rung is left alone (no branch, no double upgrade)');
+}
+{
+  // Test 4: Ctrl+click never chooses a branch — tier-2 towers are left alone and counted in the report.
+  const s = allUnlocked();
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 3, 6);
+  placeTower(s, 'gun', 4, 6);
+  upgradeTower(s, 3, 6);
+  upgradeTower(s, 4, 6);
+
+  const result = sweepUpgradeSame(s, towerAt(s, 3, 6));
+  check(result.upgraded === 0 && result.needBranch === 2,
+    `ux2: Ctrl+click on tier-2 guns upgrades none and counts both as needing a branch (${result.upgraded}/${result.needBranch})`);
+  check(towerAt(s, 3, 6).tier === 2 && towerAt(s, 3, 6).branch === null,
+    'ux2: the tier-2 guns are left alone, no branch chosen');
+  check(sweepUpgradeReport(result.upgraded, result.needBranch) === 'Upgraded 0 towers — 2 need a branch (click one to choose)',
+    `ux2: the report names the skipped branch towers (${sweepUpgradeReport(result.upgraded, result.needBranch)})`);
+}
+{
+  // Test 5: the sweep stops when salvage runs out, in id order, and keeps what it bought.
+  const s = allUnlocked();
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 3, 6); // id 1
+  placeTower(s, 'gun', 4, 6); // id 2
+  placeTower(s, 'gun', 5, 6); // id 3
+  const cost = upgradeCost(towerAt(s, 3, 6));
+  s.economy.salvage = cost * 2; // exactly two upgrades, not three
+
+  const result = sweepUpgradeSame(s, towerAt(s, 3, 6));
+  check(result.upgraded === 2, `ux2: the sweep buys two upgrades then stops (${result.upgraded})`);
+  check(towerAt(s, 3, 6).tier === 2 && towerAt(s, 4, 6).tier === 2,
+    'ux2: the first two towers in id order were upgraded');
+  check(towerAt(s, 5, 6).tier === 1, 'ux2: the third tower is left at tier 1 when salvage runs out');
+  check(s.economy.salvage === 0, 'ux2: salvage is spent down to zero');
+}
+{
+  // Test 6: without Ctrl the same click only selects.
+  const s = allUnlocked();
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 3, 6);
+  placeTower(s, 'gun', 4, 6);
+  const before = s.economy.salvage;
+  const t = towerAt(s, 3, 6);
+  selectPlacedTower(s, t); // the plain-click path
+  check(s.selectedTowerId === t.id, 'ux2: a plain click selects the tower for inspection');
+  check(towerAt(s, 3, 6).tier === 1 && towerAt(s, 4, 6).tier === 1, 'ux2: a plain click upgrades nothing');
+  check(s.economy.salvage === before, 'ux2: a plain click spends nothing');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
