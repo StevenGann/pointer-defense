@@ -110,6 +110,9 @@ export interface MouseContext {
   helpScrollBy: (dy: number) => void;
   helpPage: (dir: number) => void;
   closeHelp: () => void;
+  recordsOpen: () => boolean;
+  recordsPointerDown: (x: number, y: number, button: number) => boolean;
+  closeRecords: () => void;
   achievementOpen: () => boolean;
   achievementPointerDown: (x: number, y: number, button: number) => boolean;
   achievementPointerMove: (x: number, y: number) => void;
@@ -229,6 +232,9 @@ export class MouseController {
     // The help window swallows any click inside it, left or right button, so a click there never
     // reaches the board, the HUD or the palette behind it.
     if (this.ctx.helpOpen() && this.ctx.helpPointerDown(x, y, e.button)) return;
+
+    // The Records viewer swallows clicks inside it the same way the help window does.
+    if (this.ctx.recordsOpen() && this.ctx.recordsPointerDown(x, y, e.button)) return;
 
     // The Restore window swallows clicks inside it the same way the help window does.
     if (this.ctx.restoreOpen() && this.ctx.restorePointerDown(x, y, e.button)) return;
@@ -450,6 +456,7 @@ export class MouseController {
         {
           menuOrDialog: this.ctx.menu() !== null || this.ctx.dialog() !== null,
           help: this.ctx.helpOpen(),
+          records: this.ctx.recordsOpen(),
           achievements: this.ctx.achievementOpen(),
           restore: this.ctx.restoreOpen(),
           upgrades: this.ctx.upgradesOpen(),
@@ -463,6 +470,9 @@ export class MouseController {
           return;
         case 'help':
           this.ctx.closeHelp();
+          return;
+        case 'records':
+          this.ctx.closeRecords();
           return;
         case 'achievements':
           this.ctx.closeAchievement();

@@ -117,7 +117,9 @@ import {
   MARKED_DAMAGE_MULT,
   CLICK_SLACK,
 } from '../src/core/pointer.ts';
-import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies, allHelpUnlocked, checkProfileAchievements, rpGain, specLevelCost } from '../src/core/save.ts';
+import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies, allHelpUnlocked, checkProfileAchievements, rpGain, specLevelCost, MAX_RUNS } from '../src/core/save.ts';
+import { appendRun, buildRunRecord, runTotals, bestByMap } from '../src/core/runs.ts';
+import { buildRecordsRows, totalsLine, bestByMapLine, computeRecordsLayout, recordsHitAt, formatRecordDate, outcomeLabel } from '../src/view/records.ts';
 import { captureRun, restoreRun, loadRunSave, saveRun, clearRunSave, hasRunSave, RUN_SAVE_KEY } from '../src/core/runsave.ts';
 import { computeMenuScreen, menuButtonAt } from '../src/view/menuScreen.ts';
 import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES } from '../src/core/tree.ts';
@@ -1400,7 +1402,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 // --- 12. Profile persistence: defaults for empty, corrupt and unknown-version stores -----------
 {
   const empty = loadProfile({ getItem: () => null, setItem: () => {} });
-  check(empty.version === 2, 'empty storage returns a default profile (version 2)');
+  check(empty.version === 3, 'empty storage returns a default profile (version 3)');
   check(
     empty.specs.cpu === 0 && empty.specs.ram === 0 && empty.specs.gpu === 0 && empty.specs.disk === 0,
     'default spec levels are all zero',
@@ -8093,7 +8095,7 @@ function helpRecomputeBlock(kind) {
     setItem(_k, v) { this.value = v; },
   };
   const migrated = loadProfile(store);
-  check(migrated.version === 2, 'a version-1 save migrates to version 2');
+  check(migrated.version === 3, 'a version-1 save migrates to version 3');
   check(migrated.specs.cpu === 5 && migrated.specs.ram === 3 && migrated.specs.gpu === 2 && migrated.specs.disk === 1,
     'migration keeps the four spec fields');
   check(migrated.rp === 9 && migrated.rpEarned === 9,
@@ -10024,6 +10026,234 @@ function levelFixture(name) {
     check(noOverlap, `${vw} x ${vh}: every toolbar button hit-tests with no overlap`);
     check(labelsFit, `${vw} x ${vh}: every button label stays readable`);
   }
+}
+
+// --- Run records 1: defeat, victory and Restart Windows each record once, with the right outcome, map and wave.
+{
+  const s = stateOnLevel('dumbbell');
+  s.wave = 12;
+  s.clearedWaves = 11;
+  s.integrity = 3;
+  s.economy.earned = 5000;
+  s.tick = 900;
+  s.pointer.stage = 2;
+
+  const defeat = buildRunRecord(s, 'defeat');
+  check(defeat.outcome === 'defeat' && !defeat.victory, 'a defeat records outcome defeat, not victory');
+  check(defeat.mapId === 'dumbbell' && defeat.mapName === 'Dumbbell' && defeat.wave === 12, 'the record carries the map and the highest wave reached');
+  check(
+    defeat.clearedWaves === 11 && defeat.integrity === 3 && defeat.pointerStage === 2 && defeat.salvage === 5000 && defeat.durationTicks === 900,
+    'the record carries the run snapshot (cleared, integrity, pointer, salvage, duration)',
+  );
+
+  const p = defaultProfile();
+  appendRun(p, defeat);
+  check(p.runs.length === 1 && p.runs[0].outcome === 'defeat', 'a defeat appends exactly one record');
+
+  const victory = buildRunRecord(s, 'victory');
+  check(victory.outcome === 'victory' && victory.victory, 'a victory records outcome victory');
+  appendRun(p, victory);
+  check(p.runs.length === 2 && p.runs[0].outcome === 'victory', 'a victory appends exactly one record, newest first');
+
+  const reboot = buildRunRecord(s, 'reboot');
+  check(reboot.outcome === 'reboot' && !reboot.victory, 'a Restart Windows records outcome reboot');
+  appendRun(p, reboot);
+  check(p.runs.length === 3 && p.runs[0].outcome === 'reboot', 'a Restart Windows appends exactly one record');
+
+  check(outcomeLabel('victory') === 'Victory' && outcomeLabel('defeat') === 'Defeat' && outcomeLabel('reboot') === 'Reboot', 'outcome labels render as words');
+  check(formatRecordDate('2026-11-20T12:34:56Z') === '2026-11-20', 'record dates render as YYYY-MM-DD');
+}
+
+// --- Run records 2: escaping to the menu appends nothing.
+{
+  check(defaultProfile().runs.length === 0, 'a fresh profile has no runs');
+  const esc = escapeAction(
+    { menuOrDialog: false, help: false, records: false, achievements: false, restore: false, upgrades: false },
+    false,
+  );
+  check(esc.target === 'run' && esc.exitRun, 'Esc with nothing open exits the run');
+  check(!['victory', 'defeat', 'reboot'].includes('abandoned'), 'an abandoned run has no outcome to record');
+  const escRecords = escapeAction(
+    { menuOrDialog: false, help: false, records: true, achievements: false, restore: false, upgrades: false },
+    false,
+  );
+  check(escRecords.target === 'records' && !escRecords.exitRun, 'Esc closes the Records viewer without exiting the run');
+}
+
+// --- Run records 3: the list is newest first and never exceeds 50 (the 51st drops the oldest).
+{
+  const p = defaultProfile();
+  const mk = (i) => ({
+    id: `r${i}`,
+    at: `2026-01-${String((i % 28) + 1).padStart(2, '0')}T00:00:00Z`,
+    mapId: 'corridor',
+    mapName: 'The Corridor',
+    wave: i,
+    clearedWaves: i,
+    integrity: 10,
+    pointerStage: 1,
+    salvage: 100,
+    durationTicks: 60,
+    outcome: 'defeat',
+    victory: false,
+  });
+  for (let i = 1; i <= 51; i++) appendRun(p, mk(i));
+  check(p.runs.length === 50, 'a 51st run drops the oldest and the count never exceeds 50');
+  check(p.runs[0].id === 'r51', 'the newest run is first');
+  check(p.runs[49].id === 'r2', 'the 51st run evicted the oldest (r1) and kept r2 last');
+
+  const rows = buildRecordsRows(p.runs);
+  check(rows[0].kind === 'ranked' && rows[0].rank === 1 && rows[0].record.id === 'r51', 'the top ranked row is the highest wave');
+  check(rows[4].kind === 'ranked' && rows[4].rank === 5 && rows[4].record.id === 'r47', 'the fifth ranked row is the fifth-highest wave');
+  check(rows[5].kind === 'separator', 'an Earlier separator follows the top five');
+  check(rows[6].kind === 'date' && rows[6].record.id === 'r46', 'the rest stay in date order under the separator');
+}
+
+// --- Run records 4: per-map bests and the totals line are computed from the records, not stored.
+{
+  const runs = [
+    { id: 'a', at: '2026-01-01T00:00:00Z', mapId: 'corridor', mapName: 'The Corridor', wave: 40, clearedWaves: 40, integrity: 5, pointerStage: 1, salvage: 10, durationTicks: 100, outcome: 'defeat', victory: false },
+    { id: 'b', at: '2026-01-02T00:00:00Z', mapId: 'corridor', mapName: 'The Corridor', wave: 100, clearedWaves: 100, integrity: 8, pointerStage: 2, salvage: 20, durationTicks: 200, outcome: 'victory', victory: true },
+    { id: 'c', at: '2026-01-03T00:00:00Z', mapId: 'dumbbell', mapName: 'Dumbbell', wave: 61, clearedWaves: 61, integrity: 4, pointerStage: 1, salvage: 30, durationTicks: 300, outcome: 'reboot', victory: false },
+  ];
+  const best = bestByMap(runs);
+  check(best.length === 2, 'bestByMap has one entry per map');
+  check(best[0].mapId === 'corridor' && best[0].wave === 100, 'the Corridor best is 100, from the records');
+  check(best[1].mapId === 'dumbbell' && best[1].wave === 61, 'the Dumbbell best is 61, from the records');
+  const t = runTotals(runs);
+  check(t.runs === 3 && t.wins === 1 && t.defeats === 1 && t.reboots === 1 && t.durationTicks === 600, 'the totals line figures come from the records');
+  check(totalsLine(runs, 100) === 'Runs 3 · Wins 1 · Defeats 1 · Reboots 1 · Best wave 100', 'the totals line reads the counts and the stored all-time best');
+  check(bestByMapLine(runs) === 'Best by map — The Corridor 100, Dumbbell 61', 'the best-by-map footer is computed from the records');
+}
+
+// --- Run records 5: an older profile with no runs migrates with an empty list and keeps every other field.
+{
+  const store = {
+    value: JSON.stringify({
+      version: 2,
+      specs: { cpu: 5, ram: 3, gpu: 2, disk: 1 },
+      rp: 9,
+      rpEarned: 12,
+      tree: ['loose-change'],
+      lastSalvage: 4000,
+      achievements: ['first-blood'],
+      achievementDates: { 'first-blood': '2026-01-01' },
+      mapsCleared: ['corridor'],
+      lifetimeBossKillsByPointer: 2,
+      bestWave: 42,
+      reboots: 3,
+      soundOn: false,
+      volume: 'high',
+      autoWave: true,
+      shakeOn: false,
+      seenBossKinds: ['grunt-boss'],
+      seenEnemies: ['grunt'],
+      lastChoice: 'editor',
+    }),
+    getItem() { return this.value; },
+    setItem(_k, v) { this.value = v; },
+  };
+  const migrated = loadProfile(store);
+  check(migrated.version === 3 && Array.isArray(migrated.runs) && migrated.runs.length === 0, 'an older profile migrates with an empty run list');
+  check(migrated.specs.cpu === 5 && migrated.rp === 9 && migrated.rpEarned === 12 && migrated.tree.includes('loose-change') && migrated.lastSalvage === 4000, 'migration keeps the meta fields');
+  check(
+    migrated.achievements.includes('first-blood') && migrated.achievementDates['first-blood'] === '2026-01-01' && migrated.mapsCleared.includes('corridor') && migrated.lifetimeBossKillsByPointer === 2,
+    'migration keeps the cross-run counters',
+  );
+  check(
+    migrated.bestWave === 42 && migrated.reboots === 3 && migrated.soundOn === false && migrated.volume === 'high' && migrated.autoWave === true && migrated.shakeOn === false,
+    'migration keeps every preference and meta field',
+  );
+  check(migrated.seenBossKinds.includes('grunt-boss') && migrated.seenEnemies.includes('grunt') && migrated.lastChoice === 'editor', 'migration keeps the seen sets and the last choice');
+}
+
+// --- Run records 6: a corrupt runs entry is dropped, the rest survive.
+{
+  const store = {
+    value: JSON.stringify({
+      version: 3,
+      specs: { cpu: 2, ram: 0, gpu: 0, disk: 0 },
+      rp: 1,
+      rpEarned: 1,
+      tree: [],
+      lastSalvage: 0,
+      achievements: [],
+      achievementDates: {},
+      mapsCleared: [],
+      lifetimeBossKillsByPointer: 0,
+      bestWave: 10,
+      reboots: 1,
+      soundOn: true,
+      volume: 'med',
+      autoWave: false,
+      shakeOn: false,
+      seenBossKinds: [],
+      seenEnemies: [],
+      lastChoice: 'play',
+      runs: [
+        { id: 'a', at: '2026-01-01T00:00:00Z', mapId: 'corridor', mapName: 'The Corridor', wave: 10, clearedWaves: 10, integrity: 5, pointerStage: 1, salvage: 10, durationTicks: 60, outcome: 'defeat', victory: false },
+        { id: 'bad', at: 'nope', mapId: 'corridor', mapName: 'The Corridor', wave: 'x', clearedWaves: 0, integrity: 0, pointerStage: 0, salvage: 0, durationTicks: 0, outcome: 'defeat', victory: false },
+        { id: 'bad2', at: '2026-01-02T00:00:00Z', mapId: 'corridor', mapName: 'The Corridor', wave: 5, clearedWaves: 5, integrity: 0, pointerStage: 1, salvage: 1, durationTicks: 1, outcome: 'bogus', victory: false },
+        'not-an-object',
+        null,
+      ],
+    }),
+    getItem() { return this.value; },
+    setItem(_k, v) { this.value = v; },
+  };
+  const loaded = loadProfile(store);
+  check(loaded.runs.length === 1 && loaded.runs[0].id === 'a', 'corrupt runs entries are dropped individually and the good one survives');
+  check(loaded.bestWave === 10 && loaded.specs.cpu === 2 && loaded.reboots === 1, 'a corrupt run never poisons the rest of the profile');
+}
+
+// --- Run records 7: the dialog fits at 1024 x 640 and 1280 x 720, the table clips its rows, and Esc closes it.
+{
+  const many = [];
+  for (let i = 0; i < 50; i++) {
+    many.push({
+      id: `r${i}`,
+      at: `2026-01-${String((i % 28) + 1).padStart(2, '0')}T00:00:00Z`,
+      mapId: 'corridor',
+      mapName: 'The Corridor',
+      wave: i + 1,
+      clearedWaves: i,
+      integrity: 5,
+      pointerStage: 1,
+      salvage: 10,
+      durationTicks: 60,
+      outcome: 'defeat',
+      victory: false,
+    });
+  }
+  for (const [vw, vh] of [[1024, 640], [1280, 720]]) {
+    const layout = computeLayout(vw, vh);
+    const rl = computeRecordsLayout(layout, many, 0);
+    check(rl.window.x >= layout.client.x && rl.window.y >= layout.client.y, `${vw} x ${vh}: the Records window is fully inside the client area`);
+    check(rl.window.x + rl.window.w <= layout.client.x + layout.client.w && rl.window.y + rl.window.h <= layout.client.y + layout.client.h, `${vw} x ${vh}: the Records window fits at ${vw} x ${vh}`);
+    check(rl.maxScroll > 0, `${vw} x ${vh}: 50 runs overflow, so the table scrolls`);
+    check(rl.data.h < many.length * 16, `${vw} x ${vh}: the table clips its rows to the panel`);
+    const hit = recordsHitAt(rl, rl.close.x + Math.floor(rl.close.w / 2), rl.close.y + Math.floor(rl.close.h / 2));
+    check(hit === 'close', `${vw} x ${vh}: the close box hit-tests`);
+  }
+  const esc = escapeAction(
+    { menuOrDialog: false, help: false, records: true, achievements: false, restore: false, upgrades: false },
+    false,
+  );
+  check(esc.target === 'records' && !esc.exitRun, 'Esc closes the Records viewer without exiting the run');
+}
+
+// --- Run records 8: the empty state renders the placeholder line and Runs 0.
+{
+  const layout = computeLayout(1280, 720);
+  const rl = computeRecordsLayout(layout, [], 0);
+  check(rl.empty, 'an empty run list is the empty state');
+  check(rl.rows.length === 0, 'the empty state has no table rows');
+  check(totalsLine([], 0) === 'Runs 0', 'the empty totals line reads Runs 0');
+  check(bestByMapLine([]) === '', 'the empty state has no best-by-map footer');
+  check(
+    totalsLine([{ id: 'a', at: '2026-01-01T00:00:00Z', mapId: 'corridor', mapName: 'The Corridor', wave: 5, clearedWaves: 5, integrity: 1, pointerStage: 1, salvage: 1, durationTicks: 1, outcome: 'victory', victory: true }], 5) === 'Runs 1 · Wins 1 · Defeats 0 · Reboots 0 · Best wave 5',
+    'a single victory totals Runs 1 · Wins 1 · Best wave 5',
+  );
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

@@ -45,6 +45,10 @@ on its number) tells you which wave it arrives in.
 The map editor keeps your work: it auto-saves the drawing as a draft that survives a reload, and its
 **Save** / **Open…** toolbar buttons keep a small local library of up to 50 maps to reuse and re-edit.
 
+Every finished run is remembered. The main menu's **Records** button — or the **View** menu's
+**Records** item during a run — opens a window listing your last 50 runs (outcome, wave and map), the
+top five ranked by wave, and a best wave per map.
+
 ## Development
 
 Requires Node 22.18 or later (TypeScript types are stripped natively, no build step for the scripts).
