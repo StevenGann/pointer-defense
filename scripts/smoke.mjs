@@ -121,7 +121,9 @@ import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeen
 import { appendRun, appendDailyRun, buildRunRecord, runTotals, bestByMap } from '../src/core/runs.ts';
 import { buildRecordsRows, totalsLine, bestByMapLine, computeRecordsLayout, recordsHitAt, formatRecordDate, outcomeLabel } from '../src/view/records.ts';
 import { captureRun, restoreRun, loadRunSave, saveRun, clearRunSave, hasRunSave, RUN_SAVE_KEY } from '../src/core/runsave.ts';
-import { computeMenuScreen, menuButtonAt } from '../src/view/menuScreen.ts';
+import { computeMenuScreen, menuButtonAt, computeMenuWindow, computeMenuAnim } from '../src/view/menuScreen.ts';
+import { computeUpgradesLayout, UpgradesSession } from '../src/view/upgrades.ts';
+import { computeRestoreLayout, RestoreSession, restoreProgress, restoreDirty } from '../src/view/restore.ts';
 import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES } from '../src/core/tree.ts';
 import { ACHIEVEMENTS } from '../src/core/achievements.ts';
 import { restartWindows, checkAchievements, enterEndless, pointerDamageMult, towerCost, overclockCap, towerIntervalTicks } from '../src/core/state.ts';
@@ -163,7 +165,7 @@ import {
 } from '../src/view/bossBars.ts';
 import { backingStorePixelSize } from '../src/view/screen.ts';
 import { HELP_PAGES, pageUnlocked, lockedReason, pageById } from '../src/content/help.ts';
-import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, computeHelpScroll, HelpSession, HELP_W, HELP_H, HELP_LINE_H, HELP_SCROLL_LINES } from '../src/view/help.ts';
+import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, computeHelpScroll, HelpSession, helpIndexList, helpSearchResults, HELP_W, HELP_H, HELP_LINE_H, HELP_SCROLL_LINES } from '../src/view/help.ts';
 import { buildAchievementGrid, gridRowCount, gridCellRect, ACH_COLUMNS, ACH_CELL, ACH_GUTTER, computeAchievementGrid, achievementGridHitAt, AchievementSession } from '../src/view/dialog.ts';
 import {
   ART_MANIFEST,
@@ -10403,6 +10405,188 @@ function dailyState(date) {
   s.wave = 11;
   s.phase = 'build';
   check(waveLabel(s) === 'Wave 12 / 30 · Daily', `daily: the HUD label reads "${waveLabel(s)}"`);
+}
+
+// --- Visual pass 1: the main menu is a window on a desktop (docs/VISUAL-PASS.md) ---------------
+{
+  for (const [vw, vh] of [[1024, 640], [1280, 720]]) {
+    const layout = computeLayout(vw, vh);
+    const win = computeMenuWindow(layout);
+    const m = computeMenuScreen(layout, 'Wave 34 — The Corridor');
+    const insideX = win.window.x >= layout.client.x && win.window.x + win.window.w <= layout.client.x + layout.client.w;
+    const insideY = win.window.y >= layout.client.y && win.window.y + win.window.h <= layout.client.y + layout.client.h;
+    check(insideX && insideY, `${vw} x ${vh}: the menu window fits inside the client area`);
+    check(
+      m.buttons.map((b) => b.id).join(',') === 'continue,play,daily,editor,records,load',
+      'the menu buttons keep their ids and order',
+    );
+    let noOverlap = true;
+    let insideWindow = true;
+    let hasShortcut = true;
+    for (let i = 0; i < m.buttons.length; i++) {
+      const b = m.buttons[i];
+      insideWindow = insideWindow && b.rect.x >= win.client.x && b.rect.x + b.rect.w <= win.client.x + win.client.w && b.rect.y + b.rect.h <= win.client.y + win.client.h;
+      hasShortcut = hasShortcut && b.shortcut.length > 0;
+      if (i > 0 && b.rect.y < m.buttons[i - 1].rect.y + m.buttons[i - 1].rect.h) noOverlap = false;
+    }
+    check(noOverlap, `${vw} x ${vh}: the menu buttons do not overlap`);
+    check(insideWindow, `${vw} x ${vh}: the menu buttons sit inside the window`);
+    check(hasShortcut, 'every menu button keeps its shortcut key hint');
+    check(win.statusBar.x + win.statusBar.w <= win.window.x + win.window.w, `${vw} x ${vh}: the status bar fits inside the window`);
+    let allHit = true;
+    for (const b of m.buttons) {
+      if (menuButtonAt(layout, b.rect.x + 5, b.rect.y + 5, 'Wave 34 — The Corridor') !== b.id) allHit = false;
+    }
+    check(allHit, `${vw} x ${vh}: every menu button is hit-testable`);
+  }
+}
+
+// --- Visual pass 2: the menu animation is pure and time-driven --------------------------------
+{
+  const route = currentPath(createRunState());
+  const a = computeMenuAnim(1.5, route);
+  const b = computeMenuAnim(1.5, route);
+  check(JSON.stringify(a) === JSON.stringify(b), 'two draws at the same time produce the same state');
+  let neverOverEight = true;
+  for (const t of [0, 0.5, 1, 3.7, 11, 30, 100]) {
+    if (computeMenuAnim(t, route).creeps.length > 8) neverOverEight = false;
+  }
+  check(neverOverEight, 'the drifting-creep count never exceeds eight');
+  let inBand = true;
+  for (const t of [0, 1, 2, 3, 4, 5, 6]) {
+    const p = computeMenuAnim(t, route).pulse;
+    if (p < 0.1 - 1e-9 || p > 0.18 + 1e-9) inBand = false;
+  }
+  check(inBand, 'the route pulse stays within 0.10..0.18');
+}
+
+// --- Visual pass 3: Global Upgrades tabs, rows, clipping and scrollbar ------------------------
+{
+  const s = createRunState();
+  s.economy.salvage = 100000;
+  s.wave = 60; // reveal all 14 upgrades
+  buyUpgrade(s, 'salvage-contract');
+  buyUpgrade(s, 'wide-reticle');
+  const layout = computeLayout(1280, 720);
+
+  const avail = computeUpgradesLayout(layout, s, 'available', 0);
+  check(avail.tabs.map((t) => t.label).join(',') === 'Available,Owned', 'the tab strip reads Available, Owned');
+  check(avail.rows.length === GLOBAL_UPGRADES.length - s.upgrades.length, `the Available tab lists the ${GLOBAL_UPGRADES.length - s.upgrades.length} unowned upgrades`);
+  check(avail.rows.every((r) => !s.upgrades.includes(r.def.id)), 'no owned upgrade appears in the Available tab');
+  check(avail.columns.map((c) => c.title).join(',') === 'Icon,Upgrade,Unlocks,Cost,Status', 'the Available columns are Icon, Upgrade, Unlocks, Cost, Status');
+
+  const owned = computeUpgradesLayout(layout, s, 'owned', 0);
+  check(owned.rows.length === s.upgrades.length, 'the Owned tab lists only the owned upgrades');
+  check(owned.rows.every((r) => s.upgrades.includes(r.def.id)), 'every Owned row is owned');
+  check(owned.columns.every((c) => c.title !== 'Cost'), 'the Owned tab drops the cost column');
+
+  check(avail.list.overflow, 'the Available list overflows and needs a scrollbar');
+  check(avail.list.rowsVisible < avail.rows.length, 'the list clips its rows to the pane');
+  check(avail.list.firstRow === 0, 'the list starts scrolled to the top');
+
+  const early = createRunState();
+  early.wave = 20; // one upgrade revealed
+  const earlyLayout = computeUpgradesLayout(layout, early, 'available', 0);
+  check(!earlyLayout.list.overflow, 'a short list draws no scrollbar');
+}
+
+// --- Visual pass 4: Restore tabs, Apply dirty state and the progress bar ----------------------
+{
+  const profile = defaultProfile();
+  profile.rp = 100;
+  profile.rpEarned = 20;
+  const s = createRunState(profile);
+  s.economy.earned = 20000; // floor(2.2 * sqrt(20000/900)) = 10
+  const layout = computeLayout(1280, 720);
+  const session = new RestoreSession();
+  session.show(profile);
+
+  check(session.tab === 'restore', 'Restore opens on the Restore Point tab');
+  const rl0 = computeRestoreLayout(layout, profile, s, session);
+  check(rl0.tabs.map((t) => t.label).join(',') === 'Restore Point,Specs,Tree', 'the three tabs are Restore Point, Specs, Tree');
+  check(!restoreDirty(session, profile), 'a fresh session is clean');
+
+  session.setTab('specs');
+  check(session.tab === 'specs', 'the Specs tab switches');
+  session.setTab('tree');
+  check(session.tab === 'tree', 'the Tree tab switches');
+
+  check(!restoreDirty(session, profile), 'Apply is disabled while clean');
+  session.incSpec('cpu', profile);
+  check(restoreDirty(session, profile), 'Apply enables once a spec is staged');
+  session.decSpec('cpu', profile);
+  check(!restoreDirty(session, profile), 'Apply disables again once the draft is rolled back');
+
+  const prog = restoreProgress(s);
+  check(prog.fill === prog.points / prog.pointsNeeded, 'the progress fill equals points / pointsNeeded');
+  check(prog.fill >= 0 && prog.fill < 1, 'the progress fill is a fraction in [0, 1)');
+  const rl = computeRestoreLayout(layout, profile, s, session);
+  const blockW = 8;
+  const gap = 2;
+  const blocks = Math.max(1, Math.floor(((rl.progress.rect.w - 4) + gap) / (blockW + gap)));
+  const filled = Math.round(rl.progress.fill * blocks);
+  check(Math.abs(filled / blocks - rl.progress.fill) <= 1 / blocks, 'the segmented bar fill matches points/pointsNeeded within one block');
+}
+
+// --- Visual pass 5: Help Contents/Index/Search, splitter clamp and Back/Forward ---------------
+{
+  const profile = defaultProfile();
+  profile.bestWave = 24;
+  const session = new HelpSession();
+
+  const all = HELP_PAGES.filter((p) => pageUnlocked(p, profile));
+  const index = helpIndexList(profile);
+  check(index.length === all.length, 'the Index lists every unlocked page');
+  check(index.every((p, i) => i === 0 || index[i - 1].title.localeCompare(p.title) <= 0), 'the Index is sorted A-Z');
+
+  const hits = helpSearchResults('pointer', profile);
+  check(hits.length > 0 && hits.every((p) => p.title.toLowerCase().includes('pointer')), 'Search filters on substrings');
+  check(helpSearchResults('', profile).length === 0, 'an empty search returns nothing');
+  check(helpSearchResults('zzzzznope', profile).length === 0, 'a nonsense search returns nothing');
+
+  session.openPageId(index[0].id);
+  check(session.pageId === index[0].id, 'the Index selects a page');
+  session.setNavTab('search');
+  check(session.navTab === 'search', 'the Search tab switches');
+
+  session.dragSplitter(1000);
+  check(session.navW === 320, 'the splitter clamps to 320 px');
+  session.dragSplitter(10);
+  check(session.navW === 140, 'the splitter clamps to 140 px');
+  session.dragSplitter(200);
+  check(session.navW === 200, 'the splitter accepts an in-range width');
+
+  session.openPageId(index[1].id);
+  check(session.canBack() && !session.canForward(), 'opening a second page enables Back and disables Forward');
+  session.back();
+  check(session.canForward(), 'Back enables Forward');
+  while (session.canBack()) session.back();
+  check(!session.canBack() && session.canForward(), 'at the first page Back is disabled and Forward enabled');
+  session.forward();
+  check(session.canBack(), 'Forward re-enables Back');
+}
+
+// --- Visual pass 6: the four screens keep their existing behaviour ----------------------------
+{
+  const layout = computeLayout(1280, 800);
+  const withSave = computeMenuScreen(layout, 'Wave 34 — The Corridor');
+  check(withSave.buttons[0].id === 'continue' && withSave.buttons[1].id === 'play', 'the menu keeps Continue ahead of Play');
+  check(computeMenuScreen(layout, null).buttons[0].id === 'play', 'without a save Play is primary');
+
+  const hl = computeHelpLayout(100, 100);
+  check(helpHitAt(hl, helpRows(defaultProfile(), 2), hl.close.x + hl.close.w / 2, hl.close.y + hl.close.h / 2)?.type === 'close', 'the Help close box still hit-tests');
+
+  const s = createRunState();
+  s.wave = 60;
+  s.economy.salvage = 100000;
+  check(computeUpgradesLayout(layout, s, 'available', 0).rows.length === GLOBAL_UPGRADES.length, 'all revealed upgrades still list');
+
+  const prof = defaultProfile();
+  prof.rp = 100;
+  prof.rpEarned = 20;
+  const rs = new RestoreSession();
+  rs.show(prof);
+  check(computeRestoreLayout(layout, prof, s, rs).tabs.length === 3, 'Restore still has three tabs');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

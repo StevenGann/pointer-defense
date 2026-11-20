@@ -4,6 +4,7 @@ import {
   buySpec,
   cancelSelection,
   createRunState,
+  currentPath,
   cursorMaintenanceStatus,
   enemyAt,
   enterEndless,
@@ -26,9 +27,9 @@ import {
 import { SPAWN_KINDS, spawnKindLabel } from './core/cheats.ts';
 import { DEFAULT_LEVEL, type Level } from './core/levels.ts';
 import { dailyAvailable, dailyDate, dailyFor, dailyMenuLabel, DAILY_WAVES } from './core/daily.ts';
-import { addSeenEnemies, checkProfileAchievements, loadProfile, saveProfile, type Profile, type RunOutcome, type SpecKind } from './core/save.ts';
+import { addSeenEnemies, checkProfileAchievements, loadProfile, saveProfile, SPEC_KINDS, type Profile, type RunOutcome, type SpecKind } from './core/save.ts';
 import { clearRunSave, loadRunSave, saveRun } from './core/runsave.ts';
-import { appendDailyRun, appendRun, buildRunRecord } from './core/runs.ts';
+import { appendDailyRun, appendRun, buildRunRecord, runTotals } from './core/runs.ts';
 import { buyNode, effectsFor, treeNodeById } from './core/tree.ts';
 import { achievementName } from './core/achievements.ts';
 import { unlockAchievement } from './steam.ts';
@@ -36,8 +37,7 @@ import { ChromeView, computeLayout, PAL, pixelToWorld, pointInRect, type Layout,
 import { BoardView } from './view/board.ts';
 import { HudView, hudControlAt, paletteTowerAt, type HudAction } from './view/hud.ts';
 import { paletteTooltipLines, TooltipView, towerTooltipLines } from './view/tooltip.ts';
-import { computeUpgradesLayout, upgradeRowBuyable, upgradesHitAt, UpgradesSession, globalUpgradeTooltipLines, UpgradesView } from './view/upgrades.ts';
-import { BUFF_LINES, buyUpgrade, GLOBAL_UPGRADES, type UpgradeId } from './core/upgrades.ts';
+import { computeUpgradesLayout, upgradeRowBuyable, upgradesHitAt, UpgradesSession, globalUpgradeTooltipLines, UpgradesView } from './view/upgrades.ts';import { BUFF_LINES, buyUpgrade, GLOBAL_UPGRADES, type UpgradeId } from './core/upgrades.ts';
 import {
   branchTooltipLines,
   enemyTooltipLines,
@@ -54,8 +54,8 @@ import { FloatingNumbersView } from './view/numbers.ts';
 import { MenuView, type OpenMenu } from './view/menu.ts';
 import { AchievementGridView, AchievementSession, achievementGridHitAt, buildAchievementGrid, computeAchievementGrid, type AchievementGridModel } from './view/dialog.ts';
 import { dialogButtonAt, DialogView, type DialogModel } from './view/dialog.ts';
-import { HelpSession, HelpView, computeHelpLayout, helpHitAt, helpRows, HELP_LINE_H, HELP_SCROLL_LINES } from './view/help.ts';
-import { RestoreView, computeRestoreLayout, restoreHitAt } from './view/restore.ts';
+import { HelpSession, HelpView, computeHelpLayout, helpHitAt, helpNavHitAt, helpSearchRowAt, helpRows, helpIndexList, helpSearchResults, HELP_LINE_H, HELP_SCROLL_LINES } from './view/help.ts';
+import { RestoreView, RestoreSession, computeRestoreLayout, restoreHitAt, restoreDirty } from './view/restore.ts';
 import { RecordsSession, RecordsView, computeRecordsLayout, recordsHitAt, RECORDS_ROW_H } from './view/records.ts';
 import { MouseController, type Screen } from './input/mouse.ts';
 import { EffectsView } from './view/effects.ts';
@@ -97,7 +97,7 @@ import {
   saveLibraryMap,
   type EditorMapEntry,
 } from './core/editorstore.ts';
-import { LoadDialogView, menuButtonAt, MenuScreenView, loadDialogButtonAt, computeLoadDialog, type MenuButtonId } from './view/menuScreen.ts';
+import { LoadDialogView, menuButtonAt, MenuScreenView, loadDialogButtonAt, computeLoadDialog, menuWindowCloseAt, type MenuButtonId } from './view/menuScreen.ts';
 import { HELP_PAGES, pageUnlocked } from './content/help.ts';
 import { EditorView, editorPaletteAt, editorToggleNudgeAt, editorToolbarAt, type EditorAction, type ToggleNudge } from './view/editor.ts';
 import { MapLibraryView, NameDialogView, computeMapLibrary, computeNameDialog, mapLibraryHitAt, nameDialogButtonAt, type MapLibraryHit, type MapLibraryMode } from './view/mapLibrary.ts';
@@ -203,6 +203,7 @@ const helpView = new HelpView();
 const recordsSession = new RecordsSession();
 const recordsView = new RecordsView();
 const restoreView = new RestoreView();
+const restoreSession = new RestoreSession();
 const upgradesSession = new UpgradesSession();
 const upgradesView = new UpgradesView();
 const achievementSession = new AchievementSession();
@@ -251,7 +252,6 @@ window.addEventListener('keydown', () => sfx.ensure());
 let menu: OpenMenu | null = null;
 let dialog: DialogModel | null = null;
 let cheatNotified: RunState | null = null;
-let restoreOpen = false;
 /** The run the Global Upgrades dialog was last drawn for; a different run closes it. */
 let upgradesState: RunState | null = null;
 
@@ -260,7 +260,7 @@ let upgradesState: RunState | null = null;
  * an open menu, dialog, the Help viewer, the achievements grid, Restore, or the end-of-run modal.
  */
 function openUpgrades(): void {
-  if (menu !== null || dialog !== null || helpSession.open || achievementSession.open || restoreOpen) return;
+  if (menu !== null || dialog !== null || helpSession.open || achievementSession.open || restoreSession.open) return;
   if (state.phase === 'halted' || state.phase === 'victory') return;
   upgradesSession.show();
 }
@@ -396,6 +396,19 @@ function buyTreeNode(id: string): void {
   state.tree = [...profile.tree];
   state.treeEffects = effectsFor(profile);
   saveProfile(profile);
+}
+
+/** Commit the Restore dialog's draft to the profile and the run (docs/VISUAL-PASS.md §3). */
+function applyRestore(): void {
+  if (!restoreDirty(restoreSession, profile)) return;
+  for (const kind of SPEC_KINDS) {
+    while (restoreSession.draftSpecs[kind] > profile.specs[kind]) buySpec(state, kind);
+  }
+  syncProfileMeta();
+  for (const id of restoreSession.draftTree) {
+    if (!profile.tree.includes(id)) buyTreeNode(id);
+  }
+  restoreSession.show(profile);
 }
 
 function toastAchievement(id: string): void {
@@ -943,7 +956,7 @@ function exitRun(): void {
 
 /** No run-scoped window survives a run boundary: Restore, Global Upgrades and achievements close. */
 function closeRunModals(): void {
-  restoreOpen = false;
+  restoreSession.hide();
   upgradesSession.hide();
   achievementSession.hide();
   recordsSession.hide();
@@ -1140,7 +1153,7 @@ const mouse = new MouseController(app, {
   notice: (message) => hud.showNotice(message),
   helpOpen: () => helpSession.open,
   helpPointerDown: (x: number, y: number, button: number): boolean => {
-    const hl = computeHelpLayout(helpSession.x, helpSession.y);
+    const hl = computeHelpLayout(helpSession.x, helpSession.y, helpSession.navW);
     const rows = helpRows(profile, helpSession.expanded);
     const hit = helpHitAt(hl, rows, x, y);
     if (hit === null) return false;
@@ -1152,13 +1165,33 @@ const mouse = new MouseController(app, {
         case 'title':
           helpSession.startDrag(x, y);
           break;
+        case 'splitter':
+          splitterDrag = true;
+          break;
         case 'toolbar':
           if (hit.action === 'back') helpSession.back();
           else if (hit.action === 'forward') helpSession.forward();
-          else helpSession.contents();
+          else if (hit.action === 'home') helpSession.home();
+          else if (hit.action === 'nav') helpSession.toggleNav();
+          break;
+        case 'nav-tab':
+          helpSession.setNavTab(hit.tab);
           break;
         case 'tree':
-          if (hit.row >= 0) helpSession.clickTree(rows[hit.row]);
+          if (helpSession.navTab === 'contents') {
+            if (hit.row >= 0) helpSession.clickTree(rows[hit.row]);
+          } else if (helpSession.navTab === 'index') {
+            const list = helpIndexList(profile);
+            const idx = helpNavHitAt(hl, 'index', list.length, x, y);
+            if (idx && idx.type === 'index') helpSession.openPageId(list[idx.row].id);
+          } else {
+            const results = helpSearchResults(helpSession.searchText, profile);
+            const row = helpSearchRowAt(hl, results, x, y);
+            if (row >= 0) helpSession.openPageId(results[row].id);
+          }
+          break;
+        case 'search-field':
+          searchInput.focus();
           break;
         case 'page':
         case 'window':
@@ -1167,8 +1200,16 @@ const mouse = new MouseController(app, {
     }
     return true;
   },
-  helpPointerMove: (x: number, y: number) => helpSession.dragTo(layout, x, y),
+  helpPointerMove: (x: number, y: number) => {
+    if (splitterDrag) {
+      const hl = computeHelpLayout(helpSession.x, helpSession.y, helpSession.navW);
+      helpSession.dragSplitter(x - hl.treePanel.x);
+      return;
+    }
+    helpSession.dragTo(layout, x, y);
+  },
   helpPointerUp: () => {
+    splitterDrag = false;
     // shadow-drag: drag the Help window to the clamped edge and release.
     if (helpSession.draggedToEdge) {
       notifyAchievement(state, 'shadow-drag');
@@ -1200,53 +1241,64 @@ const mouse = new MouseController(app, {
   achievementPointerMove,
   achievementMove,
   closeAchievement: () => achievementSession.hide(),
-  restoreOpen: () => restoreOpen,
+  restoreOpen: () => restoreSession.open,
   openRestore: () => {
     upgradesSession.hide();
-    restoreOpen = true;
+    restoreSession.show(profile);
   },
   closeRestore: () => {
-    restoreOpen = false;
+    restoreSession.hide();
   },
   upgradesOpen: () => upgradesSession.open,
   openUpgrades,
   closeUpgrades: () => upgradesSession.hide(),
   upgradesPointerDown: (x: number, y: number, button: number): boolean => {
-    const ul = computeUpgradesLayout(layout, state);
+    const ul = computeUpgradesLayout(layout, state, upgradesSession.tab, upgradesSession.scroll);
     const hit = upgradesHitAt(ul, x, y);
     if (hit === null) return false;
     if (button !== 0) return true;
     if (hit.type === 'close') upgradesSession.hide();
-    else if (hit.type === 'buy') buyGlobalUpgrade(hit.id);
-    if (hit.type === 'buy' || hit.type === 'row') {
+    else if (hit.type === 'tab') upgradesSession.setTab(hit.tab);
+    else if (hit.type === 'toolbar') {
+      if (hit.action === 'buy') {
+        const row = ul.rows[upgradesSession.selected];
+        if (row && upgradeRowBuyable(row)) buyGlobalUpgrade(row.def.id);
+      } else if (hit.action === 'scroll') {
+        upgradesSession.scrollBy(3, ul);
+      }
+    } else if (hit.type === 'row') {
       const index = ul.rows.findIndex((r) => r.def.id === hit.id);
       if (index >= 0) upgradesSession.selected = index;
+    } else if (hit.type === 'ok' || hit.type === 'cancel') {
+      upgradesSession.hide();
     }
     return true;
   },
   upgradesKey: (key) => {
-    const rows = computeUpgradesLayout(layout, state).rows;
-    if (key === 'up') upgradesSession.move(-1, rows.length);
-    else if (key === 'down') upgradesSession.move(1, rows.length);
+    const ul = computeUpgradesLayout(layout, state, upgradesSession.tab, upgradesSession.scroll);
+    if (key === 'up') upgradesSession.move(-1, ul.rows.length);
+    else if (key === 'down') upgradesSession.move(1, ul.rows.length);
     else {
-      const row = rows[upgradesSession.selected];
+      const row = ul.rows[upgradesSession.selected];
       if (row && upgradeRowBuyable(row)) buyGlobalUpgrade(row.def.id);
     }
   },
   restorePointerDown: (x: number, y: number, button: number): boolean => {
-    const rl = computeRestoreLayout(layout, profile);
+    const rl = computeRestoreLayout(layout, profile, state, restoreSession);
     if (!pointInRect(rl.window, x, y)) return false;
     if (button !== 0) return true;
     const hit = restoreHitAt(rl, x, y);
     if (hit === null) return true;
-    if (hit.type === 'close') restoreOpen = false;
-    else if (hit.type === 'node') buyTreeNode(hit.id);
-    else if (hit.type === 'spec') {
-      if (buySpec(state, hit.kind)) {
-        syncProfileMeta();
-        saveProfile(profile);
-      }
-    }
+    if (hit.type === 'close' || hit.type === 'close-button') restoreSession.hide();
+    else if (hit.type === 'tab') restoreSession.setTab(hit.tab);
+    else if (hit.type === 'restart') {
+      restoreSession.hide();
+      doRestartWindows();
+    } else if (hit.type === 'spec-plus') restoreSession.incSpec(hit.kind, profile);
+    else if (hit.type === 'spec-minus') restoreSession.decSpec(hit.kind, profile);
+    else if (hit.type === 'node') restoreSession.toggleNode(hit.id, profile);
+    else if (hit.type === 'tier') restoreSession.expanded = restoreSession.expanded === hit.tier ? null : hit.tier;
+    else if (hit.type === 'apply') applyRestore();
     return true;
   },
 });
@@ -1257,6 +1309,7 @@ let menuHover: MenuButtonId | null = null;
 let loadHover: 'ok' | 'cancel' | null = null;
 let editorActionHover: EditorAction | null = null;
 let painting = false;
+let splitterDrag = false;
 
 function canvasPoint(e: PointerEvent): { x: number; y: number } {
   const rect = app.canvas.getBoundingClientRect();
@@ -1374,6 +1427,31 @@ nameInput.addEventListener('keydown', (e) => {
   }
 });
 
+// The Help viewer's Search text field: an invisible HTML input overlaid on the sunken field, so
+// typing filters the topic list natively while the look stays in the canvas.
+const searchInput = document.createElement('input');
+searchInput.type = 'text';
+searchInput.autocomplete = 'off';
+searchInput.spellcheck = false;
+searchInput.style.position = 'fixed';
+searchInput.style.border = 'none';
+searchInput.style.background = 'transparent';
+searchInput.style.color = 'transparent';
+searchInput.style.caretColor = '#000000';
+searchInput.style.outline = 'none';
+searchInput.style.padding = '0 4px';
+searchInput.style.boxSizing = 'border-box';
+searchInput.style.font = '11px Tahoma, Verdana, Geneva, sans-serif';
+searchInput.style.display = 'none';
+searchInput.style.zIndex = '10';
+document.body.appendChild(searchInput);
+searchInput.addEventListener('input', () => {
+  helpSession.searchText = searchInput.value;
+});
+searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') searchInput.blur();
+});
+
 app.canvas.addEventListener('pointermove', (e) => {
   const { x, y } = canvasPoint(e);
   if (screen === 'menu') {
@@ -1404,6 +1482,11 @@ app.canvas.addEventListener('pointermove', (e) => {
 app.canvas.addEventListener('pointerdown', (e) => {
   const { x, y } = canvasPoint(e);
   if (screen === 'menu') {
+    // The menu window's close box does nothing but a soft beep (it is the menu; there is nowhere to go).
+    if (!loadOpen && menuWindowCloseAt(layout, x, y)) {
+      sfx.play('adClose');
+      return;
+    }
     // The Records viewer, when open on the menu, owns clicks inside it (its close box, or the window
     // swallowing a stray click); a click outside falls through to the menu buttons.
     if (recordsSession.open) {
@@ -1519,7 +1602,7 @@ app.canvas.addEventListener('wheel', (e) => {
   const { x, y } = canvasPoint(e as unknown as PointerEvent);
   // The Help window scrolls its page three lines per notch while the pointer is over the page panel.
   if (helpSession.open) {
-    const hl = computeHelpLayout(helpSession.x, helpSession.y);
+    const hl = computeHelpLayout(helpSession.x, helpSession.y, helpSession.navW);
     if (pointInRect(hl.pagePanel, x, y)) {
       e.preventDefault();
       helpSession.scrollBy(Math.sign(e.deltaY) * HELP_LINE_H * HELP_SCROLL_LINES, hl);
@@ -1540,6 +1623,15 @@ app.canvas.addEventListener('wheel', (e) => {
     if (pointInRect(rl.data, x, y)) {
       e.preventDefault();
       recordsSession.scrollBy(Math.sign(e.deltaY) * RECORDS_ROW_H * 3, rl);
+      return;
+    }
+  }
+  // The Global Upgrades list scrolls three rows per notch while the pointer is over its list field.
+  if (upgradesSession.open) {
+    const ul = computeUpgradesLayout(layout, state, upgradesSession.tab, upgradesSession.scroll);
+    if (pointInRect(ul.listField, x, y)) {
+      e.preventDefault();
+      upgradesSession.scrollBy(Math.sign(e.deltaY) * 3, ul);
       return;
     }
   }
@@ -1795,7 +1887,17 @@ app.ticker.add((ticker) => {
     ad.draw(state);
     trayView.draw(state);
     helpView.draw(helpSession, profile, mouse.hover.x, mouse.hover.y);
-    restoreView.draw(restoreOpen, profile, layout);
+    if (helpSession.open && helpSession.navTab === 'search') {
+      const shl = computeHelpLayout(helpSession.x, helpSession.y, helpSession.navW);
+      searchInput.style.display = 'block';
+      searchInput.style.left = `${shl.searchField.x + 4}px`;
+      searchInput.style.top = `${shl.searchField.y}px`;
+      searchInput.style.width = `${shl.searchField.w - 48}px`;
+      searchInput.style.height = `${shl.searchField.h}px`;
+    } else {
+      searchInput.style.display = 'none';
+    }
+    restoreView.draw(restoreSession.open, profile, state, layout, restoreSession);
     // The run ending (or a new run starting) takes the dialog down with it.
     if (upgradesSession.open && (state.phase === 'halted' || state.phase === 'victory' || upgradesState !== state)) {
       upgradesSession.hide();
@@ -1805,7 +1907,7 @@ app.ticker.add((ticker) => {
       recordsSession.hide();
     }
     upgradesState = state;
-    upgradesView.draw(upgradesSession.open, state, layout, upgradesSession.selected);
+    upgradesView.draw(upgradesSession.open, state, layout, upgradesSession);
     if (achievementSession.open) {
       const m = achievementModel();
       const al = computeAchievementGrid(m, layout.client);
@@ -1835,7 +1937,7 @@ app.ticker.add((ticker) => {
   hud.root.visible = running;
   helpView.root.visible = running && helpSession.open;
   recordsView.root.visible = recordsSession.open;
-  restoreView.root.visible = running && restoreOpen;
+  restoreView.root.visible = running && restoreSession.open;
   upgradesView.root.visible = running && upgradesSession.open;
   achievementView.root.visible = running && achievementSession.open;
   ad.root.visible = running;
@@ -1850,7 +1952,18 @@ app.ticker.add((ticker) => {
 
   if (screen === 'menu') {
     const label = continueState !== null ? continueLabel(continueState) : null;
-    menuScreenView.draw(layout, menuHover, label, dailyMenu());
+    const menuTime = (performance.now() / 1000) % 1_000_000;
+    const totals = runTotals(profile.runs);
+    menuScreenView.draw(layout, menuHover, {
+      continueLabel: label,
+      daily: dailyMenu(),
+      time: menuTime,
+      route: currentPath(state),
+      bestWave: profile.bestWave,
+      runs: totals.runs,
+      achievements: profile.achievements.length,
+      version: `v${pkg.version}`,
+    });
     dialogView.draw(dialog, layout);
     if (loadOpen) {
       loadDialogView.draw(layout, loadText, loadStatus, loadHover);
@@ -1965,9 +2078,9 @@ function updateTooltip(): void {
   // Over the Global Upgrades window: a row's detail (and its shortfall), or nothing at all, so the
   // board and HUD tooltips never show through the dialog.
   if (!suppressed && upgradesSession.open) {
-    const hit = upgradesHitAt(computeUpgradesLayout(layout, state), h.x, h.y);
+    const hit = upgradesHitAt(computeUpgradesLayout(layout, state, upgradesSession.tab, upgradesSession.scroll), h.x, h.y);
     if (hit !== null) {
-      const def = hit.type === 'buy' || hit.type === 'row' ? GLOBAL_UPGRADES.find((d) => d.id === hit.id) : undefined;
+      const def = hit.type === 'row' ? GLOBAL_UPGRADES.find((d) => d.id === hit.id) : undefined;
       if (def) {
         tooltip.update({ key: `upgrade:${def.id}`, lines: globalUpgradeTooltipLines(def, state) }, h.x, h.y, viewportW, viewportH);
       } else {
