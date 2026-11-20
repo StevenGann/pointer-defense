@@ -1,6 +1,7 @@
 import type { Catalogue } from '../index.ts';
 import { achievements } from './achievements.ts';
 import { dialogs } from './dialogs.ts';
+import { help } from './help.ts';
 import { hud } from './hud.ts';
 import { levels } from './levels.ts';
 import { menu } from './menu.ts';
@@ -23,6 +24,7 @@ export const en = {
   ...hud,
   ...tooltip,
   ...dialogs,
+  ...help,
   ...achievements,
   ...upgrades,
   ...levels,

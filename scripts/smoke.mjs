@@ -11216,7 +11216,7 @@ function dailyState(date) {
   // Keys built by template literal (e.g. t(`name.tower.${kind}`)) are referenced through their prefix.
   const dynamicPrefixes = new Set();
   for (const src of sources.values()) {
-    for (const m of src.matchAll(/t\(`([A-Za-z0-9_.]*)\$\{/g)) dynamicPrefixes.add(m[1]);
+    for (const m of src.matchAll(/t\(`([A-Za-z0-9_.-]*)\$\{/g)) dynamicPrefixes.add(m[1]);
   }
   const orphans = catalogueKeys.filter(
     (k) => !referenced.has(k) && ![...dynamicPrefixes].some((p) => k.startsWith(p)),
@@ -11267,6 +11267,27 @@ function dailyState(date) {
     check(JSON.stringify(words(rendered)) === JSON.stringify(words(source)),
       `help markdown render preserves every word for ${id}`);
   }
+}
+
+// 47f. The Help prose catalogue: every help.* key is reachable from help.ts (no orphans), and no
+// help string keeps a raw ${...} — every interpolated value must have become a {placeholder}.
+{
+  const helpKeys = Object.keys(en).filter((k) => k.startsWith('help.'));
+  const sources = walkAllSources();
+  const helpSrc = sources.get('src/content/help.ts');
+  const referenced = new Set(extractTKeys(helpSrc).filter((k) => k.startsWith('help.')));
+  const dynamicPrefixes = new Set();
+  for (const m of helpSrc.matchAll(/t\(`(help\.[A-Za-z0-9_.-]*)\$\{/g)) dynamicPrefixes.add(m[1]);
+  const orphans = helpKeys.filter(
+    (k) => !referenced.has(k) && ![...dynamicPrefixes].some((p) => k.startsWith(p)),
+  );
+  check(orphans.length === 0,
+    `every help.* catalogue key is reachable from help.ts (orphans: ${orphans.join(', ') || 'none'})`);
+
+  const interpolation = '${';
+  const bad = helpKeys.filter((k) => en[k].includes(interpolation));
+  check(bad.length === 0,
+    `no help string keeps a raw ${interpolation} (bad: ${bad.join(', ') || 'none'})`);
 }
 
 // --- RTL (docs/RTL.md) -------------------------------------------------------------------------
