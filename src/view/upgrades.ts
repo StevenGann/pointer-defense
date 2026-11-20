@@ -1,48 +1,66 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import {
   bevel,
+  computeListView,
+  computeStatusBar,
+  computeTabStrip,
   CONTROL_BOX_H,
   CONTROL_BOX_W,
+  drawListView,
+  drawStatusBar,
+  drawTabStrip,
+  drawWindowChrome,
+  dottedLine,
   FONT,
   FONT_SIZE,
   PAL,
+  TAB_H,
   TITLE_H,
   pointInRect,
   type Layout,
+  type ListColumn,
+  type ListViewGeom,
   type Rect,
+  type StatusPanel,
 } from './chrome.ts';
 import { getArtTexture, UPGRADE_PLACEHOLDER } from './art.ts';
 import { textWidth } from './hud.ts';
 import { formatNumber } from '../core/format.ts';
 import type { RunState } from '../core/state.ts';
 import {
+  GLOBAL_UPGRADES,
   hasUpgrade,
   revealedUpgrades,
-  UPGRADE_GROUP_TITLES,
-  UPGRADE_GROUPS,
   type UpgradeDef,
-  type UpgradeGroup,
   type UpgradeId,
 } from '../core/upgrades.ts';
 
 /**
- * The Global Upgrades dialog (docs/GLOBAL-UPGRADES.md §6.2): a fixed, centred Windows 95 window
- * listing every global upgrade the run has reached, grouped POINTER / TOWERS / ECONOMY / BOARD /
- * SYSTEM. Hidden rows do not exist — a group with nothing revealed draws nothing, header included —
- * and one dim footer line promises more. The layout is Pixi-free so the smoke harness can assert it;
- * `UpgradesView` draws it, modelled on the Restore dialog.
+ * The Global Upgrades dialog (docs/VISUAL-PASS.md §2): an Add/Remove Programs property sheet, 660 x
+ * 430, with a toolbar (buy / info / scroll), an Available/Owned tab strip, a list view with column
+ * headers and a scrollbar, a description strip, OK/Cancel and a status bar. The model is Pixi-free so
+ * the smoke harness can assert it; `UpgradesView` draws it.
  */
 
-export const UPGRADES_W = 560;
-export const UPGRADE_ROW_H = 20;
+export const UPGRADES_W = 660;
+export const UPGRADES_H = 430;
+export const UPGRADE_ROW_H = 22;
 export const UPGRADE_ICON = 20;
-export const UPGRADE_BUY_W = 88;
-const SECTION_H = 16;
-const HEADER_H = 20;
-const FOOTER_H = 18;
-const PAD = 10;
+const ICON_COL_W = 44;
+const TOOLBAR_H = 28;
+const DESC_H = 18;
+const BUTTON_H = 28;
+const BUTTON_W = 84;
 
-export const UPGRADES_FOOTER = 'More appear as the run goes deeper.';
+export type UpgradesTab = 'available' | 'owned';
+
+export interface UpgradesButton {
+  id: 'ok' | 'cancel';
+  label: string;
+  rect: Rect;
+  /** The default button carries the 1 px dotted focus ring. */
+  default: boolean;
+}
 
 export interface UpgradeRow {
   def: UpgradeDef;
@@ -50,77 +68,135 @@ export interface UpgradeRow {
   affordable: boolean;
   rect: Rect;
   icon: Rect;
-  buy: Rect;
 }
 
 export interface UpgradesLayout {
   window: Rect;
-  title: Rect;
+  titleBar: Rect;
   close: Rect;
-  header: Rect;
-  groups: { group: UpgradeGroup; header: Rect }[];
+  toolbar: Rect;
+  toolbarButtons: { id: 'buy' | 'info' | 'scroll'; rect: Rect }[];
+  tabStrip: Rect;
+  tabs: { id: UpgradesTab; label: string; rect: Rect; active: boolean }[];
+  listField: Rect;
+  list: ListViewGeom;
+  columns: ListColumn[];
   rows: UpgradeRow[];
-  footer: Rect;
+  descStrip: Rect;
+  buttons: UpgradesButton[];
+  statusBar: Rect;
+  status: StatusPanel[];
 }
 
-export function computeUpgradesLayout(l: Layout, s: RunState): UpgradesLayout {
-  const revealed = revealedUpgrades(s);
-  const groups = UPGRADE_GROUPS.filter((g) => revealed.some((d) => d.group === g));
-
-  const contentH = HEADER_H + groups.length * SECTION_H + revealed.length * UPGRADE_ROW_H + FOOTER_H;
-  const h = Math.min(2 + TITLE_H + PAD + contentH + PAD, l.client.h - 16);
+export function computeUpgradesLayout(l: Layout, s: RunState, tab: UpgradesTab = 'available', scroll = 0): UpgradesLayout {
   const w = Math.min(UPGRADES_W, l.client.w - 40);
+  const h = Math.min(UPGRADES_H, l.client.h - 16);
   const window: Rect = {
     x: l.client.x + Math.floor((l.client.w - w) / 2),
     y: l.client.y + Math.floor((l.client.h - h) / 2),
     w,
     h,
   };
-  const title: Rect = { x: window.x + 2, y: window.y + 2, w: w - 4, h: TITLE_H };
+  const titleBar: Rect = { x: window.x + 2, y: window.y + 2, w: w - 4, h: TITLE_H };
   const close: Rect = {
-    x: title.x + title.w - 2 - CONTROL_BOX_W,
-    y: title.y + Math.floor((TITLE_H - CONTROL_BOX_H) / 2),
+    x: titleBar.x + titleBar.w - 2 - CONTROL_BOX_W,
+    y: titleBar.y + Math.floor((TITLE_H - CONTROL_BOX_H) / 2),
     w: CONTROL_BOX_W,
     h: CONTROL_BOX_H,
   };
 
-  const innerX = window.x + PAD;
-  const innerW = w - PAD * 2;
-  let cy = window.y + 2 + TITLE_H + PAD;
-  const header: Rect = { x: innerX, y: cy, w: innerW, h: HEADER_H };
-  cy += HEADER_H;
+  const toolbar: Rect = { x: window.x + 2, y: titleBar.y + titleBar.h, w: w - 4, h: TOOLBAR_H };
+  const btnH = 24;
+  let bx = toolbar.x + 6;
+  const tbBtn = (id: 'buy' | 'info' | 'scroll'): { id: 'buy' | 'info' | 'scroll'; rect: Rect } => {
+    const rect: Rect = { x: bx, y: toolbar.y + Math.floor((TOOLBAR_H - btnH) / 2), w: 24, h: btnH };
+    bx += 24 + 4;
+    return { id, rect };
+  };
+  const toolbarButtons = [tbBtn('buy'), tbBtn('info'), tbBtn('scroll')];
 
-  const groupRects: { group: UpgradeGroup; header: Rect }[] = [];
-  const rows: UpgradeRow[] = [];
-  for (const group of groups) {
-    groupRects.push({ group, header: { x: innerX, y: cy, w: innerW, h: SECTION_H } });
-    cy += SECTION_H;
-    for (const def of revealed) {
-      if (def.group !== group) continue;
-      const rect: Rect = { x: innerX, y: cy, w: innerW, h: UPGRADE_ROW_H };
-      rows.push({
-        def,
-        owned: hasUpgrade(s, def.id),
-        affordable: s.economy.salvage >= def.cost,
-        rect,
-        icon: { x: rect.x, y: rect.y, w: UPGRADE_ICON, h: UPGRADE_ICON },
-        buy: { x: rect.x + rect.w - UPGRADE_BUY_W, y: rect.y + 1, w: UPGRADE_BUY_W, h: UPGRADE_ROW_H - 2 },
-      });
-      cy += UPGRADE_ROW_H;
-    }
-  }
-  const footer: Rect = { x: innerX, y: cy, w: innerW, h: FOOTER_H };
-  return { window, title, close, header, groups: groupRects, rows, footer };
+  const tabStrip: Rect = { x: window.x + 2, y: toolbar.y + toolbar.h, w: w - 4, h: TAB_H };
+  const tabLabels = ['Available', 'Owned'];
+  const activeIdx = tab === 'available' ? 0 : 1;
+  const tabs = computeTabStrip(tabStrip, tabLabels, activeIdx).map((t, i) => ({
+    id: (i === 0 ? 'available' : 'owned') as UpgradesTab,
+    label: t.label,
+    rect: { x: t.x, y: t.y, w: t.w, h: t.h },
+    active: t.active,
+  }));
+
+  const statusBar: Rect = { x: window.x + 2, y: window.y + h - 2 - 22, w: w - 4, h: 22 };
+  const buttonRowY = statusBar.y - 8 - BUTTON_H;
+  const cancel: Rect = { x: statusBar.x + statusBar.w - BUTTON_W - 6, y: buttonRowY, w: BUTTON_W, h: BUTTON_H };
+  const ok: Rect = { x: cancel.x - BUTTON_W - 6, y: buttonRowY, w: BUTTON_W, h: BUTTON_H };
+  const buttons: UpgradesButton[] = [
+    { id: 'ok', label: 'OK', rect: ok, default: true },
+    { id: 'cancel', label: 'Cancel', rect: cancel, default: false },
+  ];
+  const descStrip: Rect = { x: window.x + 8, y: buttonRowY - 6 - DESC_H, w: w - 16, h: DESC_H };
+
+  const listField: Rect = { x: window.x + 8, y: tabStrip.y + TAB_H, w: w - 16, h: descStrip.y - 4 - (tabStrip.y + TAB_H) };
+
+  const revealed = revealedUpgrades(s);
+  const ownedList = revealed.filter((d) => hasUpgrade(s, d.id));
+  const availableList = revealed.filter((d) => !hasUpgrade(s, d.id));
+  const defs = tab === 'available' ? availableList : ownedList;
+
+  const columns: ListColumn[] =
+    tab === 'available'
+      ? [
+          { title: 'Icon', w: ICON_COL_W },
+          { title: 'Upgrade', w: 150 },
+          { title: 'Unlocks', w: 250 },
+          { title: 'Cost', w: 70 },
+          { title: 'Status', w: 114 },
+        ]
+      : [
+          { title: 'Icon', w: ICON_COL_W },
+          { title: 'Upgrade', w: 170 },
+          { title: 'Unlocks', w: 300 },
+          { title: 'Status', w: 114 },
+        ];
+
+  const list = computeListView(listField, columns, UPGRADE_ROW_H, defs.length, scroll);
+
+  const rows: UpgradeRow[] = defs.map((def, i) => ({
+    def,
+    owned: hasUpgrade(s, def.id),
+    affordable: s.economy.salvage >= def.cost,
+    rect: { x: list.body.x, y: list.body.y + i * UPGRADE_ROW_H, w: list.body.w, h: UPGRADE_ROW_H },
+    icon: { x: list.colX[0] + 4, y: list.body.y + i * UPGRADE_ROW_H + 1, w: UPGRADE_ICON, h: UPGRADE_ICON },
+  }));
+
+  const status = computeStatusBar(statusBar, [0, 150]);
+
+  return { window, titleBar, close, toolbar, toolbarButtons, tabStrip, tabs, listField, list, columns, rows, descStrip, buttons, statusBar, status };
 }
 
-/** The buy button's caption: `Buy 1,200`, or `OWNED`. */
+/** Whether a row's cart button is live: not owned and affordable right now. */
+export function upgradeRowBuyable(row: Pick<UpgradeRow, 'owned' | 'affordable'>): boolean {
+  return !row.owned && row.affordable;
+}
+
+/** The cart's caption: `Buy 1,200`, or `OWNED`. */
 export function upgradeButtonText(row: Pick<UpgradeRow, 'def' | 'owned'>): string {
   return row.owned ? 'OWNED' : `Buy ${formatNumber(row.def.cost)}`;
 }
 
-/** Whether a row's button is live: not owned and affordable right now. */
-export function upgradeRowBuyable(row: Pick<UpgradeRow, 'owned' | 'affordable'>): boolean {
-  return !row.owned && row.affordable;
+/** The status bar's summary: revealed of total, and owned among the revealed (never the full 14). */
+export function upgradesStatusText(s: Pick<RunState, 'wave' | 'upgrades'>): string {
+  const revealed = revealedUpgrades(s);
+  const owned = revealed.filter((d) => hasUpgrade(s, d.id)).length;
+  return `${revealed.length} of ${GLOBAL_UPGRADES.length} unlocked · ${owned} owned`;
+}
+
+/** The empty-list caption, printed when nothing is revealed yet; empty once an upgrade exists. */
+export function upgradesEmptyLines(s: Pick<RunState, 'wave'>): string[] {
+  if (revealedUpgrades(s).length > 0) return [];
+  const lines = ['No upgrades unlocked yet.'];
+  const next = GLOBAL_UPGRADES.filter((d) => d.wave > s.wave).map((d) => d.wave);
+  if (next.length > 0) lines.push(`The next unlocks at wave ${Math.min(...next)}.`);
+  return lines;
 }
 
 /** The tooltip for a row: the detail, plus the shortfall when the run cannot afford it yet. */
@@ -134,18 +210,29 @@ export function globalUpgradeTooltipLines(def: UpgradeDef, s: RunState): string[
 
 export type UpgradesHit =
   | { type: 'close' }
-  | { type: 'buy'; id: UpgradeId }
+  | { type: 'tab'; tab: UpgradesTab }
+  | { type: 'toolbar'; action: 'buy' | 'info' | 'scroll' }
   | { type: 'row'; id: UpgradeId }
+  | { type: 'ok' }
+  | { type: 'cancel' }
   | { type: 'window' }
   | null;
 
-/** What a point in the dialog lands on. A disabled or owned button is just its row. */
+/** What a point in the dialog lands on. A disabled toolbar button is still reported (the caller gates it). */
 export function upgradesHitAt(ul: UpgradesLayout, x: number, y: number): UpgradesHit {
   if (!pointInRect(ul.window, x, y)) return null;
   if (pointInRect(ul.close, x, y)) return { type: 'close' };
+  for (const tb of ul.toolbarButtons) {
+    if (pointInRect(tb.rect, x, y)) return { type: 'toolbar', action: tb.id };
+  }
+  for (const t of ul.tabs) {
+    if (pointInRect(t.rect, x, y)) return { type: 'tab', tab: t.id };
+  }
   for (const row of ul.rows) {
-    if (upgradeRowBuyable(row) && pointInRect(row.buy, x, y)) return { type: 'buy', id: row.def.id };
     if (pointInRect(row.rect, x, y)) return { type: 'row', id: row.def.id };
+  }
+  for (const b of ul.buttons) {
+    if (pointInRect(b.rect, x, y)) return { type: b.id };
   }
   return { type: 'window' };
 }
@@ -167,27 +254,43 @@ export function truncateToWidth(text: string, maxW: number, fontSize: number): s
   return text.slice(0, lo).trimEnd();
 }
 
-/** Keyboard selection state for the dialog: open flag plus the highlighted row index. */
+/** Keyboard/tab/scroll selection state for the dialog. */
 export class UpgradesSession {
   open = false;
   selected = 0;
+  tab: UpgradesTab = 'available';
+  scroll = 0;
 
   show(): void {
     this.open = true;
     this.selected = 0;
+    this.tab = 'available';
+    this.scroll = 0;
   }
 
   hide(): void {
     this.open = false;
   }
 
-  /** Move the selection by `delta` rows, clamped to the revealed list. */
+  setTab(tab: UpgradesTab): void {
+    if (this.tab === tab) return;
+    this.tab = tab;
+    this.selected = 0;
+    this.scroll = 0;
+  }
+
+  /** Move the selection by `delta` rows, clamped to the list. */
   move(delta: number, rowCount: number): void {
     if (rowCount <= 0) {
       this.selected = 0;
       return;
     }
     this.selected = Math.max(0, Math.min(rowCount - 1, this.selected + delta));
+  }
+
+  /** Scroll by `delta` rows, clamped to the list's range. */
+  scrollBy(delta: number, ul: UpgradesLayout): void {
+    this.scroll = Math.max(0, Math.min(ul.list.scrollMax, this.scroll + delta));
   }
 }
 
@@ -204,31 +307,77 @@ export class UpgradesView {
   readonly root = new Container();
   private readonly g = new Graphics();
   private readonly titleText: Text;
-  private readonly headerText: Text;
-  private readonly salvageText: Text;
-  private readonly footerText: Text;
-  private readonly texts: Text[] = [];
+  private readonly headerTexts: Text[] = [];
+  private readonly rowTexts: Text[] = [];
+  private readonly tabTexts: Text[] = [];
+  private readonly emptyTexts: Text[] = [];
+  private readonly descText: Text;
+  private readonly okText: Text;
+  private readonly cancelText: Text;
+  private readonly statusTexts: Text[] = [];
   private readonly icons: Sprite[] = [];
   private readonly iconLayer = new Container();
 
   constructor() {
     this.titleText = makeText('Global Upgrades', FONT_SIZE.body, true, PAL.titleInverse);
-    this.headerText = makeText('GLOBAL UPGRADES', FONT_SIZE.body, true, PAL.text);
-    this.salvageText = makeText('', FONT_SIZE.body, true, PAL.text);
-    this.salvageText.anchor.set(1, 0.5);
-    this.footerText = makeText(UPGRADES_FOOTER, FONT_SIZE.small, false, PAL.shadow);
-    this.root.addChild(this.g, this.iconLayer, this.titleText, this.headerText, this.salvageText, this.footerText);
+    this.descText = makeText('', FONT_SIZE.small, false, PAL.text);
+    this.descText.style.fontStyle = 'italic';
+    this.okText = makeText('OK', FONT_SIZE.body, false, PAL.text);
+    this.okText.anchor.set(0.5, 0.5);
+    this.cancelText = makeText('Cancel', FONT_SIZE.body, false, PAL.text);
+    this.cancelText.anchor.set(0.5, 0.5);
+    this.root.addChild(this.g, this.iconLayer, this.titleText, this.descText, this.okText, this.cancelText);
   }
 
-  /** A pooled row text, grown on demand exactly as the Restore dialog grows its rows. */
-  private textAt(index: number): Text {
-    let t = this.texts[index];
+  private headerTextAt(index: number): Text {
+    let t = this.headerTexts[index];
     if (!t) {
-      t = makeText('', FONT_SIZE.small, false, PAL.text);
-      this.texts.push(t);
+      t = makeText('', FONT_SIZE.small, true, PAL.text);
+      this.headerTexts.push(t);
       this.root.addChild(t);
     }
-    t.anchor.set(0, 0.5);
+    return t;
+  }
+
+  private rowTextAt(index: number): Text {
+    let t = this.rowTexts[index];
+    if (!t) {
+      t = makeText('', FONT_SIZE.small, false, PAL.text);
+      this.rowTexts.push(t);
+      this.root.addChild(t);
+    }
+    return t;
+  }
+
+  private tabTextAt(index: number): Text {
+    let t = this.tabTexts[index];
+    if (!t) {
+      t = makeText('', FONT_SIZE.small, false, PAL.text);
+      t.anchor.set(0.5, 0.5);
+      this.tabTexts.push(t);
+      this.root.addChild(t);
+    }
+    return t;
+  }
+
+  private emptyTextAt(index: number): Text {
+    let t = this.emptyTexts[index];
+    if (!t) {
+      t = makeText('', FONT_SIZE.small, false, PAL.text);
+      t.anchor.set(0.5, 0.5);
+      this.emptyTexts.push(t);
+      this.root.addChild(t);
+    }
+    return t;
+  }
+
+  private statusTextAt(index: number): Text {
+    let t = this.statusTexts[index];
+    if (!t) {
+      t = makeText('', FONT_SIZE.small, false, PAL.text);
+      this.statusTexts.push(t);
+      this.root.addChild(t);
+    }
     return t;
   }
 
@@ -242,57 +391,71 @@ export class UpgradesView {
     return sp;
   }
 
-  draw(open: boolean, s: RunState, l: Layout, selected: number): void {
+  draw(open: boolean, s: RunState, l: Layout, session: UpgradesSession): void {
     const g = this.g;
     g.clear();
     if (!open) {
       this.titleText.text = '';
-      this.headerText.text = '';
-      this.salvageText.text = '';
-      this.footerText.text = '';
-      for (const t of this.texts) t.text = '';
+      this.descText.text = '';
+      this.okText.text = '';
+      this.cancelText.text = '';
+      for (const t of this.headerTexts) t.text = '';
+      for (const t of this.rowTexts) t.text = '';
+      for (const t of this.tabTexts) t.text = '';
+      for (const t of this.emptyTexts) t.text = '';
+      for (const t of this.statusTexts) t.text = '';
       for (const sp of this.icons) sp.visible = false;
       return;
     }
 
-    const ul = computeUpgradesLayout(l, s);
+    const ul = computeUpgradesLayout(l, s, session.tab, session.scroll);
 
-    bevel(g, ul.window, true, PAL.face);
-    g.rect(ul.title.x, ul.title.y, ul.title.w, ul.title.h).fill(PAL.title);
+    drawWindowChrome(g, ul.window, { close: true, minimize: false, maximize: false });
     this.titleText.text = 'Global Upgrades';
-    this.titleText.position.set(ul.title.x + 6, ul.title.y + TITLE_H / 2);
+    this.titleText.position.set(ul.titleBar.x + 6, ul.titleBar.y + TITLE_H / 2);
 
-    bevel(g, ul.close, true, PAL.face);
-    const cx = ul.close.x + Math.floor(ul.close.w / 2);
-    const cy = ul.close.y + Math.floor(ul.close.h / 2);
-    g.moveTo(cx - 4, cy - 4).lineTo(cx + 4, cy + 4).stroke({ width: 1, color: PAL.text });
-    g.moveTo(cx + 4, cy - 4).lineTo(cx - 4, cy + 4).stroke({ width: 1, color: PAL.text });
-
-    const midHeader = ul.header.y + Math.floor(ul.header.h / 2);
-    this.headerText.text = 'GLOBAL UPGRADES';
-    this.headerText.position.set(ul.header.x, midHeader);
-    this.salvageText.text = `Salvage: ${formatNumber(s.economy.salvage)}`;
-    this.salvageText.position.set(ul.header.x + ul.header.w, midHeader);
-
-    // Rows past the bottom of a clamped window are not drawn (the window never outgrows the client).
-    const bottom = ul.window.y + ul.window.h - 4;
-    let ti = 0;
-    for (const gr of ul.groups) {
-      if (gr.header.y + gr.header.h > bottom) break;
-      const t = this.textAt(ti++);
-      t.text = UPGRADE_GROUP_TITLES[gr.group];
-      t.style.fill = PAL.title;
-      t.style.fontWeight = 'bold';
-      t.position.set(gr.header.x, gr.header.y + Math.floor(gr.header.h / 2));
+    // Toolbar.
+    g.rect(ul.toolbar.x, ul.toolbar.y, ul.toolbar.w, ul.toolbar.h).fill(PAL.face);
+    const selectedRow = ul.rows[session.selected];
+    const buyEnabled = selectedRow !== undefined && upgradeRowBuyable(selectedRow);
+    const scrollEnabled = ul.list.overflow;
+    for (const tb of ul.toolbarButtons) {
+      const enabled = tb.id === 'buy' ? buyEnabled : tb.id === 'scroll' ? scrollEnabled : false;
+      if (enabled) bevel(g, tb.rect, true, PAL.face);
+      else g.rect(tb.rect.x, tb.rect.y, tb.rect.w, tb.rect.h).fill(PAL.face);
+      drawToolbarGlyph(g, tb.id, tb.rect, enabled ? PAL.text : PAL.shadow);
+      // raised divider between buttons
+      g.rect(tb.rect.x + tb.rect.w + 2, tb.rect.y + 2, 2, tb.rect.h - 4).fill(PAL.highlight);
     }
 
+    // Tabs.
+    drawTabStrip(g, ul.tabStrip, ['Available', 'Owned'], session.tab === 'available' ? 0 : 1);
+    for (let i = 0; i < ul.tabs.length; i++) {
+      const t = this.tabTextAt(i);
+      const tab = ul.tabs[i];
+      t.text = tab.label;
+      t.style.fill = tab.active ? PAL.text : PAL.shadow;
+      t.position.set(tab.rect.x + tab.rect.w / 2, tab.rect.y + tab.rect.h / 2);
+    }
+    for (let i = ul.tabs.length; i < this.tabTexts.length; i++) this.tabTexts[i].text = '';
+
+    // List view.
+    drawListView(g, ul.listField, ul.columns, UPGRADE_ROW_H, ul.rows.length, session.selected, session.scroll);
+    // Header titles.
+    for (let i = 0; i < ul.columns.length; i++) {
+      const t = this.headerTextAt(i);
+      t.text = ul.columns[i].title;
+      t.position.set(ul.list.colX[i] + 4, ul.list.header.y + Math.floor(ul.list.header.h / 2));
+    }
+    // Rows.
+    let ti = 0;
     let ii = 0;
-    ul.rows.forEach((row, index) => {
-      if (row.rect.y + row.rect.h > bottom) return;
-      const midY = row.rect.y + Math.floor(row.rect.h / 2);
-      if (index === selected) {
-        g.rect(row.rect.x, row.rect.y, row.rect.w - UPGRADE_BUY_W - 4, row.rect.h).stroke({ width: 1, color: PAL.title });
-      }
+    for (let i = 0; i < ul.rows.length; i++) {
+      const row = ul.rows[i];
+      if (i < ul.list.firstRow || i >= ul.list.firstRow + ul.list.rowsVisible) continue;
+      const midY = row.rect.y + Math.floor(UPGRADE_ROW_H / 2);
+      const selected = i === session.selected;
+      const textColor = selected ? PAL.titleInverse : row.owned && session.tab === 'available' ? PAL.shadow : PAL.text;
 
       const tex = getArtTexture(row.def.id, UPGRADE_ICON) ?? getArtTexture(UPGRADE_PLACEHOLDER, UPGRADE_ICON);
       const sp = this.iconAt(ii++);
@@ -301,49 +464,111 @@ export class UpgradesView {
         sp.width = UPGRADE_ICON;
         sp.height = UPGRADE_ICON;
         sp.position.set(row.icon.x, row.icon.y);
-        sp.alpha = row.owned ? 0.5 : 1;
+        sp.alpha = session.tab === 'owned' || row.affordable ? 1 : 0.5;
         sp.visible = true;
       } else {
         sp.visible = false;
         bevel(g, row.icon, true, PAL.face);
       }
 
-      const nameX = row.icon.x + UPGRADE_ICON + 6;
-      const name = this.textAt(ti++);
+      // Name.
+      const name = this.rowTextAt(ti++);
       name.text = row.def.name;
-      name.style.fill = row.owned ? PAL.shadow : PAL.text;
+      name.style.fill = textColor;
       name.style.fontWeight = 'bold';
-      name.position.set(nameX, midY);
+      name.position.set(ul.list.colX[1] + 4, midY);
 
-      const lineX = nameX + textWidth(row.def.name, FONT_SIZE.small) + 8;
-      const lineW = row.buy.x - 6 - lineX;
-      const line = this.textAt(ti++);
-      line.text = truncateToWidth(row.def.line, lineW, FONT_SIZE.small);
-      line.style.fill = PAL.shadow;
-      line.style.fontWeight = 'normal';
-      line.position.set(lineX, midY);
+      // Unlocks.
+      const unlocksW = ul.list.colX[2] + ul.columns[2].w - ul.list.colX[2] - 8;
+      const unlocks = this.rowTextAt(ti++);
+      unlocks.text = truncateToWidth(row.def.line, unlocksW, FONT_SIZE.small);
+      unlocks.style.fill = textColor;
+      unlocks.style.fontWeight = 'normal';
+      unlocks.position.set(ul.list.colX[2] + 4, midY);
 
-      const bt = this.textAt(ti++);
-      bt.text = upgradeButtonText(row);
-      bt.style.fontWeight = 'normal';
-      if (row.owned) {
-        bt.style.fill = PAL.shadow;
-      } else if (row.affordable) {
-        bt.style.fill = PAL.text;
-        bevel(g, row.buy, true, PAL.face);
+      if (session.tab === 'available') {
+        const cost = this.rowTextAt(ti++);
+        cost.text = formatNumber(row.def.cost);
+        cost.style.fill = textColor;
+        cost.style.fontWeight = 'normal';
+        cost.position.set(ul.list.colX[3] + 4, midY);
+
+        const status = this.rowTextAt(ti++);
+        status.text = 'Available';
+        status.style.fill = textColor;
+        status.style.fontWeight = 'normal';
+        status.position.set(ul.list.colX[4] + 4, midY);
       } else {
-        bt.style.fill = PAL.shadow;
-        g.rect(row.buy.x, row.buy.y, row.buy.w, row.buy.h).fill(PAL.face);
-        g.rect(row.buy.x, row.buy.y, row.buy.w, row.buy.h).stroke({ width: 1, color: PAL.shadow });
+        const status = this.rowTextAt(ti++);
+        status.text = 'Owned';
+        status.style.fill = textColor;
+        status.style.fontWeight = 'normal';
+        status.position.set(ul.list.colX[3] + 4, midY);
       }
-      bt.anchor.set(0.5, 0.5);
-      bt.position.set(row.buy.x + row.buy.w / 2, row.buy.y + Math.floor(row.buy.h / 2));
-    });
-
-    this.footerText.text = ul.footer.y + ul.footer.h <= bottom + 4 ? UPGRADES_FOOTER : '';
-    this.footerText.position.set(ul.footer.x, ul.footer.y + Math.floor(ul.footer.h / 2));
-
-    for (let i = ti; i < this.texts.length; i++) this.texts[i].text = '';
+    }
+    for (let i = ti; i < this.rowTexts.length; i++) this.rowTexts[i].text = '';
     for (let i = ii; i < this.icons.length; i++) this.icons[i].visible = false;
+
+    // Empty list: a centred caption (plus the next unlock wave when one is coming).
+    const emptyLines = upgradesEmptyLines(s);
+    if (ul.rows.length === 0 && emptyLines.length > 0) {
+      const cy = ul.list.body.y + ul.list.body.h / 2;
+      const startY = cy - ((emptyLines.length - 1) * 14) / 2;
+      for (let i = 0; i < emptyLines.length; i++) {
+        const t = this.emptyTextAt(i);
+        t.text = emptyLines[i];
+        t.style.fill = PAL.text;
+        t.position.set(ul.list.body.x + ul.list.body.w / 2, startY + i * 14);
+      }
+    }
+    for (let i = emptyLines.length; i < this.emptyTexts.length; i++) this.emptyTexts[i].text = '';
+
+    // Description strip.
+    bevel(g, ul.descStrip, false, PAL.face);
+    const descDef = ul.rows[session.selected]?.def;
+    this.descText.text = descDef ? descDef.detail : '';
+    this.descText.position.set(ul.descStrip.x + 4, ul.descStrip.y + Math.floor(ul.descStrip.h / 2));
+
+    // OK / Cancel.
+    for (const b of ul.buttons) {
+      bevel(g, b.rect, true, PAL.face);
+      if (b.default) {
+        dottedLine(g, b.rect.x + 2, b.rect.y + 2, b.rect.x + b.rect.w - 2, b.rect.y + 2, PAL.dark);
+        dottedLine(g, b.rect.x + b.rect.w - 2, b.rect.y + 2, b.rect.x + b.rect.w - 2, b.rect.y + b.rect.h - 2, PAL.dark);
+        dottedLine(g, b.rect.x + b.rect.w - 2, b.rect.y + b.rect.h - 2, b.rect.x + 2, b.rect.y + b.rect.h - 2, PAL.dark);
+        dottedLine(g, b.rect.x + 2, b.rect.y + b.rect.h - 2, b.rect.x + 2, b.rect.y + 2, PAL.dark);
+      }
+    }
+    const okBtn = ul.buttons[0];
+    const cancelBtn = ul.buttons[1];
+    this.okText.text = okBtn.label;
+    this.okText.position.set(okBtn.rect.x + okBtn.rect.w / 2, okBtn.rect.y + okBtn.rect.h / 2);
+    this.cancelText.text = cancelBtn.label;
+    this.cancelText.position.set(cancelBtn.rect.x + cancelBtn.rect.w / 2, cancelBtn.rect.y + cancelBtn.rect.h / 2);
+
+    // Status bar.
+    const panels = drawStatusBar(g, ul.statusBar, [0, 150]);
+    this.statusTextAt(0).text = upgradesStatusText(s);
+    this.statusTextAt(0).position.set(panels[0].x + 4, panels[0].y + Math.floor(panels[0].h / 2));
+    this.statusTextAt(1).text = `Salvage ${formatNumber(s.economy.salvage)}`;
+    this.statusTextAt(1).position.set(panels[1].x + 4, panels[1].y + Math.floor(panels[1].h / 2));
+    for (let i = 2; i < this.statusTexts.length; i++) this.statusTexts[i].text = '';
+  }
+}
+
+function drawToolbarGlyph(g: Graphics, id: 'buy' | 'info' | 'scroll', r: Rect, color: number): void {
+  const cx = r.x + Math.floor(r.w / 2);
+  const cy = r.y + Math.floor(r.h / 2);
+  if (id === 'buy') {
+    g.rect(cx - 7, cy - 4, 10, 8).stroke({ width: 1, color });
+    g.moveTo(cx + 2, cy + 4).lineTo(cx - 6, cy + 7).lineTo(cx - 6, cy + 4).stroke({ width: 1, color });
+    g.circle(cx + 2, cy + 7, 1).fill(color);
+    g.circle(cx - 5, cy + 9, 1).fill(color);
+  } else if (id === 'info') {
+    g.circle(cx, cy, 7).stroke({ width: 1, color });
+    g.rect(cx - 1, cy - 4, 2, 3).fill(color);
+    g.rect(cx - 1, cy + 1, 2, 2).fill(color);
+  } else {
+    g.poly([cx, cy + 6, cx - 6, cy - 2, cx + 6, cy - 2]).fill(color);
   }
 }

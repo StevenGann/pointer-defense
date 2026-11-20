@@ -3,13 +3,18 @@ import {
   bevel,
   CONTROL_BOX_H,
   CONTROL_BOX_W,
+  dottedLine,
+  drawStatusBar,
+  drawTabStrip,
+  drawWindowChrome,
   FONT,
   FONT_SIZE,
   PAL,
-  TITLE_H,
   pointInRect,
+  TITLE_H,
   type Layout,
   type Rect,
+  type StatusPanel,
 } from './chrome.ts';
 import {
   HELP_CATEGORIES,
@@ -23,24 +28,27 @@ import {
 import type { Profile } from '../core/save.ts';
 
 /**
- * The Help viewer: a fixed, draggable Windows 95 window that looks like the CHM help viewer.
+ * The Help viewer (docs/VISUAL-PASS.md §4): a CHM help file read at a glance. A 720 x 470 window
+ * with a six-button toolbar, a draggable 200 px navigation pane (Contents / Index / Search tabs at
+ * its foot), a 4 px splitter clamped to 140-320 px, a white sunken page pane with a navy heading
+ * rule and a proportional scrollbar, and a topic-path status bar.
  *
- * The model here (layout, hit-testing, tree building, the session) is Pixi-free so the smoke
- * harness can assert the window geometry, the gates and the "one page per kind" contract. The
- * `HelpView` class at the bottom turns that model into Graphics/Text calls.
- *
- * It is a viewer, not a pause: the game clock keeps ticking and the run keeps going behind it.
+ * The model is Pixi-free so the smoke harness can assert the geometry, the gates and the search; the
+ * `HelpView` class at the bottom turns it into Graphics/Text calls.
  */
 
-export const HELP_W = 620;
-export const HELP_H = 400;
+export const HELP_W = 720;
+export const HELP_H = 470;
 export const HELP_TOOLBAR_H = 28;
 export const HELP_STATUS_H = 18;
-export const HELP_TREE_W = 190;
+export const HELP_NAV_W = 200;
+export const HELP_NAV_MIN = 140;
+export const HELP_NAV_MAX = 320;
+export const HELP_SPLIT_W = 4;
 export const HELP_TREE_ROW_H = 18;
 export const HELP_PAGE_PAD = 8;
 export const HELP_TREE_PAD = 4;
-export const HELP_LINE_H = 15;
+export const HELP_LINE_H = 17;
 export const HELP_HEADING_H = 20;
 /** Column reserved on the page panel's right edge for the scrollbar track. */
 export const HELP_SCROLL_W = 12;
@@ -49,24 +57,41 @@ export const HELP_SCROLL_TRACK_W = 8;
 /** Lines the page scrolls per mouse-wheel notch. */
 export const HELP_SCROLL_LINES = 3;
 const HELP_INDENT = 14;
+/** The tree indents one level per 12 px (chapter expander, then page icon). */
+const HELP_TREE_INDENT = 12;
 const HELP_MIN_VISIBLE = 32;
+
+export type HelpToolbarAction = 'nav' | 'back' | 'forward' | 'home' | 'print' | 'options';
+export type HelpNavTab = 'contents' | 'index' | 'search';
 
 export interface HelpLayout {
   window: Rect;
   title: Rect;
   close: Rect;
   toolbar: Rect;
+  navToggle: Rect;
   back: Rect;
   forward: Rect;
+  home: Rect;
+  print: Rect;
+  options: Rect;
+  /** Back-compat alias for the hide-nav button (the old "Contents" toolbar slot). */
   contents: Rect;
+  splitter: Rect;
   treePanel: Rect;
+  navTabStrip: Rect;
+  navTabs: { id: HelpNavTab; label: string; rect: Rect; active: boolean }[];
+  searchField: Rect;
+  searchButton: Rect;
+  indexList: Rect;
   pagePanel: Rect;
   pageText: Rect;
   status: Rect;
+  statusPanels: StatusPanel[];
 }
 
-/** The fixed window geometry at a given top-left position, derived so drawing and hit-testing agree. */
-export function computeHelpLayout(x: number, y: number): HelpLayout {
+/** The window geometry at a top-left position and a nav-pane width, derived so drawing and hit-testing agree. */
+export function computeHelpLayout(x: number, y: number, navW: number = HELP_NAV_W): HelpLayout {
   const win: Rect = { x, y, w: HELP_W, h: HELP_H };
   const title: Rect = { x: x + 2, y: y + 2, w: HELP_W - 4, h: TITLE_H };
   const close: Rect = {
@@ -79,11 +104,27 @@ export function computeHelpLayout(x: number, y: number): HelpLayout {
   const status: Rect = { x: x + 2, y: y + HELP_H - 2 - HELP_STATUS_H, w: HELP_W - 4, h: HELP_STATUS_H };
   const clientTop = toolbar.y + toolbar.h;
   const clientBottom = status.y;
-  const treePanel: Rect = { x: x + 2, y: clientTop, w: HELP_TREE_W, h: clientBottom - clientTop };
+
+  const btnW = 24;
+  let bx = toolbar.x + 6;
+  const mkBtn = (): Rect => {
+    const r: Rect = { x: bx, y: toolbar.y + Math.floor((HELP_TOOLBAR_H - btnW) / 2), w: btnW, h: btnW };
+    bx += btnW + 24;
+    return r;
+  };
+  const navToggle = mkBtn();
+  const back = mkBtn();
+  const forward = mkBtn();
+  const home = mkBtn();
+  const print = mkBtn();
+  const options = mkBtn();
+
+  const treePanel: Rect = { x: x + 2, y: clientTop, w: navW, h: clientBottom - clientTop };
+  const splitter: Rect = { x: treePanel.x + treePanel.w, y: clientTop, w: HELP_SPLIT_W, h: clientBottom - clientTop };
   const pagePanel: Rect = {
-    x: treePanel.x + treePanel.w + 2,
+    x: splitter.x + splitter.w,
     y: clientTop,
-    w: x + HELP_W - 2 - (treePanel.x + treePanel.w + 2),
+    w: x + HELP_W - 2 - (splitter.x + splitter.w),
     h: clientBottom - clientTop,
   };
   const pageText: Rect = {
@@ -93,15 +134,57 @@ export function computeHelpLayout(x: number, y: number): HelpLayout {
     h: pagePanel.h - HELP_PAGE_PAD * 2,
   };
 
-  const bh = 22;
-  let bx = toolbar.x + 6;
-  const back: Rect = { x: bx, y: toolbar.y + Math.floor((HELP_TOOLBAR_H - bh) / 2), w: 56, h: bh };
-  bx += 56 + 4;
-  const forward: Rect = { x: bx, y: back.y, w: 56, h: bh };
-  bx += 56 + 4;
-  const contents: Rect = { x: bx, y: back.y, w: 76, h: bh };
+  // The nav pane foot: Contents | Index | Search.
+  const navTabStrip: Rect = { x: treePanel.x + 2, y: treePanel.y + treePanel.h - 20, w: treePanel.w - 4, h: 18 };
+  const navTabs = computeHelpNavTabs(navTabStrip);
+  const searchField: Rect = { x: treePanel.x + 8, y: treePanel.y + 6, w: treePanel.w - 16, h: 20 };
+  const searchButton: Rect = { x: searchField.x + searchField.w - 46, y: searchField.y + 1, w: 44, h: 18 };
+  const indexList: Rect = { x: treePanel.x + 4, y: treePanel.y + 4, w: treePanel.w - 8, h: navTabStrip.y - 4 - (treePanel.y + 4) };
+  const statusPanels = computeStatusBarRects(status, [0, 110]);
 
-  return { window: win, title, close, toolbar, back, forward, contents, treePanel, pagePanel, pageText, status };
+  return {
+    window: win,
+    title,
+    close,
+    toolbar,
+    navToggle,
+    back,
+    forward,
+    home,
+    print,
+    options,
+    contents: navToggle,
+    splitter,
+    treePanel,
+    navTabStrip,
+    navTabs,
+    searchField,
+    searchButton,
+    indexList,
+    pagePanel,
+    pageText,
+    status,
+    statusPanels,
+  };
+}
+
+function computeHelpNavTabs(strip: Rect): { id: HelpNavTab; label: string; rect: Rect; active: boolean }[] {
+  const labels: [HelpNavTab, string][] = [['contents', 'Contents'], ['index', 'Index'], ['search', 'Search']];
+  const w = Math.floor(strip.w / 3);
+  return labels.map(([id, label], i) => ({ id, label, rect: { x: strip.x + i * w, y: strip.y, w, h: strip.h }, active: false }));
+}
+
+function computeStatusBarRects(rect: Rect, widths: readonly number[]): StatusPanel[] {
+  const fixed = widths.reduce((a, b) => a + (b > 0 ? b : 0), 0);
+  const flexW = (rect.w - fixed) / widths.filter((w) => w <= 0).length;
+  const out: StatusPanel[] = [];
+  let x = rect.x;
+  for (const w of widths) {
+    const pw = w > 0 ? w : flexW;
+    out.push({ x, y: rect.y, w: pw, h: rect.h });
+    x += pw;
+  }
+  return out;
 }
 
 /** Clamp a window position so it can never be dragged fully off the client area. */
@@ -132,7 +215,7 @@ export function estimateTextWidth(text: string, size: number): number {
 }
 
 /** Greedy word-wrap to a pixel width, using the conservative width estimate. */
-export function wrapText(text: string, maxWidth: number, size = FONT_SIZE.small): string[] {
+export function wrapText(text: string, maxWidth: number, size = FONT_SIZE.body): string[] {
   const words = text.split(' ');
   const lines: string[] = [];
   let cur = '';
@@ -163,20 +246,12 @@ export function pageBodyHeight(page: HelpPage, maxWidth: number): number {
 
 /** The scroll geometry for a page: how far it can scroll, plus the track and thumb rectangles. */
 export interface HelpScroll {
-  /** The maximum scroll offset in pixels (0 when the page fits its panel). */
   maxScroll: number;
-  /** The scroll offset, clamped to 0..maxScroll. */
   scroll: number;
-  /** The sunken track on the page panel's right edge. */
   scrollbar: Rect;
-  /** The proportional thumb inside the track. */
   thumb: Rect;
 }
 
-/**
- * The page's scroll range and thumb geometry. `maxScroll` is the page height minus the panel height,
- * so scrolling clamps at the first line (offset 0) and at the last line plus the panel's height.
- */
 export function computeHelpScroll(page: HelpPage | undefined, pageText: Rect, scroll: number): HelpScroll {
   const contentH = page ? pageBodyHeight(page, pageText.w) : 0;
   const maxScroll = Math.max(0, contentH - pageText.h);
@@ -195,7 +270,7 @@ export function computeHelpScroll(page: HelpPage | undefined, pageText: Rect, sc
 }
 
 // ---------------------------------------------------------------------------------------------
-// The contents tree
+// The contents tree and the index / search lists
 
 export interface HelpChapterRow {
   readonly kind: 'chapter';
@@ -213,10 +288,7 @@ export interface HelpPageRow {
 
 export type HelpRow = HelpChapterRow | HelpPageRow;
 
-/**
- * The flat tree rows for the current expansion state. At most one chapter is expanded at a time, so
- * the fixed-height tree never needs a scrollbar.
- */
+/** The flat tree rows for the current expansion state. At most one chapter is expanded at a time. */
 export function helpRows(profile: Profile, expanded: number | null): HelpRow[] {
   const rows: HelpRow[] = [];
   HELP_CATEGORIES.forEach((cat, i) => {
@@ -237,16 +309,31 @@ export function treeRowLabel(row: HelpRow): string {
   return row.locked ? 'Undiscovered' : row.page.title;
 }
 
+/** The Index tab's scrollable A-Z list: every unlocked page title, sorted alphabetically. */
+export function helpIndexList(profile: Profile): HelpPage[] {
+  return HELP_PAGES.filter((p) => pageUnlocked(p, profile)).sort((a, b) => a.title.localeCompare(b.title));
+}
+
+/** The Search tab's live filter: unlocked pages whose title contains the substring (case-insensitive). */
+export function helpSearchResults(text: string, profile: Profile): HelpPage[] {
+  const q = text.trim().toLowerCase();
+  if (q === '') return [];
+  return HELP_PAGES.filter((p) => pageUnlocked(p, profile) && p.title.toLowerCase().includes(q));
+}
+
 export type HelpHit =
   | { type: 'close' }
   | { type: 'title' }
-  | { type: 'toolbar'; action: 'back' | 'forward' | 'contents' }
+  | { type: 'toolbar'; action: HelpToolbarAction }
   | { type: 'tree'; row: number }
+  | { type: 'index'; row: number }
+  | { type: 'search-field' }
+  | { type: 'nav-tab'; tab: HelpNavTab }
+  | { type: 'splitter' }
   | { type: 'page' }
   | { type: 'window' }
   | null;
 
-/** The tree row index under a y coordinate, or -1 for the panel padding. */
 function treeRowAt(hl: HelpLayout, rows: readonly HelpRow[], y: number): number {
   const top = hl.treePanel.y + HELP_TREE_PAD;
   const rel = y - top;
@@ -260,16 +347,48 @@ export function helpHitAt(hl: HelpLayout, rows: readonly HelpRow[], x: number, y
   if (!pointInRect(hl.window, x, y)) return null;
   if (pointInRect(hl.close, x, y)) return { type: 'close' };
   if (pointInRect(hl.title, x, y)) return { type: 'title' };
-  if (pointInRect(hl.contents, x, y)) return { type: 'toolbar', action: 'contents' };
+  if (pointInRect(hl.navToggle, x, y)) return { type: 'toolbar', action: 'nav' };
   if (pointInRect(hl.back, x, y)) return { type: 'toolbar', action: 'back' };
   if (pointInRect(hl.forward, x, y)) return { type: 'toolbar', action: 'forward' };
-  if (pointInRect(hl.treePanel, x, y)) return { type: 'tree', row: treeRowAt(hl, rows, y) };
+  if (pointInRect(hl.home, x, y)) return { type: 'toolbar', action: 'home' };
+  if (pointInRect(hl.print, x, y)) return { type: 'toolbar', action: 'print' };
+  if (pointInRect(hl.options, x, y)) return { type: 'toolbar', action: 'options' };
+  if (pointInRect(hl.splitter, x, y)) return { type: 'splitter' };
+  for (const t of hl.navTabs) {
+    if (pointInRect(t.rect, x, y)) return { type: 'nav-tab', tab: t.id };
+  }
+  if (pointInRect(hl.treePanel, x, y)) {
+    if (pointInRect(hl.searchField, x, y)) return { type: 'search-field' };
+    return { type: 'tree', row: treeRowAt(hl, rows, y) };
+  }
   if (pointInRect(hl.pagePanel, x, y)) return { type: 'page' };
   return { type: 'window' };
 }
 
+/** The nav-pane hit for the Index/Search tabs (rows in the list, or the search field). */
+export function helpNavHitAt(hl: HelpLayout, navTab: HelpNavTab, listLength: number, x: number, y: number): { type: 'index'; row: number } | { type: 'search-field' } | null {
+  if (!pointInRect(hl.treePanel, x, y)) return null;
+  if (pointInRect(hl.searchField, x, y)) return { type: 'search-field' };
+  if (navTab === 'index') {
+    const rel = y - hl.indexList.y;
+    const row = Math.floor(rel / HELP_TREE_ROW_H);
+    return row >= 0 && row < listLength ? { type: 'index', row } : null;
+  }
+  return null;
+}
+
+/** The row under a point in the Search tab's result list, or -1. */
+export function helpSearchRowAt(hl: HelpLayout, results: readonly HelpPage[], x: number, y: number): number {
+  if (!pointInRect(hl.treePanel, x, y)) return -1;
+  const top = hl.searchField.y + hl.searchField.h + 6;
+  const rel = y - top;
+  if (rel < 0) return -1;
+  const row = Math.floor(rel / HELP_TREE_ROW_H);
+  return row >= 0 && row < results.length ? row : -1;
+}
+
 // ---------------------------------------------------------------------------------------------
-// Session state (single instance, draggable, visited-page history)
+// Session state (single instance, draggable, splitter, nav tabs, visited-page history)
 
 export class HelpSession {
   open = false;
@@ -279,12 +398,18 @@ export class HelpSession {
   expanded: number | null = null;
   status = '';
   dragging = false;
+  navTab: HelpNavTab = 'contents';
+  searchText = '';
+  navW = HELP_NAV_W;
+  navVisible = true;
   /** Every page id the player has opened this session (for the shadow-clippy rule). */
   readonly visited = new Set<string>([HELP_PAGES[0].id]);
   /** True once a drag pushed the window against the clamped edge (for the shadow-drag rule). */
   draggedToEdge = false;
   /** Vertical scroll offset of the open page, in pixels (clamped when read). */
   scroll = 0;
+  /** Vertical scroll offset of the Index list, in rows. */
+  indexScroll = 0;
 
   private history: string[] = [HELP_PAGES[0].id];
   private index = 0;
@@ -360,6 +485,10 @@ export class HelpSession {
     this.scroll = 0;
   }
 
+  home(): void {
+    this.select(HELP_PAGES[0].id);
+  }
+
   canBack(): boolean {
     return this.index > 0;
   }
@@ -371,6 +500,19 @@ export class HelpSession {
   /** Collapse the tree back to its chapter headings (the "top" of the contents). */
   contents(): void {
     this.expanded = null;
+  }
+
+  setNavTab(tab: HelpNavTab): void {
+    this.navTab = tab;
+  }
+
+  toggleNav(): void {
+    this.navVisible = !this.navVisible;
+  }
+
+  /** Drag the splitter to a client-relative width, clamped to 140-320 px. */
+  dragSplitter(navW: number): void {
+    this.navW = Math.max(HELP_NAV_MIN, Math.min(HELP_NAV_MAX, navW));
   }
 
   /** Scroll the open page by `dy` pixels, clamped to the page's range. */
@@ -392,6 +534,14 @@ export class HelpSession {
     this.index = this.history.length - 1;
     this.pageId = id;
     this.scroll = 0;
+  }
+
+  /** Open a page by id, whether from the tree, the index or the search list. */
+  openPageId(id: string): void {
+    const page = pageById(id);
+    if (!page) return;
+    this.status = '';
+    this.select(id);
   }
 
   /** Handle a click on a tree row: chapters toggle, locked pages explain, unlocked pages open. */
@@ -423,50 +573,48 @@ function chapterTitle(category: HelpCategory): string {
   return HELP_CATEGORIES.find((c) => c.id === category)?.title ?? category;
 }
 
-const MAX_TREE_ROWS = 12;
-const MAX_BODY_LINES = 30;
+/** The status-bar topic path: "Category › Page", or the title alone when the two coincide. */
+export function helpTopicPath(page: HelpPage | undefined): string {
+  if (!page) return 'Select a topic from the contents';
+  const cat = chapterTitle(page.category);
+  return cat === page.title ? page.title : `${cat} › ${page.title}`;
+}
 
 export class HelpView {
   readonly root = new Container();
   private readonly g = new Graphics();
   private readonly titleText: Text;
-  private readonly toolbarBack: Text;
-  private readonly toolbarForward: Text;
-  private readonly toolbarContents: Text;
   private readonly statusText: Text;
   private readonly heading: Text;
+  private readonly searchFieldText: Text;
   private readonly treeTexts: Text[] = [];
   private readonly bodyTexts: Text[] = [];
-  /** The heading and body lines, scrolled and clipped as one block to the page panel. */
+  private readonly navTexts: Text[] = [];
   private readonly pageLayer = new Container();
   private readonly pageMask = new Graphics();
 
   constructor() {
     this.titleText = makeText('Pointer Defense Help', FONT_SIZE.body, true, PAL.titleInverse);
     this.titleText.anchor.set(0, 0.5);
-    this.toolbarBack = makeText('Back', FONT_SIZE.small, false, PAL.text);
-    this.toolbarBack.anchor.set(0.5, 0.5);
-    this.toolbarForward = makeText('Forward', FONT_SIZE.small, false, PAL.text);
-    this.toolbarForward.anchor.set(0.5, 0.5);
-    this.toolbarContents = makeText('Contents', FONT_SIZE.small, false, PAL.text);
-    this.toolbarContents.anchor.set(0.5, 0.5);
     this.statusText = makeText('', FONT_SIZE.small, false, PAL.text);
     this.statusText.anchor.set(0, 0.5);
     this.heading = makeText('', FONT_SIZE.body, true, PAL.text);
     this.heading.anchor.set(0, 0);
+    this.searchFieldText = makeText('', FONT_SIZE.small, false, PAL.text);
+    this.searchFieldText.anchor.set(0, 0.5);
 
-    this.root.addChild(this.g, this.titleText, this.toolbarBack, this.toolbarForward, this.toolbarContents, this.statusText);
+    this.root.addChild(this.g, this.titleText, this.statusText, this.searchFieldText);
     this.pageLayer.addChild(this.heading);
     this.pageLayer.mask = this.pageMask;
     this.root.addChild(this.pageLayer);
 
-    for (let i = 0; i < MAX_TREE_ROWS; i++) {
+    for (let i = 0; i < 24; i++) {
       const t = makeText('', FONT_SIZE.small, false, PAL.text);
       t.anchor.set(0, 0.5);
       this.treeTexts.push(t);
       this.root.addChild(t);
     }
-    for (let i = 0; i < MAX_BODY_LINES; i++) {
+    for (let i = 0; i < 40; i++) {
       const t = makeText('', FONT_SIZE.small, false, PAL.text);
       t.anchor.set(0, 0);
       this.bodyTexts.push(t);
@@ -474,82 +622,6 @@ export class HelpView {
     }
   }
 
-  draw(session: HelpSession, profile: Profile, hoverX: number, hoverY: number): void {
-    const g = this.g;
-    g.clear();
-    if (!session.open) {
-      this.titleText.text = '';
-      this.toolbarBack.text = '';
-      this.toolbarForward.text = '';
-      this.toolbarContents.text = '';
-      this.statusText.text = '';
-      this.heading.text = '';
-      for (const t of this.treeTexts) t.text = '';
-      for (const t of this.bodyTexts) t.text = '';
-      return;
-    }
-
-    const hl = computeHelpLayout(session.x, session.y);
-    const rows = helpRows(profile, session.expanded);
-    const hover = helpHitAt(hl, rows, hoverX, hoverY);
-
-    // Frame, title bar and close box.
-    bevel(g, hl.window, true, PAL.face);
-    g.rect(hl.title.x, hl.title.y, hl.title.w, hl.title.h).fill(PAL.title);
-    this.titleText.text = 'Pointer Defense Help';
-    this.titleText.position.set(hl.title.x + 6, hl.title.y + Math.floor(TITLE_H / 2));
-
-    bevel(g, hl.close, true, PAL.face);
-    const cx = hl.close.x + Math.floor(hl.close.w / 2);
-    const cy = hl.close.y + Math.floor(hl.close.h / 2);
-    g.moveTo(cx - 4, cy - 4).lineTo(cx + 4, cy + 4).stroke({ width: 1, color: PAL.text });
-    g.moveTo(cx + 4, cy - 4).lineTo(cx - 4, cy + 4).stroke({ width: 1, color: PAL.text });
-
-    // Toolbar strip.
-    g.rect(hl.toolbar.x, hl.toolbar.y, hl.toolbar.w, hl.toolbar.h).fill(PAL.face);
-    this.drawToolbarButton(g, hl.back, this.toolbarBack, 'Back', session.canBack(), hover?.type === 'toolbar' && hover.action === 'back');
-    this.drawToolbarButton(g, hl.forward, this.toolbarForward, 'Forward', session.canForward(), hover?.type === 'toolbar' && hover.action === 'forward');
-    this.drawToolbarButton(g, hl.contents, this.toolbarContents, 'Contents', true, hover?.type === 'toolbar' && hover.action === 'contents');
-
-    // Sunken panels and status line.
-    bevel(g, hl.treePanel, false, PAL.face);
-    bevel(g, hl.pagePanel, false, PAL.face);
-    bevel(g, hl.status, false, PAL.face);
-
-    this.drawTree(g, hl, rows, session, hover);
-
-    const page = session.pageId ? pageById(session.pageId) : undefined;
-    const scroll = computeHelpScroll(page, hl.pageText, session.scroll);
-    this.pageMask.clear();
-    this.pageMask.rect(hl.pageText.x, hl.pageText.y, hl.pageText.w, hl.pageText.h).fill(0xffffff);
-    if (scroll.maxScroll > 0) {
-      g.rect(scroll.scrollbar.x, scroll.scrollbar.y, scroll.scrollbar.w, scroll.scrollbar.h).fill(PAL.shadow);
-      bevel(g, scroll.thumb, true, PAL.face);
-    }
-    this.drawPage(hl, session, scroll.scroll);
-
-    const status = session.status !== '' ? session.status : page ? chapterTitle(page.category) : 'Select a topic from the contents';
-    this.statusText.text = status;
-    this.statusText.position.set(hl.status.x + 4, hl.status.y + Math.floor(HELP_STATUS_H / 2));
-  }
-
-  private drawToolbarButton(g: Graphics, r: Rect, text: Text, label: string, enabled: boolean, hovered: boolean): void {
-    if (enabled) bevel(g, r, true, PAL.face);
-    else {
-      g.rect(r.x, r.y, r.w, r.h).fill(PAL.face);
-      g.rect(r.x, r.y, r.w, r.h).stroke({ width: 1, color: PAL.shadow });
-    }
-    if (hovered && enabled) g.rect(r.x + 2, r.y + 2, r.w - 4, r.h - 4).stroke({ width: 1, color: PAL.dark });
-    text.text = label;
-    text.style.fill = enabled ? PAL.text : PAL.shadow;
-    text.position.set(r.x + r.w / 2, r.y + r.h / 2);
-  }
-
-  /**
-   * The tree text for row `index`, grown on demand. The pool is a render-time cache, not a limit on the
-   * content: expanding a chapter adds rows, and a fixed pool threw inside the render tick the moment a
-   * chapter held more pages than the pool had slots - the window froze with the tree half drawn.
-   */
   private treeTextAt(index: number): Text {
     let t = this.treeTexts[index];
     if (!t) {
@@ -561,7 +633,17 @@ export class HelpView {
     return t;
   }
 
-  /** The body line for `index`, grown on demand for the same reason as the tree rows. */
+  private navTextAt(index: number): Text {
+    let t = this.navTexts[index];
+    if (!t) {
+      t = makeText('', FONT_SIZE.small, false, PAL.text);
+      t.anchor.set(0, 0.5);
+      this.navTexts.push(t);
+      this.root.addChild(t);
+    }
+    return t;
+  }
+
   private bodyTextAt(index: number): Text {
     let t = this.bodyTexts[index];
     if (!t) {
@@ -573,8 +655,123 @@ export class HelpView {
     return t;
   }
 
-  private drawTree(g: Graphics, hl: HelpLayout, rows: readonly HelpRow[], session: HelpSession, hover: HelpHit): void {
+  draw(session: HelpSession, profile: Profile, hoverX: number, hoverY: number): void {
+    const g = this.g;
+    g.clear();
+    if (!session.open) {
+      this.titleText.text = '';
+      this.statusText.text = '';
+      this.heading.text = '';
+      this.searchFieldText.text = '';
+      for (const t of this.treeTexts) t.text = '';
+      for (const t of this.bodyTexts) t.text = '';
+      for (const t of this.navTexts) t.text = '';
+      return;
+    }
+
+    const hl = computeHelpLayout(session.x, session.y, session.navW);
+    const rows = helpRows(profile, session.expanded);
+    const hover = helpHitAt(hl, rows, hoverX, hoverY);
+
+    // Frame, title bar and close box.
+    drawWindowChrome(g, hl.window, { close: true, minimize: false, maximize: false });
+    this.titleText.text = 'Pointer Defense Help';
+    this.titleText.position.set(hl.title.x + 6, hl.title.y + Math.floor(TITLE_H / 2));
+
+    // Toolbar: six flat 24 px buttons with drawn glyphs.
+    g.rect(hl.toolbar.x, hl.toolbar.y, hl.toolbar.w, hl.toolbar.h).fill(PAL.face);
+    const canBack = session.canBack();
+    const canForward = session.canForward();
+    this.drawToolbarGlyph(g, 'nav', hl.navToggle, true);
+    this.drawToolbarGlyph(g, 'back', hl.back, canBack);
+    this.drawToolbarGlyph(g, 'forward', hl.forward, canForward);
+    this.drawToolbarGlyph(g, 'home', hl.home, true);
+    this.drawToolbarGlyph(g, 'print', hl.print, false);
+    this.drawToolbarGlyph(g, 'options', hl.options, true);
+
+    // Nav pane + splitter + page pane.
+    bevel(g, hl.treePanel, false, PAL.highlight);
+    g.rect(hl.splitter.x, hl.splitter.y, hl.splitter.w, hl.splitter.h).fill(PAL.face);
+    g.rect(hl.splitter.x, hl.splitter.y, 1, hl.splitter.h).fill(PAL.highlight);
+    g.rect(hl.splitter.x + hl.splitter.w - 1, hl.splitter.y, 1, hl.splitter.h).fill(PAL.shadow);
+    g.rect(hl.splitter.x + Math.floor(hl.splitter.w / 2) - 1, hl.splitter.y + Math.floor(hl.splitter.h / 2) - 8, 2, 16).fill(PAL.shadow);
+    bevel(g, hl.pagePanel, false, PAL.highlight);
+
+    // Nav pane content.
+    if (session.navTab === 'contents') this.drawContents(g, hl, rows, session, hover);
+    else if (session.navTab === 'index') this.drawIndex(g, hl, profile, session);
+    else this.drawSearch(g, hl, profile, session);
+
+    // Nav tab strip at the foot.
+    const activeIdx = session.navTab === 'contents' ? 0 : session.navTab === 'index' ? 1 : 2;
+    drawTabStrip(g, hl.navTabStrip, ['Contents', 'Index', 'Search'], activeIdx);
+    let tabX = hl.navTabStrip.x;
+    const tabW = Math.floor(hl.navTabStrip.w / 3);
+    for (let i = 0; i < 3; i++) {
+      const t = this.navTextAt(24 + i);
+      t.text = ['Contents', 'Index', 'Search'][i];
+      t.style.fontWeight = 'normal';
+      t.style.fill = i === activeIdx ? PAL.text : PAL.text;
+      t.anchor.set(0.5, 0.5);
+      t.position.set(tabX + tabW / 2, hl.navTabStrip.y + Math.floor(hl.navTabStrip.h / 2));
+      tabX += tabW;
+    }
+
+    // Page pane.
+    const page = session.pageId ? pageById(session.pageId) : undefined;
+    const scroll = computeHelpScroll(page, hl.pageText, session.scroll);
+    this.pageMask.clear();
+    this.pageMask.rect(hl.pageText.x, hl.pageText.y, hl.pageText.w, hl.pageText.h).fill(0xffffff);
+    if (scroll.maxScroll > 0) {
+      g.rect(scroll.scrollbar.x, scroll.scrollbar.y, scroll.scrollbar.w, scroll.scrollbar.h).fill(PAL.shadow);
+      bevel(g, scroll.thumb, true, PAL.face);
+    }
+    this.drawPage(hl, session, scroll.scroll);
+
+    // Status bar: topic path left, Page n of m right.
+    drawStatusBar(g, hl.status, [0, 110]);
+    const path = helpTopicPath(page);
+    const pageIndex = page ? HELP_PAGES.indexOf(page) + 1 : 0;
+    this.statusText.text = path;
+    this.statusText.position.set(hl.statusPanels[0].x + 4, hl.status.y + Math.floor(HELP_STATUS_H / 2));
+    const pageNo = this.navTextAt(30);
+    pageNo.text = `Page ${pageIndex} of ${HELP_PAGES.length}`;
+    pageNo.style.fontWeight = 'normal';
+    pageNo.style.fill = PAL.text;
+    pageNo.anchor.set(0, 0.5);
+    pageNo.position.set(hl.statusPanels[1].x + 4, hl.status.y + Math.floor(HELP_STATUS_H / 2));
+    for (let i = 31; i < this.navTexts.length; i++) this.navTexts[i].text = '';
+  }
+
+  private drawToolbarGlyph(g: Graphics, action: HelpToolbarAction, r: Rect, enabled: boolean): void {
+    const color = enabled ? PAL.text : PAL.shadow;
+    const cx = r.x + Math.floor(r.w / 2);
+    const cy = r.y + Math.floor(r.h / 2);
+    if (action === 'nav') {
+      g.rect(cx - 7, cy - 7, 14, 14).stroke({ width: 1, color });
+      g.rect(cx - 7, cy - 7, 3, 14).fill(color);
+    } else if (action === 'back') {
+      g.poly([cx + 4, cy - 6, cx + 4, cy + 6, cx - 4, cy]).fill(color);
+    } else if (action === 'forward') {
+      g.poly([cx - 4, cy - 6, cx - 4, cy + 6, cx + 4, cy]).fill(color);
+    } else if (action === 'home') {
+      g.poly([cx, cy - 7, cx - 7, cy, cx + 7, cy]).fill(color);
+      g.rect(cx - 4, cy, 8, 7).fill(color);
+    } else if (action === 'print') {
+      g.rect(cx - 6, cy - 6, 12, 9).fill(color);
+      g.rect(cx - 3, cy - 9, 6, 5).fill(color);
+    } else {
+      g.circle(cx, cy, 5).stroke({ width: 1, color });
+      g.circle(cx, cy, 2).fill(color);
+    }
+  }
+
+  private drawContents(g: Graphics, hl: HelpLayout, rows: readonly HelpRow[], session: HelpSession, hover: HelpHit): void {
     const hoverRow = hover?.type === 'tree' ? hover.row : -1;
+    // Dotted guide line connecting the page rows under the one expanded chapter.
+    let guideX = -1;
+    let firstPageY = -1;
+    let lastPageY = -1;
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const text = this.treeTextAt(i);
@@ -582,30 +779,78 @@ export class HelpView {
       const selected = row.kind === 'page' && !row.locked && session.pageId === row.page.id;
       const rowHovered = i === hoverRow;
 
-      if (selected) {
-        g.rect(hl.treePanel.x + 2, y, hl.treePanel.w - 4, HELP_TREE_ROW_H).fill(PAL.title);
-      } else if (rowHovered && (row.kind === 'chapter' || !row.locked)) {
-        g.rect(hl.treePanel.x + 2, y, hl.treePanel.w - 4, HELP_TREE_ROW_H).fill(PAL.highlight);
-      }
+      if (selected) g.rect(hl.treePanel.x + 2, y, hl.treePanel.w - 4, HELP_TREE_ROW_H).fill(PAL.title);
+      else if (rowHovered && (row.kind === 'chapter' || !row.locked)) g.rect(hl.treePanel.x + 2, y, hl.treePanel.w - 4, HELP_TREE_ROW_H).fill(PAL.highlight);
 
       if (row.kind === 'chapter') {
         const bx = hl.treePanel.x + 4;
         const by = y + 4;
-        bevel(g, { x: bx, y: by, w: 9, h: 9 }, true, PAL.face);
+        // The 9x9 [+]/[-] box: a 1 px black border with a drawn plus or minus.
+        g.rect(bx, by, 9, 9).fill(PAL.highlight);
+        g.rect(bx, by, 9, 9).stroke({ width: 1, color: PAL.dark });
         const bxc = bx + 4.5;
         const byc = by + 4.5;
-        g.moveTo(bxc - 2, byc).lineTo(bxc + 2, byc).stroke({ width: 1, color: PAL.text });
-        if (!row.expanded) g.moveTo(bxc, byc - 2).lineTo(bxc, byc + 2).stroke({ width: 1, color: PAL.text });
+        g.moveTo(bxc - 2, byc).lineTo(bxc + 2, byc).stroke({ width: 1, color: PAL.dark });
+        if (!row.expanded) g.moveTo(bxc, byc - 2).lineTo(bxc, byc + 2).stroke({ width: 1, color: PAL.dark });
         text.text = row.title;
         text.style.fill = PAL.text;
         text.position.set(bx + 13, y + Math.floor(HELP_TREE_ROW_H / 2));
       } else {
+        const px = hl.treePanel.x + 4 + HELP_TREE_INDENT;
+        const iconX = px - 10;
+        g.rect(iconX, y + 5, 8, 8).stroke({ width: 1, color: row.locked ? PAL.shadow : PAL.text });
+        if (guideX < 0) guideX = iconX + 4;
+        if (firstPageY < 0) firstPageY = y + 9;
+        lastPageY = y + 9;
         text.text = treeRowLabel(row);
         text.style.fill = row.locked ? PAL.shadow : selected ? PAL.titleInverse : PAL.text;
-        text.position.set(hl.treePanel.x + 4 + HELP_INDENT, y + Math.floor(HELP_TREE_ROW_H / 2));
+        text.position.set(px, y + Math.floor(HELP_TREE_ROW_H / 2));
       }
     }
+    if (guideX >= 0 && lastPageY > firstPageY) dottedLine(g, guideX, firstPageY, guideX, lastPageY, PAL.shadow);
     for (let i = rows.length; i < this.treeTexts.length; i++) this.treeTexts[i].text = '';
+  }
+
+  private drawIndex(g: Graphics, hl: HelpLayout, profile: Profile, session: HelpSession): void {
+    const list = helpIndexList(profile);
+    for (let i = 0; i < list.length; i++) {
+      const y = hl.indexList.y + i * HELP_TREE_ROW_H;
+      if (y + HELP_TREE_ROW_H > hl.navTabStrip.y) break;
+      const selected = session.pageId === list[i].id;
+      if (selected) g.rect(hl.treePanel.x + 2, y, hl.treePanel.w - 4, HELP_TREE_ROW_H).fill(PAL.title);
+      const t = this.treeTextAt(i);
+      t.text = list[i].title;
+      t.style.fill = selected ? PAL.titleInverse : PAL.text;
+      t.position.set(hl.treePanel.x + 8, y + Math.floor(HELP_TREE_ROW_H / 2));
+    }
+    for (let i = list.length; i < this.treeTexts.length; i++) this.treeTexts[i].text = '';
+  }
+
+  private drawSearch(g: Graphics, hl: HelpLayout, profile: Profile, session: HelpSession): void {
+    bevel(g, hl.searchField, false, PAL.highlight);
+    this.searchFieldText.text = session.searchText;
+    this.searchFieldText.position.set(hl.searchField.x + 4, hl.searchField.y + Math.floor(hl.searchField.h / 2));
+    bevel(g, hl.searchButton, true, PAL.face);
+    const bt = this.navTextAt(20);
+    bt.text = 'Search';
+    bt.style.fontWeight = 'normal';
+    bt.style.fill = PAL.text;
+    bt.anchor.set(0.5, 0.5);
+    bt.position.set(hl.searchButton.x + hl.searchButton.w / 2, hl.searchButton.y + Math.floor(hl.searchButton.h / 2));
+
+    const results = helpSearchResults(session.searchText, profile);
+    let y = hl.searchField.y + hl.searchField.h + 6;
+    for (let i = 0; i < results.length; i++) {
+      if (y + HELP_TREE_ROW_H > hl.navTabStrip.y) break;
+      const selected = session.pageId === results[i].id;
+      if (selected) g.rect(hl.treePanel.x + 2, y, hl.treePanel.w - 4, HELP_TREE_ROW_H).fill(PAL.title);
+      const t = this.treeTextAt(i);
+      t.text = results[i].title;
+      t.style.fill = selected ? PAL.titleInverse : PAL.text;
+      t.position.set(hl.treePanel.x + 8, y + Math.floor(HELP_TREE_ROW_H / 2));
+      y += HELP_TREE_ROW_H;
+    }
+    for (let i = results.length; i < this.treeTexts.length; i++) this.treeTexts[i].text = '';
   }
 
   private drawPage(hl: HelpLayout, session: HelpSession, scrollOffset: number): void {
@@ -617,6 +862,9 @@ export class HelpView {
     }
 
     this.heading.text = page.title;
+    this.heading.style.fill = PAL.navy;
+    this.heading.style.fontWeight = 'bold';
+    this.heading.style.fontSize = 16;
     this.heading.position.set(hl.pageText.x, hl.pageText.y - scrollOffset);
 
     let lineIndex = 0;
@@ -630,6 +878,7 @@ export class HelpView {
         const t = this.bodyTextAt(lineIndex++);
         t.text = (bullet && i === 0 ? '• ' : '') + ln;
         t.style.fill = PAL.text;
+        t.style.fontSize = FONT_SIZE.body;
         t.position.set(hl.pageText.x + (bullet ? HELP_INDENT : 0), y);
         y += HELP_LINE_H;
       });
