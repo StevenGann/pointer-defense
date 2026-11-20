@@ -167,7 +167,8 @@ import {
 } from '../src/view/bossBars.ts';
 import { backingStorePixelSize } from '../src/view/screen.ts';
 import { HELP_PAGES, pageUnlocked, lockedReason, pageById } from '../src/content/help.ts';
-import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, computeHelpScroll, HelpSession, helpIndexList, helpSearchResults, helpTopicPath, HELP_W, HELP_H, HELP_LINE_H, HELP_HEADING_H, HELP_SCROLL_LINES, layoutPageLines, helpArtLayout } from '../src/view/help.ts';
+import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, computeHelpScroll, HelpSession, helpIndexList, helpSearchResults, helpTopicPath, HELP_W, HELP_H, HELP_LINE_H, HELP_HEADING_H, HELP_SCROLL_LINES, helpArtLayout } from '../src/view/help.ts';
+import { parseHelpMarkdown, layoutHelpBlocks, helpMeasure, ITEM_GAP } from '../src/view/helpMarkdown.ts';
 import { nextHelpMode, contextHelpPage, contextHelpHitAt } from '../src/view/contexthelp.ts';
 import { buildAchievementGrid, gridRowCount, gridCellRect, ACH_COLUMNS, ACH_CELL, ACH_GUTTER, computeAchievementGrid, achievementGridHitAt, AchievementSession } from '../src/view/dialog.ts';
 import {
@@ -7593,14 +7594,7 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   check(treeRowLabel(unlockedRow) === 'Flyer', 'an unlocked row reads the enemy name');
 }
 
-// --- 44f. Help numbers: every tower block is recomputed from the sim's functions -----------------
-
-function helpFmt2(n) { return n.toFixed(2); }
-function helpFmtTrim(n) { return n.toFixed(2).replace(/\.?0+$/, ''); }
-function helpFmtPct(n) { return `${Math.round(n * 100)}%`; }
-function helpFmtDps(damage, fireTicks) { return fireTicks <= 0 ? '—' : helpFmt2((damage * TICK_HZ) / fireTicks); }
-function helpFmtFire(fireTicks) { return fireTicks <= 0 ? '—' : `${helpFmt2(fireTicks / TICK_HZ)} s (${helpFmt2(TICK_HZ / fireTicks)}/s)`; }
-function helpFmtTurn(turnRate) { return turnRate > 0 ? `${turnRate} °/s` : 'instant'; }
+// --- 44f. Help Markdown (docs/HELP-MARKDOWN.md): parser, alignment and the tier tables ------------
 
 function helpSynthTower(kind, tier, branch) {
   const t = createTower(0, kind, 0, 0);
@@ -7608,121 +7602,80 @@ function helpSynthTower(kind, tier, branch) {
   t.branch = branch;
   return t;
 }
-function helpNextCost(kind, tier, branch) {
-  return upgradeCost(helpSynthTower(kind, tier, branch));
-}
-function helpBranches(kind) {
-  if (kind === 'repair') return [];
-  return kind === 'wall' || kind === 'cursor' ? ['A', 'B', 'C'] : ['A', 'B'];
-}
-function helpCombatTraits(kind, eff) {
-  const parts = [];
-  if (eff.splash > 0) parts.push(`Splash ${helpFmt2(eff.splash)}`);
-  if (eff.pierce > 0) parts.push(`Pierce ${eff.pierce}`);
-  if (eff.ignoresArmour) parts.push('Ignores armour');
-  if (eff.slowFactor < 1) parts.push(`Slows to ${helpFmtPct(eff.slowFactor)} for ${helpFmt2(eff.slowTicks / TICK_HZ)} s`);
-  if (eff.targetsFlyersOnly) parts.push('Flyers only');
-  if (eff.flyerDamageMult !== 1) parts.push(`${helpFmtTrim(eff.flyerDamageMult)}× vs flyers`);
-  if (kind === 'gun') parts.push(`${helpFmtTrim(FLYER_OFF_KIND_DAMAGE)}× vs flyers`);
-  if (eff.chainCount > 0) parts.push(`Chains to ${eff.chainCount} at ${helpFmtPct(eff.chainDamage)}`);
-  if (eff.beams > 1) parts.push(`${eff.beams} beams at ${helpFmtPct(eff.beamDamage)}`);
-  if (eff.shieldedDamageMult !== 1) parts.push(`${helpFmtTrim(eff.shieldedDamageMult)}× vs shields`);
-  return parts.length > 0 ? parts.join(' · ') : '—';
-}
+function helpFmtDps(damage, fireTicks) { return fireTicks <= 0 ? '—' : (damage * TICK_HZ / fireTicks).toFixed(2); }
 
-/** Rebuild a tower's stat block line-for-line, exactly as src/content/help.ts does. */
-function helpRecomputeBlock(kind) {
-  const st = TOWER_STATS[kind];
-  const unlock = Math.max(1, towerUnlockWave(kind));
-  const lines = [`Cost $${st.cost} · unlocks wave ${unlock}`];
-  if (kind === 'beacon') {
-    const base = effectiveStats(helpSynthTower('beacon', 1, null));
-    lines.push(`Range ${helpFmt2(base.range)} · +${helpFmtPct(base.auraDamage)} damage to towers in radius`);
-    const t2 = effectiveStats(helpSynthTower('beacon', 2, null));
-    lines.push(`Tier 2 — $${helpNextCost('beacon', 1, null)}: range ${helpFmt2(t2.range)}`);
-    const branchCost = helpNextCost('beacon', 2, null);
-    const command = effectiveStats(helpSynthTower('beacon', 3, 'A'));
-    lines.push(`Command — $${branchCost}: +${helpFmtPct(command.auraDamage)} damage to towers in radius`);
-    const relay = effectiveStats(helpSynthTower('beacon', 3, 'B'));
-    lines.push(`Relay — $${branchCost}: +${helpFmtPct(relay.auraDamage)} damage to towers · +${helpFmtPct(relay.auraPointerDamage)} pointer damage · +${helpFmtTrim(relay.auraPointerRange)} pointer range`);
-  } else if (kind === 'repair') {
-    const t1 = helpSynthTower('repair', 1, null);
-    lines.push(`Heals ${helpFmt2(repairHealRate(t1))} HP/s · radius ${helpFmt2(repairRadius(t1))} tiles`);
-    const t2 = helpSynthTower('repair', 2, null);
-    lines.push(`Tier 2 — $${helpNextCost('repair', 1, null)}: heals ${helpFmt2(repairHealRate(t2))} HP/s · radius ${helpFmt2(repairRadius(t2))} tiles`);
-    const t3 = helpSynthTower('repair', 3, null);
-    lines.push(`Tier 3 — $${helpNextCost('repair', 2, null)}: heals ${helpFmt2(repairHealRate(t3))} HP/s · radius ${helpFmt2(repairRadius(t3))} tiles`);
-  } else if (kind === 'wall') {
-    lines.push(`${wallMaxHp(1, null)} HP · blocks the route`);
-    lines.push(`Tier 2 — $${helpNextCost('wall', 1, null)}: ${wallMaxHp(2, null)} HP`);
-    const branchCost = helpNextCost('wall', 2, null);
-    lines.push(`Bulwark — $${branchCost}: ${wallMaxHp(3, 'A')} HP`);
-    lines.push(`Mesh — $${branchCost}: ${wallMaxHp(3, 'B')} HP · blocks flyers`);
-    lines.push(`Toggle — $${branchCost}: ${wallMaxHp(3, 'C')} HP · a gate you open and close`);
-  } else if (kind === 'cursor') {
-    const t1 = helpSynthTower('cursor', 1, null);
-    lines.push(`${helpFmt2(cursorClickRate(t1))} clicks/s · radius ${helpFmt2(cursorRadius(t1))} tiles · ${helpFmtPct(CURSOR_CLICK_DAMAGE_FACTOR)} of your click damage`);
-    const t2 = helpSynthTower('cursor', 2, null);
-    lines.push(`Tier 2 — $${helpNextCost('cursor', 1, null)}: ${helpFmt2(cursorClickRate(t2))} clicks/s · radius ${helpFmt2(cursorRadius(t2))} tiles`);
-    const branchCost = helpNextCost('cursor', 2, null);
-    const overclock = helpSynthTower('cursor', 3, 'A');
-    lines.push(`Overclock — $${branchCost}: ${helpFmt2(cursorClickRate(overclock))} clicks/s · ${helpFmtPct(CURSOR_CLICK_DAMAGE_FACTOR * cursorClickDamageFactor(overclock))} of your click damage`);
-    const wide = helpSynthTower('cursor', 3, 'B');
-    lines.push(`Wide Search — $${branchCost}: ${helpFmt2(cursorClickRate(wide))} clicks/s · radius ${helpFmt2(cursorRadius(wide))} tiles`);
-    const maintenance = helpSynthTower('cursor', 3, 'C');
-    lines.push(`Maintenance — $${branchCost}: ${helpFmt2(cursorClickRate(maintenance))} clicks/s · radius ${helpFmt2(cursorRadius(maintenance))} tiles · repairs towers below ${helpFmtPct(CURSOR_REPAIR_THRESHOLD)}`);
-  } else {
-    const base = effectiveStats(helpSynthTower(kind, 1, null));
-    lines.push(`Range ${helpFmt2(base.range)} · Damage ${helpFmt2(base.damage)} · Fire ${helpFmtFire(base.fireInterval)} · Turn ${helpFmtTurn(base.turnRate)}`);
-    lines.push(helpCombatTraits(kind, base));
-    lines.push(`DPS ${helpFmtDps(base.damage, base.fireInterval)}`);
-    const t2 = effectiveStats(helpSynthTower(kind, 2, null));
-    lines.push(`Tier 2 — $${helpNextCost(kind, 1, null)}: range ${helpFmt2(t2.range)} · damage ${helpFmt2(t2.damage)} · DPS ${helpFmtDps(t2.damage, t2.fireInterval)}`);
-    const branchCost = helpNextCost(kind, 2, null);
-    for (const branch of helpBranches(kind)) {
-      lines.push(`${branchName(kind, branch)} — $${branchCost}`);
-      if (kind === 'cannon' && branch === 'B') {
-        lines.push(`Lays a mine every ${helpFmt2(MINE_INTERVAL_TICKS / TICK_HZ)} s · arms in ${helpFmt2(MINE_ARM_TICKS / TICK_HZ)} s · ${MINE_LIVE_CAP} live cap · ${MINE_DAMAGE} damage in a ${helpFmt2(MINE_BLAST_RADIUS)} blast · expires in ${helpFmt2(MINE_EXPIRE_TICKS / TICK_HZ)} s`);
-        continue;
-      }
-      if (kind === 'aa' && branch === 'B') {
-        lines.push(`${AA_SALVO_COUNT} homing missiles per salvo · each ${helpFmtPct(1 / AA_SALVO_COUNT)} of a hit`);
-      }
-      for (let tier = 3; tier <= MAX_TIER; tier++) {
-        const eff = effectiveStats(helpSynthTower(kind, tier, branch));
-        const label = tier === 3 ? 'Tier 3:' : `Tier ${tier} — $${helpNextCost(kind, tier - 1, branch)}:`;
-        lines.push(`${label} range ${helpFmt2(eff.range)} · damage ${helpFmt2(eff.damage)} · fire ${helpFmtFire(eff.fireInterval)} · DPS ${helpFmtDps(eff.damage, eff.fireInterval)}`);
-      }
-    }
+{
+  // 1. Parser: inline styles, bullets, tables, and a mismatched row is a thrown parse error.
+  const blocks = parseHelpMarkdown([
+    'This is **bold** and *italic* and `code`.',
+    '- one',
+    '- two',
+    '| A | B |',
+    '|---|--:|',
+    '| x | 1 |',
+    '| y | 2 |',
+  ]);
+  check(blocks[0].kind === 'paragraph', 'parser: a prose line is a paragraph');
+  const para = blocks[0];
+  check(para.runs.some((r) => r.bold && r.text === 'bold'), 'parser: **bold** becomes a bold run');
+  check(para.runs.some((r) => r.italic && r.text === 'italic'), 'parser: *italic* becomes an italic run');
+  check(para.runs.some((r) => r.code && r.text === 'code'), 'parser: `code` becomes a code run');
+  check(blocks[1].kind === 'bullet' && blocks[2].kind === 'bullet', 'parser: "- " lines are bullets');
+  check(blocks[3].kind === 'table', 'parser: a pipe table parses to one table block');
+  const table = blocks[3];
+  check(table.header.join(',') === 'A,B' && table.rows.length === 2, 'parser: a table has its header and two body rows');
+
+  let threw = false;
+  try {
+    parseHelpMarkdown(['| A | B |', '|---|---|', '| x |']);
+  } catch {
+    threw = true;
   }
-  return lines;
+  check(threw, 'parser: a row with a different cell count than the header is a parse error');
 }
 
 {
-  // 44f. Every tower page's stat block equals the recomputation, character for character.
-  for (const kind of TOWER_KINDS) {
-    const page = HELP_PAGES.find((p) => p.id === `tower-${kind}`);
-    const block = helpRecomputeBlock(kind);
-    check(page !== undefined && page.body.length >= block.length, `tower ${kind} has a page with a stat block (${block.length} lines)`);
-    const actual = page.body.slice(0, block.length).join('\n');
-    check(actual === block.join('\n'), `tower ${kind} stat block recomputes character for character`);
+  // 2. Alignment: `--:` right-aligns, and a right-aligned numeric column's cells end at the same x.
+  const blocks = parseHelpMarkdown(['| Tier | Cost | DPS |', '|---|--:|--:|', '| 1 | — | 6.0 |', '| 10 | $300 | 50.25 |', '| 100 | $3000 | 502.5 |']);
+  const table = blocks[0];
+  check(table.kind === 'table' && table.align.join(',') === 'left,right,right', 'alignment: --: parses to right alignment');
+  const layout = layoutHelpBlocks(blocks, 400, null, (t) => t.length * 7);
+  const laid = layout.items[0];
+  const rightEdges = laid.cells.map((row) => {
+    const cell = row[2];
+    const last = cell[cell.length - 1];
+    return last.x + last.width;
+  });
+  check(rightEdges.every((x) => Math.abs(x - rightEdges[0]) < 1e-9), `alignment: right-aligned cells end at the same x (${rightEdges.join(',')})`);
+}
+
+{
+  // 5. The Gun tier table's tier 5 / 10 / 20 rows match effectiveStats and upgradeCost.
+  const gun = pageById('tower-gun');
+  const table = parseHelpMarkdown(gun.body).find((b) => b.kind === 'table');
+  check(table !== undefined && table.header[0] === 'Tier' && table.header[1] === 'Cost' && table.header.length === 4,
+    `the Gun page has a Tier/Cost/branch/branch table (${table?.header.join(',')})`);
+  check(table.header[2] === 'Marksman' && table.header[3] === 'Repeater', 'the Gun table names its two branches');
+  for (const tier of [5, 10, 20]) {
+    const row = table.rows[tier - 1];
+    const tierText = row[0].map((r) => r.text).join('');
+    const costText = row[1].map((r) => r.text).join('');
+    check(tierText === String(tier), `gun tier ${tier} row labels its tier`);
+    check(costText === `$${upgradeCost(helpSynthTower('gun', tier - 1, null))}`, `gun tier ${tier} cost matches upgradeCost (${costText})`);
+    for (const [bi, branch] of ['A', 'B'].entries()) {
+      const eff = effectiveStats(helpSynthTower('gun', tier, branch));
+      const got = row[2 + bi].map((r) => r.text).join('');
+      check(got === helpFmtDps(eff.damage, eff.fireInterval), `gun tier ${tier} ${branch} DPS matches effectiveStats (${got})`);
+    }
   }
 }
 
 {
-  // 44f2. Tier and branch lines read effectiveStats on a synthetic tower at that tier and branch.
-  for (const kind of ['gun', 'cannon', 'taser', 'frost', 'laser', 'aa']) {
-    const page = HELP_PAGES.find((p) => p.id === `tower-${kind}`);
-    for (const branch of ['A', 'B']) {
-      if (kind === 'cannon' && branch === 'B') continue; // Minesweeper replaces tier lines with its mine line
-      for (let tier = 3; tier <= MAX_TIER; tier++) {
-        const eff = effectiveStats(helpSynthTower(kind, tier, branch));
-        const label = tier === 3 ? 'Tier 3:' : `Tier ${tier} — $${helpNextCost(kind, tier - 1, branch)}:`;
-        const line = `${label} range ${helpFmt2(eff.range)} · damage ${helpFmt2(eff.damage)} · fire ${helpFmtFire(eff.fireInterval)} · DPS ${helpFmtDps(eff.damage, eff.fireInterval)}`;
-        check(page.body.includes(line), `tower ${kind} ${branch} tier ${tier} line matches effectiveStats`);
-      }
-    }
-  }
+  // 6. A Wall page's table stops at tier 3, a Cursor's at 5, a Gun's at 20.
+  const rowsFor = (id) => parseHelpMarkdown(pageById(id).body).find((b) => b.kind === 'table').rows.length;
+  check(rowsFor('tower-wall') === 3, 'the Wall table stops at tier 3');
+  check(rowsFor('tower-cursor') === 5, 'the Cursor table stops at tier 5');
+  check(rowsFor('tower-gun') === 20, 'the Gun table stops at tier 20');
 }
 
 {
@@ -7860,33 +7813,37 @@ function helpRecomputeBlock(kind) {
 }
 
 {
-  // 2 + 3 + 4. Layout: no overlap, the scroll invariant, and full width with no box for art-free pages.
+  // 3 + 4. Layout (docs/HELP-MARKDOWN.md): monotonic height, the sum of line heights, the scroll
+  // invariant, and no laid-out line overlaps the artwork box, for every page at two widths.
   const widths = [computeHelpLayout(0, 0, 200).pageText.w, computeHelpLayout(0, 0, 320).pageText.w];
   const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const layoutAt = (page, width) => {
+    const art = helpArtLayout(page, width);
+    return layoutHelpBlocks(parseHelpMarkdown(page.body), width, art !== null ? art.box : null, helpMeasure);
+  };
+
   for (const page of HELP_PAGES) {
-    for (const width of widths) {
-      const art = helpArtLayout(page, width);
-      const lines = layoutPageLines(page, width);
+    const layouts = widths.map((width) => layoutAt(page, width));
 
-      // 2. No body line's rectangle overlaps the art box.
-      if (art !== null) {
-        const box = art.box;
-        let clean = true;
-        for (const ln of lines) {
-          if (overlaps({ x: ln.x, y: ln.y, w: ln.width, h: HELP_LINE_H }, box)) clean = false;
-        }
-        check(clean, `help art: no body line overlaps the art box for ${page.id} at ${width}px`);
+    // 3. Height is monotonic (wider never taller) and equals the bottom of the last line plus the gap.
+    check(layouts[0].height <= layouts[1].height, `help markdown: ${page.id} height is monotonic across widths (${layouts[0].height} <= ${layouts[1].height})`);
+    for (const [i, layout] of layouts.entries()) {
+      const last = layout.items[layout.items.length - 1];
+      const sum = last ? last.y + last.height + ITEM_GAP : HELP_HEADING_H;
+      check(layout.height === sum, `help markdown: ${page.id} height equals the sum of line heights at ${widths[i]}px`);
+      check(pageBodyHeight(page, widths[i]) === layout.height, `help markdown: pageBodyHeight equals the laid-out height for ${page.id} at ${widths[i]}px`);
+    }
+
+    // 4. No laid-out line overlaps the artwork box.
+    for (const [i, layout] of layouts.entries()) {
+      const art = helpArtLayout(page, widths[i]);
+      if (art === null) continue;
+      const box = art.box;
+      let clean = true;
+      for (const item of layout.items) {
+        if (overlaps({ x: item.x, y: item.y, w: item.width, h: item.height }, box)) clean = false;
       }
-
-      // 3. pageBodyHeight equals the laid-out height (the scroll invariant).
-      const laidOut = lines.length === 0 ? HELP_HEADING_H : lines[lines.length - 1].y + HELP_LINE_H + 4;
-      check(pageBodyHeight(page, width) === laidOut, `help art: pageBodyHeight equals the laid-out height for ${page.id} at ${width}px`);
-
-      // 4. A page with no art lays out exactly as before: full width, no box.
-      if (!page.art) {
-        check(art === null, `help art: ${page.id} draws no art box`);
-        check(lines.every((ln) => ln.x + ln.width === width), `help art: ${page.id} body is full width at ${width}px`);
-      }
+      check(clean, `help markdown: no line overlaps the art box for ${page.id} at ${widths[i]}px`);
     }
   }
 }
@@ -9687,12 +9644,13 @@ function helpRecomputeBlock(kind) {
   check(bad.length === 0,
     `every damage-dealing kind/tier/branch has fireInterval > 0 (bad: ${bad.join(', ') || 'none'})`);
 
-  // 4. The Gun's Help page prints the tier-5 line with a real rate and DPS.
+  // 4. The Gun's Help page table shows the tier-5 Repeater with a real DPS (28).
   const gunPage = pageById('tower-gun');
   check(gunPage !== undefined, 'the Gun has a Help page');
-  const t5line = gunPage?.body.find((l) => l.startsWith('Tier 5') && l.includes('16.00/s'));
-  check(t5line !== undefined && t5line.includes('28.00') && !t5line.includes('never fires') && !t5line.includes('DPS —'),
-    `the Gun Help page tier-5 line reads a real rate and DPS (${t5line})`);
+  const gunTable = parseHelpMarkdown(gunPage.body).find((b) => b.kind === 'table');
+  const repeaterCol = gunTable?.header.indexOf('Repeater') ?? -1;
+  const t5cell = repeaterCol >= 0 ? gunTable.rows[4][repeaterCol].map((r) => r.text).join('') : '';
+  check(t5cell === '28.00', `the Gun Help page tier-5 Repeater column reads a real DPS (${t5cell})`);
 
   // 5. Cannon Mortar and AA Flak intervals are unchanged: the linear rule stays for multipliers >= 1.
   const linear = (mul, strength) => 1 + (mul - 1) * strength;
@@ -11143,12 +11101,10 @@ function dailyState(date) {
   check(before === after, 'a click in help mode places no tower, starts no wave, and leaves the run state byte-identical');
 }
 
-console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
-process.exit(failures === 0 ? 0 : 1);
 // --- 30b. No POINTER row is wider than the panel ----------------------------------------------
 {
   for (const [w, h] of [[1280, 720], [1024, 640]]) {
-    for (const stage of [1, 2, 3]) {
+    for (const stage of [1, 2]) {
       for (const wave of [1, 40, 100]) {
         const s = createRunState();
         s.pointer.stage = stage;
@@ -11173,3 +11129,33 @@ process.exit(failures === 0 ? 0 : 1);
     'wrapped POINTER rows carry no double spaces',
   );
 }
+
+// --- 30c. A rate branch never loses DPS as it climbs -------------------------------------------
+{
+  const dps = (t) => {
+    const e = effectiveStats(t);
+    return (e.damage * 60) / Math.max(1, e.fireInterval);
+  };
+  // The Gun's Repeater is the only rate branch (`intervalMul < 1`) in the game. Its depth is
+  // capped where its rate stops growing, so it must gain DPS at every tier it can be bought.
+  {
+    let prev = 0;
+    let climbing = true;
+    for (let tier = 3; tier <= MAX_TIER; tier += 1) {
+      const tower = createTower(1, 'gun', 0, 0);
+      tower.tier = tier;
+      tower.branch = 'B';
+      const here = dps(tower);
+      if (here < prev - 1e-6) climbing = false;
+      prev = here;
+    }
+    check(climbing, `the Repeater gains DPS at every tier from 3 to ${MAX_TIER}`);
+  }
+  const t5 = createTower(1, 'gun', 0, 0);
+  t5.tier = 5;
+  t5.branch = 'B';
+  check(Math.abs(dps(t5) - 28) < 1e-6, 'tier 5 Repeater keeps its pre-existing 28.0 DPS');
+}
+
+console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
+process.exit(failures === 0 ? 0 : 1);

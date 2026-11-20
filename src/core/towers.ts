@@ -879,6 +879,13 @@ const BRANCH_EFFECTS: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch,
   },
 };
 
+/** True for a branch that trades damage for fire rate. Its depth stops buying rate at tier 6, when
+ *  the interval ladder hits its four-step plateau, so its depth must stop growing there too. */
+function isRateBranch(kind: TowerKind, branch: Branch): boolean {
+  const effect = BRANCH_EFFECTS[kind][branch];
+  return effect !== undefined && effect.intervalMul !== undefined && effect.intervalMul < 1;
+}
+
 export interface EffectiveStats {
   readonly range: number;
   readonly damage: number;
@@ -950,7 +957,11 @@ export function effectiveStats(tower: Tower): EffectiveStats {
   }
 
   if (tower.branch !== null && tower.tier >= 3) {
-    const strength = Math.min(1 + 0.5 * (tower.tier - 3), 4);
+    // Branch depth. A rate branch (intervalMul < 1) stops buying rate at tier 6, where the ladder
+    // hits its four-step plateau; past that point extra depth only paid the branch's damage cost, so
+    // a Repeater lost DPS as you spent money on it. Cap such a branch's depth where its rate stopped.
+    const depthCap = isRateBranch(tower.kind, tower.branch) ? 2.5 : 4;
+    const strength = Math.min(1 + 0.5 * (tower.tier - 3), depthCap);
     const e = BRANCH_EFFECTS[tower.kind][tower.branch];
     if (e !== undefined) {
       if (e.damageMul !== undefined) damage *= scaledMultiplier(e.damageMul, strength);
