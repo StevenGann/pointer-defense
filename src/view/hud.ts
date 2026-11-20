@@ -6,7 +6,8 @@ import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
 import { BUFF_NAMES, buffSecondsLeft, hasUpgrade, revealedUpgrades, upgradeBuff } from '../core/upgrades.ts';
 import { clickDamage, comboMultiplier, critChance, overclockCeiling, pointerUpgradeState } from '../core/pointer.ts';
-import { autoWaveStatus, canCycleLevel, currentPath, cursorMaintenanceStatus, isFinalWave, noBuildActive, NO_BUILD_MESSAGE, overclockCap, pointerDamageMult, selectedTower, STARTING_INTEGRITY, towerCost, towerUnlocked, type RunState } from '../core/state.ts';
+import { autoWaveStatus, canCycleLevel, currentPath, cursorMaintenanceStatus, isFinalWave, noBuildActive, NO_BUILD_MESSAGE, overclockCap, pointerDamageMult, selectedTower, STARTING_INTEGRITY, synergyLayout, towerCost, towerUnlocked, type RunState } from '../core/state.ts';
+import { AA_MIN_CLUSTER } from '../core/synergy.ts';
 
 import {
   BRANCHES,
@@ -157,6 +158,8 @@ interface TowerDetailLayout {
   close: Rect;
   stats: Rect;
   route: Rect;
+  /** The Synced line for an AA in a cluster: its rect plus the cluster size, or null. */
+  synced: { rect: Rect; count: number } | null;
   target: Rect | null;
   upgrade: Rect | null;
   branches: BranchButton[];
@@ -286,6 +289,13 @@ export function computeHud(l: Layout, s: RunState): HudLayout {
     const routeRow: Rect = { x: x + 6, y: cy, w: w - 12, h: 18 };
     cy += 18 + 4;
 
+    // An AA standing in a cluster states the connection, not a number (docs/SYNERGIES.md §6).
+    const cluster = tower.kind === 'aa' ? synergyLayout(s).clusterOf.get(tower.id) : undefined;
+    const synced = cluster !== undefined && cluster.members.length >= AA_MIN_CLUSTER
+      ? { rect: { x: x + 6, y: cy, w: w - 12, h: 18 }, count: cluster.members.length }
+      : null;
+    if (synced) cy += 18;
+
     // Walls and the repair tower never target, so they have no target-mode row.
     const target: Rect | null = tower.kind === 'wall' || tower.kind === 'repair' ? null : { x: innerX, y: cy, w: innerW, h: 24 };
     if (target) cy += 24 + 4;
@@ -331,7 +341,7 @@ export function computeHud(l: Layout, s: RunState): HudLayout {
     const sell: Rect = { x: innerX, y: cy, w: innerW, h: 24 };
     cy += 24;
     const box: Rect = { x, y: boxTop, w, h: cy - boxTop + 6 };
-    detail = { box, name, close, stats, route: routeRow, target, upgrade, branches, repair, sell };
+    detail = { box, name, close, stats, route: routeRow, synced, target, upgrade, branches, repair, sell };
     cy = box.y + box.h + 6;
   }
 
@@ -689,6 +699,7 @@ export class HudView {
   private readonly towerName = makeText('', true);
   private readonly towerStats = makeText('');
   private readonly towerRoute = makeText('');
+  private readonly towerSynced = makeText('');
   private readonly upgradeButton = makeText('');
   private readonly branchButtons: Text[] = [makeText(''), makeText(''), makeText('')];
   private readonly repairButton = makeText('');
@@ -736,6 +747,7 @@ export class HudView {
       this.towerName,
       this.towerStats,
       this.towerRoute,
+      this.towerSynced,
       this.upgradeButton,
       ...this.branchButtons,
       this.repairButton,
@@ -1035,6 +1047,17 @@ export class HudView {
       this.towerRoute.anchor.x = tr.anchor;
       this.towerRoute.position.set(tr.x, d.route.y + Math.floor(d.route.h / 2));
 
+      if (d.synced) {
+        this.towerSynced.visible = true;
+        this.towerSynced.text = t('hud.synergy.synced', { count: d.synced.count });
+        const sc = textX(d.synced.rect, 'start');
+        this.towerSynced.anchor.x = sc.anchor;
+        this.towerSynced.position.set(sc.x, d.synced.rect.y + Math.floor(d.synced.rect.h / 2));
+      } else {
+        this.towerSynced.text = '';
+        this.towerSynced.visible = false;
+      }
+
       if (d.target) {
         const fixed = frozen || TOWER_STATS[tower.kind].targetLock !== null || tower.kind === 'cursor';
         drawButton(g, d.target, !fixed, hoverHud === 'target' && !fixed);
@@ -1116,6 +1139,7 @@ export class HudView {
     this.towerName.text = '';
     this.towerStats.text = '';
     this.towerRoute.text = '';
+    this.towerSynced.text = '';
     this.upgradeButton.text = '';
     this.repairButton.text = '';
     this.sellButton.text = '';
@@ -1124,6 +1148,7 @@ export class HudView {
     this.towerName.visible = false;
     this.towerStats.visible = false;
     this.towerRoute.visible = false;
+    this.towerSynced.visible = false;
     this.upgradeButton.visible = false;
     this.repairButton.visible = false;
     this.sellButton.visible = false;

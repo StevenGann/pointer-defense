@@ -52,6 +52,7 @@ export const hud = {
   'hud.repairStats': '{heal} HP/s  rng {radius}  healing {count}',
   'hud.combatStats': 'dmg {damage}  rng {range}',
   'hud.route': 'Route: {count} tiles',
+  'hud.synergy.synced': 'Synced · {count} towers',
   'hud.target': 'Target',
   'hud.upgrade': 'Upgrade ${cost}',
   'hud.repairing': 'Repairing — {seconds} s',

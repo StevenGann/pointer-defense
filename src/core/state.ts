@@ -203,6 +203,7 @@ import {
   type SpecLevels,
 } from './save.ts';
 import { effectsFor, TREE_NODES, type TreeEffects } from './tree.ts';
+import { AA_HOLD_CAP, AA_HOLD_WINDOW, buildSynergyLayout, type SynergyCluster, type SynergyLayout } from './synergy.ts';
 
 /**
  * The run state and the functions that change it.
@@ -419,6 +420,12 @@ export interface RunState {
   enemySlowTicks: number;
   /** Tower id -> ticks remaining it is disabled. */
   towerDisabled: Map<number, number>;
+  /** Bumped whenever towers change, invalidating the memoised synergy clusters (docs/SYNERGIES.md §4.4). */
+  synergyRev: number;
+  /** Tower id -> the tick a held shot began; cleared whenever clusters are rebuilt. */
+  synergyHoldSince: Map<number, number>;
+  /** Tower id -> the enemy a held shot is waiting to fire at; cleared with `synergyHoldSince`. */
+  synergyHoldTarget: Map<number, number>;
   /** Seeded PRNG state (see rng.ts). */
   rng: number;
   /** Desktop geometry for ad placement, updated by the view on resize. */
@@ -692,6 +699,9 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     towerDamageBuffTicks: 0,
     enemySlowTicks: 0,
     towerDisabled: new Map(),
+    synergyRev: 0,
+    synergyHoldSince: new Map(),
+    synergyHoldTarget: new Map(),
     rng: opts.seed ?? daily?.seed ?? 0x9e3779b9,
     viewport: {
       width: 1280,
@@ -1046,6 +1056,7 @@ export function placeTower(s: RunState, kind: TowerKind, col: number, row: numbe
   s.towersBuilt++;
   if (kind === 'wall') s.wallsBuilt++;
   if (kind === 'cursor') s.cursorBuilt = true;
+  s.synergyRev++;
   rebuildField(s);
   recomputeAuras(s.towers, s.clock);
   s.placedFirstTower = true;
@@ -1202,6 +1213,7 @@ export function upgradeTower(s: RunState, col: number, row: number): boolean {
   t.tier = (t.tier + 1) as Tier;
   t.spent += cost;
   s.upgradesBought++;
+  s.synergyRev++;
   refreshTowerHp(t);
   recomputeAuras(s.towers, s.clock);
   return true;
@@ -1249,7 +1261,10 @@ export function sweepUpgradeSame(s: RunState, source: Tower): TowerSweep {
     refreshTowerHp(t);
   }
 
-  if (result.upgraded > 0) recomputeAuras(s.towers, s.clock);
+  if (result.upgraded > 0) {
+    s.synergyRev++;
+    recomputeAuras(s.towers, s.clock);
+  }
   return result;
 }
 
@@ -1284,6 +1299,7 @@ export function chooseBranch(s: RunState, col: number, row: number, branch: Bran
   if (isMinesweeper(t)) t.mineCooldown = MINE_INTERVAL_TICKS;
   // A Toggle gate installs closed: the branch must never silently open the route the player built.
   t.open = false;
+  s.synergyRev++;
   refreshTowerHp(t);
   rebuildField(s); // a Mesh branch starts blocking flyers
   recomputeAuras(s.towers, s.clock);
@@ -1296,6 +1312,7 @@ export function sellTower(s: RunState, col: number, row: number): boolean {
   if (!t) return false;
   const refund = sellValue(t, s.treeEffects.sellRefund);
   s.towers = s.towers.filter((x) => x.id !== t.id);
+  s.synergyRev++;
   s.blocked.delete(row * s.grid.cols + col);
   s.mines = s.mines.filter((m) => m.towerId !== t.id);
   s.economy.salvage += refund;
@@ -3256,7 +3273,9 @@ export function cursorMaintenanceStatus(s: RunState, t: Tower): string | null {
 
 function fireTowers(s: RunState): void {
   const buff = s.towerDamageBuffTicks > 0 ? 1.4 : 1;
+  const layout = synergyLayout(s);
   for (const t of s.towers) {
+    if (layout.clusterOf.has(t.id)) continue; // a clustered AA fires with its cluster, below
     if ((s.towerDisabled.get(t.id) ?? 0) > 0) continue; // disabled by Blue Screen
     if (isDown(t, s.clock)) continue; // an offline (or EMP'd) tower does not fire
     if (isMinesweeper(t)) continue; // a Minesweeper lays mines instead of firing
@@ -3333,6 +3352,167 @@ function fireTowers(s: RunState): void {
     else if (st.chainCount > 0) fireChain(s, t, st, target, dmg);
     else if (st.splash > 0) fireSplash(s, t, st, target, dmg);
     else hitEnemy(s, t, st, target, dmg);
+  }
+
+  // Synchronized Fire (docs/SYNERGIES.md §4.2): each cluster is handled in one lead-order pass, so
+  // leaders fire before the followers that wait on them.
+  for (const cluster of layout.clusters) processSynergyCluster(s, cluster, buff);
+}
+
+/**
+ * The memoised synergy layout for a state. Rebuilt only when the tower roster changed (the revision
+ * counter), so the O(n²) adjacency scan does not run every tick. A rebuild also clears the held-shot
+ * maps: a follower whose leader was sold, moved or re-rolled must re-evaluate from a clean hold.
+ */
+const synergyLayoutCache = new WeakMap<RunState, { rev: number; layout: SynergyLayout }>();
+export function synergyLayout(s: RunState): SynergyLayout {
+  let cached = synergyLayoutCache.get(s);
+  if (cached === undefined || cached.rev !== s.synergyRev) {
+    cached = { rev: s.synergyRev, layout: buildSynergyLayout(s.towers) };
+    synergyLayoutCache.set(s, cached);
+    s.synergyHoldSince.clear();
+    s.synergyHoldTarget.clear();
+  }
+  return cached.layout;
+}
+
+/** Drop any held shot for a tower, because it fired, cooled, lost its target or stopped aiming. */
+function clearSynergyHold(s: RunState, id: number): void {
+  s.synergyHoldSince.delete(id);
+  s.synergyHoldTarget.delete(id);
+}
+
+/** Fire one AA shot. A follower that fires writes its own cooldown and never anyone else's. */
+function fireAaShot(s: RunState, t: Tower, st: EffectiveStats, dmg: number, target: Enemy): void {
+  t.cooldown = towerIntervalTicks(s, st.fireInterval) - 1;
+  // The AA's tier-3 branches fire projectiles rather than hitscan; the base form is a plain hit.
+  if (t.kind === 'aa' && t.branch === 'A') {
+    fireFlakShell(s, t, st, target, dmg);
+    return;
+  }
+  if (t.kind === 'aa' && t.branch === 'B') {
+    fireMissileSalvo(s, t, st, target, dmg);
+    return;
+  }
+  s.events.push({ type: 'shot', towerId: t.id, x: target.x, y: target.y, splash: st.splash });
+  hitEnemy(s, t, st, target, dmg);
+}
+
+/**
+ * Advance one AA cluster for a tick. Members are walked in lead order; a follower that is ready to
+ * fire and has a live, soon-to-fire leader that has not fired this tick holds its shot instead. A
+ * hold never writes a cooldown and is re-evaluated every tick against a live target.
+ */
+function processSynergyCluster(s: RunState, cluster: SynergyCluster, buff: number): void {
+  const members = cluster.members;
+  const n = members.length;
+  const live = new Array<boolean>(n);
+  const fired = new Array<boolean>(n);
+  const hasTarget = new Array<boolean>(n);
+  const cooldownAfter = new Array<number>(n);
+
+  for (let i = 0; i < n; i++) {
+    const t = members[i];
+    const disabled = (s.towerDisabled.get(t.id) ?? 0) > 0;
+    const down = isDown(t, s.clock);
+    live[i] = !disabled && !down;
+
+    if (disabled || down) {
+      clearSynergyHold(s, t.id);
+      continue;
+    }
+    if (isMinesweeper(t)) {
+      clearSynergyHold(s, t.id);
+      continue;
+    }
+    const st = effectiveStats(t);
+    if (st.damage <= 0 || st.fireInterval <= 0) {
+      clearSynergyHold(s, t.id);
+      continue;
+    }
+    const range = (st.range + t.auraRange) * towerRangeMult(s);
+    const dmg = st.damage * t.auraDamage * buff * towerDamageMult(s);
+
+    // Manual Override: identical to the per-tower walk, so a marked enemy still wins the target.
+    let overrideTarget: Enemy | undefined;
+    if (s.pointer.manualOverride && s.pointer.targetId !== null) {
+      const marked = s.enemies.find((e) => e.id === s.pointer.targetId && !e.dead);
+      if (
+        marked &&
+        towerCanHurt(s, marked) &&
+        (!st.targetsFlyersOnly || baseEnemyKind(marked.kind) === 'flyer') &&
+        inRange(t, marked, range)
+      ) {
+        overrideTarget = marked;
+      }
+    }
+    const targets =
+      overrideTarget !== undefined
+        ? [overrideTarget]
+        : ((): Enemy[] => {
+            const tg = acquireTarget(s, t, st, range);
+            return tg ? [tg] : [];
+          })();
+
+    if (t.cooldown > 0) {
+      t.cooldown--;
+      cooldownAfter[i] = t.cooldown;
+      hasTarget[i] = targets.length > 0;
+      if (targets.length > 0) aimToward(t, bearingTo(t, targets[0]), st.turnRate);
+      clearSynergyHold(s, t.id);
+      continue;
+    }
+
+    if (targets.length === 0) {
+      cooldownAfter[i] = 0;
+      hasTarget[i] = false;
+      clearSynergyHold(s, t.id);
+      continue;
+    }
+
+    if (!aimToward(t, bearingTo(t, targets[0]), st.turnRate)) {
+      cooldownAfter[i] = 0;
+      hasTarget[i] = true;
+      clearSynergyHold(s, t.id);
+      continue;
+    }
+
+    const target = targets[0];
+    cooldownAfter[i] = 0;
+    hasTarget[i] = true;
+
+    // A live leader that has not fired this tick and will fire within the hold window blocks the shot.
+    let blocked = false;
+    for (const li of cluster.leaders[i]) {
+      if (live[li] && !fired[li] && hasTarget[li] && cooldownAfter[li] <= AA_HOLD_WINDOW) {
+        blocked = true;
+        break;
+      }
+    }
+
+    if (!blocked) {
+      fireAaShot(s, t, st, dmg, target);
+      fired[i] = true;
+      clearSynergyHold(s, t.id);
+      continue;
+    }
+
+    // The follower would hold. It fires anyway when the target it was waiting to shoot is gone or out
+    // of range, or when it has held for the backstop.
+    const since = s.synergyHoldSince.get(t.id);
+    const heldTarget = s.synergyHoldTarget.get(t.id);
+    const heldEnemy = heldTarget !== undefined ? s.enemies.find((e) => e.id === heldTarget && !e.dead) : undefined;
+    const lostTarget = heldTarget !== undefined && (heldEnemy === undefined || !towerCanHurt(s, heldEnemy) || !inRange(t, heldEnemy, range));
+    const heldLongEnough = since !== undefined && s.tick - since + 1 >= AA_HOLD_CAP;
+
+    if (lostTarget || heldLongEnough) {
+      fireAaShot(s, t, st, dmg, target);
+      fired[i] = true;
+      clearSynergyHold(s, t.id);
+    } else if (since === undefined) {
+      s.synergyHoldSince.set(t.id, s.tick);
+      s.synergyHoldTarget.set(t.id, target.id);
+    }
   }
 }
 

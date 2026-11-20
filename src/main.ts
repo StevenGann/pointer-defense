@@ -678,6 +678,7 @@ function buildMenu(name: MenuName): OpenMenu {
         { id: 'records', label: t('menu.view.records') },
         { id: 'separator', label: '', separator: true },
         { id: 'shake', label: profile.shakeOn ? t('menu.view.shakeOn') : t('menu.view.shakeOff') },
+        { id: 'synergy', label: showSynergyLines ? t('menu.view.synergyOn') : t('menu.view.synergyOff') },
         { id: 'separator', label: '', separator: true },
         { id: 'language-header', label: t('menu.view.language'), disabled: true },
         // Each language is named in its own script, so the list is readable whichever one is active.
@@ -793,6 +794,9 @@ function menuAction(id: string): void {
       profile.shakeOn = !profile.shakeOn;
       shake.setEnabled(profile.shakeOn);
       saveProfile(profile);
+      break;
+    case 'synergy':
+      showSynergyLines = !showSynergyLines;
       break;
     case 'god-mode':
       toggleGodMode(state);
@@ -1950,6 +1954,10 @@ const QUALITY_PIN = qualityPin();
 let quality: QualityLevel = QUALITY_PIN ?? 'full';
 let governorSamples = 0;
 
+// The View -> Synergy lines toggle. Session-only on purpose: it changes nothing but what is drawn,
+// so it never touches the save, the sim or the RNG (docs/SYNERGIES.md §5).
+let showSynergyLines = true;
+
 /** Debug-only per-stage timings: `?prof=1`, read back from `window.__perf`. */
 const PERF_PROF = new URLSearchParams(location.search).get('prof') === '1';
 function pmark(name: string, fn: () => void): void {
@@ -2020,6 +2028,7 @@ app.ticker.add((ticker) => {
         { col: mouse.hover.col, row: mouse.hover.row, onBoard: mouse.hover.onBoard, x: mouse.hover.x, y: mouse.hover.y },
         (id, tick) => effects.knockbackOffset(id, tick),
         quality,
+        showSynergyLines,
       ),
     );
     if (!PERF_HIDDEN.has('fx')) pmark('effects', () => effects.draw(state, layout));

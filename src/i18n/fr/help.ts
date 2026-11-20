@@ -188,4 +188,11 @@ export const help: Catalogue = {
   'help.tower-cursor.4': '- **{name}** — {cost}\u00A0: {rate} clics/s, rayon de {radius} cases.',
   'help.tower-cursor.5': '- **{name}** — {cost}\u00A0: répare les tours en dessous de {pct} quand son rayon est dégagé.',
   'help.tower-cursor.6': 'Un second curseur qui clique sur les ennemis pour la moitié de vos dégâts de clic. Nourrissez-le en améliorant le pointeur.',
+
+  // Synergies (always available; docs/SYNERGIES.md §6).
+  'help.synergy.title': 'Synergies',
+  'help.synergy.1': 'Deux tours adjacentes des bons types se lient en une synergie. Adjacent signifie côte à côte — nord, sud, est ou ouest, jamais en diagonale.',
+  'help.synergy.2': '**Tir synchronisé** — les tours AA adjacentes tirent comme une seule\u00A0: la plus rapide mène et les autres tirent avec elle. Une AA simple tire toutes les {interval} ticks.',
+  'help.synergy.3': 'Une suiveuse retient son tir jusqu\'à ce que sa meneuse tire ce tick-là. Elle attend au plus {window} ticks la meneuse, et jamais plus de {cap} ticks au total.',
+  'help.synergy.4': 'Un tir synchronisé est exactement aussi fort qu\'un tir non synchronisé — aucun bonus de dégâts ni de cadence — il atterrit juste avec les autres.',
 } as const satisfies Catalogue;
