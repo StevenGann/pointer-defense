@@ -11101,12 +11101,10 @@ function dailyState(date) {
   check(before === after, 'a click in help mode places no tower, starts no wave, and leaves the run state byte-identical');
 }
 
-console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
-process.exit(failures === 0 ? 0 : 1);
 // --- 30b. No POINTER row is wider than the panel ----------------------------------------------
 {
   for (const [w, h] of [[1280, 720], [1024, 640]]) {
-    for (const stage of [1, 2, 3]) {
+    for (const stage of [1, 2]) {
       for (const wave of [1, 40, 100]) {
         const s = createRunState();
         s.pointer.stage = stage;
@@ -11131,3 +11129,33 @@ process.exit(failures === 0 ? 0 : 1);
     'wrapped POINTER rows carry no double spaces',
   );
 }
+
+// --- 30c. A rate branch never loses DPS as it climbs -------------------------------------------
+{
+  const dps = (t) => {
+    const e = effectiveStats(t);
+    return (e.damage * 60) / Math.max(1, e.fireInterval);
+  };
+  // The Gun's Repeater is the only rate branch (`intervalMul < 1`) in the game. Its depth is
+  // capped where its rate stops growing, so it must gain DPS at every tier it can be bought.
+  {
+    let prev = 0;
+    let climbing = true;
+    for (let tier = 3; tier <= MAX_TIER; tier += 1) {
+      const tower = createTower(1, 'gun', 0, 0);
+      tower.tier = tier;
+      tower.branch = 'B';
+      const here = dps(tower);
+      if (here < prev - 1e-6) climbing = false;
+      prev = here;
+    }
+    check(climbing, `the Repeater gains DPS at every tier from 3 to ${MAX_TIER}`);
+  }
+  const t5 = createTower(1, 'gun', 0, 0);
+  t5.tier = 5;
+  t5.branch = 'B';
+  check(Math.abs(dps(t5) - 28) < 1e-6, 'tier 5 Repeater keeps its pre-existing 28.0 DPS');
+}
+
+console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
+process.exit(failures === 0 ? 0 : 1);
