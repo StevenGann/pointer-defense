@@ -64,6 +64,22 @@ Nothing in flight.
   only long-lived one besides whatever is currently in flight.
 - **Note:** offered twice, never answered. Safe to ignore.
 
+## Shipped recently
+
+Kept short on purpose — the last few things that landed, so "did we do that?" has an answer here
+instead of in chat. Older history is `git log`.
+
+- **Help text measured, not guessed** (`0e9b180`) — the `length × 13 × 0.6` ruler made Help pages
+  look stretched with wide gaps between words; prose now measures with the real font metrics and RTL
+  prose is flush right.
+- **Menu bar measured per locale** (`e37c696`) — CJK words collided because layout assumed 7 px a
+  letter; words are measured, and every locale must fit the bar without overlap.
+- **No phantom turrets** (`71b4a0a`) — per-tower sprite pools are indexed by slot, so a wall that
+  inherited a gun's slot kept drawing the gun's turret. Slots are cleared before redraw.
+- **Help prose in all seven languages** (`5e7f438`, `24286db`) — 910/910 keys, still `draft`.
+- **Victory message no longer under the title bar** (`df60c77`) — the block was centre-anchored and
+  grew upward into the 20 px title bar.
+
 ## Deferred by request — not in the queue
 
 Kept here so these do not get re-proposed as new work:
