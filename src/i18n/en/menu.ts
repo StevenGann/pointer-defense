@@ -1,0 +1,27 @@
+import type { Catalogue } from '../index.ts';
+
+/** Menu-bar words and every File / View / Cheats / Help item. */
+export const menu = {
+  'menu.file': 'File',
+  'menu.view': 'View',
+  'menu.cheats': 'Cheats',
+  'menu.help': 'Help',
+  'menu.file.restart': 'Restart Windows',
+  'menu.file.restartWave50': 'Restart Windows (wave 50)',
+  'menu.file.newRun': 'New Run',
+  'menu.file.exit': 'Exit',
+  'menu.view.records': 'Records',
+  'menu.view.shakeOn': 'Screen shake: On',
+  'menu.view.shakeOff': 'Screen shake: Off',
+  'menu.cheats.godMode': 'God Mode',
+  'menu.cheats.killAll': 'Kill All',
+  'menu.cheats.spawn': 'Spawn',
+  'menu.help.show': 'Show Help',
+  'menu.help.soundOn': 'Sound: On',
+  'menu.help.soundOff': 'Sound: Off',
+  'menu.help.volumeLow': 'Volume: Low',
+  'menu.help.volumeMed': 'Volume: Medium',
+  'menu.help.volumeHigh': 'Volume: High',
+  'menu.help.achievements': 'Achievements',
+  'menu.help.about': 'About',
+} as const satisfies Catalogue;

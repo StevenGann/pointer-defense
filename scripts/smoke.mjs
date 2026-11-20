@@ -249,7 +249,7 @@ import {
   SHAKE_LEAK_FREEZE_MS,
 } from '../src/view/shake.ts';
 import { t, plural, formatInt, formatMoney } from '../src/i18n/index.ts';
-import { en } from '../src/i18n/en.ts';
+import { en } from '../src/i18n/en/index.ts';
 import { extractTKeys, parseCatalogueKeys, checkI18n, scanRoots, walkAllSources, readBaseline } from './i18n-check.mjs';
 
 // All v0.10b levels share a single spawn and exit, so the older maze checks keep a local gate.
@@ -11204,7 +11204,9 @@ function dailyState(date) {
 // 47c. Every catalogue key is referenced by code, and every referenced key exists.
 {
   const sources = walkAllSources();
-  const catalogueKeys = parseCatalogueKeys(sources.get('src/i18n/en.ts') ?? '');
+  const catalogueKeys = [...sources.entries()]
+    .filter(([path]) => path.startsWith('src/i18n/en/'))
+    .flatMap(([, src]) => parseCatalogueKeys(src));
   const referenced = new Set();
   for (const src of sources.values()) {
     for (const key of extractTKeys(src)) referenced.add(key);

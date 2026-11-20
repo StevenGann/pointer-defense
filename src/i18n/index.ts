@@ -1,4 +1,4 @@
-import { en } from './en.ts';
+import { en } from './en/index.ts';
 
 /**
  * Localisation machinery (docs/LOCALIZATION.md).
@@ -65,13 +65,31 @@ export function t(key: string, params?: Readonly<Record<string, string | number>
   });
 }
 
+/** The plural categories `Intl.PluralRules` can return, each optionally supplied by a catalogue. */
+export type PluralForms = Partial<Record<Intl.LDMLPluralRule, string>>;
+
 /**
- * Pick `one` when `Intl.PluralRules` selects the singular form for `locale`, `other` otherwise.
- * Languages with more than two forms (e.g. Polish's `few` / `many`) currently map to `other`, so
- * adding those forms later changes only the catalogue, not the call sites.
+ * Pick the plural form for `n`. Russian and Ukrainian need `one` / `few` / `many` / `other`, Hebrew
+ * `one` / `two` / `many` / `other`, French `one` / `many` / `other`, Chinese only `other` — so the
+ * caller supplies a category map and anything it omits falls back to `other`.
+ *
+ * The two-string form `plural(n, one, other)` is kept for call sites that only distinguish singular
+ * from plural.
  */
-export function plural(n: number, one: string, other: string, locale: string = activeLocaleName): string {
-  return new Intl.PluralRules(locale).select(n) === 'one' ? one : other;
+export function plural(n: number, forms: PluralForms | string, other?: string, locale: string = activeLocaleName): string {
+  const category = new Intl.PluralRules(locale).select(n);
+  if (typeof forms === 'string') return category === 'one' ? forms : (other ?? forms);
+  return forms[category] ?? forms.other ?? '';
+}
+
+/** A locale the game knows about: its catalogue, its BCP-47 tag, and its writing direction. */
+export interface LocaleDef {
+  readonly code: string;
+  readonly name: string;
+  readonly dir: 'ltr' | 'rtl';
+  readonly catalogue: Catalogue;
+  /** True while any string is machine-drafted and unreviewed. */
+  readonly draft: boolean;
 }
 
 /** An integer formatted for a locale (`1,234` in en-US, `1 234` in fr-FR). */
