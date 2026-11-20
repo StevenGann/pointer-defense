@@ -67,6 +67,7 @@ import { getArtTexture, onArtInvalidate, preloadArt, setArtDpr } from './view/ar
 import { repairHealingCount, TOWER_KINDS, TOWER_STATS, type Branch, type TowerKind } from './core/towers.ts';
 import { isBossVariant, type EnemyKind } from './core/enemies.ts';
 import { encodeLevel, decodeCode } from './core/codec.ts';
+import { nextQuality, qualityFrameMs, qualityPin, type QualityLevel } from './core/quality.ts';
 import {
   clearEditor,
   createEditor,
@@ -107,7 +108,7 @@ const app = new Application();
 await app.init({
   background: PAL.desktop,
   resizeTo: window,
-  antialias: true,
+  antialias: false,
   resolution: window.devicePixelRatio || 1,
   autoDensity: true,
 });
@@ -1834,9 +1835,48 @@ function drainEvents(): void {
   state.events = [];
 }
 
+const PERF_HIDDEN: ReadonlySet<string> = (() => {
+  const raw = new URLSearchParams(location.search).get('hide');
+  return new Set(raw ? raw.split(',').filter(Boolean) : []);
+})();
+
+/** The frame-time readout (`?fps=1`) shows the smoothed frame time and the derived rate. */
+const PERF_FPS = new URLSearchParams(location.search).get('fps') === '1';
+
+/**
+ * The frame-time governor (docs/PERFORMANCE.md §1). Presentation-only: it decides the quality level
+ * `board.draw` uses, and nothing else. `?quality=full` pins it so a comparison run never steps down.
+ */
+const QUALITY_PIN = qualityPin();
+let quality: QualityLevel = QUALITY_PIN ?? 'full';
+let governorSamples = 0;
+
+/** Debug-only per-stage timings: `?prof=1`, read back from `window.__perf`. */
+const PERF_PROF = new URLSearchParams(location.search).get('prof') === '1';
+function pmark(name: string, fn: () => void): void {
+  if (!PERF_PROF) {
+    fn();
+    return;
+  }
+  const t0 = performance.now();
+  fn();
+  const w = window as unknown as { __perf?: Record<string, { sum: number; max: number; n: number }> };
+  const all = (w.__perf ??= {});
+  const s = (all[name] ??= { sum: 0, max: 0, n: 0 });
+  const dt = performance.now() - t0;
+  s.sum += dt;
+  s.n += 1;
+  if (dt > s.max) s.max = dt;
+}
+
 app.ticker.add((ticker) => {
   const running = screen === 'run';
   if (running) {
+    // The governor samples the real frame time every run frame and picks the quality level; a pin
+    // (`?quality=`) still samples (for the readout) but never lets the level move.
+    const governorDecides = nextQuality(quality, ticker.deltaMS, governorSamples++);
+    quality = QUALITY_PIN ?? governorDecides;
+
     const alpha = step(state, ticker.deltaMS);
     drainEvents();
     if (!state.cheatsUsed) {
@@ -1873,19 +1913,30 @@ app.ticker.add((ticker) => {
       cheatNotified = state;
       hud.showNotice('Cheats active — this run will not be recorded', 240);
     }
-    board.draw(
-      state,
-      layout,
-      alpha,
-      { col: mouse.hover.col, row: mouse.hover.row, onBoard: mouse.hover.onBoard, x: mouse.hover.x, y: mouse.hover.y },
-      (id, tick) => effects.knockbackOffset(id, tick),
+    pmark('board', () =>
+      board.draw(
+        state,
+        layout,
+        alpha,
+        { col: mouse.hover.col, row: mouse.hover.row, onBoard: mouse.hover.onBoard, x: mouse.hover.x, y: mouse.hover.y },
+        (id, tick) => effects.knockbackOffset(id, tick),
+        quality,
+      ),
     );
-    effects.draw(state, layout);
-    numbers.draw(state, layout);
-    bossBars.draw(state, layout, profile.shakeOn);
-    hud.draw(state, layout, mouse.hover.hud);
-    ad.draw(state);
-    trayView.draw(state);
+    if (!PERF_HIDDEN.has('fx')) pmark('effects', () => effects.draw(state, layout));
+    if (!PERF_HIDDEN.has('fx')) pmark('numbers', () => numbers.draw(state, layout));
+    pmark('bossBars', () => bossBars.draw(state, layout, profile.shakeOn));
+    const frameMs = qualityFrameMs();
+    pmark('hud', () =>
+      hud.draw(state, layout, mouse.hover.hud, {
+        quality,
+        frameMs,
+        fps: Math.round(1000 / frameMs),
+        showFps: PERF_FPS,
+      }),
+    );
+    pmark('ad', () => ad.draw(state));
+    pmark('tray', () => trayView.draw(state));
     helpView.draw(helpSession, profile, mouse.hover.x, mouse.hover.y);
     if (helpSession.open && helpSession.navTab === 'search') {
       const shl = computeHelpLayout(helpSession.x, helpSession.y, helpSession.navW);
@@ -1963,6 +2014,7 @@ app.ticker.add((ticker) => {
       runs: totals.runs,
       achievements: profile.achievements.length,
       version: `v${pkg.version}`,
+      marqueeOffset: quality === 'lean' ? 0 : undefined,
     });
     dialogView.draw(dialog, layout);
     if (loadOpen) {

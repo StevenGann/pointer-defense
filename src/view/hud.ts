@@ -30,6 +30,7 @@ import {
 } from '../core/towers.ts';
 import { earlyCallBonus, MODIFIER_NAMES, typeBossKindForWave, waveDef, waveModifiers } from '../core/waves.ts';
 import { ENEMY_STATS } from '../core/enemies.ts';
+import type { QualityLevel } from '../core/quality.ts';
 import { branchName, fmtClickDamage, targetModeDisplay } from './tooltipText.ts';
 
 /**
@@ -84,6 +85,34 @@ export function waveLabel(s: RunState): string {
     label += ` · ${s.modifiers.map((m) => MODIFIER_NAMES[m]).join(' + ')}`;
   }
   return label;
+}
+
+/** What the governor's current state contributes to the status-bar speed slot. */
+export interface HudPerf {
+  quality: QualityLevel;
+  /** The smoothed frame time in ms, for the `?fps=1` readout. */
+  frameMs: number;
+  /** Frames per second, derived from `frameMs`, for the `?fps=1` readout. */
+  fps: number;
+  /** Whether `?fps=1` is enabled; the readout costs nothing when it is off. */
+  showFps: boolean;
+}
+
+/** The status-bar speed slot: the multiplier alone. The perf readout has its own slot. */
+export function speedStatusText(speed: number): string {
+  return `×${speed}`;
+}
+
+/**
+ * The `?fps=1` readout and the quality indicator, right-aligned against the wave pane: the speed
+ * pane is 44 px wide and cannot hold it. Empty when there is nothing to report.
+ */
+export function statusPerfText(perf: HudPerf | null): string {
+  if (perf === null) return '';
+  const parts: string[] = [];
+  if (perf.showFps) parts.push(`${perf.frameMs.toFixed(1)} ms`, `${perf.fps}/s`);
+  if (perf.quality !== 'full' || perf.showFps) parts.push(`Q: ${perf.quality}`);
+  return parts.join(' · ');
 }
 
 let metricsText: Text | null = null;
@@ -663,6 +692,7 @@ export class HudView {
   private readonly statusHint = makeText('');
   private readonly statusWave = makeText('');
   private readonly statusSpeed = makeText('');
+  private readonly statusPerf: Text = makeText('');
   private readonly statusPaused = makeText('', true);
   private readonly cheatMarker = makeText('');
   private readonly integrity = makeText('');
@@ -702,12 +732,14 @@ export class HudView {
   private readonly globalRows: Text[] = [makeText(''), makeText(''), makeText('')];
 
   constructor() {
+    this.statusPerf.anchor.set(1, 0.5);
     this.towerButtons = TOWER_KINDS.map(() => makeText(''));
     this.root.addChild(this.g, this.checks);
     for (const t of [
       this.statusHint,
       this.statusWave,
       this.statusSpeed,
+      this.statusPerf,
       this.statusPaused,
       this.cheatMarker,
       this.integrity,
@@ -801,7 +833,7 @@ export class HudView {
     }
   }
 
-  draw(s: RunState, l: Layout, hoverHud: HudAction | null): void {
+  draw(s: RunState, l: Layout, hoverHud: HudAction | null, perf: HudPerf | null = null): void {
     const g = this.g;
     g.clear();
     this.checkIndex = 0;
@@ -836,7 +868,9 @@ export class HudView {
 
     this.statusWave.text = waveLabel(s);
     this.statusWave.position.set(sp.middle.x + 4, sp.middle.y + Math.floor(sp.middle.h / 2));
-    this.statusSpeed.text = `×${s.speed}`;
+    this.statusSpeed.text = speedStatusText(s.speed);
+    this.statusPerf.text = statusPerfText(perf);
+    this.statusPerf.position.set(sp.middle.x - 6, sp.middle.y + Math.floor(sp.middle.h / 2));
     this.statusSpeed.position.set(sp.speed.x + 4, sp.speed.y + Math.floor(sp.speed.h / 2));
 
     // Toolbar.

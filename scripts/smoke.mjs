@@ -145,10 +145,12 @@ import {
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
 import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName, TOOLTIP_BLUE } from '../src/view/tooltipText.ts';
-import { BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre } from '../src/view/board.ts';
+import { BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
-import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect } from '../src/view/hud.ts';
+import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, statusPerfText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect } from '../src/view/hud.ts';
+import { FloatingNumbersView } from '../src/view/numbers.ts';
+import { nextQuality } from '../src/core/quality.ts';
 import { dailyFor, dailyLevel, dailySeed, dailyMenuLabel, dailyAvailable, DAILY_WAVES, hashDaily } from '../src/core/daily.ts';
 import {
   advanceBossBars,
@@ -10682,6 +10684,119 @@ function dailyState(date) {
   const s = createRunState();
   const prog = restoreProgress(s); // zero lifetime salvage, so zero points toward the next Restore Point
   check(prog.fill === 0, `the progress bar is empty at zero points (fill ${prog.fill})`);
+}
+
+// --- Frame budget (docs/PERFORMANCE.md): the governor, pinned levels, cached layers, caps -------
+// 1. The governor steps down above 22 ms after 30 samples, up below 14 ms after 120, and never
+//    oscillates on an alternating 21/15 ms stream.
+{
+  let q = 'full';
+  for (let i = 0; i < 30; i++) q = nextQuality(q, 50, i);
+  check(q === 'no-shadows', `governor steps down above 22 ms after 30 samples (${q})`);
+
+  for (let i = 0; i < 250; i++) q = nextQuality(q, 5, 30 + i);
+  check(q === 'full', `governor steps back up below 14 ms after 120 frames (${q})`);
+
+  let prev = q;
+  let oscillated = false;
+  for (let i = 0; i < 500; i++) {
+    q = nextQuality(q, i % 2 === 0 ? 21 : 15, 280 + i);
+    if (q !== prev) { oscillated = true; break; }
+    prev = q;
+  }
+  check(!oscillated, 'governor never oscillates on an alternating 21/15 ms sequence');
+}
+
+// 2. A pinned ?quality=full level never changes, and the status bar shows Q: lean below full.
+{
+  const unpinned = () => {
+    let q = 'full';
+    for (let i = 0; i < 300; i++) q = nextQuality(q, 100, i);
+    return q;
+  };
+  check(unpinned() === 'lean', `unpinned: sustained slow frames step all the way down (${unpinned()})`);
+
+  const pin = 'full';
+  let q = 'full';
+  for (let i = 0; i < 300; i++) {
+    const decided = nextQuality(q, 100, i);
+    q = pin ?? decided;
+  }
+  check(q === 'full', 'a ?quality=full pin never changes the level');
+
+  check(speedStatusText(2) === '×2', 'the speed slot shows only the multiplier');
+  check(statusPerfText({ quality: 'lean', frameMs: 16.7, fps: 60, showFps: false }) === 'Q: lean',
+    'the speed slot shows Q: lean when the level is below full');
+  check(statusPerfText({ quality: 'full', frameMs: 16.7, fps: 60, showFps: true }) === '16.7 ms · 60/s · Q: full',
+    '?fps=1 draws the frame-time readout with Q: full');
+}
+
+// 3. The route key changes on a tower placement and does not change across ticks with no building.
+{
+  const s = stateOnLevel('open-field');
+  const before = routeKey(s);
+  for (let i = 0; i < 120; i++) tick(s);
+  check(routeKey(s) === before, 'route key is stable across ticks with no building');
+
+  s.economy.salvage = 10000;
+  check(placeTower(s, 'gun', 3, 5), 'place a gun on the route');
+  check(routeKey(s) !== before, 'route key changes on a tower placement');
+}
+
+// 4. Health bars are drawn for damaged enemies and bosses, not for full-health grunts.
+{
+  const grunt = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+  check(!enemyHealthBarVisible(grunt), 'a full-health grunt draws no health bar');
+  grunt.hp = grunt.maxHp - 1;
+  check(enemyHealthBarVisible(grunt), 'a damaged enemy draws a health bar');
+
+  const boss = createEnemy(2, 'grunt-boss', 1, SPAWN, EXIT);
+  check(enemyHealthBarVisible(boss), 'a boss draws a health bar even at full health');
+
+  const shielded = createEnemy(3, 'shielded', 1, SPAWN, EXIT);
+  check(enemyHealthBarVisible(shielded), 'a shielded enemy draws a health bar at full health');
+
+  check(shadowDrawnFor('grunt', 'full') && !shadowDrawnFor('grunt', 'no-shadows') && !shadowDrawnFor('grunt', 'lean'),
+    'shadows: a grunt casts a shadow only at full');
+  check(shadowDrawnFor('grunt-boss', 'no-shadows') && shadowDrawnFor('flyer-boss', 'no-shadows'),
+    'shadows: bosses and the Carrier keep shadows at no-shadows');
+}
+
+// 5. The damage-number cap keeps the newest 40.
+{
+  const view = new FloatingNumbersView();
+  const layout = computeLayout(1280, 800);
+  for (let i = 0; i < 50; i++) view.addDamage(i, i, i + 1, false, false, 1000);
+  const s = createRunState();
+  s.tick = 1000;
+  view.draw(s, layout);
+  const live = view.root.children.filter((c) => c.visible && typeof c.text === 'string');
+  check(live.length === 40, `damage numbers cap at 40 live floaters (${live.length})`);
+  const amounts = live.map((c) => Number(c.text)).sort((a, b) => a - b);
+  check(amounts[0] === 11 && amounts[amounts.length - 1] === 50, 'the cap keeps the newest 40 (drops the oldest)');
+}
+
+// 6. A 900-tick determinism hash with the governor pinned to lean equals the one at full.
+{
+  const hash = (pin) => {
+    const s = stateOnLevel('open-field');
+    placeTower(s, 'gun', 3, 6);
+    placeTower(s, 'gun', 4, 6);
+    s.rng = 0x12345678;
+    s.wave = 5;
+    startWave(s);
+    let quality = 'full';
+    const h = createHash('sha256');
+    for (let i = 0; i < 900; i++) {
+      tick(s);
+      const decided = nextQuality(quality, 16.7, i);
+      quality = pin ?? decided;
+      if (s.events.length > 0) { h.update(JSON.stringify(s.events)); s.events = []; }
+      h.update(`${s.rng}:${s.integrity}:${s.enemies.length}`);
+    }
+    return h.digest('hex');
+  };
+  check(hash('full') === hash('lean'), '900-tick determinism hash is identical pinned to lean and full');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

@@ -415,6 +415,8 @@ export class MenuScreenView {
     runs: number;
     achievements: number;
     version: string;
+    /** Overrides the time-derived marquee scroll (used to freeze it at the `lean` quality level). */
+    marqueeOffset?: number;
   }): void {
     const g = this.g;
     g.clear();
@@ -539,7 +541,7 @@ export class MenuScreenView {
     const marqueeText = MARQUEE_TIPS;
     const textW = textWidth(marqueeText, FONT_SIZE.small);
     const scrollW = textW + win.marquee.w;
-    const off = state.time * 30 % scrollW;
+    const off = state.marqueeOffset ?? (state.time * 30 % scrollW);
     this.marquee.text = marqueeText;
     this.marquee.position.set(win.marquee.x + win.marquee.w - off, win.marquee.y + Math.floor(win.marquee.h / 2));
     const mask = marqueeMaskRect(l);
