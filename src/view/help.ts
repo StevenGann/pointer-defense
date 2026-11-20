@@ -1,4 +1,4 @@
-import { Container, Graphics, Text } from 'pixi.js';
+import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import {
   bevel,
   CONTROL_BOX_H,
@@ -26,6 +26,9 @@ import {
   type HelpPage,
 } from '../content/help.ts';
 import type { Profile } from '../core/save.ts';
+import { ENEMY_ART_BODY, HELP_REFERENCE_CELL } from './board.ts';
+import { artSpriteSize, frameTexture } from './art.ts';
+import { ENEMY_STATS, type EnemyKind } from '../core/enemies.ts';
 
 /**
  * The Help viewer (docs/VISUAL-PASS.md §4): a CHM help file read at a glance. A 720 x 470 window
@@ -56,6 +59,14 @@ export const HELP_SCROLL_W = 12;
 export const HELP_SCROLL_TRACK_W = 8;
 /** Lines the page scrolls per mouse-wheel notch. */
 export const HELP_SCROLL_LINES = 3;
+/** The vertical gap left after each page body entry (4 px, as the original layout did). */
+const HELP_ITEM_GAP = 4;
+/** Inset of the art preview box from the page text area's right and top edges (docs/HELP-ART.md). */
+export const HELP_ART_INSET = 8;
+/** Gap between a body line wrapped around the art box and the box's left edge. */
+export const HELP_ART_GAP = 16;
+/** Padding inside the art preview box around the sprite (`box = maxPreview + 2 * HELP_ART_PAD`). */
+export const HELP_ART_PAD = 6;
 const HELP_INDENT = 14;
 /** The tree indents one level per 12 px (chapter expander, then page icon). */
 const HELP_TREE_INDENT = 12;
@@ -214,34 +225,129 @@ export function estimateTextWidth(text: string, size: number): number {
   return Math.ceil(text.length * size * 0.6);
 }
 
-/** Greedy word-wrap to a pixel width, using the conservative width estimate. */
-export function wrapText(text: string, maxWidth: number, size = FONT_SIZE.body): string[] {
+/**
+ * One laid-out body line (docs/HELP-ART.md). `x`, `y` and `width` are in the page text area's own
+ * coordinates: (0, 0) is its top-left and `maxWidth` its width, with the title occupying the first
+ * `HELP_HEADING_H` pixels. `width` is the wrapping width the line was laid out to, so the line's text
+ * spans [x, x + width].
+ */
+export interface HelpLine {
+  readonly text: string;
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+}
+
+/** The art preview box a page draws, and the sprite sizes that fit inside it. */
+export interface HelpArtLayout {
+  /** Preview sprite size for the base texture, in px. */
+  readonly basePx: number;
+  /** Preview sprite size for the turret texture, in px (0 = no turret). */
+  readonly turretPx: number;
+  /** The sunken box, relative to the page text area's top-left corner. */
+  readonly box: Rect;
+}
+
+/**
+ * The preview sprite sizes for a page, derived from the same constants the board draws with
+ * (docs/HELP-ART.md §2): twice the board's sprite size, rounded up to whole px.
+ *
+ * - An enemy (or boss) body is `artSpriteSize(ENEMY_ART_BODY[kind] * radius * cell)` on the board, so
+ *   the preview is `2 * artSpriteSize(ENEMY_ART_BODY[kind] * ENEMY_STATS[kind].radius * cell)`.
+ * - A tower body and turret are drawn at exactly `cell` on the board, so both preview at `2 * cell`.
+ */
+export function helpArtLayout(page: HelpPage, maxWidth: number): HelpArtLayout | null {
+  if (!page.art) return null;
+
+  const gate = page.gate;
+  let basePx: number;
+  let turretPx = 0;
+  if (gate.kind === 'tower') {
+    basePx = Math.ceil(2 * HELP_REFERENCE_CELL);
+    if (page.art.turret !== undefined) turretPx = basePx;
+  } else if (gate.kind === 'enemy' || gate.kind === 'boss') {
+    basePx = enemyPreviewPx(gate.enemy);
+  } else {
+    // An art-bearing page is always an enemy, boss or tower page.
+    return null;
+  }
+
+  const size = Math.max(basePx, turretPx) + 2 * HELP_ART_PAD;
+  const box: Rect = { x: maxWidth - HELP_ART_INSET - size, y: HELP_ART_INSET, w: size, h: size };
+  return { basePx, turretPx, box };
+}
+
+/** Twice the board's sprite size for an enemy or boss body, rounded up to a whole pixel. */
+function enemyPreviewPx(kind: EnemyKind): number {
+  return Math.ceil(2 * artSpriteSize(ENEMY_ART_BODY[kind] * ENEMY_STATS[kind].radius * HELP_REFERENCE_CELL));
+}
+
+/** Whether a body line at `lineY` has any vertical overlap with the art box. */
+function lineIntersectsBox(lineY: number, box: Rect): boolean {
+  return lineY < box.y + box.h && lineY + HELP_LINE_H > box.y;
+}
+
+/** Greedy word-wrap of one body entry, narrowing to the art box where a line's band intersects it. */
+function wrapBodyEntry(
+  text: string,
+  contentWidth: number,
+  art: HelpArtLayout | null,
+  startY: number,
+): { text: string; width: number }[] {
   const words = text.split(' ');
-  const lines: string[] = [];
+  const out: { text: string; width: number }[] = [];
+  const widthAt = (lineIndex: number): number => {
+    if (art !== null && lineIntersectsBox(startY + lineIndex * HELP_LINE_H, art.box)) {
+      return contentWidth - art.box.w - HELP_ART_GAP;
+    }
+    return contentWidth;
+  };
+
   let cur = '';
   for (const w of words) {
+    const width = widthAt(out.length);
     const cand = cur.length === 0 ? w : `${cur} ${w}`;
-    if (estimateTextWidth(cand, size) <= maxWidth) {
+    if (estimateTextWidth(cand, FONT_SIZE.body) <= width) {
       cur = cand;
     } else {
-      if (cur.length > 0) lines.push(cur);
+      if (cur.length > 0) out.push({ text: cur, width });
       cur = w;
     }
   }
-  if (cur.length > 0) lines.push(cur);
-  return lines.length > 0 ? lines : [''];
+  if (cur.length > 0) out.push({ text: cur, width: widthAt(out.length) });
+  return out;
+}
+
+/**
+ * The single layout of a page's body lines (docs/HELP-ART.md §3): the lines the view draws, with
+ * their positions and wrapping widths. The view draws from this and `pageBodyHeight` sums it, so the
+ * wrap logic lives in exactly one place. The title is not included — it is drawn separately and never
+ * narrowed.
+ */
+export function layoutPageLines(page: HelpPage, maxWidth: number): HelpLine[] {
+  const art = helpArtLayout(page, maxWidth);
+  const lines: HelpLine[] = [];
+  let y = HELP_HEADING_H;
+  for (const item of page.body) {
+    const bullet = item.startsWith('• ');
+    const text = bullet ? item.slice(2) : item;
+    const indent = bullet ? HELP_INDENT : 0;
+    const contentWidth = bullet ? maxWidth - HELP_INDENT : maxWidth;
+    const wrapped = wrapBodyEntry(text, contentWidth, art, y);
+    wrapped.forEach((ln, i) => {
+      lines.push({ text: (bullet && i === 0 ? '• ' : '') + ln.text, x: indent, y, width: ln.width });
+      y += HELP_LINE_H;
+    });
+    y += HELP_ITEM_GAP;
+  }
+  return lines;
 }
 
 /** The pixel height a page needs at a given text width, mirroring exactly what the view draws. */
 export function pageBodyHeight(page: HelpPage, maxWidth: number): number {
-  let h = HELP_HEADING_H;
-  for (const item of page.body) {
-    const bullet = item.startsWith('• ');
-    const text = bullet ? item.slice(2) : item;
-    const width = bullet ? maxWidth - HELP_INDENT : maxWidth;
-    h += wrapText(text, width).length * HELP_LINE_H + 4;
-  }
-  return h;
+  const lines = layoutPageLines(page, maxWidth);
+  const last = lines[lines.length - 1];
+  return last ? last.y + HELP_LINE_H + HELP_ITEM_GAP : HELP_HEADING_H;
 }
 
 /** The scroll geometry for a page: how far it can scroll, plus the track and thumb rectangles. */
@@ -592,6 +698,11 @@ export class HelpView {
   private readonly navTexts: Text[] = [];
   private readonly pageLayer = new Container();
   private readonly pageMask = new Graphics();
+  /** The sunken frame + paper fill of the art preview box, drawn in the page layer so it scrolls. */
+  private readonly artFrame = new Graphics();
+  /** The pooled preview sprites: one base and one turret, reused every frame (docs/HELP-ART.md §5). */
+  private readonly artBase = new Sprite();
+  private readonly artTurret = new Sprite();
 
   constructor() {
     this.titleText = makeText('Pointer Defense Help', FONT_SIZE.body, true, PAL.titleInverse);
@@ -603,8 +714,11 @@ export class HelpView {
     this.searchFieldText = makeText('', FONT_SIZE.small, false, PAL.text);
     this.searchFieldText.anchor.set(0, 0.5);
 
+    this.artBase.anchor.set(0.5, 0.5);
+    this.artTurret.anchor.set(0.5, 0.5);
+
     this.root.addChild(this.g, this.titleText, this.statusText, this.searchFieldText);
-    this.pageLayer.addChild(this.heading);
+    this.pageLayer.addChild(this.heading, this.artFrame, this.artBase, this.artTurret);
     this.pageLayer.mask = this.pageMask;
     this.root.addChild(this.pageLayer);
 
@@ -655,7 +769,7 @@ export class HelpView {
     return t;
   }
 
-  draw(session: HelpSession, profile: Profile, hoverX: number, hoverY: number): void {
+  draw(session: HelpSession, profile: Profile, hoverX: number, hoverY: number, clock: number): void {
     const g = this.g;
     g.clear();
     if (!session.open) {
@@ -663,6 +777,9 @@ export class HelpView {
       this.statusText.text = '';
       this.heading.text = '';
       this.searchFieldText.text = '';
+      this.artFrame.clear();
+      this.artBase.visible = false;
+      this.artTurret.visible = false;
       for (const t of this.treeTexts) t.text = '';
       for (const t of this.bodyTexts) t.text = '';
       for (const t of this.navTexts) t.text = '';
@@ -726,7 +843,7 @@ export class HelpView {
       g.rect(scroll.scrollbar.x, scroll.scrollbar.y, scroll.scrollbar.w, scroll.scrollbar.h).fill(PAL.shadow);
       bevel(g, scroll.thumb, true, PAL.face);
     }
-    this.drawPage(hl, session, scroll.scroll);
+    this.drawPage(hl, session, scroll.scroll, clock);
 
     // Status bar: topic path left, Page n of m right.
     drawStatusBar(g, hl.status, [0, 110]);
@@ -853,10 +970,13 @@ export class HelpView {
     for (let i = results.length; i < this.treeTexts.length; i++) this.treeTexts[i].text = '';
   }
 
-  private drawPage(hl: HelpLayout, session: HelpSession, scrollOffset: number): void {
+  private drawPage(hl: HelpLayout, session: HelpSession, scrollOffset: number, clock: number): void {
     const page = session.pageId ? pageById(session.pageId) : undefined;
     if (!page) {
       this.heading.text = '';
+      this.artFrame.clear();
+      this.artBase.visible = false;
+      this.artTurret.visible = false;
       for (const t of this.bodyTexts) t.text = '';
       return;
     }
@@ -867,23 +987,76 @@ export class HelpView {
     this.heading.style.fontSize = 16;
     this.heading.position.set(hl.pageText.x, hl.pageText.y - scrollOffset);
 
-    let lineIndex = 0;
-    let y = hl.pageText.y + HELP_HEADING_H - scrollOffset;
-    for (const item of page.body) {
-      const bullet = item.startsWith('• ');
-      const text = bullet ? item.slice(2) : item;
-      const width = bullet ? hl.pageText.w - HELP_INDENT : hl.pageText.w;
-      const lines = wrapText(text, width);
-      lines.forEach((ln, i) => {
-        const t = this.bodyTextAt(lineIndex++);
-        t.text = (bullet && i === 0 ? '• ' : '') + ln;
-        t.style.fill = PAL.text;
-        t.style.fontSize = FONT_SIZE.body;
-        t.position.set(hl.pageText.x + (bullet ? HELP_INDENT : 0), y);
-        y += HELP_LINE_H;
-      });
-      y += 4;
+    // The art preview box: a sunken 1 px frame with a paper fill, its sprite(s) clipped to the page.
+    this.drawArtBox(page, hl, scrollOffset, clock);
+
+    const lines = layoutPageLines(page, hl.pageText.w);
+    lines.forEach((ln, i) => {
+      const t = this.bodyTextAt(i);
+      t.text = ln.text;
+      t.style.fill = PAL.text;
+      t.style.fontSize = FONT_SIZE.body;
+      t.position.set(hl.pageText.x + ln.x, hl.pageText.y + ln.y - scrollOffset);
+    });
+    for (let i = lines.length; i < this.bodyTexts.length; i++) this.bodyTexts[i].text = '';
+  }
+
+  /** Draw the art preview box and its pooled sprites, hidden when the page has no art. */
+  private drawArtBox(page: HelpPage, hl: HelpLayout, scrollOffset: number, clock: number): void {
+    const art = helpArtLayout(page, hl.pageText.w);
+    const g = this.artFrame;
+    g.clear();
+    if (art === null || !page.art) {
+      this.artBase.visible = false;
+      this.artTurret.visible = false;
+      return;
     }
-    for (let i = lineIndex; i < this.bodyTexts.length; i++) this.bodyTexts[i].text = '';
+
+    const bx = hl.pageText.x + art.box.x;
+    const by = hl.pageText.y + art.box.y - scrollOffset;
+    const box = art.box;
+
+    // Sunken 1 px frame over a paper fill.
+    g.rect(bx, by, box.w, box.h).fill(PAL.highlight);
+    g.rect(bx, by, box.w, 1).fill(PAL.shadow);
+    g.rect(bx, by, 1, box.h).fill(PAL.shadow);
+    g.rect(bx, by + box.h - 1, box.w, 1).fill(PAL.light);
+    g.rect(bx + box.w - 1, by, 1, box.h).fill(PAL.light);
+
+    const cx = bx + box.w / 2;
+    const cy = by + box.h / 2;
+
+    // Base first, then the turret at angle 0 (facing right), both centred in the box.
+    const baseTex = frameTexture(page.art.base, art.basePx, clock, 0);
+    if (baseTex !== null) {
+      this.artBase.texture = baseTex;
+      this.artBase.visible = true;
+      this.artBase.width = art.basePx;
+      this.artBase.height = art.basePx;
+      this.artBase.tint = 0xffffff;
+      this.artBase.rotation = 0;
+      this.artBase.alpha = 1;
+      this.artBase.position.set(cx, cy);
+    } else {
+      this.artBase.visible = false;
+    }
+
+    if (art.turretPx > 0 && page.art.turret !== undefined) {
+      const turretTex = frameTexture(page.art.turret, art.turretPx, clock, 0);
+      if (turretTex !== null) {
+        this.artTurret.texture = turretTex;
+        this.artTurret.visible = true;
+        this.artTurret.width = art.turretPx;
+        this.artTurret.height = art.turretPx;
+        this.artTurret.tint = 0xffffff;
+        this.artTurret.rotation = 0;
+        this.artTurret.alpha = 1;
+        this.artTurret.position.set(cx, cy);
+      } else {
+        this.artTurret.visible = false;
+      }
+    } else {
+      this.artTurret.visible = false;
+    }
   }
 }

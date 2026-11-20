@@ -1937,7 +1937,7 @@ app.ticker.add((ticker) => {
     );
     pmark('ad', () => ad.draw(state));
     pmark('tray', () => trayView.draw(state));
-    helpView.draw(helpSession, profile, mouse.hover.x, mouse.hover.y);
+    helpView.draw(helpSession, profile, mouse.hover.x, mouse.hover.y, state.clock);
     if (helpSession.open && helpSession.navTab === 'search') {
       const shl = computeHelpLayout(helpSession.x, helpSession.y, helpSession.navW);
       searchInput.style.display = 'block';

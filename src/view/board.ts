@@ -145,6 +145,13 @@ export const ENEMY_COLOR: Record<EnemyKind, number> = {
 export const SHIELD_COLOR = 0x00d0d0;
 
 /**
+ * The board's nominal cell size, in px. The Help viewer's art preview (docs/HELP-ART.md) scales its
+ * sprite from this single reference so a tower body or enemy silhouette previews at exactly twice the
+ * board's in-game size without either view hardcoding a pixel figure.
+ */
+export const HELP_REFERENCE_CELL = 48;
+
+/**
  * The SVG silhouette's on-screen bounding diameter, in units of the enemy's pixel radius `r`. The
  * art is authored to fill the 32x32 viewBox's 28px silhouette, and the sprite is sized so that
  * silhouette spans `factor × r` pixels — the same box the procedural body occupied.
@@ -1101,7 +1108,8 @@ function drawTowerBody(
   // Base and turret share one clock and seed so a two-part animation stays in step; the clock counts
   // from placement so a `hold` waits from the moment the tower was placed.
   const animTicks = clock - t.placedTick;
-  const baseTex = frameTexture(artNameForTowerBase(t.kind), cell, animTicks, t.id);
+  const baseName = artNameForTowerBase(t.kind);
+  const baseTex = baseName !== null ? frameTexture(baseName, cell, animTicks, t.id) : null;
   if (baseTex !== null) {
     baseSprite.texture = baseTex;
     baseSprite.visible = true;
@@ -1306,7 +1314,8 @@ function drawGhost(
     return;
   }
 
-  const baseTex = getArtTexture(artNameForTowerBase(kind), cell);
+  const baseName = artNameForTowerBase(kind);
+  const baseTex = baseName !== null ? getArtTexture(baseName, cell) : null;
   if (baseTex === null) {
     baseSprite.visible = false;
     turretSprite.visible = false;

@@ -204,9 +204,9 @@ export function enemyArtNames(kind: EnemyKind): readonly string[] {
   return own !== null && base !== null && own !== base ? [own, base] : own !== null ? [own] : [];
 }
 
-/** The plinth asset for a tower kind (`<kind>-base`). */
-export function artNameForTowerBase(kind: string): string {
-  return `${kind}-base`;
+/** The plinth asset for a tower kind (`<kind>-base`), or null when the kind ships no plinth (the Wall). */
+export function artNameForTowerBase(kind: string): string | null {
+  return (TOWER_BASE_KINDS as readonly string[]).includes(kind) ? `${kind}-base` : null;
 }
 
 /** The barrel asset for a tower kind, or null when that kind ships no turret (Beacon, Cursor, Repair, Wall). */
