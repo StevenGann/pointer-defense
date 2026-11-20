@@ -9,5 +9,10 @@
  * directly and never ask for a locale get English.
  */
 import { initLocale } from './activate.ts';
+import { localeMeta } from './locales.ts';
+import { setDirection } from '../view/direction.ts';
 
 export const activeLocaleCode: string = initLocale();
+
+// Install the writing direction before any view module asks for it (docs/RTL.md).
+setDirection(localeMeta(activeLocaleCode).dir);

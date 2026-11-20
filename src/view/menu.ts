@@ -2,6 +2,7 @@ import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { bevel, FONT, FONT_SIZE, menuIndex, menuWordRects, PAL, pointInRect, type MenuName, type Rect } from './chrome.ts';
 import { getArtTexture } from './art.ts';
 import { textWidth } from './hud.ts';
+import { isRtl } from './direction.ts';
 
 /**
  * Windows 95 dropdown menus for the File and Help menu words. Drawn in Pixi like the rest of the
@@ -80,14 +81,17 @@ export function computeMenu(menu: Rect, open: OpenMenu): MenuLayout {
   const word = menuWordRects(menu)[menuIndex(open.name)];
   const width = columnWidth(open.entries);
   const height = columnHeight(open.entries);
-  const rect: Rect = { x: word.x, y: menu.y + menu.h - 1, w: width, h: height };
+  // RTL aligns the dropdown's right edge with the word's right edge (docs/RTL.md).
+  const x = isRtl() ? word.x + word.w - width : word.x;
+  const rect: Rect = { x, y: menu.y + menu.h - 1, w: width, h: height };
   const column = layoutColumn(open.entries, rect.x, rect.y, width, height);
 
   let second: MenuColumn | null = null;
   if (open.secondColumn && open.secondColumn.length > 0) {
     const w2 = columnWidth(open.secondColumn);
     const h2 = columnHeight(open.secondColumn);
-    const r2: Rect = { x: rect.x + rect.w, y: rect.y, w: w2, h: Math.max(h2, rect.h) };
+    // The sub-column (Cheats) sits to the left of the first column in RTL, to the right in LTR.
+    const r2: Rect = { x: isRtl() ? rect.x - w2 : rect.x + rect.w, y: rect.y, w: w2, h: Math.max(h2, rect.h) };
     second = layoutColumn(open.secondColumn, r2.x, r2.y, w2, r2.h);
   }
 
@@ -155,6 +159,7 @@ export class MenuView {
   /** Draw one dropdown column of entries, reusing the shared label pool. */
   private drawColumn(rect: Rect, items: MenuItemLayout[], hoveredId: string | null): void {
     const g = this.g;
+    const rtl = isRtl();
     bevel(g, rect, true, PAL.face);
     for (const item of items) {
       const t = this.textAt(this.textIndex++);
@@ -168,10 +173,19 @@ export class MenuView {
         g.rect(item.rect.x + 2, item.rect.y, item.rect.w - 4, item.rect.h).fill(PAL.title);
       }
       const textColor = item.disabled ? PAL.shadow : hoveredId === item.id ? PAL.titleInverse : PAL.text;
-      if (item.checked) this.drawCheck(item.rect.x + 5, item.rect.y + Math.floor(item.rect.h / 2), textColor);
+      if (item.checked) {
+        const cx = rtl ? item.rect.x + item.rect.w - 5 - 12 : item.rect.x + 5;
+        this.drawCheck(cx, item.rect.y + Math.floor(item.rect.h / 2), textColor);
+      }
       t.text = item.label;
       t.style.fill = textColor;
-      t.position.set(item.rect.x + 6 + (item.checked ? 14 : 0), item.rect.y + Math.floor(item.rect.h / 2));
+      if (rtl) {
+        t.anchor.x = 1;
+        t.position.set(item.rect.x + item.rect.w - 6 - (item.checked ? 14 : 0), item.rect.y + Math.floor(item.rect.h / 2));
+      } else {
+        t.anchor.x = 0;
+        t.position.set(item.rect.x + 6 + (item.checked ? 14 : 0), item.rect.y + Math.floor(item.rect.h / 2));
+      }
     }
   }
 

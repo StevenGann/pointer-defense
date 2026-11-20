@@ -35,6 +35,7 @@ import { earlyCallBonus, MODIFIER_NAMES, typeBossKindForWave, waveDef, waveModif
 import type { QualityLevel } from '../core/quality.ts';
 import { branchName, fmtClickDamage, targetModeDisplay } from './tooltipText.ts';
 import { t } from '../i18n/index.ts';
+import { isRtl, textX } from './direction.ts';
 
 /**
  * The HUD: status-bar text (hint / wave / speed), the integrity and salvage readouts, the pointer stage and
@@ -302,10 +303,10 @@ export function computeHud(l: Layout, s: RunState): HudLayout {
     const innerW = w - 8;
     cy += 6;
     const name: Rect = { x: x + 6, y: cy, w: w - 12, h: 20 };
-    // The detail pane's title row carries a Win95 close box on its right edge, the same control the
+    // The detail pane's title row carries a Win95 close box on its outer edge, the same control the
     // help window uses, so the shop list is one click away instead of a click on the board.
     const close: Rect = {
-      x: name.x + name.w - CONTROL_BOX_W,
+      x: isRtl() ? name.x : name.x + name.w - CONTROL_BOX_W,
       y: name.y + Math.floor((name.h - CONTROL_BOX_H) / 2),
       w: CONTROL_BOX_W,
       h: CONTROL_BOX_H,
@@ -823,7 +824,7 @@ export class HudView {
 
   /** A Windows checkbox: a white sunken box with the standard tick glyph when checked. */
   private drawCheckbox(g: Graphics, r: Rect, checked: boolean): void {
-    const box: Rect = { x: r.x, y: r.y + Math.floor((r.h - 12) / 2), w: 12, h: 12 };
+    const box: Rect = { x: isRtl() ? r.x + r.w - 12 : r.x, y: r.y + Math.floor((r.h - 12) / 2), w: 12, h: 12 };
     bevel(g, box, false, PAL.highlight);
     if (checked) {
       const spr = this.checkSprite(this.checkIndex++);
@@ -853,44 +854,70 @@ export class HudView {
     this.lastTick = s.tick;
     if (this.notice !== '' && s.tick >= this.noticeUntilTick) this.notice = '';
 
-    // A small sunken CHEATS chip sits on the right of the hint pane while a cheat is active.
+    // A small sunken CHEATS chip sits on the far side of the hint pane while a cheat is active.
     if (s.cheatsUsed) {
-      const cr: Rect = { x: sp.left.x + sp.left.w - 64 - 4, y: sp.left.y + 2, w: 64, h: sp.left.h - 4 };
+      const cr: Rect = {
+        x: isRtl() ? sp.left.x + 4 : sp.left.x + sp.left.w - 64 - 4,
+        y: sp.left.y + 2,
+        w: 64,
+        h: sp.left.h - 4,
+      };
       bevel(g, cr, false, PAL.face);
       this.cheatMarker.text = t('hud.cheats');
-      this.cheatMarker.position.set(cr.x + 6, cr.y + Math.floor(cr.h / 2));
+      const cp = textX(cr, 'start');
+      this.cheatMarker.anchor.x = cp.anchor;
+      this.cheatMarker.position.set(cp.x, cr.y + Math.floor(cr.h / 2));
     } else {
       this.cheatMarker.text = '';
     }
 
     // A paused run shows a sunken PAUSED box and keeps the speed readout; otherwise the hint shows.
     if (s.paused) {
-      const pr: Rect = { x: sp.left.x + 4, y: sp.left.y + 2, w: 64, h: sp.left.h - 4 };
+      const pr: Rect = {
+        x: isRtl() ? sp.left.x + sp.left.w - 4 - 64 : sp.left.x + 4,
+        y: sp.left.y + 2,
+        w: 64,
+        h: sp.left.h - 4,
+      };
       bevel(g, pr, false, PAL.face);
       this.statusPaused.text = t('hud.paused');
-      this.statusPaused.position.set(pr.x + 6, pr.y + Math.floor(pr.h / 2));
+      const pp = textX(pr, 'start');
+      this.statusPaused.anchor.x = pp.anchor;
+      this.statusPaused.position.set(pp.x, pr.y + Math.floor(pr.h / 2));
       this.statusHint.text = '';
     } else {
       this.statusPaused.text = '';
       this.statusHint.text = helpMode
         ? CONTEXT_HELP_HINT
         : this.notice || autoWaveStatus(s) || (noBuildActive(s) ? NO_BUILD_MESSAGE : hintFor(s));
-      this.statusHint.position.set(sp.left.x + 4, sp.left.y + Math.floor(sp.left.h / 2));
+      const hp = textX(sp.left, 'start', 4);
+      this.statusHint.anchor.x = hp.anchor;
+      this.statusHint.position.set(hp.x, sp.left.y + Math.floor(sp.left.h / 2));
     }
 
     this.statusWave.text = waveLabel(s);
-    this.statusWave.position.set(sp.middle.x + 4, sp.middle.y + Math.floor(sp.middle.h / 2));
+    const wp = textX(sp.middle, 'start', 4);
+    this.statusWave.anchor.x = wp.anchor;
+    this.statusWave.position.set(wp.x, sp.middle.y + Math.floor(sp.middle.h / 2));
     this.statusSpeed.text = speedStatusText(s.speed);
     this.statusPerf.text = statusPerfText(perf);
-    this.statusPerf.position.set(sp.middle.x - 6, sp.middle.y + Math.floor(sp.middle.h / 2));
-    this.statusSpeed.position.set(sp.speed.x + 4, sp.speed.y + Math.floor(sp.speed.h / 2));
+    this.statusPerf.anchor.x = isRtl() ? 0 : 1;
+    this.statusPerf.position.set(
+      isRtl() ? sp.middle.x + sp.middle.w + 6 : sp.middle.x - 6,
+      sp.middle.y + Math.floor(sp.middle.h / 2),
+    );
+    const spP = textX(sp.speed, 'start', 4);
+    this.statusSpeed.anchor.x = spP.anchor;
+    this.statusSpeed.position.set(spP.x, sp.speed.y + Math.floor(sp.speed.h / 2));
 
     // Toolbar.
     const h = computeHud(l, s);
 
     bevel(g, h.integrity, false, PAL.face);
     this.integrity.text = t('hud.integrity', { current: s.integrity, max: STARTING_INTEGRITY });
-    this.integrity.position.set(h.integrity.x + 6, h.integrity.y + Math.floor(h.integrity.h / 2));
+    const ip = textX(h.integrity, 'start');
+    this.integrity.anchor.x = ip.anchor;
+    this.integrity.position.set(ip.x, h.integrity.y + Math.floor(h.integrity.h / 2));
 
     bevel(g, h.salvage, false, PAL.face);
     this.salvage.text = salvageReadoutText(s);
@@ -900,7 +927,9 @@ export class HudView {
 
     if (h.route) {
       this.route.text = t('hud.route', { count: currentPath(s).length });
-      this.route.position.set(h.route.x + 6, h.route.y + Math.floor(h.route.h / 2));
+      const rp = textX(h.route, 'start');
+      this.route.anchor.x = rp.anchor;
+      this.route.position.set(rp.x, h.route.y + Math.floor(h.route.h / 2));
     } else {
       this.route.text = '';
     }
@@ -912,7 +941,9 @@ export class HudView {
       this.mapNext.style.fill = PAL.text;
       this.mapNext.position.set(h.map.next.x + h.map.next.w / 2, h.map.next.y + Math.floor(h.map.next.h / 2));
       this.mapLabel.text = t('hud.mapLabel', { name });
-      this.mapLabel.position.set(h.map.row.x + 6, h.map.row.y + Math.floor(h.map.row.h / 2));
+      const mp = textX(h.map.row, 'start');
+      this.mapLabel.anchor.x = mp.anchor;
+      this.mapLabel.position.set(mp.x, h.map.row.y + Math.floor(h.map.row.h / 2));
     } else {
       this.mapLabel.text = '';
       this.mapNext.text = '';
@@ -926,12 +957,16 @@ export class HudView {
           ? t('hud.startWave', { wave: s.wave + 1 })
           : t('hud.callWave', { wave: s.wave + 1, bonus: earlyCallBonus(s.waveTick, s.wave + 1) });
       this.waveButton.style.fill = enabled ? PAL.text : PAL.shadow;
-      this.waveButton.position.set(h.wave.x + 6, h.wave.y + Math.floor(h.wave.h / 2));
+      const wv = textX(h.wave, 'start');
+      this.waveButton.anchor.x = wv.anchor;
+      this.waveButton.position.set(wv.x, h.wave.y + Math.floor(h.wave.h / 2));
 
       this.drawCheckbox(g, h.autoWave, s.autoWave);
       this.autoWaveButton.text = t('hud.auto');
       this.autoWaveButton.style.fill = PAL.text;
-      this.autoWaveButton.position.set(h.autoWave.x + 20, h.autoWave.y + Math.floor(h.autoWave.h / 2));
+      const aw = textX(h.autoWave, 'start', 20);
+      this.autoWaveButton.anchor.x = aw.anchor;
+      this.autoWaveButton.position.set(aw.x, h.autoWave.y + Math.floor(h.autoWave.h / 2));
     } else {
       this.waveButton.text = '';
       this.autoWaveButton.text = '';
@@ -977,7 +1012,9 @@ export class HudView {
 
       const branch = tower.branch === null ? '' : t('hud.towerBranch', { branch: branchName(tower.kind, tower.branch) });
       this.towerName.text = t('hud.towerName', { name: towerName(tower.kind), tier: tower.tier, max: kindMaxTier(tower.kind) }) + branch + (isOffline(tower) ? t('hud.towerOffline') : '');
-      this.towerName.position.set(d.name.x, d.name.y + Math.floor(d.name.h / 2));
+      const tn = textX(d.name, 'start');
+      this.towerName.anchor.x = tn.anchor;
+      this.towerName.position.set(tn.x, d.name.y + Math.floor(d.name.h / 2));
 
       // The detail pane's close box: a raised Win95 box with the same X glyph the help window uses.
       bevel(g, d.close, true, PAL.face);
@@ -1008,20 +1045,28 @@ export class HudView {
         const range = st.range + tower.auraRange;
         this.towerStats.text = t('hud.combatStats', { damage: damage.toFixed(1), range: range.toFixed(1) });
       }
-      this.towerStats.position.set(d.stats.x, d.stats.y + Math.floor(d.stats.h / 2));
+      const ts = textX(d.stats, 'start');
+      this.towerStats.anchor.x = ts.anchor;
+      this.towerStats.position.set(ts.x, d.stats.y + Math.floor(d.stats.h / 2));
 
       this.towerRoute.text = t('hud.route', { count: currentPath(s).length });
-      this.towerRoute.position.set(d.route.x, d.route.y + Math.floor(d.route.h / 2));
+      const tr = textX(d.route, 'start');
+      this.towerRoute.anchor.x = tr.anchor;
+      this.towerRoute.position.set(tr.x, d.route.y + Math.floor(d.route.h / 2));
 
       if (d.target) {
         const fixed = frozen || TOWER_STATS[tower.kind].targetLock !== null || tower.kind === 'cursor';
         drawButton(g, d.target, !fixed, hoverHud === 'target' && !fixed);
         this.targetButton.text = t('hud.target');
         this.targetButton.style.fill = fixed ? PAL.shadow : PAL.text;
-        this.targetButton.position.set(d.target.x + 6, d.target.y + Math.floor(d.target.h / 2));
+        const tgb = textX(d.target, 'start');
+        this.targetButton.anchor.x = tgb.anchor;
+        this.targetButton.position.set(tgb.x, d.target.y + Math.floor(d.target.h / 2));
         this.targetValue.text = targetModeDisplay(tower);
         this.targetValue.style.fill = fixed ? PAL.shadow : PAL.text;
-        this.targetValue.position.set(d.target.x + d.target.w - 6, d.target.y + Math.floor(d.target.h / 2));
+        const tgv = textX(d.target, 'end');
+        this.targetValue.anchor.x = tgv.anchor;
+        this.targetValue.position.set(tgv.x, d.target.y + Math.floor(d.target.h / 2));
       } else {
         this.targetButton.text = '';
         this.targetValue.text = '';
@@ -1033,7 +1078,9 @@ export class HudView {
         drawButton(g, d.upgrade, enabled, hoverHud === 'upgrade');
         this.upgradeButton.text = t('hud.upgrade', { cost: formatNumber(price) });
         this.upgradeButton.style.fill = enabled ? PAL.text : PAL.shadow;
-        this.upgradeButton.position.set(d.upgrade.x + 6, d.upgrade.y + Math.floor(d.upgrade.h / 2));
+        const up = textX(d.upgrade, 'start');
+        this.upgradeButton.anchor.x = up.anchor;
+        this.upgradeButton.position.set(up.x, d.upgrade.y + Math.floor(d.upgrade.h / 2));
       } else {
         this.upgradeButton.text = '';
       }
@@ -1069,7 +1116,9 @@ export class HudView {
             ? t('hud.noDamage')
             : t('hud.repair', { hp: Math.ceil(hp), cost: formatNumber(cost) });
         this.repairButton.style.fill = enabled ? PAL.text : PAL.shadow;
-        this.repairButton.position.set(d.repair.x + 6, d.repair.y + Math.floor(d.repair.h / 2));
+        const rp = textX(d.repair, 'start');
+        this.repairButton.anchor.x = rp.anchor;
+        this.repairButton.position.set(rp.x, d.repair.y + Math.floor(d.repair.h / 2));
       } else {
         this.repairButton.text = '';
       }
@@ -1077,7 +1126,9 @@ export class HudView {
       drawButton(g, d.sell, !frozen, hoverHud === 'sell');
       this.sellButton.text = t('hud.sell', { amount: formatNumber(sellValue(tower, s.treeEffects.sellRefund)) });
       this.sellButton.style.fill = frozen ? PAL.shadow : PAL.text;
-      this.sellButton.position.set(d.sell.x + 6, d.sell.y + Math.floor(d.sell.h / 2));
+      const sl = textX(d.sell, 'start');
+      this.sellButton.anchor.x = sl.anchor;
+      this.sellButton.position.set(sl.x, d.sell.y + Math.floor(d.sell.h / 2));
       return;
     }
 
@@ -1117,7 +1168,9 @@ export class HudView {
       const btn = this.towerButtons[i];
       btn.text = t('hud.towerButton', { name: towerName(kind), cost: formatNumber(towerCost(s, kind)) });
       btn.style.fill = enabled ? (armed ? PAL.title : PAL.text) : PAL.shadow;
-      btn.position.set(rect.x + 6, rect.y + Math.floor(rect.h / 2));
+      const bp = textX(rect, 'start');
+      btn.anchor.x = bp.anchor;
+      btn.position.set(bp.x, rect.y + Math.floor(rect.h / 2));
     }
   }
 
@@ -1129,7 +1182,9 @@ export class HudView {
     const mult = comboMultiplier(s.pointer);
     if (mult > 1) {
       this.comboText.text = t('hud.combo', { multiplier: mult.toFixed(1) });
-      this.comboText.position.set(rp.nextWave.rect.x + 2, rp.nextWave.rect.y - 10);
+      const cp = textX(rp.nextWave.rect, 'start', 2);
+      this.comboText.anchor.x = cp.anchor;
+      this.comboText.position.set(cp.x, rp.nextWave.rect.y - 10);
       this.comboText.visible = true;
     } else {
       this.comboText.text = '';
@@ -1142,8 +1197,10 @@ export class HudView {
     // POINTER: the pointer's home — stage, click damage, overclock, crits, the upgrade and Override.
     bevel(g, rp.pointer.rect, false, PAL.face);
     this.pointerTitle.text = t('hud.pointerTitle');
+    const pt = textX(rp.pointer.rect, 'start');
+    this.pointerTitle.anchor.x = pt.anchor;
     this.pointerTitle.position.set(
-      rp.pointer.rect.x + 6,
+      pt.x,
       rp.pointer.rect.y + SECTION_PAD_TOP + SECTION_TITLE_H / 2,
     );
     for (let i = 0; i < this.pointerRows.length; i++) {
@@ -1151,7 +1208,9 @@ export class HudView {
       if (row) {
         this.pointerRows[i].text = row.text;
         this.pointerRows[i].style.fill = PAL.text;
-        this.pointerRows[i].position.set(row.rect.x, row.rect.y + Math.floor(row.rect.h / 2));
+        const rw = textX(row.rect, 'start');
+        this.pointerRows[i].anchor.x = rw.anchor;
+        this.pointerRows[i].position.set(rw.x, row.rect.y + Math.floor(row.rect.h / 2));
       } else {
         this.pointerRows[i].text = '';
       }
@@ -1159,16 +1218,20 @@ export class HudView {
     drawButton(g, rp.pointer.upgrade, rp.pointer.upgradeEnabled, hoverHud === 'pointer');
     this.pointerButton.text = rp.pointer.upgradeText;
     this.pointerButton.style.fill = rp.pointer.upgradeEnabled ? PAL.text : PAL.shadow;
+    const pb = textX(rp.pointer.upgrade, 'start');
+    this.pointerButton.anchor.x = pb.anchor;
     this.pointerButton.position.set(
-      rp.pointer.upgrade.x + 6,
+      pb.x,
       rp.pointer.upgrade.y + Math.floor(rp.pointer.upgrade.h / 2),
     );
     if (rp.pointer.override) {
       this.drawCheckbox(g, rp.pointer.override, s.pointer.manualOverride);
       this.pointerOverrideButton.text = t('hud.override');
       this.pointerOverrideButton.style.fill = PAL.text;
+      const ov = textX(rp.pointer.override, 'start', 20);
+      this.pointerOverrideButton.anchor.x = ov.anchor;
       this.pointerOverrideButton.position.set(
-        rp.pointer.override.x + 20,
+        ov.x,
         rp.pointer.override.y + Math.floor(rp.pointer.override.h / 2),
       );
     } else {
@@ -1186,11 +1249,15 @@ export class HudView {
     const rect = section.rect;
     bevel(g, rect, false, PAL.face);
     title.text = section.title;
-    title.position.set(rect.x + 6, rect.y + SECTION_PAD_TOP + SECTION_TITLE_H / 2);
+    const tp = textX(rect, 'start');
+    title.anchor.x = tp.anchor;
+    title.position.set(tp.x, rect.y + SECTION_PAD_TOP + SECTION_TITLE_H / 2);
     for (let i = 0; i < rows.length; i++) {
       rows[i].text = i < section.rows.length ? section.rows[i] : '';
+      const rp = textX(rect, 'start');
+      rows[i].anchor.x = rp.anchor;
       rows[i].position.set(
-        rect.x + 6,
+        rp.x,
         rect.y + SECTION_PAD_TOP + SECTION_TITLE_H + i * SECTION_ROW_H + SECTION_ROW_H / 2,
       );
     }

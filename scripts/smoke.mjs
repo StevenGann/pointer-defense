@@ -54,6 +54,7 @@ import { FLYER_OFF_KIND_DAMAGE,
   noBuildActive,
   NO_BUILD_MESSAGE,
   AUTO_WAVE_DELAY_TICKS,
+  STARTING_INTEGRITY,
   rebuildField,
 } from '../src/core/state.ts';
 import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE, MINE_BLAST_RADIUS, CURSOR_CLICK_DAMAGE_FACTOR, repairHealRate, repairRadius, MAX_TIER, TIERS, kindMaxTier, COMBAT_KINDS } from '../src/core/towers.ts';
@@ -249,6 +250,7 @@ import {
   SHAKE_LEAK_FREEZE_MS,
 } from '../src/view/shake.ts';
 import { t, plural, formatInt, formatMoney } from '../src/i18n/index.ts';
+import { setDirection, isRtl, mirrorX } from '../src/view/direction.ts';
 import { en } from '../src/i18n/en/index.ts';
 import { extractTKeys, parseCatalogueKeys, checkI18n, scanRoots, walkAllSources, readBaseline } from './i18n-check.mjs';
 
@@ -11264,6 +11266,147 @@ function dailyState(date) {
     const source = page.body.join(' ').replace(/[*`|#>-]/g, ' ');
     check(JSON.stringify(words(rendered)) === JSON.stringify(words(source)),
       `help markdown render preserves every word for ${id}`);
+  }
+}
+
+// --- RTL (docs/RTL.md) -------------------------------------------------------------------------
+{
+  // 1. isRtl() is false by default and true only while a dir:'rtl' locale is installed.
+  check(isRtl() === false, 'RTL: isRtl is false by default');
+  setDirection('rtl');
+  check(isRtl() === true, "RTL: isRtl is true under setDirection('rtl')");
+  setDirection('ltr');
+  check(isRtl() === false, 'RTL: isRtl returns to false under ltr');
+}
+
+{
+  // 2. mirrorX is its own inverse and preserves size.
+  const outer = { x: 100, y: 50, w: 400, h: 200 };
+  const r = { x: 120, y: 60, w: 30, h: 40 };
+  const m = mirrorX(r, outer);
+  check(m.w === r.w && m.h === r.h, 'RTL: mirrorX preserves size');
+  check(m.y === r.y, 'RTL: mirrorX preserves y');
+  check(m.x === outer.x + outer.w - (r.x - outer.x) - r.w, 'RTL: mirrorX flips x inside outer');
+  const back = mirrorX(m, outer);
+  check(back.x === r.x && back.w === r.w && back.h === r.h && back.y === r.y, 'RTL: mirrorX is its own inverse');
+}
+
+{
+  // 3. With Hebrew installed, computeLayout puts leftPanel right of rightPanel, and their widths,
+  // the board rect and the total client rect are unchanged from the LTR case.
+  const ltr = computeLayout(1280, 800);
+  setDirection('rtl');
+  const rtl = computeLayout(1280, 800);
+  setDirection('ltr');
+  check(JSON.stringify(ltr.board) === JSON.stringify(rtl.board), 'RTL: board rect is byte-identical');
+  check(JSON.stringify(ltr.boardCol) === JSON.stringify(rtl.boardCol), 'RTL: board column rect is unchanged');
+  check(ltr.client.x === rtl.client.x && ltr.client.y === rtl.client.y && ltr.client.w === rtl.client.w && ltr.client.h === rtl.client.h,
+    'RTL: total client rect is unchanged');
+  check(rtl.leftPanel.x === ltr.rightPanel.x && rtl.rightPanel.x === ltr.leftPanel.x, 'RTL: leftPanel and rightPanel swap sides');
+  check(rtl.leftPanel.w === ltr.leftPanel.w && rtl.rightPanel.w === ltr.rightPanel.w, 'RTL: panel widths are unchanged');
+  check(rtl.leftPanel.x > rtl.rightPanel.x, 'RTL: leftPanel sits right of rightPanel');
+}
+
+{
+  // 4. Menu word hit-boxes, reversed, still open the menu the player clicked.
+  const layout = computeLayout(1280, 800);
+  const ltrRects = menuWordRects(layout.menu);
+  setDirection('rtl');
+  const rtlRects = menuWordRects(layout.menu);
+  const names = menuItems().map((m) => m.name);
+  check(rtlRects[0].x > rtlRects[1].x && ltrRects[0].x < ltrRects[1].x, 'RTL: menu words lay out from the right edge');
+  let openOk = true;
+  for (let i = 0; i < names.length; i++) {
+    const r = rtlRects[i];
+    if (menuNameAt(layout.menu, r.x + 2, r.y + 2) !== names[i]) openOk = false;
+  }
+  setDirection('ltr');
+  check(openOk, 'RTL: reversed menu-word hit-boxes still open the menu the player clicked');
+}
+
+{
+  // 5. A seeded run produces the same determinism hash under rtl as under ltr (presentation only).
+  const hashRun = () => {
+    const s = stateOnLevel('open-field');
+    s.economy.salvage = 100000;
+    placeTower(s, 'gun', 3, 6);
+    placeTower(s, 'gun', 4, 6);
+    s.rng = 0x12345678;
+    s.wave = 5;
+    startWave(s);
+    const h = createHash('sha256');
+    for (let i = 0; i < 900; i++) {
+      tick(s);
+      if (s.events.length > 0) {
+        h.update(JSON.stringify(s.events));
+        s.events = [];
+      }
+      h.update(`${s.rng}:${s.integrity}:${s.enemies.length}`);
+    }
+    return h.digest('hex');
+  };
+  setDirection('ltr');
+  const en = hashRun();
+  setDirection('rtl');
+  const he = hashRun();
+  setDirection('ltr');
+  check(en === he, 'RTL: a seeded run produces the same determinism hash in rtl as in ltr');
+}
+
+{
+  // 6. Panel-fit: every HUD label fits its rect in rtl at 1280x720 and 1024x768, measured, not guessed.
+  for (const [vw, vh] of [[1280, 720], [1024, 768]]) {
+    setDirection('rtl');
+    const l = computeLayout(vw, vh);
+    const panelW = l.leftPanel.w; // both side panels share one width (168)
+    const fits = (text, size = FONT_SIZE.body) => textWidth(text, size) <= panelW;
+    const s = createRunState();
+    const h = computeHud(l, s);
+    const right = computeRightPanel(l, s);
+    let allFit = true;
+    const assertFit = (label, text, size = FONT_SIZE.body) => {
+      if (!fits(text, size)) {
+        allFit = false;
+        console.log(`  RTL panel-fit miss: ${label} "${text}" ${textWidth(text, size)} > ${panelW} @ ${vw}x${vh}`);
+      }
+    };
+
+    assertFit('integrity', t('hud.integrity', { current: s.integrity, max: STARTING_INTEGRITY }));
+    assertFit('salvage', salvageReadoutText(s));
+    if (h.route) assertFit('route', t('hud.route', { count: currentPath(s).length }));
+    for (const tw of h.towers) {
+      assertFit(`tower ${tw.kind}`, t('hud.towerButton', { name: t(`name.tower.${tw.kind}`), cost: formatNumber(towerCost(s, tw.kind)) }));
+    }
+    assertFit('wave', t('hud.startWave', { wave: s.wave + 1 }));
+    assertFit('auto', t('hud.auto'));
+    if (h.map) assertFit('map', t('hud.mapLabel', { name: s.level.name }));
+
+    for (const sec of [right.nextWave, right.kills, right.globalUpgrades]) {
+      assertFit(sec.title, sec.title);
+      for (const row of sec.rows) assertFit('info row', row);
+    }
+    for (const row of right.pointer.rows) assertFit('pointer row', row.text);
+    assertFit('pointer upgrade', right.pointer.upgradeText);
+
+    // Tower detail (a selected, tier-2 gun exercises the name/stats/route/sell/branch rows).
+    const ds = allUnlocked();
+    ds.economy.salvage = 1e9;
+    if (placeTower(ds, 'gun', 5, 5)) {
+      const gun = towerAt(ds, 5, 5);
+      gun.tier = 2;
+      selectPlacedTower(ds, gun);
+      const dh = computeHud(l, ds);
+      if (dh.detail) {
+        const d = dh.detail;
+        assertFit('detail name', t('hud.towerName', { name: t('name.tower.gun'), tier: gun.tier, max: kindMaxTier('gun') }));
+        assertFit('detail route', t('hud.route', { count: currentPath(ds).length }));
+        assertFit('detail sell', t('hud.sell', { amount: formatNumber(sellValue(gun, ds.treeEffects.sellRefund)) }));
+        for (const b of d.branches) assertFit('branch', b.label, FONT_SIZE.small);
+      }
+    }
+
+    setDirection('ltr');
+    check(allFit, `RTL: every HUD label fits its rect at ${vw}x${vh}`);
   }
 }
 

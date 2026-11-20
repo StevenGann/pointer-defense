@@ -3,6 +3,7 @@ import { COLS, ROWS } from '../core/grid.ts';
 import { cheatsEnabled } from '../core/cheats.ts';
 import { getArtTexture } from './art.ts';
 import { t } from '../i18n/index.ts';
+import { isRtl, mirrorX } from './direction.ts';
 
 /**
  * Windows 95 chrome primitives and the single window model.
@@ -124,6 +125,11 @@ export function computeLayout(vw: number, vh: number): Layout {
   };
   const rightPanel: Rect = { x: client.x + client.w - PANEL_W, y: client.y, w: PANEL_W, h: client.h };
 
+  // RTL swaps the two side panels so the build palette sits right and the info panel left, while the
+  // board column keeps its byte-identical rect (docs/RTL.md). The board itself never mirrors.
+  const buildPanel = isRtl() ? rightPanel : leftPanel;
+  const infoPanel = isRtl() ? leftPanel : rightPanel;
+
   const inner: Rect = { x: boardCol.x + 2, y: boardCol.y + 2, w: boardCol.w - 4, h: boardCol.h - 4 };
   const cell = Math.max(1, Math.floor(Math.min(inner.w / COLS, inner.h / ROWS)));
   const boardW = cell * COLS;
@@ -136,16 +142,20 @@ export function computeLayout(vw: number, vh: number): Layout {
   const middle: Rect = { x: speed.x - 180, y: status.y, w: 178, h: status.h };
   const left: Rect = { x: status.x, y: status.y, w: middle.x - 2 - status.x, h: status.h };
 
+  const statusPanes: StatusPanes = isRtl()
+    ? { left: mirrorX(left, status), middle: mirrorX(middle, status), speed: mirrorX(speed, status) }
+    : { left, middle, speed };
+
   return {
     window: win,
     title,
     menu,
     client,
-    leftPanel,
+    leftPanel: buildPanel,
     boardCol,
-    rightPanel,
+    rightPanel: infoPanel,
     status,
-    statusPanes: { left, middle, speed },
+    statusPanes,
     board,
     boardW,
     boardH,
@@ -215,11 +225,22 @@ export function menuItems(): readonly MenuItem[] {
   ];
 }
 
-/** Hit rectangles for the menu words, left-padded 8px, left at x+6. */
+/** Hit rectangles for the menu words, left-padded 8px, left at x+6 (right edge first in RTL). */
 export function menuWordRects(menu: Rect): Rect[] {
   const out: Rect[] = [];
+  const items = menuItems();
+  if (isRtl()) {
+    let x = menu.x + menu.w - 6;
+    for (const item of items) {
+      const width = item.label.length * 7;
+      x -= width;
+      out.push({ x, y: menu.y, w: width, h: menu.h });
+      x -= 8;
+    }
+    return out;
+  }
   let x = menu.x + 6;
-  for (const item of menuItems()) {
+  for (const item of items) {
     const width = item.label.length * 7;
     out.push({ x, y: menu.y, w: width, h: menu.h });
     x += width + 8;
@@ -335,7 +356,7 @@ export class ChromeView {
 
     // Title bar.
     g.rect(l.title.x, l.title.y, l.title.w, l.title.h).fill(PAL.title);
-    const iconX = l.title.x + 2;
+    const iconX = isRtl() ? l.title.x + l.title.w - 2 - 16 : l.title.x + 2;
     const iconY = l.title.y + 1;
     const arrowTex = getArtTexture('arrow-left', 16);
     if (arrowTex !== null) {
@@ -351,7 +372,11 @@ export class ChromeView {
       this.arrowIcon.visible = false;
       drawArrowIcon(g, iconX, iconY);
     }
-    this.titleText.position.set(iconX + 16 + 2, l.title.y + Math.floor(l.title.h / 2));
+    this.titleText.anchor.x = isRtl() ? 1 : 0;
+    this.titleText.position.set(
+      isRtl() ? iconX - 2 : iconX + 16 + 2,
+      l.title.y + Math.floor(l.title.h / 2),
+    );
     drawControlButtons(g, this.controlGlyphs, l.title);
 
     // Menu bar.
@@ -459,7 +484,14 @@ export function computeTitleControls(title: Rect): TitleControls {
   const maximize: Rect = { x: close.x - 2 - CONTROL_BOX_W, y: by, w: CONTROL_BOX_W, h: CONTROL_BOX_H };
   const minimize: Rect = { x: maximize.x - 2 - CONTROL_BOX_W, y: by, w: CONTROL_BOX_W, h: CONTROL_BOX_H };
   const help: Rect = { x: minimize.x - 2 - CONTROL_BOX_W, y: by, w: CONTROL_BOX_W, h: CONTROL_BOX_H };
-  return { help, minimize, maximize, close };
+  if (!isRtl()) return { help, minimize, maximize, close };
+  // RTL: the whole strip flips to the left edge, so the close box stays outermost (docs/RTL.md).
+  return {
+    help: mirrorX(help, title),
+    minimize: mirrorX(minimize, title),
+    maximize: mirrorX(maximize, title),
+    close: mirrorX(close, title),
+  };
 }
 
 /** The pure geometry `drawWindowChrome` draws from, so the layout can be asserted without a renderer. */
@@ -585,16 +617,19 @@ export function computeListView(field: Rect, columns: readonly ListColumn[], row
   const body: Rect = { x: field.x + 2, y: header.y + header.h, w: field.w - 4, h: field.h - 4 - header.h };
   const colX: number[] = [];
   const colW: number[] = columns.map((c) => c.w);
-  let x = body.x;
+  // RTL lays the columns out from the right edge, so the first column becomes the rightmost and the
+  // LTR rightmost column becomes the leftmost (docs/RTL.md).
+  let x = isRtl() ? body.x + body.w : body.x;
   for (const c of columns) {
+    if (isRtl()) x -= c.w;
     colX.push(x);
-    x += c.w;
+    if (!isRtl()) x += c.w;
   }
   const rowsVisible = Math.floor(body.h / rowH);
   const scrollMax = Math.max(0, rowCount - rowsVisible);
   const firstRow = Math.max(0, Math.min(scroll, scrollMax));
   const overflow = scrollMax > 0;
-  const scrollbar: Rect = { x: body.x + body.w - LIST_SCROLL_W, y: body.y, w: LIST_SCROLL_W, h: body.h };
+  const scrollbar: Rect = { x: isRtl() ? body.x : body.x + body.w - LIST_SCROLL_W, y: body.y, w: LIST_SCROLL_W, h: body.h };
   const thumbH = overflow ? Math.max(14, Math.round(scrollbar.h * (rowsVisible / rowCount))) : scrollbar.h;
   const thumbY = overflow && scrollMax > 0 ? Math.round((scrollbar.h - thumbH) * (firstRow / scrollMax)) : 0;
   const thumb: Rect = { x: scrollbar.x + 1, y: scrollbar.y + thumbY, w: scrollbar.w - 2, h: thumbH };
@@ -610,18 +645,20 @@ export function drawListView(g: Graphics, field: Rect, columns: readonly ListCol
   const geom = computeListView(field, columns, rowH, rowCount, scroll);
   bevel(g, geom.field, false, PAL.highlight);
   bevel(g, geom.header, true, PAL.face);
-  for (let i = 1; i < geom.colX.length; i++) {
-    const sx = geom.colX[i] - 1;
+  const boundaries = [...geom.colX].sort((a, b) => a - b);
+  for (let i = 1; i < boundaries.length; i++) {
+    const sx = boundaries[i] - 1;
     vline(g, sx - 0.5, geom.header.y + 1, geom.header.y + geom.header.h - 1, PAL.shadow);
     vline(g, sx + 0.5, geom.header.y + 1, geom.header.y + geom.header.h - 1, PAL.highlight);
   }
   const usableW = geom.body.w - (geom.overflow ? LIST_SCROLL_W : 0);
+  const rowX = isRtl() ? geom.body.x + LIST_SCROLL_W : geom.body.x;
   for (let i = 0; i < geom.rowsVisible; i++) {
     const rowIdx = geom.firstRow + i;
     if (rowIdx >= rowCount) break;
     const ry = geom.body.y + i * rowH;
-    if (rowIdx === selected) g.rect(geom.body.x, ry, usableW, rowH).fill(PAL.title);
-    else if (i % 2 === 1) g.rect(geom.body.x, ry, usableW, rowH).fill(PAL.light);
+    if (rowIdx === selected) g.rect(rowX, ry, usableW, rowH).fill(PAL.title);
+    else if (i % 2 === 1) g.rect(rowX, ry, usableW, rowH).fill(PAL.light);
   }
   if (geom.overflow) drawScrollbar(g, geom.scrollbar, geom.rowsVisible / rowCount, geom.scrollMax > 0 ? geom.firstRow / geom.scrollMax : 0, false);
   return geom;

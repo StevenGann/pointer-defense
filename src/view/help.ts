@@ -28,6 +28,7 @@ import {
 } from '../content/help.ts';
 import type { Profile } from '../core/save.ts';
 import { t } from '../i18n/index.ts';
+import { mirrorIfRtl, textX } from './direction.ts';
 import { ENEMY_ART_BODY, HELP_REFERENCE_CELL } from './board.ts';
 import { artSpriteSize, frameTexture } from './art.ts';
 import { ENEMY_STATS, type EnemyKind } from '../core/enemies.ts';
@@ -117,12 +118,12 @@ export interface HelpLayout {
 export function computeHelpLayout(x: number, y: number, navW: number = HELP_NAV_W): HelpLayout {
   const win: Rect = { x, y, w: HELP_W, h: HELP_H };
   const title: Rect = { x: x + 2, y: y + 2, w: HELP_W - 4, h: TITLE_H };
-  const close: Rect = {
+  const close: Rect = mirrorIfRtl({
     x: title.x + title.w - 2 - CONTROL_BOX_W,
     y: title.y + Math.floor((TITLE_H - CONTROL_BOX_H) / 2),
     w: CONTROL_BOX_W,
     h: CONTROL_BOX_H,
-  };
+  }, title);
   const toolbar: Rect = { x: x + 2, y: title.y + title.h, w: HELP_W - 4, h: HELP_TOOLBAR_H };
   const status: Rect = { x: x + 2, y: y + HELP_H - 2 - HELP_STATUS_H, w: HELP_W - 4, h: HELP_STATUS_H };
   const clientTop = toolbar.y + toolbar.h;
@@ -757,7 +758,9 @@ export class HelpView {
     // Frame, title bar and close box.
     drawWindowChrome(g, hl.window, { close: true, minimize: false, maximize: false });
     this.titleText.text = t('screen.help.title');
-    this.titleText.position.set(hl.title.x + 6, hl.title.y + Math.floor(TITLE_H / 2));
+    const tp = textX(hl.title, 'start');
+    this.titleText.anchor.x = tp.anchor;
+    this.titleText.position.set(tp.x, hl.title.y + Math.floor(TITLE_H / 2));
 
     // Toolbar: six flat 24 px buttons with drawn glyphs.
     g.rect(hl.toolbar.x, hl.toolbar.y, hl.toolbar.w, hl.toolbar.h).fill(PAL.face);

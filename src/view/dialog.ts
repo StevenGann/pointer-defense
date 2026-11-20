@@ -3,6 +3,7 @@ import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from
 import { t } from '../i18n/index.ts';
 import { ACHIEVEMENTS } from '../core/achievements.ts';
 import { getArtTexture } from './art.ts';
+import { isRtl, mirrorX, textX } from './direction.ts';
 
 /**
  * A small Windows 95 modal dialog, drawn in Pixi: a navy title bar, a body of text rows and one or
@@ -58,6 +59,10 @@ export function computeDialog(l: Layout, model: DialogModel): DialogLayout {
     bx -= BUTTON_W;
     buttons.unshift({ id: model.buttons[i].id, rect: { x: bx, y: rect.y + rect.h - PAD - BUTTON_H, w: BUTTON_W, h: BUTTON_H } });
     bx -= BUTTON_GAP;
+  }
+  // RTL reverses the buttons left-to-right, keeping the default button first in reading order.
+  if (isRtl()) {
+    for (const b of buttons) b.rect = mirrorX(b.rect, rect);
   }
 
   return { rect, buttons };
@@ -128,7 +133,9 @@ export class DialogView {
       }
       t.text = row.text;
       t.style.fill = row.greyed ? PAL.shadow : PAL.text;
-      t.position.set(d.rect.x + 12, d.rect.y + 2 + TITLE_H + PAD + i * ROW_H + ROW_H / 2);
+      const rx = textX(d.rect, 'start', 12);
+      t.anchor.x = rx.anchor;
+      t.position.set(rx.x, d.rect.y + 2 + TITLE_H + PAD + i * ROW_H + ROW_H / 2);
     }
 
     for (let i = 0; i < this.buttons.length; i++) {

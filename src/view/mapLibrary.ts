@@ -1,6 +1,7 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
 import { t } from '../i18n/index.ts';
+import { isRtl, mirrorIfRtl, textX } from './direction.ts';
 import type { EditorMapEntry } from '../core/editorstore.ts';
 import type { Level } from '../core/levels.ts';
 
@@ -68,9 +69,10 @@ export function computeMapLibrary(l: Layout, maps: readonly EditorMapEntry[], mo
   const maxScroll = Math.max(0, contentH - list.h);
   const clampedScroll = Math.min(Math.max(0, scroll), maxScroll);
   const contentY = list.y - clampedScroll;
+  const rowX = isRtl() ? list.x + DLG_SCROLL_W : list.x;
   const rows = maps.map((m, i) => ({
     id: m.id,
-    rect: { x: list.x, y: contentY + i * DLG_ROW_H, w: rowW, h: DLG_ROW_H },
+    rect: { x: rowX, y: contentY + i * DLG_ROW_H, w: rowW, h: DLG_ROW_H },
   }));
 
   const btnY = rect.y + h - DLG_PAD - DLG_BUTTON_H;
@@ -84,13 +86,24 @@ export function computeMapLibrary(l: Layout, maps: readonly EditorMapEntry[], mo
   }
   const primary: Rect = { x: bx - DLG_BUTTON_W, y: btnY, w: DLG_BUTTON_W, h: DLG_BUTTON_H };
 
-  const scrollbar: Rect = { x: list.x + list.w - DLG_SCROLL_W + 1, y: list.y + 1, w: DLG_SCROLL_W - 2, h: Math.max(0, list.h - 2) };
+  const scrollbar: Rect = { x: isRtl() ? list.x + 1 : list.x + list.w - DLG_SCROLL_W + 1, y: list.y + 1, w: DLG_SCROLL_W - 2, h: Math.max(0, list.h - 2) };
   const trackH = scrollbar.h;
   const thumbH = maxScroll > 0 ? Math.max(18, Math.round(trackH * (list.h / Math.max(1, contentH)))) : trackH;
   const thumbY = maxScroll > 0 ? Math.round((trackH - thumbH) * (clampedScroll / maxScroll)) : 0;
   const thumb: Rect = { x: scrollbar.x, y: scrollbar.y + thumbY, w: scrollbar.w, h: thumbH };
 
-  return { rect, list, rows, primary, del, cancel, maxScroll, scrollbar, thumb, contentY };
+  return {
+    rect,
+    list,
+    rows,
+    primary: mirrorIfRtl(primary, rect),
+    del: del === null ? null : mirrorIfRtl(del, rect),
+    cancel: mirrorIfRtl(cancel, rect),
+    maxScroll,
+    scrollbar,
+    thumb,
+    contentY,
+  };
 }
 
 export type MapLibraryHit =
@@ -192,10 +205,14 @@ export class MapLibraryView {
       const metaT = this.metaTexts[visible];
       nameT.text = entry.name;
       nameT.style.fill = selected ? PAL.titleInverse : PAL.text;
-      nameT.position.set(r.x + 6, r.y + r.h / 2);
+      const np = textX(r, 'start', 6);
+      nameT.anchor.x = np.anchor;
+      nameT.position.set(np.x, r.y + r.h / 2);
       metaT.text = t('dlg.mapLibrary.meta', { date: formatSavedAt(entry.savedAt), size: mapSizeText(entry.level) });
       metaT.style.fill = selected ? PAL.titleInverse : PAL.shadow;
-      metaT.position.set(r.x + r.w - 6, r.y + r.h / 2);
+      const mp = textX(r, 'end', 6);
+      metaT.anchor.x = mp.anchor;
+      metaT.position.set(mp.x, r.y + r.h / 2);
       visible++;
     }
     for (let i = visible; i < MAX_ROWS; i++) {
@@ -260,7 +277,7 @@ export function computeNameDialog(l: Layout): NameDialogLayout {
   const field: Rect = { x: rect.x + NAME_PAD, y: rect.y + NAME_TITLE_H + NAME_PAD, w: w - NAME_PAD * 2, h: NAME_FIELD_H };
   const ok: Rect = { x: rect.x + w - NAME_PAD - NAME_BUTTON_W * 2 - 6, y: rect.y + h - NAME_PAD - NAME_BUTTON_H, w: NAME_BUTTON_W, h: NAME_BUTTON_H };
   const cancel: Rect = { x: ok.x + NAME_BUTTON_W + 6, y: ok.y, w: NAME_BUTTON_W, h: NAME_BUTTON_H };
-  return { rect, field, ok, cancel };
+  return { rect, field, ok: mirrorIfRtl(ok, rect), cancel: mirrorIfRtl(cancel, rect) };
 }
 
 export function nameDialogButtonAt(l: Layout, px: number, py: number): 'ok' | 'cancel' | null {

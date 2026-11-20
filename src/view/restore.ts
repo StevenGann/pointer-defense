@@ -34,6 +34,7 @@ import { SPEC_CAPS, SPEC_KINDS, SPEC_NAMES, specLevelCost, specEffectText, type 
 import { restartPointsGained, type RunState } from '../core/state.ts';
 import { t } from '../i18n/index.ts';
 import { formatNumber } from '../core/format.ts';
+import { mirrorIfRtl, textX } from './direction.ts';
 
 /**
  * The Restore dialog (docs/VISUAL-PASS.md §3): a System Properties property sheet, 620 x 420, with
@@ -126,12 +127,12 @@ export function computeRestoreLayout(l: Layout, profile: Profile, s: RunState, s
     h,
   };
   const titleBar: Rect = { x: window.x + 2, y: window.y + 2, w: w - 4, h: TITLE_H };
-  const close: Rect = {
+  const close: Rect = mirrorIfRtl({
     x: titleBar.x + titleBar.w - 2 - CONTROL_BOX_W,
     y: titleBar.y + Math.floor((TITLE_H - CONTROL_BOX_H) / 2),
     w: CONTROL_BOX_W,
     h: CONTROL_BOX_H,
-  };
+  }, titleBar);
 
   const tabStrip: Rect = { x: window.x + 2, y: titleBar.y + titleBar.h, w: w - 4, h: TAB_H };
   const tabLabels = [t('dlg.restore.tabRestore'), t('dlg.restore.tabSpecs'), t('dlg.restore.tabTree')];
@@ -156,8 +157,8 @@ export function computeRestoreLayout(l: Layout, profile: Profile, s: RunState, s
   const restartButton: Rect = { x: tabBody.x, y: payout.y + payout.h + 10, w: 150, h: 32 };
   const buttons: RestoreButton[] = [
     { id: 'restart', label: t('dlg.restore.restart'), rect: restartButton, default: true },
-    { id: 'apply', label: t('dlg.restore.apply'), rect: apply, default: false },
-    { id: 'close', label: t('dlg.restore.close'), rect: cancel, default: false },
+    { id: 'apply', label: t('dlg.restore.apply'), rect: mirrorIfRtl(apply, window), default: false },
+    { id: 'close', label: t('dlg.restore.close'), rect: mirrorIfRtl(cancel, window), default: false },
   ];
   const prog = restoreProgress(s);
   const progress = { rect: { x: tabBody.x, y: restartButton.y + restartButton.h + 16, w: tabBody.w - 40, h: 14 }, ...prog };
@@ -421,7 +422,9 @@ export class RestoreView {
     const rl = computeRestoreLayout(l, profile, s, session);
     drawWindowChrome(g, rl.window, { close: true, minimize: false, maximize: false });
     this.titleText.text = t('dlg.restore.title');
-    this.titleText.position.set(rl.titleBar.x + 6, rl.titleBar.y + TITLE_H / 2);
+    const tp = textX(rl.titleBar, 'start');
+    this.titleText.anchor.x = tp.anchor;
+    this.titleText.position.set(tp.x, rl.titleBar.y + TITLE_H / 2);
 
     drawTabStrip(g, rl.tabStrip, [t('dlg.restore.tabRestore'), t('dlg.restore.tabSpecs'), t('dlg.restore.tabTree')], session.tab === 'restore' ? 0 : session.tab === 'specs' ? 1 : 2);
     for (let i = 0; i < rl.tabs.length; i++) {
@@ -484,13 +487,16 @@ export class RestoreView {
 
   private drawSpecsTab(g: Graphics, rl: RestoreLayout): void {
     drawListView(g, rl.specsField, rl.specs, 24, rl.specRows.length, -1, 0);
-    const colX = [rl.specsField.x + 2, rl.specsField.x + 2 + 110, rl.specsField.x + 2 + 210];
+    // The column positions mirror the LTR layout in RTL, so the text and the list separators agree.
+    const colX = computeListView(rl.specsField, rl.specs, 24, rl.specRows.length, 0).colX;
     let ti = 0;
     for (let i = 0; i < rl.specs.length; i++) {
       const t = this.rowTextAt(ti++);
       t.text = rl.specs[i].title;
       t.style.fontWeight = 'bold';
-      t.position.set(colX[i] + 4, rl.specsField.y + 2 + 9);
+      const hp = textX({ x: colX[i], y: 0, w: rl.specs[i].w, h: 0 }, 'start', 4);
+      t.anchor.x = hp.anchor;
+      t.position.set(hp.x, rl.specsField.y + 2 + 9);
     }
     for (const row of rl.specRows) {
       const midY = row.rect.y + Math.floor(row.rect.h / 2);
@@ -498,6 +504,7 @@ export class RestoreView {
       name.text = SPEC_NAMES[row.kind];
       name.style.fontWeight = 'bold';
       name.style.fill = PAL.text;
+      name.anchor.x = 0;
       name.position.set(colX[0] + 4, midY);
 
       const levelText = this.rowTextAt(ti++);
@@ -512,6 +519,7 @@ export class RestoreView {
       effect.text = specEffectText(row.kind, row.level);
       effect.style.fontWeight = 'normal';
       effect.style.fill = PAL.shadow;
+      effect.anchor.x = 0;
       effect.position.set(colX[2] + 4, midY);
 
       if (row.stepper) {
