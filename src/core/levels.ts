@@ -1,5 +1,6 @@
 import { COLS, ROWS, inBounds, tileAt, type Grid, type Tile, type TileKind } from './grid.ts';
 import { isSealed } from './pathfield.ts';
+import { t } from '../i18n/index.ts';
 
 /**
  * Authored maps (docs/design.md §5).
@@ -174,28 +175,28 @@ const LADDER_RIGHT: Route = [{ col: 0, row: 2 }, ...rowRun(2, 1, 17), ...column(
 export const LEVELS: readonly Level[] = [
   {
     id: 'corridor',
-    name: 'The Corridor',
+    name: t('level.corridor.name'),
     walls: CORRIDOR_WALLS,
     starts: [{ col: 0, row: 6 }],
     exits: [{ col: COLS - 1, row: 6 }],
   },
   {
     id: 'dumbbell',
-    name: 'Dumbbell',
+    name: t('level.dumbbell.name'),
     walls: DUMBBELL_WALLS,
     starts: [{ col: 0, row: 6 }],
     exits: [{ col: COLS - 1, row: 6 }],
   },
   {
     id: 'open-field',
-    name: 'Open Field',
+    name: t('level.openField.name'),
     walls: OPEN_FIELD_WALLS,
     starts: [{ col: 0, row: 6 }],
     exits: [{ col: COLS - 1, row: 6 }],
   },
   {
     id: 'turnstile',
-    name: 'Turnstile',
+    name: t('level.turnstile.name'),
     walls: TURNSTILE_WALLS,
     starts: [{ col: 0, row: 6 }],
     exits: [{ col: COLS - 1, row: 6 }],
@@ -203,7 +204,7 @@ export const LEVELS: readonly Level[] = [
   },
   {
     id: 'fork',
-    name: 'The Fork',
+    name: t('level.fork.name'),
     walls: FORK_WALLS,
     starts: [{ col: 0, row: 6 }],
     exits: [{ col: COLS - 1, row: 6 }],
@@ -211,7 +212,7 @@ export const LEVELS: readonly Level[] = [
   },
   {
     id: 'ladder',
-    name: 'The Ladder',
+    name: t('level.ladder.name'),
     walls: LADDER_WALLS,
     starts: [{ col: 0, row: 2 }],
     exits: [{ col: 17, row: 9 }],
@@ -268,19 +269,19 @@ export function levelFingerprint(level: Level): string {
 export function levelProblemMessage(reason: string): string {
   switch (reason) {
     case 'too many toggles':
-      return 'too many shutters';
+      return t('level.problem.tooManyShutters');
     case 'toggle out of bounds':
-      return 'a shutter is out of bounds';
+      return t('level.problem.shutterOutOfBounds');
     case 'toggle on a wall tile':
-      return 'a shutter sits on a wall';
+      return t('level.problem.shutterOnWall');
     case 'toggle period must be positive':
-      return 'a shutter period must be positive';
+      return t('level.problem.shutterPeriodPositive');
     case 'toggle open window out of range':
-      return 'a shutter open window is out of range';
+      return t('level.problem.shutterOpenWindowRange');
     case 'toggle combination seals the route':
-      return 'no route from start to exit';
+      return t('level.problem.sealedRoute');
     case 'routes overlap':
-      return 'routes overlap outside the spawn and exit';
+      return t('level.problem.routesOverlap');
     default:
       return reason;
   }
