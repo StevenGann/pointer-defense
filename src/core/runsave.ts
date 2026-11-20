@@ -28,6 +28,7 @@ import { WAVE_COUNT, type ModifierId } from './waves.ts';
 import { GLOBAL_UPGRADES, type BuffKind, type TrayPopup, type UpgradeId } from './upgrades.ts';
 import { defaultProfile, SPEC_CAPS, type Profile, type SpecLevels } from './save.ts';
 import { isTreeNodeId, type TreeEffects } from './tree.ts';
+import { isAdTipId, type AdTipId } from '../content/adTips.ts';
 
 export const RUN_SAVE_KEY = 'pd.run.v1';
 export const RUN_SAVE_VERSION = 1;
@@ -689,7 +690,9 @@ function parseAd(v: unknown): Ad | null {
   const h = num(v.h);
   if (id === null || kind === null || ttl === null || x === null || y === null || w === null || h === null) return null;
   if (!AD_KINDS.includes(kind as AdKind)) return null;
-  return { id, kind: kind as AdKind, ttl, x, y, w, h };
+  // A Blue Screen has no tip; an absent tip (an older save, or a null) is treated the same way.
+  const tip: AdTipId | null = v.tip === null || v.tip === undefined ? null : isAdTipId(v.tip) ? v.tip : null;
+  return { id, kind: kind as AdKind, tip, ttl, x, y, w, h };
 }
 
 function parseTray(v: unknown): TrayPopup | null {
@@ -1041,6 +1044,7 @@ export function restoreRun(save: unknown, profile: Profile = defaultProfile()): 
     nextId,
     events: [],
     ad,
+    adTipCursor: -1,
     nextAdAttemptTick,
     towerDamageBuffTicks,
     enemySlowTicks,

@@ -174,7 +174,7 @@ import {
   type ModifierId,
   type Spawn,
 } from './waves.ts';
-import { tickAds, type Ad, type AdKind } from './ads.ts';
+import { AD_AUTOUPDATE_DAMAGE_MULT, AD_TIMEZONE_SPEED_MULT, tickAds, type Ad, type AdKind } from './ads.ts';
 import {
   AA_SALVO_COUNT,
   MISSILE_ACCEL,
@@ -412,6 +412,8 @@ export interface RunState {
   events: GameEvent[];
   /** The live desktop ad, or null. */
   ad: Ad | null;
+  /** Ad-tip cursor: which pool entry the next ad shows; -1 until the first tip seeds it (docs/ADS-TIPS.md §2.3). */
+  adTipCursor: number;
   /** Tick when the next ad spawn may be attempted. */
   nextAdAttemptTick: number;
   /** Ticks remaining on the AutoUpdate tower damage buff. */
@@ -695,6 +697,7 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     nextId: 1,
     events: [],
     ad: null,
+    adTipCursor: -1,
     nextAdAttemptTick: 0,
     towerDamageBuffTicks: 0,
     enemySlowTicks: 0,
@@ -2452,7 +2455,7 @@ function moveEnemies(s: RunState): void {
     e.prevX = e.x;
     e.prevY = e.y;
     if (s.tick < e.stunUntilTick) continue; // stunned: stand still this tick
-    const globalSlow = slowFactorFor(e.kind, s.enemySlowTicks > 0 ? 0.5 : 1);
+    const globalSlow = slowFactorFor(e.kind, s.enemySlowTicks > 0 ? AD_TIMEZONE_SPEED_MULT : 1);
     const slow = s.tick < e.slowUntilTick ? Math.min(globalSlow, e.slowFactor) : globalSlow;
     // The Pacer's aura is a speed floor: enemies inside 3 tiles move at the Pacer's speed or their
     // own, whichever is faster. Applied to the base speed before Frost, so it composes with slow.
@@ -3272,7 +3275,7 @@ export function cursorMaintenanceStatus(s: RunState, t: Tower): string | null {
 }
 
 function fireTowers(s: RunState): void {
-  const buff = s.towerDamageBuffTicks > 0 ? 1.4 : 1;
+  const buff = s.towerDamageBuffTicks > 0 ? AD_AUTOUPDATE_DAMAGE_MULT : 1;
   const layout = synergyLayout(s);
   for (const t of s.towers) {
     if (layout.clusterOf.has(t.id)) continue; // a clustered AA fires with its cluster, below

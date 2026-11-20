@@ -1,7 +1,15 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { bevel, CONTROL_BOX_H, CONTROL_BOX_W, FONT, FONT_SIZE, PAL, TITLE_H, type Rect } from './chrome.ts';
 import { t } from '../i18n/index.ts';
-import { AD_SPECS, type Ad } from '../core/ads.ts';
+import { textWidth } from './metrics.ts';
+import {
+  AD_AUTOUPDATE_DAMAGE_MULT,
+  AD_DEFRAG_SALVAGE_PCT,
+  AD_SCREENSAVER_DAMAGE,
+  AD_TIMEZONE_SPEED_MULT,
+  type Ad,
+  type AdKind,
+} from '../core/ads.ts';
 import type { RunState } from '../core/state.ts';
 import { TRAY_LIFETIME_TICKS, type TrayPopup } from '../core/upgrades.ts';
 
@@ -12,6 +20,86 @@ import { TRAY_LIFETIME_TICKS, type TrayPopup } from '../core/upgrades.ts';
  */
 
 const AD_APPEAR_TICKS = 6;
+
+/** The reward line's vertical centre sits 19 px below the title bar — the same place it did before
+ *  the tip block was added, so the reason to click never moves (docs/ADS-TIPS.md §2.1). */
+const REWARD_LINE_OFFSET = 19;
+
+/** The tip block's horizontal padding and 11 px line height. */
+const TIP_PAD = 6;
+const TIP_LINE_H = 12;
+const TIP_MAX_LINES = 3;
+
+/**
+ * Wrap a tip into lines that each fit `maxWidth` at the tip's 11 px, measured with `textWidth` so the
+ * headless smoke harness and the browser agree on where a line breaks.
+ */
+export function wrapAdTip(text: string, maxWidth: number): string[] {
+  const lines: string[] = [];
+  for (const word of text.split(' ')) {
+    if (lines.length === 0) {
+      lines.push(word);
+    } else {
+      const candidate = lines[lines.length - 1] + ' ' + word;
+      if (textWidth(candidate, FONT_SIZE.small) <= maxWidth) lines[lines.length - 1] = candidate;
+      else lines.push(word);
+    }
+    // A single token wider than the box (CJK has no spaces) breaks by character.
+    while (textWidth(lines[lines.length - 1], FONT_SIZE.small) > maxWidth) {
+      const line = lines[lines.length - 1];
+      let cut = line.length - 1;
+      while (cut > 0 && textWidth(line.slice(0, cut), FONT_SIZE.small) > maxWidth) cut--;
+      if (cut <= 0) cut = 1;
+      lines[lines.length - 1] = line.slice(0, cut);
+      lines.push(line.slice(cut));
+    }
+  }
+  return lines;
+}
+
+/** The tip's wrapped display lines, shortened (never the box) if a locale would need a fourth line. */
+function adTipLines(text: string, maxWidth: number): string[] {
+  const lines = wrapAdTip(text, maxWidth);
+  if (lines.length <= TIP_MAX_LINES) return lines;
+  const words = text.split(' ');
+  for (let n = words.length; n > 0; n--) {
+    const candidate = words.slice(0, n).join(' ') + '…';
+    const shortened = wrapAdTip(candidate, maxWidth);
+    if (shortened.length <= TIP_MAX_LINES) return shortened;
+  }
+  return ['…'];
+}
+
+/** The title for a kind, from the catalogue. */
+function adTitle(kind: AdKind): string {
+  return t(`ads.kind.${kind}.title`);
+}
+
+/** The reward line, with its numbers computed from the same effect constants the sim reads. */
+function adMessage(kind: AdKind): string {
+  switch (kind) {
+    case 'defrag':
+      return t('ads.kind.defrag.message', { pct: Math.round(AD_DEFRAG_SALVAGE_PCT * 100) });
+    case 'autoupdate':
+      return t('ads.kind.autoupdate.message', { pct: Math.round((AD_AUTOUPDATE_DAMAGE_MULT - 1) * 100) });
+    case 'timezone':
+      return t('ads.kind.timezone.message', { pct: Math.round((1 - AD_TIMEZONE_SPEED_MULT) * 100) });
+    case 'screensaver':
+      return t('ads.kind.screensaver.message', { damage: AD_SCREENSAVER_DAMAGE });
+    default:
+      return t(`ads.kind.${kind}.message`);
+  }
+}
+
+/** The reward line's vertical centre, for the layout tests to pin the unchanged position. */
+export function adRewardLineY(ad: Ad): number {
+  return ad.y + 2 + TITLE_H + REWARD_LINE_OFFSET;
+}
+
+/** The tip block's text-width budget: the box minus its 6 px side padding. */
+export function adTipMaxWidth(ad: Ad): number {
+  return ad.w - TIP_PAD * 2;
+}
 
 /** The close box, 16x14 in the top-right of the 22 px title bar. */
 export function adCloseRect(ad: Ad): Rect {
@@ -32,6 +120,10 @@ export class AdView {
   private readonly g = new Graphics();
   private readonly title = makeText('');
   private readonly message = makeText('');
+  private readonly tip = new Text({
+    text: '',
+    style: { fontFamily: FONT, fontSize: FONT_SIZE.small, fill: PAL.text, lineHeight: TIP_LINE_H },
+  });
   private seenId: number | null = null;
   private bornTick = 0;
 
@@ -40,7 +132,8 @@ export class AdView {
     this.title.anchor.set(0, 0.5);
     this.title.style.fontWeight = 'bold';
     this.message.anchor.set(0, 0.5);
-    this.root.addChild(this.title, this.message);
+    this.tip.anchor.set(0, 0);
+    this.root.addChild(this.title, this.message, this.tip);
   }
 
   draw(state: RunState): void {
@@ -50,15 +143,20 @@ export class AdView {
     if (!ad) {
       this.title.text = '';
       this.message.text = '';
+      this.tip.text = '';
       this.seenId = null;
       return;
     }
     if (ad.id !== this.seenId) {
       this.seenId = ad.id;
       this.bornTick = state.tick;
+      // The tip text object is reused and only reassigned when the ad changes, so the draw path
+      // stays allocation-free per frame.
+      this.title.text = adTitle(ad.kind);
+      this.message.text = adMessage(ad.kind);
+      this.tip.text = ad.tip === null ? '' : adTipLines(t(`ads.tip.${ad.tip}`), adTipMaxWidth(ad)).join('\n');
     }
 
-    const spec = AD_SPECS[ad.kind];
     bevel(g, { x: ad.x, y: ad.y, w: ad.w, h: ad.h }, true, PAL.face);
 
     // Appear snap: a bright frame for the first 6 ticks, no easing (docs/design.md §13.4).
@@ -71,7 +169,6 @@ export class AdView {
     // Title bar (navy), the same 22 px as the main window. The Blue Screen trap's only tell: the
     // title text sits a pixel high.
     g.rect(ad.x + 2, ad.y + 2, ad.w - 4, TITLE_H).fill(PAL.title);
-    this.title.text = spec.title;
     this.title.style.fill = PAL.titleInverse;
     this.title.position.set(
       ad.x + 6,
@@ -86,12 +183,13 @@ export class AdView {
     g.moveTo(cx - 4, cy - 4).lineTo(cx + 4, cy + 4).stroke({ width: 1, color: PAL.text });
     g.moveTo(cx + 4, cy - 4).lineTo(cx - 4, cy + 4).stroke({ width: 1, color: PAL.text });
 
-    // Message line, centred in the body below the title bar.
-    this.message.text = spec.message;
+    // Reward line, in its pre-tip place, then a 1 px separator and the tip block below it. The tip is
+    // empty for Blue Screen: the block and separator still draw, so the trap is never told by shape.
     this.message.style.fill = PAL.text;
-    const bodyTop = ad.y + 2 + TITLE_H;
-    const bodyH = ad.h - TITLE_H - 4;
-    this.message.position.set(ad.x + 6, bodyTop + Math.floor(bodyH / 2));
+    this.message.position.set(ad.x + 6, adRewardLineY(ad));
+    const separatorY = adRewardLineY(ad) + 8;
+    g.moveTo(ad.x + 2, separatorY + 0.5).lineTo(ad.x + ad.w - 2, separatorY + 0.5).stroke({ width: 1, color: PAL.shadow });
+    this.tip.position.set(ad.x + TIP_PAD, separatorY + 2);
   }
 }
 
