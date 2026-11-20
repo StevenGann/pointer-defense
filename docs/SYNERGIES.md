@@ -2,9 +2,12 @@
 
 Status: spec, not built. Owner: Guppy. Written 2026-11-20.
 
-Two towers of the right kinds standing next to each other should be worth more than the same two
-towers standing apart, and the board should say so without a tooltip: a translucent line joins the
-pair, coloured by what the pair is doing for each other.
+Two towers of the right kinds standing next to each other should do something together, and the
+board should say so without a tooltip: a translucent line joins the pair, coloured by what the pair
+is doing for each other.
+
+A synergy is not automatically a buff. This one is a behaviour: adjacent AAs fire as one, and a
+player who wants the rhythm builds for it.
 
 This document specifies the mechanism, the first synergy (AA), how it enters the simulation without
 breaking determinism or saves, how it is drawn, and what proves it works.
@@ -54,13 +57,11 @@ Adjacent AAs fire as one.
    falls back to it.
 3. **A follower holds its fire.** A follower that is ready, aimed and has a target does not shoot
    until its leader fires in that same tick. Then it fires with it.
-4. **Concentrated.** Every additional tower firing in the same tick adds 6% damage to every shot in
-   that tick, capped at +24% from four or more shooters. A pair hits 6% harder; a line of five hits
-   24% harder.
 
-Targeting, range, turn rate, armour handling, flak shells and missile salvos are all untouched.
-Synchronized Fire changes *when* AA fires and *how hard* the simultaneous shots land, never *at
-what*.
+That is the whole effect. Synchronized Fire changes *when* AA fires and nothing else: no damage
+multiplier, no rate change, no range change. Targeting, turn rate, armour handling, flak shells and
+missile salvos are untouched, and a synchronized shot deals exactly the damage the tower's stats say
+it deals.
 
 Why holding instead of a shared clock: a shared clock hands every member the fastest member's rate,
 so a Flak tower beside a plain AA would fire 3.5× as often as it is allowed to — not a synergy, a
@@ -75,8 +76,6 @@ relation is transitive by construction — see §4.3.
 
 Tuning constants, all in `src/core/synergy.ts`:
 
-- `AA_VOLLEY_BONUS = 0.06` per extra simultaneous shooter
-- `AA_VOLLEY_BONUS_CAP = 0.24`
 - `AA_MIN_CLUSTER = 2`
 - `AA_HOLD_WINDOW = 33` ticks — how far ahead a follower will wait for a leader's shot
 - `AA_HOLD_CAP = 66` ticks — the backstop: longest a follower may hold, ever
@@ -106,8 +105,9 @@ instead of only where the player built a pair.
    disabled, EMP'd, has no target in range, or is further away than that window.
 5. Any follower that has held for `AA_HOLD_CAP` consecutive ticks fires regardless. This is the
    backstop that stops a rule about waiting from becoming a tower that never shoots.
-6. Count the shots that landed this tick in the cluster; every one of them gets
-   `1 + min(AA_VOLLEY_BONUS_CAP, AA_VOLLEY_BONUS × (n − 1))`.
+
+Nothing about the shot changes when it lands: same damage, same projectile, same targeting. The only
+observable difference is the tick it happens on.
 
 Holding is a runtime fact, not a saved one: `holdSince` is a per-tower-id map cleared whenever
 clusters are rebuilt. A save taken mid-hold resumes with nobody holding, which costs at most one
@@ -174,9 +174,11 @@ intended and safe, because nothing about the role is stored.
 
 ## 6. Player-facing text
 
-- Help → a new **Synergies** page: the rule in one paragraph, the AA row, and the tuning in plain
-  words ("adjacent AA towers fire as one — the faster one leads, and a bigger volley hits harder").
-- Tower detail panel for an AA in a cluster: one line, `Synced · 3 towers · +12% volley`.
+- Help → a new **Synergies** page: the rule in one paragraph and the AA row in plain words
+  ("adjacent AA towers fire as one — the faster one leads and the others fire with it; a
+  synchronized shot is exactly as strong as an unsynchronized one, it just lands with the rest").
+- Tower detail panel for an AA in a cluster: one line, `Synced · 3 towers`. It states the
+  connection, not a number, because there is no number.
 - Tooltip for a lone AA: `No adjacent AA — not synchronized`. It states the opportunity once and
   does not nag.
 - All new strings go through the catalogue under `help.synergy.*` and `hud.synergy.*`, with numbers
@@ -195,7 +197,8 @@ Smoke groups, in the existing harness:
 6. Abandonment: a follower fires anyway when its leader is offline, has no target, is outside the
    window, or has held past `AA_HOLD_CAP`.
 7. Rate preservation: a clustered Flak AA still fires on its own interval, never the leader's.
-8. Volley maths: 2 shooters +6%, 3 +12%, 5 +24% and no further, checked against the constants.
+8. No multiplier: a synchronized shot deals exactly `effectiveStats(t).damage`, compared against a
+   lone tower's shot on the same target, to the last decimal.
 9. No cooldown rewriting: a tower's cooldown sequence is identical with and without a neighbour,
    apart from the ticks it spends holding.
 10. Isolation: a lone AA's cooldown, aim and damage are unchanged; the non-flyer determinism hash
@@ -208,11 +211,18 @@ Smoke groups, in the existing harness:
 
 ## 8. Balance note
 
-A base pair goes from about 18.9 DPS across two towers to the same shots landing together at +6%, so
-roughly 20 DPS. The follower's wait costs at most one leader cycle per volley and nothing at all once
-two towers share an interval, which is the common case. If testers report AA trivialising flyer
-waves, cut `AA_VOLLEY_BONUS_CAP` first, then the per-member bonus; do not touch the base AA stats,
-which are load-bearing for the existing flyer-wave tuning.
+This synergy does not raise DPS, and it should not be sold as if it does. Two plain AAs pay the
+alignment once — after that they share a 33-tick clock and lose nothing — so the pair is exactly as
+strong as two unpaired towers that happen to be in step.
+
+The case with a real cost is a Flak follower: 117 ticks against a 33-tick leader, so it can wait up
+to 33 ticks per cycle, which is up to 28% of that tower's rate. That is the price of the rhythm and
+it is worth watching in playtests. If it reads as a nerf rather than a choice, the fix is to scale
+`AA_HOLD_WINDOW` down to a fraction of the follower's own interval, which weakens alignment for
+mixed-rate pairs but bounds the tax.
+
+No balance change to the base AA is implied by this feature, and none should be made to compensate
+for it.
 
 Records set before this ships are not comparable with records set after; that was already true of
 every balance change and is not worth a migration.
