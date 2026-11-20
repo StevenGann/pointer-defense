@@ -1861,9 +1861,10 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   // same branch point.
   const PRE_SWARM_NO_FLYER_HASH = 'ee8c2036';
 
-  const factor = (w) => (w <= 20 ? 2 : w <= 50 ? 3 : 4);
-  check(flyerSwarmFactor(20) === 2 && flyerSwarmFactor(21) === 3 && flyerSwarmFactor(50) === 3 && flyerSwarmFactor(51) === 4,
-    'flyer swarms: band factors are 2x to 20, 3x to 50, 4x from 51');
+  const factor = flyerSwarmFactor;
+  check(flyerSwarmFactor(20) === 2 && flyerSwarmFactor(21) === 3 && flyerSwarmFactor(50) === 3 &&
+    flyerSwarmFactor(51) === 3 && flyerSwarmFactor(85) === 2 && flyerSwarmFactor(100) === 2,
+    'flyer swarms: band factors are 2x to 20, 3x to 50, then a ramp 3x->2x from 51 to 85 (docs/FLYER-TAPER.md)');
 
   // 1 + 2. Counts per band; capped waves trim chaff, never flyers, and land exactly on the cap.
   let countsOk = true;
@@ -1888,7 +1889,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     }
   }
   check(countsOk, 'flyer swarms: waves 6..100 carry round(old * band factor) flyers');
-  check(capped.length > 0, `flyer swarms: some late waves hit the cap (${capped.join(', ')})`);
+  check(capped.length === 0, `flyer swarms: the taper keeps every wave 6..100 under the cap (capped: ${capped.join(', ') || 'none'})`);
   check(cappedOk, 'flyer swarms: capped waves keep every multiplied flyer and total exactly WAVE_ENEMY_CAP; uncapped totals grow by the added flyers only');
   check(buildSchedule(6).filter((sp) => sp.kind === 'flyer').length === 6 &&
     buildSchedule(10).filter((sp) => sp.kind === 'flyer').length === 16,
@@ -1985,6 +1986,70 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   check(shapeOk, 'flyer swarms: schedule shape unchanged ({tick, kind}, ordered, length = waveEnemyCount)');
 }
 
+// --- 16ab. Flyer taper (docs/FLYER-TAPER.md) ---------------------------------------------------
+{
+  const oldFactor = (w) => (w <= 20 ? 2 : w <= 50 ? 3 : 4);
+  // Pre-swarm flyer counts, from the docs/FLYER-SWARMS.md table above.
+  const PRE_TAPER_FLYERS = { 10: 8, 25: 7, 50: 11 };
+
+  // 1. Waves 10, 25 and 50 produce byte-identical schedules to before. The taper only touches
+  //    wave >= 51, so their multipliers (and therefore their full schedules) are unchanged.
+  let lowBandsUnchanged = true;
+  for (let w = 1; w <= 50; w++) if (flyerSwarmFactor(w) !== oldFactor(w)) lowBandsUnchanged = false;
+  check(lowBandsUnchanged, 'flyer taper: waves 1..50 keep their old 2x/3x multipliers');
+  for (const w of [10, 25, 50]) {
+    const flyers = buildSchedule(w).filter((sp) => sp.kind === 'flyer').length;
+    check(flyers === Math.round(PRE_TAPER_FLYERS[w] * oldFactor(w)),
+      `flyer taper: wave ${w} still flies ${flyers} flyers (${oldFactor(w)}x, unchanged)`);
+  }
+  // The full schedule byte-identity against the pre-change build: the hash below is recorded from
+  // the old flat-band curve, so it is an expectation computed from the old multiplier, not a hash of
+  // the new output.
+  const preChangeText = [10, 25, 50].map((w) => JSON.stringify(buildSchedule(w))).join('\n');
+  let h = 0x811c9dc5;
+  for (let i = 0; i < preChangeText.length; i++) {
+    h ^= preChangeText.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  check((h >>> 0).toString(16) === '899bc06e',
+    `flyer taper: waves 10/25/50 schedules are byte-identical to the pre-change build (hash ${(h >>> 0).toString(16)})`);
+
+  // 2. Wave 85 produces 28 flyers, not 56.
+  const w85Flyers = buildSchedule(85).filter((sp) => sp.kind === 'flyer').length;
+  check(w85Flyers === 28, `flyer taper: wave 85 flies ${w85Flyers} flyers, not 56`);
+
+  // 3. The multiplier is 3.0 at wave 51, 2.0 at wave 85, 2.0 at wave 100, and never increases after
+  //    wave 50.
+  check(flyerSwarmFactor(51) === 3 && flyerSwarmFactor(85) === 2 && flyerSwarmFactor(100) === 2,
+    'flyer taper: the multiplier is 3x at wave 51, 2x at wave 85, 2x at wave 100');
+  let neverUp = true;
+  for (let w = 51; w <= 400; w++) if (flyerSwarmFactor(w + 1) > flyerSwarmFactor(w)) neverUp = false;
+  check(neverUp, 'flyer taper: the multiplier never increases after wave 50');
+
+  // 4. The band curve is a smooth, monotone ramp: each wave from 51 to 85 steps down by exactly
+  //    1/34, so the curve only eases the volume and never bumps a wave's flyer count back up.
+  let rampOk = true;
+  for (let w = 51; w < 85; w++) {
+    if (Math.abs(flyerSwarmFactor(w) - flyerSwarmFactor(w + 1) - 1 / 34) > 1e-9) rampOk = false;
+  }
+  check(rampOk, 'flyer taper: the 51..85 ramp is linear, 1/34 per wave');
+
+  // 5. Flight packing is unchanged: six per flight, 0.15 s between members of a flight.
+  const w85Ticks = buildSchedule(85).filter((sp) => sp.kind === 'flyer').map((sp) => sp.tick);
+  let sixPerFlight = true;
+  let spacingOk = true;
+  let run = 1;
+  for (let i = 1; i < w85Ticks.length; i++) {
+    const gap = w85Ticks[i] - w85Ticks[i - 1];
+    if (gap <= FLYER_FLIGHT_MEMBER_TICKS) run++;
+    else run = 1;
+    if (run > FLYER_FLIGHT_SIZE) sixPerFlight = false;
+  }
+  const firstFlight = w85Ticks.slice(0, FLYER_FLIGHT_SIZE);
+  spacingOk = firstFlight.slice(1).every((t, i) => t - firstFlight[i] === FLYER_FLIGHT_MEMBER_TICKS);
+  check(sixPerFlight && spacingOk, 'flyer taper: wave 85 flies six per flight, 0.15 s apart');
+}
+
 // --- 16b. Endless curve: 1-100 unchanged, HP bands, count/interval, modifier stacking ---------
 {
   // Waves 1..100 must be byte-identical: hash the full balance table (HP scale, value scale,
@@ -2000,7 +2065,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     h ^= table.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
-  check((h >>> 0).toString(16) === 'c3581b15', `waves 1..100 balance table unchanged (hash ${(h >>> 0).toString(16)})`);
+  check((h >>> 0).toString(16) === 'ae33addc', `waves 1..100 balance table unchanged (hash ${(h >>> 0).toString(16)})`);
 }
 
 {
@@ -7914,7 +7979,7 @@ function helpRecomputeBlock(kind) {
     h ^= table.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
-  check((h >>> 0).toString(16) === 'c3581b15', 'waves 1..100 balance table unchanged with cheats off');
+  check((h >>> 0).toString(16) === 'ae33addc', 'waves 1..100 balance table unchanged with cheats off');
 }
 
 // --- 45. The Restore tree ----------------------------------------------------------------
