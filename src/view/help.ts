@@ -3,6 +3,7 @@ import {
   bevel,
   CONTROL_BOX_H,
   CONTROL_BOX_W,
+  dottedLine,
   drawStatusBar,
   drawTabStrip,
   drawWindowChrome,
@@ -56,6 +57,8 @@ export const HELP_SCROLL_TRACK_W = 8;
 /** Lines the page scrolls per mouse-wheel notch. */
 export const HELP_SCROLL_LINES = 3;
 const HELP_INDENT = 14;
+/** The tree indents one level per 12 px (chapter expander, then page icon). */
+const HELP_TREE_INDENT = 12;
 const HELP_MIN_VISIBLE = 32;
 
 export type HelpToolbarAction = 'nav' | 'back' | 'forward' | 'home' | 'print' | 'options';
@@ -570,6 +573,13 @@ function chapterTitle(category: HelpCategory): string {
   return HELP_CATEGORIES.find((c) => c.id === category)?.title ?? category;
 }
 
+/** The status-bar topic path: "Category › Page", or the title alone when the two coincide. */
+export function helpTopicPath(page: HelpPage | undefined): string {
+  if (!page) return 'Select a topic from the contents';
+  const cat = chapterTitle(page.category);
+  return cat === page.title ? page.title : `${cat} › ${page.title}`;
+}
+
 export class HelpView {
   readonly root = new Container();
   private readonly g = new Graphics();
@@ -720,7 +730,7 @@ export class HelpView {
 
     // Status bar: topic path left, Page n of m right.
     drawStatusBar(g, hl.status, [0, 110]);
-    const path = this.topicPath(page);
+    const path = helpTopicPath(page);
     const pageIndex = page ? HELP_PAGES.indexOf(page) + 1 : 0;
     this.statusText.text = path;
     this.statusText.position.set(hl.statusPanels[0].x + 4, hl.status.y + Math.floor(HELP_STATUS_H / 2));
@@ -731,12 +741,6 @@ export class HelpView {
     pageNo.anchor.set(0, 0.5);
     pageNo.position.set(hl.statusPanels[1].x + 4, hl.status.y + Math.floor(HELP_STATUS_H / 2));
     for (let i = 31; i < this.navTexts.length; i++) this.navTexts[i].text = '';
-  }
-
-  private topicPath(page: HelpPage | undefined): string {
-    if (!page) return 'Select a topic from the contents';
-    const cat = chapterTitle(page.category);
-    return `${cat} › ${page.title}`;
   }
 
   private drawToolbarGlyph(g: Graphics, action: HelpToolbarAction, r: Rect, enabled: boolean): void {
@@ -764,6 +768,10 @@ export class HelpView {
 
   private drawContents(g: Graphics, hl: HelpLayout, rows: readonly HelpRow[], session: HelpSession, hover: HelpHit): void {
     const hoverRow = hover?.type === 'tree' ? hover.row : -1;
+    // Dotted guide line connecting the page rows under the one expanded chapter.
+    let guideX = -1;
+    let firstPageY = -1;
+    let lastPageY = -1;
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       const text = this.treeTextAt(i);
@@ -777,22 +785,29 @@ export class HelpView {
       if (row.kind === 'chapter') {
         const bx = hl.treePanel.x + 4;
         const by = y + 4;
-        bevel(g, { x: bx, y: by, w: 9, h: 9 }, true, PAL.face);
+        // The 9x9 [+]/[-] box: a 1 px black border with a drawn plus or minus.
+        g.rect(bx, by, 9, 9).fill(PAL.highlight);
+        g.rect(bx, by, 9, 9).stroke({ width: 1, color: PAL.dark });
         const bxc = bx + 4.5;
         const byc = by + 4.5;
-        g.moveTo(bxc - 2, byc).lineTo(bxc + 2, byc).stroke({ width: 1, color: PAL.text });
-        if (!row.expanded) g.moveTo(bxc, byc - 2).lineTo(bxc, byc + 2).stroke({ width: 1, color: PAL.text });
+        g.moveTo(bxc - 2, byc).lineTo(bxc + 2, byc).stroke({ width: 1, color: PAL.dark });
+        if (!row.expanded) g.moveTo(bxc, byc - 2).lineTo(bxc, byc + 2).stroke({ width: 1, color: PAL.dark });
         text.text = row.title;
         text.style.fill = PAL.text;
         text.position.set(bx + 13, y + Math.floor(HELP_TREE_ROW_H / 2));
       } else {
-        const px = hl.treePanel.x + 4 + HELP_INDENT;
-        g.rect(px - 10, y + 5, 8, 8).stroke({ width: 1, color: row.locked ? PAL.shadow : PAL.text });
+        const px = hl.treePanel.x + 4 + HELP_TREE_INDENT;
+        const iconX = px - 10;
+        g.rect(iconX, y + 5, 8, 8).stroke({ width: 1, color: row.locked ? PAL.shadow : PAL.text });
+        if (guideX < 0) guideX = iconX + 4;
+        if (firstPageY < 0) firstPageY = y + 9;
+        lastPageY = y + 9;
         text.text = treeRowLabel(row);
         text.style.fill = row.locked ? PAL.shadow : selected ? PAL.titleInverse : PAL.text;
         text.position.set(px, y + Math.floor(HELP_TREE_ROW_H / 2));
       }
     }
+    if (guideX >= 0 && lastPageY > firstPageY) dottedLine(g, guideX, firstPageY, guideX, lastPageY, PAL.shadow);
     for (let i = rows.length; i < this.treeTexts.length; i++) this.treeTexts[i].text = '';
   }
 

@@ -54,6 +54,14 @@ const BUTTON_W = 84;
 
 export type UpgradesTab = 'available' | 'owned';
 
+export interface UpgradesButton {
+  id: 'ok' | 'cancel';
+  label: string;
+  rect: Rect;
+  /** The default button carries the 1 px dotted focus ring. */
+  default: boolean;
+}
+
 export interface UpgradeRow {
   def: UpgradeDef;
   owned: boolean;
@@ -75,8 +83,7 @@ export interface UpgradesLayout {
   columns: ListColumn[];
   rows: UpgradeRow[];
   descStrip: Rect;
-  ok: Rect;
-  cancel: Rect;
+  buttons: UpgradesButton[];
   statusBar: Rect;
   status: StatusPanel[];
 }
@@ -122,6 +129,10 @@ export function computeUpgradesLayout(l: Layout, s: RunState, tab: UpgradesTab =
   const buttonRowY = statusBar.y - 8 - BUTTON_H;
   const cancel: Rect = { x: statusBar.x + statusBar.w - BUTTON_W - 6, y: buttonRowY, w: BUTTON_W, h: BUTTON_H };
   const ok: Rect = { x: cancel.x - BUTTON_W - 6, y: buttonRowY, w: BUTTON_W, h: BUTTON_H };
+  const buttons: UpgradesButton[] = [
+    { id: 'ok', label: 'OK', rect: ok, default: true },
+    { id: 'cancel', label: 'Cancel', rect: cancel, default: false },
+  ];
   const descStrip: Rect = { x: window.x + 8, y: buttonRowY - 6 - DESC_H, w: w - 16, h: DESC_H };
 
   const listField: Rect = { x: window.x + 8, y: tabStrip.y + TAB_H, w: w - 16, h: descStrip.y - 4 - (tabStrip.y + TAB_H) };
@@ -159,7 +170,7 @@ export function computeUpgradesLayout(l: Layout, s: RunState, tab: UpgradesTab =
 
   const status = computeStatusBar(statusBar, [0, 150]);
 
-  return { window, titleBar, close, toolbar, toolbarButtons, tabStrip, tabs, listField, list, columns, rows, descStrip, ok, cancel, statusBar, status };
+  return { window, titleBar, close, toolbar, toolbarButtons, tabStrip, tabs, listField, list, columns, rows, descStrip, buttons, statusBar, status };
 }
 
 /** Whether a row's cart button is live: not owned and affordable right now. */
@@ -170,6 +181,22 @@ export function upgradeRowBuyable(row: Pick<UpgradeRow, 'owned' | 'affordable'>)
 /** The cart's caption: `Buy 1,200`, or `OWNED`. */
 export function upgradeButtonText(row: Pick<UpgradeRow, 'def' | 'owned'>): string {
   return row.owned ? 'OWNED' : `Buy ${formatNumber(row.def.cost)}`;
+}
+
+/** The status bar's summary: revealed of total, and owned among the revealed (never the full 14). */
+export function upgradesStatusText(s: Pick<RunState, 'wave' | 'upgrades'>): string {
+  const revealed = revealedUpgrades(s);
+  const owned = revealed.filter((d) => hasUpgrade(s, d.id)).length;
+  return `${revealed.length} of ${GLOBAL_UPGRADES.length} unlocked · ${owned} owned`;
+}
+
+/** The empty-list caption, printed when nothing is revealed yet; empty once an upgrade exists. */
+export function upgradesEmptyLines(s: Pick<RunState, 'wave'>): string[] {
+  if (revealedUpgrades(s).length > 0) return [];
+  const lines = ['No upgrades unlocked yet.'];
+  const next = GLOBAL_UPGRADES.filter((d) => d.wave > s.wave).map((d) => d.wave);
+  if (next.length > 0) lines.push(`The next unlocks at wave ${Math.min(...next)}.`);
+  return lines;
 }
 
 /** The tooltip for a row: the detail, plus the shortfall when the run cannot afford it yet. */
@@ -204,8 +231,9 @@ export function upgradesHitAt(ul: UpgradesLayout, x: number, y: number): Upgrade
   for (const row of ul.rows) {
     if (pointInRect(row.rect, x, y)) return { type: 'row', id: row.def.id };
   }
-  if (pointInRect(ul.ok, x, y)) return { type: 'ok' };
-  if (pointInRect(ul.cancel, x, y)) return { type: 'cancel' };
+  for (const b of ul.buttons) {
+    if (pointInRect(b.rect, x, y)) return { type: b.id };
+  }
   return { type: 'window' };
 }
 
@@ -281,6 +309,8 @@ export class UpgradesView {
   private readonly titleText: Text;
   private readonly headerTexts: Text[] = [];
   private readonly rowTexts: Text[] = [];
+  private readonly tabTexts: Text[] = [];
+  private readonly emptyTexts: Text[] = [];
   private readonly descText: Text;
   private readonly okText: Text;
   private readonly cancelText: Text;
@@ -319,6 +349,28 @@ export class UpgradesView {
     return t;
   }
 
+  private tabTextAt(index: number): Text {
+    let t = this.tabTexts[index];
+    if (!t) {
+      t = makeText('', FONT_SIZE.small, false, PAL.text);
+      t.anchor.set(0.5, 0.5);
+      this.tabTexts.push(t);
+      this.root.addChild(t);
+    }
+    return t;
+  }
+
+  private emptyTextAt(index: number): Text {
+    let t = this.emptyTexts[index];
+    if (!t) {
+      t = makeText('', FONT_SIZE.small, false, PAL.text);
+      t.anchor.set(0.5, 0.5);
+      this.emptyTexts.push(t);
+      this.root.addChild(t);
+    }
+    return t;
+  }
+
   private statusTextAt(index: number): Text {
     let t = this.statusTexts[index];
     if (!t) {
@@ -349,6 +401,8 @@ export class UpgradesView {
       this.cancelText.text = '';
       for (const t of this.headerTexts) t.text = '';
       for (const t of this.rowTexts) t.text = '';
+      for (const t of this.tabTexts) t.text = '';
+      for (const t of this.emptyTexts) t.text = '';
       for (const t of this.statusTexts) t.text = '';
       for (const sp of this.icons) sp.visible = false;
       return;
@@ -376,6 +430,14 @@ export class UpgradesView {
 
     // Tabs.
     drawTabStrip(g, ul.tabStrip, ['Available', 'Owned'], session.tab === 'available' ? 0 : 1);
+    for (let i = 0; i < ul.tabs.length; i++) {
+      const t = this.tabTextAt(i);
+      const tab = ul.tabs[i];
+      t.text = tab.label;
+      t.style.fill = tab.active ? PAL.text : PAL.shadow;
+      t.position.set(tab.rect.x + tab.rect.w / 2, tab.rect.y + tab.rect.h / 2);
+    }
+    for (let i = ul.tabs.length; i < this.tabTexts.length; i++) this.tabTexts[i].text = '';
 
     // List view.
     drawListView(g, ul.listField, ul.columns, UPGRADE_ROW_H, ul.rows.length, session.selected, session.scroll);
@@ -447,6 +509,20 @@ export class UpgradesView {
     for (let i = ti; i < this.rowTexts.length; i++) this.rowTexts[i].text = '';
     for (let i = ii; i < this.icons.length; i++) this.icons[i].visible = false;
 
+    // Empty list: a centred caption (plus the next unlock wave when one is coming).
+    const emptyLines = upgradesEmptyLines(s);
+    if (ul.rows.length === 0 && emptyLines.length > 0) {
+      const cy = ul.list.body.y + ul.list.body.h / 2;
+      const startY = cy - ((emptyLines.length - 1) * 14) / 2;
+      for (let i = 0; i < emptyLines.length; i++) {
+        const t = this.emptyTextAt(i);
+        t.text = emptyLines[i];
+        t.style.fill = PAL.text;
+        t.position.set(ul.list.body.x + ul.list.body.w / 2, startY + i * 14);
+      }
+    }
+    for (let i = emptyLines.length; i < this.emptyTexts.length; i++) this.emptyTexts[i].text = '';
+
     // Description strip.
     bevel(g, ul.descStrip, false, PAL.face);
     const descDef = ul.rows[session.selected]?.def;
@@ -454,19 +530,25 @@ export class UpgradesView {
     this.descText.position.set(ul.descStrip.x + 4, ul.descStrip.y + Math.floor(ul.descStrip.h / 2));
 
     // OK / Cancel.
-    bevel(g, ul.ok, true, PAL.face);
-    dottedLine(g, ul.ok.x + 2, ul.ok.y + 2, ul.ok.x + ul.ok.w - 2, ul.ok.y + 2, PAL.dark);
-    dottedLine(g, ul.ok.x + ul.ok.w - 2, ul.ok.y + 2, ul.ok.x + ul.ok.w - 2, ul.ok.y + ul.ok.h - 2, PAL.dark);
-    dottedLine(g, ul.ok.x + ul.ok.w - 2, ul.ok.y + ul.ok.h - 2, ul.ok.x + 2, ul.ok.y + ul.ok.h - 2, PAL.dark);
-    dottedLine(g, ul.ok.x + 2, ul.ok.y + ul.ok.h - 2, ul.ok.x + 2, ul.ok.y + 2, PAL.dark);
-    bevel(g, ul.cancel, true, PAL.face);
-    this.okText.position.set(ul.ok.x + ul.ok.w / 2, ul.ok.y + ul.ok.h / 2);
-    this.cancelText.position.set(ul.cancel.x + ul.cancel.w / 2, ul.cancel.y + ul.cancel.h / 2);
+    for (const b of ul.buttons) {
+      bevel(g, b.rect, true, PAL.face);
+      if (b.default) {
+        dottedLine(g, b.rect.x + 2, b.rect.y + 2, b.rect.x + b.rect.w - 2, b.rect.y + 2, PAL.dark);
+        dottedLine(g, b.rect.x + b.rect.w - 2, b.rect.y + 2, b.rect.x + b.rect.w - 2, b.rect.y + b.rect.h - 2, PAL.dark);
+        dottedLine(g, b.rect.x + b.rect.w - 2, b.rect.y + b.rect.h - 2, b.rect.x + 2, b.rect.y + b.rect.h - 2, PAL.dark);
+        dottedLine(g, b.rect.x + 2, b.rect.y + b.rect.h - 2, b.rect.x + 2, b.rect.y + 2, PAL.dark);
+      }
+    }
+    const okBtn = ul.buttons[0];
+    const cancelBtn = ul.buttons[1];
+    this.okText.text = okBtn.label;
+    this.okText.position.set(okBtn.rect.x + okBtn.rect.w / 2, okBtn.rect.y + okBtn.rect.h / 2);
+    this.cancelText.text = cancelBtn.label;
+    this.cancelText.position.set(cancelBtn.rect.x + cancelBtn.rect.w / 2, cancelBtn.rect.y + cancelBtn.rect.h / 2);
 
     // Status bar.
     const panels = drawStatusBar(g, ul.statusBar, [0, 150]);
-    const ownedCount = revealedUpgrades(s).filter((d) => hasUpgrade(s, d.id)).length;
-    this.statusTextAt(0).text = `${GLOBAL_UPGRADES.length} upgrades · ${ownedCount} owned`;
+    this.statusTextAt(0).text = upgradesStatusText(s);
     this.statusTextAt(0).position.set(panels[0].x + 4, panels[0].y + Math.floor(panels[0].h / 2));
     this.statusTextAt(1).text = `Salvage ${formatNumber(s.economy.salvage)}`;
     this.statusTextAt(1).position.set(panels[1].x + 4, panels[1].y + Math.floor(panels[1].h / 2));

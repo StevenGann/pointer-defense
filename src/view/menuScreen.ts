@@ -101,6 +101,11 @@ export function computeMenuWindow(l: Layout): MenuWindowLayout {
   return { window, titleBar, menuBar, client, statusBar, wordmark, rule, marquee, close };
 }
 
+/** The marquee's clip rectangle: exactly the 18 px marquee strip, so the scroll never escapes it. */
+export function marqueeMaskRect(l: Layout): Rect {
+  return computeMenuWindow(l).marquee;
+}
+
 export function computeMenuScreen(l: Layout, continueLabel: string | null = null, daily: MenuDaily | null = null): MenuScreenLayout {
   const win = computeMenuWindow(l);
   const labels: [MenuButtonId, string, string][] = [];
@@ -309,6 +314,7 @@ export class MenuScreenView {
   private readonly creepLayer = new Container();
   private readonly creepSprites: Sprite[] = [];
   private readonly pointerSprite: Sprite;
+  private readonly marqueeMask = new Graphics();
   /** Cached route polyline and creep parameters, so a frame allocates nothing. */
   private cachedRouteKey = '';
   private routePts: { x: number; y: number }[] = [];
@@ -522,7 +528,7 @@ export class MenuScreenView {
       mwx += t.width + 8;
     }
 
-    // Marquee.
+    // Marquee, masked to its 18 px strip so the tips never run across the window or desktop.
     bevel(g, win.marquee, false, PAL.face);
     const marqueeText = MARQUEE_TIPS;
     const textW = textWidth(marqueeText, FONT_SIZE.small);
@@ -530,6 +536,10 @@ export class MenuScreenView {
     const off = state.time * 30 % scrollW;
     this.marquee.text = marqueeText;
     this.marquee.position.set(win.marquee.x + win.marquee.w - off, win.marquee.y + Math.floor(win.marquee.h / 2));
+    const mask = marqueeMaskRect(l);
+    this.marqueeMask.clear();
+    this.marqueeMask.rect(mask.x, mask.y, mask.w, mask.h).fill(0xffffff);
+    this.marquee.mask = this.marqueeMask;
 
     // Buttons.
     for (let i = 0; i < this.buttonTexts.length; i++) {
@@ -569,13 +579,15 @@ export class MenuScreenView {
       s.position.set(b.rect.x + b.rect.w - 12, b.rect.y + Math.floor(b.rect.h / 2));
     }
 
-    // Status bar.
-    const panels = drawStatusBar(g, win.statusBar, [120, 0, 60]);
+    // Status bar: Ready (120 px) · version (flex) · the run summary sized to its measured text.
+    const best = `Best ${state.bestWave} · ${state.runs} runs · ${state.achievements}/118`;
+    const bestW = textWidth(best, FONT_SIZE.small) + 8;
+    const panels = drawStatusBar(g, win.statusBar, [120, 0, bestW]);
     this.statusTexts[0].text = 'Ready';
     this.statusTexts[0].position.set(panels[0].x + 4, panels[0].y + Math.floor(panels[0].h / 2));
-    this.statusTexts[1].text = `Best wave ${state.bestWave} · ${state.runs} runs · ${state.achievements}/118 achievements`;
+    this.statusTexts[1].text = state.version;
     this.statusTexts[1].position.set(panels[1].x + 4, panels[1].y + Math.floor(panels[1].h / 2));
-    this.statusTexts[2].text = state.version;
+    this.statusTexts[2].text = best;
     this.statusTexts[2].position.set(panels[2].x + 4, panels[2].y + Math.floor(panels[2].h / 2));
   }
 }

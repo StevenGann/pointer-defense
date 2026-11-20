@@ -121,8 +121,8 @@ import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeen
 import { appendRun, appendDailyRun, buildRunRecord, runTotals, bestByMap } from '../src/core/runs.ts';
 import { buildRecordsRows, totalsLine, bestByMapLine, computeRecordsLayout, recordsHitAt, formatRecordDate, outcomeLabel } from '../src/view/records.ts';
 import { captureRun, restoreRun, loadRunSave, saveRun, clearRunSave, hasRunSave, RUN_SAVE_KEY } from '../src/core/runsave.ts';
-import { computeMenuScreen, menuButtonAt, computeMenuWindow, computeMenuAnim } from '../src/view/menuScreen.ts';
-import { computeUpgradesLayout, UpgradesSession } from '../src/view/upgrades.ts';
+import { computeMenuScreen, menuButtonAt, computeMenuWindow, computeMenuAnim, marqueeMaskRect } from '../src/view/menuScreen.ts';
+import { computeUpgradesLayout, UpgradesSession, upgradesStatusText, upgradesEmptyLines } from '../src/view/upgrades.ts';
 import { computeRestoreLayout, RestoreSession, restoreProgress, restoreDirty } from '../src/view/restore.ts';
 import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES } from '../src/core/tree.ts';
 import { ACHIEVEMENTS } from '../src/core/achievements.ts';
@@ -165,7 +165,7 @@ import {
 } from '../src/view/bossBars.ts';
 import { backingStorePixelSize } from '../src/view/screen.ts';
 import { HELP_PAGES, pageUnlocked, lockedReason, pageById } from '../src/content/help.ts';
-import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, computeHelpScroll, HelpSession, helpIndexList, helpSearchResults, HELP_W, HELP_H, HELP_LINE_H, HELP_SCROLL_LINES } from '../src/view/help.ts';
+import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, computeHelpScroll, HelpSession, helpIndexList, helpSearchResults, helpTopicPath, HELP_W, HELP_H, HELP_LINE_H, HELP_SCROLL_LINES } from '../src/view/help.ts';
 import { buildAchievementGrid, gridRowCount, gridCellRect, ACH_COLUMNS, ACH_CELL, ACH_GUTTER, computeAchievementGrid, achievementGridHitAt, AchievementSession } from '../src/view/dialog.ts';
 import {
   ART_MANIFEST,
@@ -10587,6 +10587,101 @@ function dailyState(date) {
   const rs = new RestoreSession();
   rs.show(prof);
   check(computeRestoreLayout(layout, prof, s, rs).tabs.length === 3, 'Restore still has three tabs');
+}
+
+// --- Visual pass 7: every tab and button in all four layouts carries a non-empty label ---------
+{
+  const layout = computeLayout(1280, 800);
+  const s = createRunState();
+  s.wave = 60;
+  s.economy.salvage = 100000;
+  const profile = defaultProfile();
+  profile.rp = 100;
+  profile.rpEarned = 20;
+  const rs = new RestoreSession();
+  rs.show(profile);
+
+  const menu = computeMenuScreen(layout, 'Wave 34 — The Corridor');
+  for (const b of menu.buttons) {
+    check(typeof b.label === 'string' && b.label.length > 0, `the main menu button "${b.id}" carries a non-empty label`);
+  }
+
+  const ul = computeUpgradesLayout(layout, s, 'available', 0);
+  for (const t of ul.tabs) {
+    check(typeof t.label === 'string' && t.label.length > 0, `Global Upgrades tab "${t.id}" carries a non-empty label`);
+  }
+  for (const b of ul.buttons) {
+    check(typeof b.label === 'string' && b.label.length > 0, `Global Upgrades button "${b.id}" carries a non-empty label`);
+  }
+
+  const rl = computeRestoreLayout(layout, profile, s, rs);
+  for (const t of rl.tabs) {
+    check(typeof t.label === 'string' && t.label.length > 0, `System Properties tab "${t.id}" carries a non-empty label`);
+  }
+  for (const b of rl.buttons) {
+    check(typeof b.label === 'string' && b.label.length > 0, `System Properties button "${b.id}" carries a non-empty label`);
+  }
+
+  const hl = computeHelpLayout(100, 100);
+  for (const t of hl.navTabs) {
+    check(typeof t.label === 'string' && t.label.length > 0, `Help nav tab "${t.id}" carries a non-empty label`);
+  }
+}
+
+// --- Visual pass 8: the upgrades status counts revealed, and the empty state follows the list ---
+{
+  const early = createRunState();
+  early.wave = 2; // nothing revealed yet
+  check(upgradesStatusText(early) === '0 of 14 unlocked · 0 owned', `the status counts revealed, not total (${upgradesStatusText(early)})`);
+  const wave20 = createRunState();
+  wave20.wave = 20; // one upgrade revealed
+  check(upgradesStatusText(wave20) === '1 of 14 unlocked · 0 owned', `the status counts one revealed upgrade (${upgradesStatusText(wave20)})`);
+
+  const layout = computeLayout(1280, 720);
+  const emptyLayout = computeUpgradesLayout(layout, early, 'available', 0);
+  check(emptyLayout.rows.length === 0, 'the Available list is empty before anything is revealed');
+  check(upgradesEmptyLines(early).length > 0, 'the empty-state line appears exactly when the list is empty');
+  check(upgradesEmptyLines(early)[0] === 'No upgrades unlocked yet.', `the empty state reads "No upgrades unlocked yet." (${upgradesEmptyLines(early)[0]})`);
+
+  const s = createRunState();
+  s.wave = 60;
+  s.economy.salvage = 100000;
+  buyUpgrade(s, 'salvage-contract');
+  buyUpgrade(s, 'wide-reticle');
+  buyUpgrade(s, 'double-buffer');
+  check(upgradesStatusText(s) === '14 of 14 unlocked · 3 owned', `the status counts owned among revealed (${upgradesStatusText(s)})`);
+  const fullLayout = computeUpgradesLayout(layout, s, 'available', 0);
+  check(fullLayout.rows.length > 0, 'the Available list is non-empty once upgrades are revealed');
+  check(upgradesEmptyLines(s).length === 0, 'the empty-state line is absent once the list has rows');
+}
+
+// --- Visual pass 9: the marquee mask rectangle equals the marquee rect -------------------------
+{
+  const layout = computeLayout(1280, 800);
+  const win = computeMenuWindow(layout);
+  const mask = marqueeMaskRect(layout);
+  check(
+    mask.x === win.marquee.x && mask.y === win.marquee.y && mask.w === win.marquee.w && mask.h === win.marquee.h,
+    'the marquee mask rectangle equals the marquee rect',
+  );
+  check(mask.h === 18, 'the marquee mask clips to its 18 px strip');
+}
+
+// --- Visual pass 10: the Help topic path shows the topic name once -----------------------------
+{
+  const gs = pageById('getting-started');
+  const gsPath = helpTopicPath(gs);
+  check((gsPath.match(/Getting started/g) ?? []).length === 1, `the path shows the topic name once (${gsPath})`);
+  const gun = pageById('tower-gun');
+  check(helpTopicPath(gun) === `Towers › ${gun.title}`, `the path reads the category then the topic (${helpTopicPath(gun)})`);
+  check(helpTopicPath(undefined) === 'Select a topic from the contents', 'an empty path reads the select hint');
+}
+
+// --- Visual pass 11: the System Properties progress bar is empty at zero points -----------------
+{
+  const s = createRunState();
+  const prog = restoreProgress(s); // zero lifetime salvage, so zero points toward the next Restore Point
+  check(prog.fill === 0, `the progress bar is empty at zero points (fill ${prog.fill})`);
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

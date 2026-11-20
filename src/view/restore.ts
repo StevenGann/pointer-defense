@@ -74,6 +74,14 @@ export interface RestoreSpecRow {
   stepper: { minus: Rect; value: Rect; plus: Rect } | null;
 }
 
+export interface RestoreButton {
+  id: 'restart' | 'apply' | 'close';
+  label: string;
+  rect: Rect;
+  /** The default button carries the 1 px dotted focus ring. */
+  default: boolean;
+}
+
 export interface RestoreTreeRow {
   kind: 'tier' | 'node';
   tier: number;
@@ -97,14 +105,12 @@ export interface RestoreLayout {
   tabs: { id: RestoreTab; label: string; rect: Rect; active: boolean }[];
   tabBody: Rect;
   payout: Rect;
-  restartButton: Rect;
   progress: { rect: Rect; fill: number; points: number; pointsNeeded: number };
   specsField: Rect;
   specs: ListColumn[];
   specRows: RestoreSpecRow[];
   treeRows: RestoreTreeRow[];
-  apply: Rect;
-  cancel: Rect;
+  buttons: RestoreButton[];
   statusBar: Rect;
   status: StatusPanel[];
 }
@@ -147,6 +153,11 @@ export function computeRestoreLayout(l: Layout, profile: Profile, s: RunState, s
   // Restore Point tab.
   const payout: Rect = { x: tabBody.x, y: tabBody.y, w: tabBody.w, h: 34 };
   const restartButton: Rect = { x: tabBody.x, y: payout.y + payout.h + 10, w: 150, h: 32 };
+  const buttons: RestoreButton[] = [
+    { id: 'restart', label: 'Restart Windows', rect: restartButton, default: true },
+    { id: 'apply', label: 'Apply', rect: apply, default: false },
+    { id: 'close', label: 'Close', rect: cancel, default: false },
+  ];
   const prog = restoreProgress(s);
   const progress = { rect: { x: tabBody.x, y: restartButton.y + restartButton.h + 16, w: tabBody.w - 40, h: 14 }, ...prog };
 
@@ -177,7 +188,7 @@ export function computeRestoreLayout(l: Layout, profile: Profile, s: RunState, s
   // Tree tab.
   const treeRows = buildTreeRows(tabBody, profile, session);
 
-  return { window, titleBar, close, tabStrip, tabs, tabBody, payout, restartButton, progress, specsField, specs, specRows, treeRows, apply, cancel, statusBar, status };
+  return { window, titleBar, close, tabStrip, tabs, tabBody, payout, progress, specsField, specs, specRows, treeRows, buttons, statusBar, status };
 }
 
 function buildTreeRows(area: Rect, profile: Profile, session: RestoreSession): RestoreTreeRow[] {
@@ -224,9 +235,13 @@ export function restoreHitAt(rl: RestoreLayout, x: number, y: number): RestoreHi
   for (const t of rl.tabs) {
     if (pointInRect(t.rect, x, y)) return { type: 'tab', tab: t.id };
   }
-  if (pointInRect(rl.apply, x, y)) return { type: 'apply' };
-  if (pointInRect(rl.cancel, x, y)) return { type: 'close-button' };
-  if (rl.tabs[0].active && pointInRect(rl.restartButton, x, y)) return { type: 'restart' };
+  for (const b of rl.buttons) {
+    if (b.id === 'restart') {
+      if (rl.tabs[0].active && pointInRect(b.rect, x, y)) return { type: 'restart' };
+    } else if (pointInRect(b.rect, x, y)) {
+      return b.id === 'apply' ? { type: 'apply' } : { type: 'close-button' };
+    }
+  }
   if (rl.tabs[1].active) {
     for (const row of rl.specRows) {
       if (row.stepper && pointInRect(row.stepper.minus, x, y)) return { type: 'spec-minus', kind: row.kind };
@@ -333,6 +348,7 @@ export class RestoreView {
   private readonly applyText: Text;
   private readonly cancelText: Text;
   private readonly rows: Text[] = [];
+  private readonly tabTexts: Text[] = [];
   private readonly statusTexts: Text[] = [];
 
   constructor() {
@@ -374,6 +390,17 @@ export class RestoreView {
     return t;
   }
 
+  private tabTextAt(index: number): Text {
+    let t = this.tabTexts[index];
+    if (!t) {
+      t = makeText('', FONT_SIZE.small, false, PAL.text);
+      t.anchor.set(0.5, 0.5);
+      this.tabTexts.push(t);
+      this.root.addChild(t);
+    }
+    return t;
+  }
+
   draw(open: boolean, profile: Profile, s: RunState, l: Layout, session: RestoreSession): void {
     const g = this.g;
     g.clear();
@@ -385,6 +412,7 @@ export class RestoreView {
       this.applyText.text = '';
       this.cancelText.text = '';
       for (const t of this.rows) t.text = '';
+      for (const t of this.tabTexts) t.text = '';
       for (const t of this.statusTexts) t.text = '';
       return;
     }
@@ -395,6 +423,14 @@ export class RestoreView {
     this.titleText.position.set(rl.titleBar.x + 6, rl.titleBar.y + TITLE_H / 2);
 
     drawTabStrip(g, rl.tabStrip, ['Restore Point', 'Specs', 'Tree'], session.tab === 'restore' ? 0 : session.tab === 'specs' ? 1 : 2);
+    for (let i = 0; i < rl.tabs.length; i++) {
+      const t = this.tabTextAt(i);
+      const tab = rl.tabs[i];
+      t.text = tab.label;
+      t.style.fill = tab.active ? PAL.text : PAL.shadow;
+      t.position.set(tab.rect.x + tab.rect.w / 2, tab.rect.y + tab.rect.h / 2);
+    }
+    for (let i = rl.tabs.length; i < this.tabTexts.length; i++) this.tabTexts[i].text = '';
 
     if (session.tab === 'restore') this.drawRestoreTab(g, rl, profile, s);
     else if (session.tab === 'specs') this.drawSpecsTab(g, rl);
@@ -402,15 +438,19 @@ export class RestoreView {
 
     // Apply / Close.
     const dirty = restoreDirty(session, profile);
-    if (dirty) bevel(g, rl.apply, true, PAL.face);
+    const applyBtn = rl.buttons.find((b) => b.id === 'apply')!;
+    const closeBtn = rl.buttons.find((b) => b.id === 'close')!;
+    if (dirty) bevel(g, applyBtn.rect, true, PAL.face);
     else {
-      g.rect(rl.apply.x, rl.apply.y, rl.apply.w, rl.apply.h).fill(PAL.face);
-      g.rect(rl.apply.x, rl.apply.y, rl.apply.w, rl.apply.h).stroke({ width: 1, color: PAL.shadow });
+      g.rect(applyBtn.rect.x, applyBtn.rect.y, applyBtn.rect.w, applyBtn.rect.h).fill(PAL.face);
+      g.rect(applyBtn.rect.x, applyBtn.rect.y, applyBtn.rect.w, applyBtn.rect.h).stroke({ width: 1, color: PAL.shadow });
     }
-    bevel(g, rl.cancel, true, PAL.face);
+    bevel(g, closeBtn.rect, true, PAL.face);
+    this.applyText.text = applyBtn.label;
     this.applyText.style.fill = dirty ? PAL.text : PAL.shadow;
-    this.applyText.position.set(rl.apply.x + rl.apply.w / 2, rl.apply.y + rl.apply.h / 2);
-    this.cancelText.position.set(rl.cancel.x + rl.cancel.w / 2, rl.cancel.y + rl.cancel.h / 2);
+    this.applyText.position.set(applyBtn.rect.x + applyBtn.rect.w / 2, applyBtn.rect.y + applyBtn.rect.h / 2);
+    this.cancelText.text = closeBtn.label;
+    this.cancelText.position.set(closeBtn.rect.x + closeBtn.rect.w / 2, closeBtn.rect.y + closeBtn.rect.h / 2);
 
     // Status bar.
     const panels = drawStatusBar(g, rl.statusBar, [0, 130]);
@@ -427,12 +467,14 @@ export class RestoreView {
     this.payoutText.text = restorePayoutText(s, profile);
     this.payoutText.position.set(rl.payout.x + 6, rl.payout.y + Math.floor(rl.payout.h / 2));
 
-    bevel(g, rl.restartButton, true, PAL.face);
-    dottedLine(g, rl.restartButton.x + 3, rl.restartButton.y + 3, rl.restartButton.x + rl.restartButton.w - 3, rl.restartButton.y + 3, PAL.dark);
-    dottedLine(g, rl.restartButton.x + rl.restartButton.w - 3, rl.restartButton.y + 3, rl.restartButton.x + rl.restartButton.w - 3, rl.restartButton.y + rl.restartButton.h - 3, PAL.dark);
-    dottedLine(g, rl.restartButton.x + rl.restartButton.w - 3, rl.restartButton.y + rl.restartButton.h - 3, rl.restartButton.x + 3, rl.restartButton.y + rl.restartButton.h - 3, PAL.dark);
-    dottedLine(g, rl.restartButton.x + 3, rl.restartButton.y + rl.restartButton.h - 3, rl.restartButton.x + 3, rl.restartButton.y + 3, PAL.dark);
-    this.restartText.position.set(rl.restartButton.x + rl.restartButton.w / 2, rl.restartButton.y + rl.restartButton.h / 2);
+    const restartBtn = rl.buttons.find((b) => b.id === 'restart')!;
+    bevel(g, restartBtn.rect, true, PAL.face);
+    dottedLine(g, restartBtn.rect.x + 3, restartBtn.rect.y + 3, restartBtn.rect.x + restartBtn.rect.w - 3, restartBtn.rect.y + 3, PAL.dark);
+    dottedLine(g, restartBtn.rect.x + restartBtn.rect.w - 3, restartBtn.rect.y + 3, restartBtn.rect.x + restartBtn.rect.w - 3, restartBtn.rect.y + restartBtn.rect.h - 3, PAL.dark);
+    dottedLine(g, restartBtn.rect.x + restartBtn.rect.w - 3, restartBtn.rect.y + restartBtn.rect.h - 3, restartBtn.rect.x + 3, restartBtn.rect.y + restartBtn.rect.h - 3, PAL.dark);
+    dottedLine(g, restartBtn.rect.x + 3, restartBtn.rect.y + restartBtn.rect.h - 3, restartBtn.rect.x + 3, restartBtn.rect.y + 3, PAL.dark);
+    this.restartText.text = restartBtn.label;
+    this.restartText.position.set(restartBtn.rect.x + restartBtn.rect.w / 2, restartBtn.rect.y + restartBtn.rect.h / 2);
 
     this.progressText.text = 'Progress to the next point';
     this.progressText.position.set(rl.progress.rect.x, rl.progress.rect.y - 16);
