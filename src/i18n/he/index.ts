@@ -1,4 +1,5 @@
 import type { Catalogue } from '../index.ts';
+import { help } from './help.ts';
 
 /**
  * The Hebrew catalogue — a machine draft pending native review.
@@ -11,6 +12,9 @@ import type { Catalogue } from '../index.ts';
  * any string.
  */
 export const he: Catalogue = {
+  // Help-page prose (src/i18n/he/help.ts).
+  ...help,
+
   // Menu-bar words and every File / View / Cheats / Help item.
   'menu.file': 'קובץ',
   'menu.view': 'תצוגה',
