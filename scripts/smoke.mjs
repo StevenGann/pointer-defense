@@ -148,7 +148,7 @@ import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText
 import { BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
-import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect } from '../src/view/hud.ts';
+import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, statusPerfText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect } from '../src/view/hud.ts';
 import { FloatingNumbersView } from '../src/view/numbers.ts';
 import { nextQuality } from '../src/core/quality.ts';
 import { dailyFor, dailyLevel, dailySeed, dailyMenuLabel, dailyAvailable, DAILY_WAVES, hashDaily } from '../src/core/daily.ts';
@@ -10724,10 +10724,10 @@ function dailyState(date) {
   }
   check(q === 'full', 'a ?quality=full pin never changes the level');
 
-  check(speedStatusText(2, null) === '×2', 'the speed slot shows only the multiplier at full quality');
-  check(speedStatusText(2, { quality: 'lean', frameMs: 16.7, fps: 60, showFps: false }) === '×2 · Q: lean',
+  check(speedStatusText(2) === '×2', 'the speed slot shows only the multiplier');
+  check(statusPerfText({ quality: 'lean', frameMs: 16.7, fps: 60, showFps: false }) === 'Q: lean',
     'the speed slot shows Q: lean when the level is below full');
-  check(speedStatusText(2, { quality: 'full', frameMs: 16.7, fps: 60, showFps: true }) === '×2 · 16.7 ms · 60/s · Q: full',
+  check(statusPerfText({ quality: 'full', frameMs: 16.7, fps: 60, showFps: true }) === '16.7 ms · 60/s · Q: full',
     '?fps=1 draws the frame-time readout with Q: full');
 }
 

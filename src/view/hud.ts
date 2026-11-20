@@ -98,16 +98,21 @@ export interface HudPerf {
   showFps: boolean;
 }
 
+/** The status-bar speed slot: the multiplier alone. The perf readout has its own slot. */
+export function speedStatusText(speed: number): string {
+  return `×${speed}`;
+}
+
 /**
- * The status-bar speed slot: `×N`, plus the frame-time readout when `?fps=1` is on and a `Q: lean`
- * indicator whenever the level is below full. The Q indicator shares the slot with the speed figure,
- * never replacing it.
+ * The `?fps=1` readout and the quality indicator, right-aligned against the wave pane: the speed
+ * pane is 44 px wide and cannot hold it. Empty when there is nothing to report.
  */
-export function speedStatusText(speed: number, perf: HudPerf | null): string {
-  let text = `×${speed}`;
-  if (perf?.showFps) text += ` · ${perf.frameMs.toFixed(1)} ms · ${perf.fps}/s`;
-  if (perf && (perf.quality !== 'full' || perf.showFps)) text += ` · Q: ${perf.quality}`;
-  return text;
+export function statusPerfText(perf: HudPerf | null): string {
+  if (perf === null) return '';
+  const parts: string[] = [];
+  if (perf.showFps) parts.push(`${perf.frameMs.toFixed(1)} ms`, `${perf.fps}/s`);
+  if (perf.quality !== 'full' || perf.showFps) parts.push(`Q: ${perf.quality}`);
+  return parts.join(' · ');
 }
 
 let metricsText: Text | null = null;
@@ -687,6 +692,7 @@ export class HudView {
   private readonly statusHint = makeText('');
   private readonly statusWave = makeText('');
   private readonly statusSpeed = makeText('');
+  private readonly statusPerf: Text = makeText('');
   private readonly statusPaused = makeText('', true);
   private readonly cheatMarker = makeText('');
   private readonly integrity = makeText('');
@@ -726,12 +732,14 @@ export class HudView {
   private readonly globalRows: Text[] = [makeText(''), makeText(''), makeText('')];
 
   constructor() {
+    this.statusPerf.anchor.set(1, 0.5);
     this.towerButtons = TOWER_KINDS.map(() => makeText(''));
     this.root.addChild(this.g, this.checks);
     for (const t of [
       this.statusHint,
       this.statusWave,
       this.statusSpeed,
+      this.statusPerf,
       this.statusPaused,
       this.cheatMarker,
       this.integrity,
@@ -860,7 +868,9 @@ export class HudView {
 
     this.statusWave.text = waveLabel(s);
     this.statusWave.position.set(sp.middle.x + 4, sp.middle.y + Math.floor(sp.middle.h / 2));
-    this.statusSpeed.text = speedStatusText(s.speed, perf);
+    this.statusSpeed.text = speedStatusText(s.speed);
+    this.statusPerf.text = statusPerfText(perf);
+    this.statusPerf.position.set(sp.middle.x - 6, sp.middle.y + Math.floor(sp.middle.h / 2));
     this.statusSpeed.position.set(sp.speed.x + 4, sp.speed.y + Math.floor(sp.speed.h / 2));
 
     // Toolbar.
