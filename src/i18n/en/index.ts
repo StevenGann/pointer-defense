@@ -1,4 +1,5 @@
 import type { Catalogue } from '../index.ts';
+import { dialogs } from './dialogs.ts';
 import { menu } from './menu.ts';
 import { status } from './status.ts';
 
@@ -9,6 +10,7 @@ import { status } from './status.ts';
  * touching the same file. Every key is referenced by code, checked by `npm run i18n:check`.
  */
 export const en = {
+  ...dialogs,
   ...menu,
   ...status,
 
