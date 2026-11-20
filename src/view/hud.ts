@@ -1,3 +1,4 @@
+import { towerName, enemyName } from '../i18n/names.ts';
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { bevel, CONTROL_BOX_H, CONTROL_BOX_W, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
 import { getArtTexture } from './art.ts';
@@ -31,7 +32,6 @@ import {
   type TowerKind,
 } from '../core/towers.ts';
 import { earlyCallBonus, MODIFIER_NAMES, typeBossKindForWave, waveDef, waveModifiers } from '../core/waves.ts';
-import { ENEMY_STATS } from '../core/enemies.ts';
 import type { QualityLevel } from '../core/quality.ts';
 import { branchName, fmtClickDamage, targetModeDisplay } from './tooltipText.ts';
 import { t } from '../i18n/index.ts';
@@ -417,7 +417,7 @@ export function computeRightPanel(l: Layout, s: RunState): RightPanelLayout {
   if (mods.length > 0) composition.unshift(t('hud.compositionMods', { modifiers: mods.map((m) => MODIFIER_NAMES[m]).join(' + ') }));
   // Name the type boss ahead of time so its first appearance is telegraphed before it spawns.
   const typeBoss = typeBossKindForWave(wave);
-  if (typeBoss) composition.unshift(t('hud.compositionBoss', { name: ENEMY_STATS[typeBoss].name }));
+  if (typeBoss) composition.unshift(t('hud.compositionBoss', { name: enemyName(typeBoss) }));
 
   const nextWave: InfoSection = {
     rect: { x, y, w, h: infoSectionHeight(composition.length) },
@@ -668,7 +668,7 @@ export function victoryButtonAt(l: Layout, s: RunState, px: number, py: number):
 export const CONTEXT_HELP_HINT = t('status.contextHelp');
 
 function hintFor(s: RunState): string {
-  if (s.selected) return t('status.placeTower', { name: TOWER_STATS[s.selected].name });
+  if (s.selected) return t('status.placeTower', { name: towerName(s.selected) });
   if (selectedTower(s)) return t('status.inspectTower');
   switch (s.phase) {
     case 'build':
@@ -976,7 +976,7 @@ export class HudView {
       for (const text of this.branchButtons) text.visible = true;
 
       const branch = tower.branch === null ? '' : t('hud.towerBranch', { branch: branchName(tower.kind, tower.branch) });
-      this.towerName.text = t('hud.towerName', { name: TOWER_STATS[tower.kind].name, tier: tower.tier, max: kindMaxTier(tower.kind) }) + branch + (isOffline(tower) ? t('hud.towerOffline') : '');
+      this.towerName.text = t('hud.towerName', { name: towerName(tower.kind), tier: tower.tier, max: kindMaxTier(tower.kind) }) + branch + (isOffline(tower) ? t('hud.towerOffline') : '');
       this.towerName.position.set(d.name.x, d.name.y + Math.floor(d.name.h / 2));
 
       // The detail pane's close box: a raised Win95 box with the same X glyph the help window uses.
@@ -1115,7 +1115,7 @@ export class HudView {
         g.rect(rect.x + 1, rect.y + 1, rect.w - 2, rect.h - 2).stroke({ width: 2, color: PAL.title });
       }
       const btn = this.towerButtons[i];
-      btn.text = t('hud.towerButton', { name: TOWER_STATS[kind].name, cost: formatNumber(towerCost(s, kind)) });
+      btn.text = t('hud.towerButton', { name: towerName(kind), cost: formatNumber(towerCost(s, kind)) });
       btn.style.fill = enabled ? (armed ? PAL.title : PAL.text) : PAL.shadow;
       btn.position.set(rect.x + 6, rect.y + Math.floor(rect.h / 2));
     }

@@ -1,4 +1,5 @@
-import { ENEMY_STATS, type EnemyKind } from './enemies.ts';
+import { enemyName } from '../i18n/names.ts';
+import type { EnemyKind } from './enemies.ts';
 
 /**
  * The Cheats menu and its shortcuts are a testing tool: reach any state without grinding. They are
@@ -39,5 +40,5 @@ export const SPAWN_KINDS: readonly EnemyKind[] = [
 
 /** The display name for a spawnable kind. */
 export function spawnKindLabel(kind: EnemyKind): string {
-  return ENEMY_STATS[kind].name;
+  return enemyName(kind);
 }

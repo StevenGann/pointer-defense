@@ -1,8 +1,8 @@
+import { enemyName } from '../i18n/names.ts';
 import { Container, Graphics, Text } from 'pixi.js';
 import { FONT, FONT_SIZE, PAL, type Layout } from './chrome.ts';
 import {
   BASTION_SHIELD_LAYERS,
-  ENEMY_STATS,
   isBossKind,
   isBossVariant,
   type Enemy,
@@ -68,7 +68,7 @@ export function livingBosses(enemies: readonly Enemy[]): Enemy[] {
 
 /** The boss's announcement name, uppercase and ready for letter-spacing. */
 export function bossName(kind: EnemyKind): string {
-  return ENEMY_STATS[kind].name.toUpperCase();
+  return enemyName(kind).toUpperCase();
 }
 
 /** The one-line gimmick subtitle for a type's first appearance, or null when the kind has none. */

@@ -11211,7 +11211,14 @@ function dailyState(date) {
   for (const src of sources.values()) {
     for (const key of extractTKeys(src)) referenced.add(key);
   }
-  const orphans = catalogueKeys.filter((k) => !referenced.has(k));
+  // Keys built by template literal (e.g. t(`name.tower.${kind}`)) are referenced through their prefix.
+  const dynamicPrefixes = new Set();
+  for (const src of sources.values()) {
+    for (const m of src.matchAll(/t\(`([A-Za-z0-9_.]*)\$\{/g)) dynamicPrefixes.add(m[1]);
+  }
+  const orphans = catalogueKeys.filter(
+    (k) => !referenced.has(k) && ![...dynamicPrefixes].some((p) => k.startsWith(p)),
+  );
   const missing = [...referenced].filter((k) => !catalogueKeys.includes(k));
   check(orphans.length === 0, `every catalogue key is referenced (orphans: ${orphans.join(', ') || 'none'})`);
   check(missing.length === 0, `every referenced key exists (missing: ${missing.join(', ') || 'none'})`);
