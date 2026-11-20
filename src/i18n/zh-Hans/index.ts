@@ -819,6 +819,13 @@ export const zh: Catalogue = {
   'name.enemy.armoured-boss': '无畏舰',
   'name.enemy.saboteur-boss': '剪线者',
   'name.enemy.breacher-boss': '冲撞者',
+  'name.pointer.1': '点击',
+  'name.pointer.2': '准星',
+  'name.modifier.fog': '迷雾',
+  'name.modifier.no-build': '禁止建造',
+  'name.modifier.fast': '快进',
+  'name.modifier.blackout': '停电',
+  'name.modifier.rush': '突袭',
 
   // Window title.
   'window.title': 'Pointer Defense',

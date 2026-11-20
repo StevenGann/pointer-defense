@@ -832,6 +832,13 @@ export const uk: Catalogue = {
   'name.enemy.armoured-boss': 'Дредноут',
   'name.enemy.saboteur-boss': 'Кусачка',
   'name.enemy.breacher-boss': 'Таран',
+  'name.pointer.1': 'Клік',
+  'name.pointer.2': 'Приціл',
+  'name.modifier.fog': 'Туман',
+  'name.modifier.no-build': 'Без будівництва',
+  'name.modifier.fast': 'Прискорення',
+  'name.modifier.blackout': 'Затемнення',
+  'name.modifier.rush': 'Натиск',
 
   // Window title.
   'window.title': 'Pointer Defense',

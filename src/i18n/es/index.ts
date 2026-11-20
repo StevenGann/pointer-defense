@@ -728,6 +728,13 @@ export const es: Catalogue = {
   'name.enemy.armoured-boss': 'Coloso',
   'name.enemy.saboteur-boss': 'Cortacables',
   'name.enemy.breacher-boss': 'Ariete',
+  'name.pointer.1': 'Clic',
+  'name.pointer.2': 'Retícula',
+  'name.modifier.fog': 'Niebla',
+  'name.modifier.no-build': 'Sin construcción',
+  'name.modifier.fast': 'Avance rápido',
+  'name.modifier.blackout': 'Apagón',
+  'name.modifier.rush': 'Avalancha',
 
   // Shell strings.
   'shell.menu.play': 'Jugar',

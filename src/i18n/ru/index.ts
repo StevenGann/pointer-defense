@@ -830,6 +830,13 @@ export const ru = {
   'name.enemy.armoured-boss': 'Дредноут',
   'name.enemy.saboteur-boss': 'Кусачки',
   'name.enemy.breacher-boss': 'Таран',
+  'name.pointer.1': 'Клик',
+  'name.pointer.2': 'Прицел',
+  'name.modifier.fog': 'Туман',
+  'name.modifier.no-build': 'Без строительства',
+  'name.modifier.fast': 'Ускорение',
+  'name.modifier.blackout': 'Затемнение',
+  'name.modifier.rush': 'Натиск',
 
   // ── Window title ──────────────────────────────────────────────────────────────────────────
   'window.title': 'Pointer Defense',

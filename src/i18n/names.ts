@@ -14,3 +14,13 @@ export function towerName(kind: string): string {
 export function enemyName(kind: string): string {
   return t(`name.enemy.${kind}`);
 }
+
+/** The pointer's stage name ('Click', 'Reticle') by stage number. */
+export function pointerName(stage: number): string {
+  return t(`name.pointer.${stage}`);
+}
+
+/** A wave modifier's name ('Fog', 'Blackout') by id. */
+export function modifierName(id: string): string {
+  return t(`name.modifier.${id}`);
+}

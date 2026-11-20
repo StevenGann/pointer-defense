@@ -33,4 +33,13 @@ export const names = {
   'name.enemy.armoured-boss': 'Dreadnought',
   'name.enemy.saboteur-boss': 'Wirecutter',
   'name.enemy.breacher-boss': 'Ram',
+
+  // Pointer stages and wave modifiers: data-held names, translated like the roster.
+  'name.pointer.1': 'Click',
+  'name.pointer.2': 'Reticle',
+  'name.modifier.fog': 'Fog',
+  'name.modifier.no-build': 'No-Build',
+  'name.modifier.fast': 'Fast Forward',
+  'name.modifier.blackout': 'Blackout',
+  'name.modifier.rush': 'Rush',
 } as const satisfies Catalogue;

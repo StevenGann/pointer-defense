@@ -709,6 +709,13 @@ export const he: Catalogue = {
   'name.enemy.armoured-boss': 'דרדנוט',
   'name.enemy.saboteur-boss': 'חותך חוטים',
   'name.enemy.breacher-boss': 'איל',
+  'name.pointer.1': 'לחיצה',
+  'name.pointer.2': 'כוונת',
+  'name.modifier.fog': 'ערפל',
+  'name.modifier.no-build': 'ללא בנייה',
+  'name.modifier.fast': 'הרצה מהירה',
+  'name.modifier.blackout': 'החשכה',
+  'name.modifier.rush': 'הסתערות',
 
   // Shell strings.
   'shell.menu.play': 'שחק',

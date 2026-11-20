@@ -1,11 +1,11 @@
-import { towerName, enemyName } from '../i18n/names.ts';
+import { towerName, enemyName, pointerName, modifierName } from '../i18n/names.ts';
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { bevel, CONTROL_BOX_H, CONTROL_BOX_W, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
 import { getArtTexture } from './art.ts';
 import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
 import { BUFF_NAMES, buffSecondsLeft, hasUpgrade, revealedUpgrades, upgradeBuff } from '../core/upgrades.ts';
-import { clickDamage, comboMultiplier, critChance, overclockCeiling, pointerInfo, pointerUpgradeState } from '../core/pointer.ts';
+import { clickDamage, comboMultiplier, critChance, overclockCeiling, pointerUpgradeState } from '../core/pointer.ts';
 import { autoWaveStatus, canCycleLevel, currentPath, cursorMaintenanceStatus, isFinalWave, noBuildActive, NO_BUILD_MESSAGE, overclockCap, pointerDamageMult, selectedTower, STARTING_INTEGRITY, towerCost, towerUnlocked, type RunState } from '../core/state.ts';
 
 import {
@@ -31,7 +31,7 @@ import {
   type Branch,
   type TowerKind,
 } from '../core/towers.ts';
-import { earlyCallBonus, MODIFIER_NAMES, typeBossKindForWave, waveDef, waveModifiers } from '../core/waves.ts';
+import { earlyCallBonus, typeBossKindForWave, waveDef, waveModifiers } from '../core/waves.ts';
 import type { QualityLevel } from '../core/quality.ts';
 import { branchName, fmtClickDamage, targetModeDisplay } from './tooltipText.ts';
 import { t } from '../i18n/index.ts';
@@ -85,7 +85,7 @@ export function waveLabel(s: RunState): string {
   else if (s.endless) label = t('hud.wave', { wave: displayWave });
   else label = t('hud.waveOf', { wave: displayWave, total: s.waveLimit });
   if (s.phase === 'wave' && s.modifiers.length > 0) {
-    label += t('hud.waveModifiers', { modifiers: s.modifiers.map((m) => MODIFIER_NAMES[m]).join(' + ') });
+    label += t('hud.waveModifiers', { modifiers: s.modifiers.map((m) => modifierName(m)).join(' + ') });
   }
   return label;
 }
@@ -414,7 +414,7 @@ export function computeRightPanel(l: Layout, s: RunState): RightPanelLayout {
   const def = waveDef(wave);
   const composition = def ? def.groups.map((grp) => t('hud.compositionEntry', { count: grp.count, kind: enemyName(grp.kind) })) : [];
   const mods = waveModifiers(wave);
-  if (mods.length > 0) composition.unshift(t('hud.compositionMods', { modifiers: mods.map((m) => MODIFIER_NAMES[m]).join(' + ') }));
+  if (mods.length > 0) composition.unshift(t('hud.compositionMods', { modifiers: mods.map((m) => modifierName(m)).join(' + ') }));
   // Name the type boss ahead of time so its first appearance is telegraphed before it spawns.
   const typeBoss = typeBossKindForWave(wave);
   if (typeBoss) composition.unshift(t('hud.compositionBoss', { name: enemyName(typeBoss) }));
@@ -477,7 +477,7 @@ export function wrapRowText(text: string, maxWidth: number, size: number): strin
 }
 
 function computePointerSection(s: RunState, x: number, y: number, w: number): PointerSection {
-  const name = pointerInfo(s.pointer).name;
+  const name = pointerName(s.pointer.stage);
   const dmg = fmtClickDamage(clickDamage(s.pointer));
   const stage = s.pointer.stage;
   const overclock =

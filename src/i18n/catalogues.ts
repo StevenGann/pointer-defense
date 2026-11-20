@@ -1,5 +1,7 @@
 import type { Catalogue } from './index.ts';
 import { en } from './en/index.ts';
+import { es } from './es/index.ts';
+import { he } from './he/index.ts';
 import { fr } from './fr/index.ts';
 import { ru } from './ru/index.ts';
 import { uk } from './uk/index.ts';
@@ -14,6 +16,8 @@ import { zh } from './zh-Hans/index.ts';
  */
 export const CATALOGUES: Readonly<Record<string, Catalogue>> = {
   en,
+  es,
+  he,
   fr,
   ru,
   uk,

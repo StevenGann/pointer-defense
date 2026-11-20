@@ -791,6 +791,13 @@ export const fr: Catalogue = {
   'name.enemy.armoured-boss': 'Dreadnought',
   'name.enemy.saboteur-boss': 'Coupe-circuit',
   'name.enemy.breacher-boss': 'Bélier',
+  'name.pointer.1': 'Clic',
+  'name.pointer.2': 'Réticule',
+  'name.modifier.fog': 'Brouillard',
+  'name.modifier.no-build': 'Sans construction',
+  'name.modifier.fast': 'Avance rapide',
+  'name.modifier.blackout': 'Panne',
+  'name.modifier.rush': 'Ruée',
 
   // Window title.
   'window.title': 'Pointer Defense',
