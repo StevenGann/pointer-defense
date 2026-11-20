@@ -1,4 +1,5 @@
 import type { Catalogue } from '../index.ts';
+import { help } from './help.ts';
 
 /**
  * Simplified Chinese (zh-Hans) catalogue — machine draft, pending native review.
@@ -826,6 +827,8 @@ export const zh: Catalogue = {
   'name.modifier.fast': '快进',
   'name.modifier.blackout': '停电',
   'name.modifier.rush': '突袭',
+
+  ...help,
 
   // Window title.
   'window.title': 'Pointer Defense',
