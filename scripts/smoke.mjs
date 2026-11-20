@@ -248,6 +248,9 @@ import {
   SHAKE_MAX_TICKS,
   SHAKE_LEAK_FREEZE_MS,
 } from '../src/view/shake.ts';
+import { t, plural, formatInt, formatMoney } from '../src/i18n/index.ts';
+import { en } from '../src/i18n/en.ts';
+import { extractTKeys, parseCatalogueKeys, checkI18n, scanRoots, walkAllSources, readBaseline } from './i18n-check.mjs';
 
 // All v0.10b levels share a single spawn and exit, so the older maze checks keep a local gate.
 const SPAWN = DEFAULT_LEVEL.starts[0];
@@ -11155,6 +11158,104 @@ function dailyState(date) {
   t5.tier = 5;
   t5.branch = 'B';
   check(Math.abs(dps(t5) - 28) < 1e-6, 'tier 5 Repeater keeps its pre-existing 28.0 DPS');
+}
+
+// --- 47. Localisation (docs/LOCALIZATION.md) ----------------------------------------------------
+// 47a. t() interpolates and throws on a missing key or an unfilled placeholder.
+{
+  check(t('menu.file') === 'File', "t('menu.file') resolves the English catalogue");
+  check(t('status.placeTower', { name: 'Gun' }) === 'Click a tile to place Gun — right-click to cancel',
+    't() fills a placeholder from params');
+  check(Object.keys(en).length > 20, 'the catalogue holds the first migration slice');
+
+  let threwMissing = false;
+  try {
+    t('catalogue.no.such.key');
+  } catch {
+    threwMissing = true;
+  }
+  check(threwMissing, 't() throws on a missing key in development');
+
+  let threwUnfilled = false;
+  try {
+    t('status.placeTower');
+  } catch {
+    threwUnfilled = true;
+  }
+  check(threwUnfilled, 't() throws on an unfilled placeholder in development');
+
+  check(formatInt(1234567, 'en-US') === '1,234,567', 'formatInt groups for a locale');
+  check(formatMoney(1234, 'en-US') === '$1,234', 'formatMoney is locale currency');
+}
+
+// 47b. plural() matches Intl.PluralRules for a locale with more than two forms (Polish).
+{
+  const rule = new Intl.PluralRules('pl');
+  let matches = true;
+  for (const n of [0, 1, 2, 3, 5, 11, 22, 100, 1.5]) {
+    if (plural(n, 'one', 'other', 'pl') !== (rule.select(n) === 'one' ? 'one' : 'other')) matches = false;
+  }
+  check(matches, 'plural() agrees with Intl.PluralRules for Polish');
+  check(plural(1, 'one', 'other', 'pl') === 'one', 'Polish plural: 1 selects the one form');
+  check(plural(2, 'one', 'other', 'pl') === 'other', 'Polish plural: 2 (few) falls back to other');
+  check(plural(5, 'one', 'other', 'pl') === 'other', 'Polish plural: 5 (many) falls back to other');
+}
+
+// 47c. Every catalogue key is referenced by code, and every referenced key exists.
+{
+  const sources = walkAllSources();
+  const catalogueKeys = parseCatalogueKeys(sources.get('src/i18n/en.ts') ?? '');
+  const referenced = new Set();
+  for (const src of sources.values()) {
+    for (const key of extractTKeys(src)) referenced.add(key);
+  }
+  const orphans = catalogueKeys.filter((k) => !referenced.has(k));
+  const missing = [...referenced].filter((k) => !catalogueKeys.includes(k));
+  check(orphans.length === 0, `every catalogue key is referenced (orphans: ${orphans.join(', ') || 'none'})`);
+  check(missing.length === 0, `every referenced key exists (missing: ${missing.join(', ') || 'none'})`);
+}
+
+// 47d. The i18n checker fails on a bare literal in a migrated module and on an emptied baseline.
+{
+  const scan = scanRoots();
+  const baseline = readBaseline();
+  const current = checkI18n(scan, baseline);
+  check(current.ok, `i18n:check passes on the current tree (${current.counts.filter((c) => c.count > 0).length} modules still in the baseline)`);
+
+  const empty = checkI18n(scan, []);
+  check(!empty.ok && empty.errors.length > 0, 'i18n:check fails when the baseline is emptied while bare strings remain');
+
+  const leaked = checkI18n(new Map([['src/view/menu.ts', ['Leaked menu string']]]), []);
+  check(!leaked.ok && leaked.errors.some((e) => e.includes('src/view/menu.ts')),
+    'i18n:check fails on a bare literal added to a migrated module');
+
+  const stale = checkI18n(new Map([['src/view/menu.ts', []]]), ['src/view/menu.ts']);
+  check(!stale.ok && stale.errors.some((e) => e.includes('shrink the baseline')),
+    'i18n:check fails on a stale baseline entry');
+}
+
+// 47e. A help page's Markdown render preserves the generated text for one tower and one enemy page.
+{
+  const words = (text) => (text.toLowerCase().match(/[a-z0-9]+/g) ?? []).sort();
+  const blockText = (blocks) => {
+    const out = [];
+    for (const b of blocks) {
+      if (b.kind === 'table') {
+        out.push(b.header.join(' '));
+        for (const row of b.rows) out.push(row.map((cell) => cell.map((r) => r.text).join('')).join(' '));
+      } else {
+        out.push(b.runs.map((r) => r.text).join(' '));
+      }
+    }
+    return out.join(' ');
+  };
+  for (const id of ['tower-gun', 'enemy-grunt']) {
+    const page = pageById(id);
+    const rendered = blockText(parseHelpMarkdown(page.body));
+    const source = page.body.join(' ').replace(/[*`|#>-]/g, ' ');
+    check(JSON.stringify(words(rendered)) === JSON.stringify(words(source)),
+      `help markdown render preserves every word for ${id}`);
+  }
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

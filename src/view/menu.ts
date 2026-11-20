@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { bevel, FONT, FONT_SIZE, menuIndex, menuWordRects, PAL, pointInRect, type MenuName, type Rect } from './chrome.ts';
 import { getArtTexture } from './art.ts';
+import { textWidth } from './hud.ts';
 
 /**
  * Windows 95 dropdown menus for the File and Help menu words. Drawn in Pixi like the rest of the
@@ -49,7 +50,7 @@ export interface MenuLayout {
 }
 
 function columnWidth(entries: MenuEntry[]): number {
-  return Math.max(144, ...entries.map((e) => e.label.length * 7 + 30 + (e.checked ? 14 : 0)));
+  return Math.max(144, ...entries.map((e) => Math.ceil(textWidth(e.label, FONT_SIZE.body)) + 30 + (e.checked ? 14 : 0)));
 }
 
 function columnHeight(entries: MenuEntry[]): number {

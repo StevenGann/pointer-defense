@@ -103,6 +103,7 @@ import { contextHelpHitAt, contextHelpPage, nextHelpMode } from './view/contexth
 import { HELP_PAGES, pageUnlocked } from './content/help.ts';
 import { EditorView, editorPaletteAt, editorToggleNudgeAt, editorToolbarAt, type EditorAction, type ToggleNudge } from './view/editor.ts';
 import { MapLibraryView, NameDialogView, computeMapLibrary, computeNameDialog, mapLibraryHitAt, nameDialogButtonAt, type MapLibraryHit, type MapLibraryMode } from './view/mapLibrary.ts';
+import { t } from './i18n/index.ts';
 import pkg from '../package.json';
 
 const app = new Application();
@@ -665,9 +666,9 @@ function buildMenu(name: MenuName): OpenMenu {
     return {
       name,
       entries: [
-        { id: 'records', label: 'Records' },
+        { id: 'records', label: t('menu.view.records') },
         { id: 'separator', label: '', separator: true },
-        { id: 'shake', label: profile.shakeOn ? 'Screen shake: On' : 'Screen shake: Off' },
+        { id: 'shake', label: profile.shakeOn ? t('menu.view.shakeOn') : t('menu.view.shakeOff') },
       ],
     };
   }
@@ -675,11 +676,11 @@ function buildMenu(name: MenuName): OpenMenu {
     return {
       name,
       entries: [
-        { id: 'god-mode', label: 'God Mode', checked: state.godMode },
-        { id: 'kill-all', label: 'Kill All' },
+        { id: 'god-mode', label: t('menu.cheats.godMode'), checked: state.godMode },
+        { id: 'kill-all', label: t('menu.cheats.killAll') },
       ],
       secondColumn: [
-        { id: 'spawn-header', label: 'Spawn', disabled: true },
+        { id: 'spawn-header', label: t('menu.cheats.spawn'), disabled: true },
         ...SPAWN_KINDS.map((kind) => ({ id: `spawn:${kind}`, label: spawnKindLabel(kind) })),
       ],
     };
@@ -688,15 +689,15 @@ function buildMenu(name: MenuName): OpenMenu {
     return {
       name,
       entries: [
-        { id: 'show-help', label: 'Show Help' },
+        { id: 'show-help', label: t('menu.help.show') },
         { id: 'separator', label: '', separator: true },
-        { id: 'sound', label: profile.soundOn ? 'Sound: On' : 'Sound: Off' },
-        { id: 'volumeLow', label: 'Volume: Low', checked: profile.volume === 'low' },
-        { id: 'volumeMed', label: 'Volume: Medium', checked: profile.volume === 'med' },
-        { id: 'volumeHigh', label: 'Volume: High', checked: profile.volume === 'high' },
+        { id: 'sound', label: profile.soundOn ? t('menu.help.soundOn') : t('menu.help.soundOff') },
+        { id: 'volumeLow', label: t('menu.help.volumeLow'), checked: profile.volume === 'low' },
+        { id: 'volumeMed', label: t('menu.help.volumeMed'), checked: profile.volume === 'med' },
+        { id: 'volumeHigh', label: t('menu.help.volumeHigh'), checked: profile.volume === 'high' },
         { id: 'separator', label: '', separator: true },
-        { id: 'achievements', label: 'Achievements' },
-        { id: 'about', label: 'About' },
+        { id: 'achievements', label: t('menu.help.achievements') },
+        { id: 'about', label: t('menu.help.about') },
       ],
     };
   }
@@ -704,10 +705,10 @@ function buildMenu(name: MenuName): OpenMenu {
   return {
     name,
     entries: [
-      { id: 'restart', label: ready ? 'Restart Windows' : 'Restart Windows (wave 50)', disabled: !ready },
-      { id: 'new-run', label: 'New Run' },
+      { id: 'restart', label: ready ? t('menu.file.restart') : t('menu.file.restartWave50'), disabled: !ready },
+      { id: 'new-run', label: t('menu.file.newRun') },
       { id: 'separator', label: '', separator: true },
-      { id: 'exit', label: 'Exit' },
+      { id: 'exit', label: t('menu.file.exit') },
     ],
   };
 }
