@@ -25,9 +25,10 @@ import {
 } from './core/state.ts';
 import { SPAWN_KINDS, spawnKindLabel } from './core/cheats.ts';
 import { DEFAULT_LEVEL, type Level } from './core/levels.ts';
+import { dailyAvailable, dailyDate, dailyFor, dailyMenuLabel, DAILY_WAVES } from './core/daily.ts';
 import { addSeenEnemies, checkProfileAchievements, loadProfile, saveProfile, type Profile, type RunOutcome, type SpecKind } from './core/save.ts';
 import { clearRunSave, loadRunSave, saveRun } from './core/runsave.ts';
-import { appendRun, buildRunRecord } from './core/runs.ts';
+import { appendDailyRun, appendRun, buildRunRecord } from './core/runs.ts';
 import { buyNode, effectsFor, treeNodeById } from './core/tree.ts';
 import { achievementName } from './core/achievements.ts';
 import { unlockAchievement } from './steam.ts';
@@ -461,6 +462,15 @@ function recordRun(outcome: RunOutcome): void {
   saveProfile(profile);
 }
 
+/**
+ * Record a finished daily (docs/DAILY.md): one record with `outcome: 'daily'` plus the date and
+ * seed, mirrored to `profile.daily` so the menu can disable the button. Idempotent — a daily already
+ * recorded for its date is never appended twice.
+ */
+function recordDaily(): void {
+  if (appendDailyRun(profile, state)) saveProfile(profile);
+}
+
 // --- Run save (docs/RUN-SAVE.md) ----------------------------------------------------------------
 
 /** The last observed values the save tracker diffs each frame to spot immediate-write events. */
@@ -496,7 +506,7 @@ function continueLabel(s: RunState): string {
  * is throttled to one per two seconds of run time.
  */
 function maybeSaveRun(force = false): void {
-  if (nosave || runOrigin === 'editor' || state.wave < 1) return;
+  if (nosave || runOrigin === 'editor' || state.daily !== null || state.wave < 1) return;
   if (state.phase === 'halted' || state.phase === 'victory') return;
   if (!force && state.clock - lastRunSaveClock < SAVE_INTERVAL_TICKS) return;
   saveRun(state);
@@ -520,9 +530,15 @@ function syncRunSave(): void {
   else maybeSaveRun(false);
 
   if (state.phase !== prevSavePhase) {
-    if (state.phase === 'victory') recordRun('victory');
-    else if (state.phase === 'halted') recordRun('defeat');
-    if (state.phase === 'victory' || state.phase === 'halted') clearRunSave();
+    if (state.phase === 'victory' || state.phase === 'halted') {
+      if (state.daily !== null) {
+        // A daily records one attempt and never touches the normal run save.
+        recordDaily();
+      } else {
+        recordRun(state.phase === 'victory' ? 'victory' : 'defeat');
+        clearRunSave();
+      }
+    }
   }
 
   prevSaveWave = state.wave;
@@ -788,6 +804,35 @@ function startPlay(): void {
   startRun(DEFAULT_LEVEL, 'play');
 }
 
+/** The Daily button's label and disabled state, computed from the profile and the local date. */
+function dailyMenu(): { label: string; disabled: boolean } {
+  const today = dailyDate();
+  return {
+    label: dailyMenuLabel(profile.daily, today),
+    disabled: !dailyAvailable(profile.daily, today),
+  };
+}
+
+/** Start today's daily (docs/DAILY.md), or do nothing when it has already been played. */
+function startDaily(): void {
+  const date = dailyDate();
+  if (!dailyAvailable(profile.daily, date)) return;
+  const { seed, level } = dailyFor(date);
+  state = createRunState(profile, level, { waveLimit: DAILY_WAVES, daily: { date, seed }, seed });
+  resetRunNotified();
+  resetSaveTrackers();
+  if (batteryLow) notifyAchievement(state, 'shadow-flat-battery');
+  syncViewport();
+  runOrigin = 'play';
+  screen = 'run';
+  menu = null;
+  dialog = null;
+  closeRunModals();
+  loadOpen = false;
+  loadInput.blur();
+  hud.showNotice(`Daily — ${date}`, 180);
+}
+
 /** Resume the saved run from the main menu's Continue button. */
 function startContinue(): void {
   if (continueState === null) return;
@@ -881,6 +926,7 @@ function copyCode(): void {
 
 /** Esc from a run: a Test run returns to the editor (drawing intact), anything else to the menu. */
 function exitRun(): void {
+  if (state.daily !== null) recordDaily(); // abandoning a daily still records it (docs/DAILY.md)
   maybeSaveRun(true);
   if (runOrigin === 'editor') {
     screen = 'editor';
@@ -1331,7 +1377,7 @@ nameInput.addEventListener('keydown', (e) => {
 app.canvas.addEventListener('pointermove', (e) => {
   const { x, y } = canvasPoint(e);
   if (screen === 'menu') {
-    menuHover = loadOpen ? null : menuButtonAt(layout, x, y, continueState !== null ? continueLabel(continueState) : null);
+    menuHover = loadOpen ? null : menuButtonAt(layout, x, y, continueState !== null ? continueLabel(continueState) : null, dailyMenu());
     loadHover = loadOpen ? loadDialogButtonAt(layout, x, y) : null;
     return;
   }
@@ -1387,12 +1433,13 @@ app.canvas.addEventListener('pointerdown', (e) => {
       return;
     }
     const label = continueState !== null ? continueLabel(continueState) : null;
-    const btn = menuButtonAt(layout, x, y, label);
+    const btn = menuButtonAt(layout, x, y, label, dailyMenu());
     if (btn === 'continue') startContinue();
     else if (btn === 'play') {
       if (continueState !== null) askDiscardSave();
       else startPlay();
-    } else if (btn === 'editor') openEditorScreen();
+    } else if (btn === 'daily') startDaily();
+    else if (btn === 'editor') openEditorScreen();
     else if (btn === 'load') openLoadDialog();
     else if (btn === 'records') recordsSession.show();
     return;
@@ -1537,6 +1584,7 @@ window.addEventListener('keydown', (e) => {
       else startPlay();
     } else if (e.key === 'e' || e.key === 'E') openEditorScreen();
     else if (e.key === 'l' || e.key === 'L') openLoadDialog();
+    else if (e.key === 'd' || e.key === 'D') startDaily();
     return;
   }
   if (screen === 'editor') {
@@ -1802,7 +1850,7 @@ app.ticker.add((ticker) => {
 
   if (screen === 'menu') {
     const label = continueState !== null ? continueLabel(continueState) : null;
-    menuScreenView.draw(layout, menuHover, label);
+    menuScreenView.draw(layout, menuHover, label, dailyMenu());
     dialogView.draw(dialog, layout);
     if (loadOpen) {
       loadDialogView.draw(layout, loadText, loadStatus, loadHover);

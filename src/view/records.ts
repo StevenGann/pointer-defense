@@ -76,7 +76,10 @@ export function bestByMapLine(runs: readonly RunRecord[]): string {
 }
 
 export function outcomeLabel(outcome: RunRecord['outcome']): string {
-  return outcome === 'victory' ? 'Victory' : outcome === 'defeat' ? 'Defeat' : 'Reboot';
+  if (outcome === 'victory') return 'Victory';
+  if (outcome === 'defeat') return 'Defeat';
+  if (outcome === 'reboot') return 'Reboot';
+  return 'Daily';
 }
 
 /** The compact date for a record's ISO timestamp: `2026-11-20T…` -> `2026-11-20`. */

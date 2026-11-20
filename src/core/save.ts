@@ -19,8 +19,8 @@ export const SAVE_VERSION = 3;
 /** How many finished runs the profile remembers, newest first (docs/RUN-RECORDS.md). */
 export const MAX_RUNS = 50;
 
-/** How a run ended: cleared wave 100, integrity reached zero, or Restart Windows. */
-export type RunOutcome = 'victory' | 'defeat' | 'reboot';
+/** How a run ended: cleared the final wave, integrity reached zero, Restart Windows, or a daily. */
+export type RunOutcome = 'victory' | 'defeat' | 'reboot' | 'daily';
 
 /** One finished run, appended at the moment it ends (docs/RUN-RECORDS.md). */
 export interface RunRecord {
@@ -39,6 +39,18 @@ export interface RunRecord {
   durationTicks: number;
   outcome: RunOutcome;
   victory: boolean;
+  /** The daily's date and seed, carried only on a daily record (docs/DAILY.md). */
+  dailyDate?: string;
+  dailySeed?: number;
+}
+
+/** The last daily's result, mirrored to the profile so the menu can read it without the history. */
+export interface DailyResult {
+  date: string;
+  wave: number;
+  clearedWaves: number;
+  outcome: RunOutcome;
+  at: string;
 }
 
 /** The oldest schema version still readable; any version from here up migrates to the current one. */
@@ -81,6 +93,8 @@ export interface Profile {
   reboots: number;
   /** Finished runs, newest first, capped at MAX_RUNS (docs/RUN-RECORDS.md). */
   runs: RunRecord[];
+  /** The last daily's result, so the menu can disable the Daily button until the next date. */
+  daily: DailyResult | null;
   /** Whether sound effects play at all. */
   soundOn: boolean;
   /** Master volume step. */
@@ -157,6 +171,7 @@ export function defaultProfile(): Profile {
     bestWave: 0,
     reboots: 0,
     runs: [],
+    daily: null,
     soundOn: true,
     volume: 'med',
     autoWave: false,
@@ -193,6 +208,7 @@ export function cloneProfile(p: Profile): Profile {
     bestWave: p.bestWave,
     reboots: p.reboots,
     runs: p.runs.map((r) => ({ ...r })),
+    daily: p.daily === null ? null : { ...p.daily },
     soundOn: p.soundOn,
     volume: p.volume,
     autoWave: p.autoWave,
@@ -304,8 +320,16 @@ function parseRunRecord(value: unknown): RunRecord | null {
     return null;
   }
   const outcome: RunOutcome | null =
-    o.outcome === 'victory' || o.outcome === 'defeat' || o.outcome === 'reboot' ? o.outcome : null;
+    o.outcome === 'victory' || o.outcome === 'defeat' || o.outcome === 'reboot' || o.outcome === 'daily' ? o.outcome : null;
   if (outcome === null) return null;
+  let dailyDate: string | undefined;
+  if (typeof o.dailyDate === 'string') dailyDate = o.dailyDate;
+  let dailySeed: number | undefined;
+  if (o.dailySeed !== undefined) {
+    const seed = nonNegInt(o.dailySeed);
+    if (seed === null) return null;
+    dailySeed = seed;
+  }
   return {
     id: o.id,
     at: o.at,
@@ -320,7 +344,24 @@ function parseRunRecord(value: unknown): RunRecord | null {
     outcome,
     // Derived from the outcome, never trusted from storage, so the two can never disagree.
     victory: outcome === 'victory',
+    ...(dailyDate !== undefined ? { dailyDate } : {}),
+    ...(dailySeed !== undefined ? { dailySeed } : {}),
   };
+}
+
+/** Parse the last daily's result, or null when it is absent or corrupt. */
+function parseDaily(value: unknown): DailyResult | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const o = value as Record<string, unknown>;
+  const date = typeof o.date === 'string' ? o.date : null;
+  const wave = nonNegInt(o.wave);
+  const clearedWaves = nonNegInt(o.clearedWaves);
+  const at = typeof o.at === 'string' ? o.at : null;
+  if (date === null || wave === null || clearedWaves === null || at === null) return null;
+  const outcome: RunOutcome | null =
+    o.outcome === 'victory' || o.outcome === 'defeat' || o.outcome === 'reboot' || o.outcome === 'daily' ? o.outcome : null;
+  if (outcome === null) return null;
+  return { date, wave, clearedWaves, outcome, at };
 }
 
 /** Parse the run history, dropping corrupt entries individually and capping at MAX_RUNS. */
@@ -413,8 +454,10 @@ function parseProfile(raw: string): Profile | null {
   // Run history (docs/RUN-RECORDS.md): an older save without the field loads an empty list, and
   // corrupt entries are dropped one at a time rather than failing the load.
   const runs = parseRuns(o.runs);
+  // The last daily's result (docs/DAILY.md); an older save without the field simply has none played.
+  const daily = parseDaily(o.daily);
 
-  return { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, achievementDates, mapsCleared, lifetimeBossKillsByPointer, bestWave, reboots, runs, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice };
+  return { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, achievementDates, mapsCleared, lifetimeBossKillsByPointer, bestWave, reboots, runs, daily, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice };
 }
 
 /**

@@ -1435,7 +1435,7 @@ human would simply repair out of.
 | Co-op? | no. A shared board with two pointers is a different game |
 | Mobile? | no. Mazing and clicking both want a mouse |
 | Leaderboard? | no server; a local best-run table only |
-| Daily challenge? | after 0.6: one seeded run per day, same board and waves for everyone |
+| Daily challenge? | shipped: one seeded run per local day, same board and waves for everyone (see §27) |
 | Selling during a wave? | yes, 70 %, and it re-paths immediately |
 
 ---
@@ -1801,6 +1801,29 @@ unknown enemy kind, a bad integrity/wave, or absurd counts returns `null` and de
 never throws, so a bad save can never stop the game booting. Restoring a save mid-wave grants no
 salvage, fires no wave-start effects and re-grants no achievements, and the seeded run continues
 byte-identically on the same tick boundary it was saved at.
+
+---
+
+## 27. The daily challenge
+
+One seeded run per local day, the same for everyone on that date (docs/DAILY.md is the contract): the
+map is `LEVELS[hash(date) % LEVELS.length]` and the seed is `hash(date)`, so two players on the same
+date face the same board, the same enemy lanes and the same crit rolls for the same inputs. A daily is
+**thirty waves, not a hundred**: `RunState.waveLimit` (default `WAVE_COUNT`) is set to 30, and
+`isFinalWave`, `finishWavePhase`, the HUD wave label and the endless offer all read `waveLimit` instead
+of `WAVE_COUNT`. Victory at wave 30 does not offer endless.
+
+A daily forbids cheats, map cycling and run saving — the Cheats menu does nothing, `cycleLevel` and the
+map Next button are inert, and the run is never written to `pd.run.v1`. Everything else is a normal
+run: the profile's specs and Restore tree apply, achievements fire, and the pointer and towers work as
+usual.
+
+The attempt is recorded the moment the run ends — victory, defeat, or Esc — as one run with
+`outcome: 'daily'`, `dailyDate` and `dailySeed`, and mirrored to `profile.daily = { date, wave,
+clearedWaves, outcome, at }` so the menu can show it without scanning the history. Once recorded, the
+menu's **Daily** button (bound to `D`) reads `Daily done — wave 22` and is disabled until the next
+date; an unplayed daily reads `Daily — 2026-11-20`. The main menu's buttons become Continue (when a
+save exists), Play, Daily, Editor, Records, Load code.
 
 ---
 

@@ -30,7 +30,7 @@ into every future run.
 | `1`–`9` | Select the nine tower kinds, in palette order (also works during a wave) |
 | `Esc` | Clear the current selection and close any open menu; from a run it returns to the main menu |
 | `Enter` | On the main menu: Continue the saved run (primary when one exists), else Play |
-| `P`, `E`, `L` | On the main menu: Play, open the Editor, or Load code |
+| `P`, `E`, `D`, `L` | On the main menu: Play, open the Editor, start the Daily, or Load code |
 | `U` | Upgrade the selected tower |
 | `X` | Sell the selected tower |
 | `Enter` | Start the next wave (in the build phase) |
@@ -48,6 +48,11 @@ The map editor keeps your work: it auto-saves the drawing as a draft that surviv
 Every finished run is remembered. The main menu's **Records** button — or the **View** menu's
 **Records** item during a run — opens a window listing your last 50 runs (outcome, wave and map), the
 top five ranked by wave, and a best wave per map.
+
+The main menu's **Daily** button (or `D`) starts one seeded run for today: a fixed map and a fixed
+seed derived from the local date, thirty waves long, with no cheats, map cycling or mid-run saving.
+You get one attempt per day — once it ends (victory, defeat, or `Esc`) the button reads
+`Daily done — wave 22` until the next date, and the result is recorded alongside your other runs.
 
 ## Development
 

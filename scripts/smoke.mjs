@@ -118,7 +118,7 @@ import {
   CLICK_SLACK,
 } from '../src/core/pointer.ts';
 import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies, allHelpUnlocked, checkProfileAchievements, rpGain, specLevelCost, MAX_RUNS } from '../src/core/save.ts';
-import { appendRun, buildRunRecord, runTotals, bestByMap } from '../src/core/runs.ts';
+import { appendRun, appendDailyRun, buildRunRecord, runTotals, bestByMap } from '../src/core/runs.ts';
 import { buildRecordsRows, totalsLine, bestByMapLine, computeRecordsLayout, recordsHitAt, formatRecordDate, outcomeLabel } from '../src/view/records.ts';
 import { captureRun, restoreRun, loadRunSave, saveRun, clearRunSave, hasRunSave, RUN_SAVE_KEY } from '../src/core/runsave.ts';
 import { computeMenuScreen, menuButtonAt } from '../src/view/menuScreen.ts';
@@ -146,7 +146,8 @@ import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText
 import { BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
-import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, READOUT_FONT_SIZE, salvageReadoutText } from '../src/view/hud.ts';
+import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect } from '../src/view/hud.ts';
+import { dailyFor, dailyLevel, dailySeed, dailyMenuLabel, dailyAvailable, DAILY_WAVES, hashDaily } from '../src/core/daily.ts';
 import {
   advanceBossBars,
   barFillPx,
@@ -10254,6 +10255,154 @@ function levelFixture(name) {
     totalsLine([{ id: 'a', at: '2026-01-01T00:00:00Z', mapId: 'corridor', mapName: 'The Corridor', wave: 5, clearedWaves: 5, integrity: 1, pointerStage: 1, salvage: 1, durationTicks: 1, outcome: 'victory', victory: true }], 5) === 'Runs 1 · Wins 1 · Defeats 0 · Reboots 0 · Best wave 5',
     'a single victory totals Runs 1 · Wins 1 · Best wave 5',
   );
+}
+
+// --- Daily challenge (docs/DAILY.md) ------------------------------------------------------------
+
+/** A fresh daily run for a date, on the date's seeded map. */
+function dailyState(date) {
+  const { seed, level } = dailyFor(date);
+  return createRunState(defaultProfile(), level, { waveLimit: DAILY_WAVES, daily: { date, seed }, seed });
+}
+
+// 1. The seed and map for a fixed date are stable and differ on the next date.
+{
+  const a = dailyFor('2026-11-20');
+  const b = dailyFor('2026-11-20');
+  const c = dailyFor('2026-11-21');
+  check(a.seed === b.seed && a.level.id === b.level.id, 'daily: a fixed date maps to a stable seed and map');
+  check(a.seed !== c.seed, 'daily: the next date maps to a different seed');
+  check(dailySeed('2026-11-20') === hashDaily('2026-11-20'), 'daily: the seed is hash(date)');
+  check(dailyLevel('2026-11-20').id === LEVELS[hashDaily('2026-11-20') % LEVELS.length].id,
+    'daily: the map is LEVELS[hash(date) % LEVELS.length]');
+  check(LEVELS.some((l) => l.id === a.level.id), 'daily: the seeded map is an authored level');
+}
+
+// 2. Two runs created for the same date produce identical enemy lanes and crit rolls for the same
+//    inputs (a hash over 600 ticks).
+{
+  const trace = (date) => {
+    const s = dailyState(date);
+    startWave(s);
+    const parts = [];
+    for (let i = 0; i < 600; i++) {
+      tick(s);
+      parts.push(s.rng);
+      parts.push(s.enemies.map((e) => `${e.kind}:${e.routeIndex}:${e.laneOffset.toFixed(4)}:${e.x.toFixed(4)}:${e.y.toFixed(4)}`).join(';'));
+      parts.push(nextCritRoll(s.rng, false, false).crit ? 1 : 0);
+    }
+    return createHash('sha1').update(parts.join('|')).digest('hex');
+  };
+  const same = trace('2026-11-20');
+  check(same === trace('2026-11-20'),
+    'daily: two runs for the same date produce identical enemy lanes and crit rolls over 600 ticks');
+  check(same !== trace('2026-11-21'), 'daily: the next date produces a different run');
+}
+
+// 3. A daily's waveLimit is 30; clearing wave 30 ends in victory and does not offer endless.
+{
+  const s = dailyState('2026-11-20');
+  check(s.waveLimit === 30, 'daily: waveLimit is 30');
+  check(s.daily !== null && s.daily.date === '2026-11-20', 'daily: the run carries its date and seed');
+  s.wave = 30;
+  s.phase = 'wave';
+  s.runs = [];
+  s.enemies = [];
+  tick(s);
+  check(s.phase === 'victory', 'daily: clearing wave 30 ends in victory');
+  check(!s.endless, 'daily: victory does not enter endless');
+  enterEndless(s);
+  check(s.phase === 'victory' && !s.endless, 'daily: endless is never offered at victory');
+  const layout = computeLayout(1280, 800);
+  const vb = victoryButtons(victoryModalRect(layout));
+  check(victoryButtonAt(layout, s, vb.endless.x + vb.endless.w / 2, vb.endless.y + vb.endless.h / 2) !== 'endless',
+    'daily: the victory modal has no endless button');
+}
+
+// 4. A normal run still has waveLimit === WAVE_COUNT and behaves exactly as before.
+{
+  const s = createRunState();
+  check(s.waveLimit === WAVE_COUNT, 'normal: waveLimit is still WAVE_COUNT');
+  check(s.daily === null, 'normal: a normal run carries no daily');
+  s.wave = 11;
+  s.phase = 'build';
+  check(waveLabel(s) === 'Wave 12 / 100', 'normal: the HUD label still reads Wave 12 / 100');
+}
+
+// 5. Ending a daily — victory, defeat, or Esc — appends exactly one record with outcome 'daily' and
+//    the date, and sets profile.daily.
+{
+  const profile = defaultProfile();
+  const s = dailyState('2026-11-20');
+  s.wave = 30;
+  s.clearedWaves = 30;
+  check(profile.runs.length === 0, 'daily: a fresh profile has no runs');
+  check(appendDailyRun(profile, s), 'daily: ending the run records it');
+  check(profile.runs.length === 1, 'daily: exactly one record is appended');
+  const rec = profile.runs[0];
+  check(rec.outcome === 'daily', "daily: the record's outcome is 'daily'");
+  check(rec.dailyDate === '2026-11-20', 'daily: the record carries dailyDate');
+  check(rec.dailySeed === dailySeed('2026-11-20'), 'daily: the record carries dailySeed');
+  check(
+    profile.daily !== null && profile.daily.date === '2026-11-20' && profile.daily.wave === 30 && profile.daily.clearedWaves === 30,
+    'daily: the result is mirrored to profile.daily',
+  );
+  // Esc-abandonment and defeat take the same path, and a second call never double-records.
+  check(!appendDailyRun(profile, s), 'daily: a second record for the same date is refused');
+  check(profile.runs.length === 1, 'daily: no double record');
+}
+
+// 6. A second attempt on the same date is refused and the button is disabled.
+{
+  const today = '2026-11-20';
+  const played = { date: today, wave: 22 };
+  check(!dailyAvailable(played, today), 'daily: a played date is not available again');
+  check(dailyMenuLabel(played, today) === 'Daily done — wave 22', 'daily: the button reads Daily done — wave 22');
+  const layout = computeLayout(1280, 800);
+  const m = computeMenuScreen(layout, null, { label: dailyMenuLabel(played, today), disabled: true });
+  const dailyBtn = m.buttons.find((b) => b.id === 'daily');
+  check(dailyBtn !== undefined && dailyBtn.disabled === true, 'daily: the button is disabled once played');
+  check(
+    menuButtonAt(layout, dailyBtn.rect.x + 5, dailyBtn.rect.y + 5, null, { label: dailyMenuLabel(played, today), disabled: true }) === null,
+    'daily: a disabled Daily button is not hit-testable',
+  );
+}
+
+// 7. The next date re-enables the button with a new seed.
+{
+  const played = { date: '2026-11-20', wave: 22 };
+  const next = '2026-11-21';
+  check(dailyAvailable(played, next), 'daily: the next date is available again');
+  check(dailyMenuLabel(played, next) === `Daily — ${next}`, 'daily: the button reads Daily — <next date>');
+  check(dailySeed(next) !== dailySeed('2026-11-20'), 'daily: the next date has a new seed');
+  const layout = computeLayout(1280, 800);
+  const m = computeMenuScreen(layout, null, { label: dailyMenuLabel(played, next), disabled: false });
+  const dailyBtn = m.buttons.find((b) => b.id === 'daily');
+  check(dailyBtn !== undefined && !dailyBtn.disabled, 'daily: the button is re-enabled on the next date');
+}
+
+// 8. Cheats, map cycling and run saving are all inert in a daily.
+{
+  const s = dailyState('2026-11-20');
+  toggleGodMode(s);
+  check(!s.godMode && !s.cheatsUsed, 'daily: God Mode is inert');
+  check(!spawnCheatEnemy(s, 'grunt'), 'daily: spawning an enemy is inert');
+  check(s.enemies.length === 0, 'daily: no cheat enemy appeared');
+  killAllEnemies(s);
+  check(s.enemies.length === 0 && !s.cheatsUsed, 'daily: Kill All is inert');
+  check(!canCycleLevel(s), 'daily: map cycling is unavailable');
+  check(!cycleLevel(s), 'daily: cycleLevel returns false');
+  const store = runSaveStore();
+  saveRun(s, store);
+  check(store.current() === null, 'daily: the run is never written to pd.run.v1');
+}
+
+// 9. The HUD label reads `Wave 12 / 30 · Daily`.
+{
+  const s = dailyState('2026-11-20');
+  s.wave = 11;
+  s.phase = 'build';
+  check(waveLabel(s) === 'Wave 12 / 30 · Daily', `daily: the HUD label reads "${waveLabel(s)}"`);
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

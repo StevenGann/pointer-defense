@@ -28,7 +28,7 @@ import {
   type Branch,
   type TowerKind,
 } from '../core/towers.ts';
-import { earlyCallBonus, MODIFIER_NAMES, typeBossKindForWave, waveDef, WAVE_COUNT, waveModifiers } from '../core/waves.ts';
+import { earlyCallBonus, MODIFIER_NAMES, typeBossKindForWave, waveDef, waveModifiers } from '../core/waves.ts';
 import { ENEMY_STATS } from '../core/enemies.ts';
 import { branchName, fmtClickDamage, targetModeDisplay } from './tooltipText.ts';
 
@@ -68,6 +68,22 @@ export const READOUT_FONT_SIZE = FONT_SIZE.body;
 /** The salvage readout's value: `$1,234`, or `---` while a Blackout wave masks it. */
 export function salvageReadoutText(s: RunState): string {
   return s.modifiers.includes('blackout') && s.phase === 'wave' ? '---' : `$${formatNumber(s.economy.salvage)}`;
+}
+
+/**
+ * The status-bar wave label: `Wave 12 / 30 · Daily` in a daily, `Wave 12 / 100` in a normal run,
+ * `Wave 101` in endless, with the active modifiers appended mid-wave.
+ */
+export function waveLabel(s: RunState): string {
+  const displayWave = s.phase === 'build' ? s.wave + 1 : s.wave;
+  let label: string;
+  if (s.daily !== null) label = `Wave ${displayWave} / ${s.waveLimit} · Daily`;
+  else if (s.endless) label = `Wave ${displayWave}`;
+  else label = `Wave ${displayWave} / ${s.waveLimit}`;
+  if (s.phase === 'wave' && s.modifiers.length > 0) {
+    label += ` · ${s.modifiers.map((m) => MODIFIER_NAMES[m]).join(' + ')}`;
+  }
+  return label;
 }
 
 let metricsText: Text | null = null;
@@ -550,7 +566,7 @@ export function modalRestartAt(l: Layout, s: RunState, px: number, py: number): 
   return pointInRect(restartRect(modalRect(l)), px, py);
 }
 
-function victoryModalRect(l: Layout): Rect {
+export function victoryModalRect(l: Layout): Rect {
   const w = 320;
   const h = 172;
   return {
@@ -561,12 +577,12 @@ function victoryModalRect(l: Layout): Rect {
   };
 }
 
-interface VictoryButtons {
+export interface VictoryButtons {
   endless: Rect;
   restart: Rect;
 }
 
-function victoryButtons(m: Rect): VictoryButtons {
+export function victoryButtons(m: Rect): VictoryButtons {
   const bh = 26;
   const pad = 10;
   const gap = 6;
@@ -583,7 +599,7 @@ export type VictoryAction = 'endless' | 'restart';
 export function victoryButtonAt(l: Layout, s: RunState, px: number, py: number): VictoryAction | null {
   if (s.phase !== 'victory') return null;
   const b = victoryButtons(victoryModalRect(l));
-  if (pointInRect(b.endless, px, py)) return 'endless';
+  if (s.daily === null && pointInRect(b.endless, px, py)) return 'endless';
   if (pointInRect(b.restart, px, py)) return 'restart';
   return null;
 }
@@ -794,12 +810,7 @@ export class HudView {
       this.statusHint.position.set(sp.left.x + 4, sp.left.y + Math.floor(sp.left.h / 2));
     }
 
-    const displayWave = s.phase === 'build' ? s.wave + 1 : s.wave;
-    let waveLabel = s.endless ? `Wave ${displayWave}` : `Wave ${displayWave} / ${WAVE_COUNT}`;
-    if (s.phase === 'wave' && s.modifiers.length > 0) {
-      waveLabel += ` · ${s.modifiers.map((m) => MODIFIER_NAMES[m]).join(' + ')}`;
-    }
-    this.statusWave.text = waveLabel;
+    this.statusWave.text = waveLabel(s);
     this.statusWave.position.set(sp.middle.x + 4, sp.middle.y + Math.floor(sp.middle.h / 2));
     this.statusSpeed.text = `×${s.speed}`;
     this.statusSpeed.position.set(sp.speed.x + 4, sp.speed.y + Math.floor(sp.speed.h / 2));
@@ -1150,7 +1161,7 @@ export class HudView {
     this.modalTitle.position.set(m.x + 6, m.y + 2 + 10);
 
     this.modalMessage.text = [
-      'All one hundred waves cleared.',
+      s.daily !== null ? 'Daily complete — all thirty waves cleared.' : 'All one hundred waves cleared.',
       `Kills — towers ${s.economy.kills.tower} · pointer ${s.economy.kills.pointer}`,
       `Salvage earned: $${formatNumber(s.economy.earned)}`,
       `Integrity remaining: ${s.integrity}`,
@@ -1158,9 +1169,13 @@ export class HudView {
     this.modalMessage.position.set(m.x + 12, m.y + 2 + 20 + 16);
 
     const b = victoryButtons(m);
-    bevel(g, b.endless, true, PAL.face);
-    this.modalButton2.text = 'Endless';
-    this.modalButton2.position.set(b.endless.x + b.endless.w / 2, b.endless.y + b.endless.h / 2);
+    if (s.daily === null) {
+      bevel(g, b.endless, true, PAL.face);
+      this.modalButton2.text = 'Endless';
+      this.modalButton2.position.set(b.endless.x + b.endless.w / 2, b.endless.y + b.endless.h / 2);
+    } else {
+      this.modalButton2.text = '';
+    }
 
     bevel(g, b.restart, true, PAL.face);
     this.modalRestart.text = 'Restart Windows';
