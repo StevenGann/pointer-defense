@@ -1,23 +1,16 @@
 [
   "src/input/mouse.ts",
   "src/main.ts",
-  "src/view/ad.ts",
   "src/view/art.ts",
   "src/view/board.ts",
   "src/view/bossBars.ts",
   "src/view/chrome.ts",
   "src/view/contexthelp.ts",
-  "src/view/dialog.ts",
-  "src/view/editor.ts",
   "src/view/help.ts",
   "src/view/helpMarkdown.ts",
   "src/view/hud.ts",
-  "src/view/mapLibrary.ts",
   "src/view/menuScreen.ts",
   "src/view/numbers.ts",
-  "src/view/records.ts",
-  "src/view/restore.ts",
   "src/view/tooltipText.ts",
-  "src/view/upgrades.ts",
   "src/view/wallAppearance.ts"
 ]

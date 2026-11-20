@@ -1,5 +1,6 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
+import { t } from '../i18n/index.ts';
 import { ACHIEVEMENTS } from '../core/achievements.ts';
 import { getArtTexture } from './art.ts';
 
@@ -429,19 +430,19 @@ export class AchievementGridView {
       this.iconSprites.push(s);
       this.icons.addChild(s);
     }
-    this.titleText = makeText('Achievements', PAL.titleInverse, true);
+    this.titleText = makeText(t('dlg.achievements.title'), PAL.titleInverse, true);
     this.titleText.anchor.set(0, 0.5);
     this.root.addChild(this.titleText);
     this.summaryText = makeText('', PAL.text);
     this.summaryText.anchor.set(0, 0.5);
     this.root.addChild(this.summaryText);
-    for (const label of ['All', 'Earned', 'Locked']) {
+    for (const label of [t('dlg.achievements.filterAll'), t('dlg.achievements.filterEarned'), t('dlg.achievements.filterLocked')]) {
       const t = makeText(label, PAL.text);
       t.anchor.set(0.5, 0.5);
       this.filterTexts.push(t);
       this.root.addChild(t);
     }
-    this.closeText = makeText('Close', PAL.text);
+    this.closeText = makeText(t('dlg.achievements.close'), PAL.text);
     this.closeText.anchor.set(0.5, 0.5);
     this.root.addChild(this.closeText);
     this.tooltipLayer.addChild(this.tooltipG);
@@ -472,10 +473,10 @@ export class AchievementGridView {
     const al = computeAchievementGrid(model, l.client);
     bevel(g, al.window, true, PAL.face);
     g.rect(al.title.x, al.title.y, al.title.w, al.title.h).fill(PAL.title);
-    this.titleText.text = 'Achievements';
+    this.titleText.text = t('dlg.achievements.title');
     this.titleText.position.set(al.title.x + 6, al.title.y + ACH_TITLE_H / 2);
 
-    this.summaryText.text = `${model.earnedCount} / ${model.total} · ${model.shadowCount} shadow`;
+    this.summaryText.text = t('dlg.achievements.summary', { earned: model.earnedCount, total: model.total, shadow: model.shadowCount });
     this.summaryText.position.set(al.summary.x, al.summary.y + ACH_SUMMARY_H / 2);
 
     const filters: { rect: Rect; value: AchievementFilter }[] = [
@@ -551,7 +552,7 @@ export class AchievementGridView {
     const padY = 4;
     nameT.text = entry.name;
     nameT.style.fill = TOOLTIP_TEXT;
-    statusT.text = entry.earned ? (entry.earnedDate ? `Earned ${entry.earnedDate}` : 'Earned') : 'Locked';
+    statusT.text = entry.earned ? (entry.earnedDate ? t('dlg.achievements.tooltipEarnedDate', { date: entry.earnedDate }) : t('dlg.achievements.tooltipEarned')) : t('dlg.achievements.tooltipLocked');
     statusT.style.fill = TOOLTIP_STATUS;
 
     // The panel is sized from the name and the status line, then the description wraps *into* that

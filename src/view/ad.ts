@@ -1,5 +1,6 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { bevel, CONTROL_BOX_H, CONTROL_BOX_W, FONT, FONT_SIZE, PAL, TITLE_H, type Rect } from './chrome.ts';
+import { t } from '../i18n/index.ts';
 import { AD_SPECS, type Ad } from '../core/ads.ts';
 import type { RunState } from '../core/state.ts';
 import { TRAY_LIFETIME_TICKS, type TrayPopup } from '../core/upgrades.ts';
@@ -140,7 +141,7 @@ export class TrayView {
       g.rect(tray.x, tray.y, tray.w, tray.h).stroke({ width: 2, color: PAL.highlight, alpha: 1 - age / AD_APPEAR_TICKS });
     }
     g.rect(tray.x + 2, tray.y + 2, tray.w - 4, TITLE_H).fill(PAL.title);
-    this.title.text = 'System Update';
+    this.title.text = t('dlg.ad.systemUpdate');
     this.title.style.fill = PAL.titleInverse;
     this.title.position.set(tray.x + 6, tray.y + 2 + Math.floor(TITLE_H / 2));
 
@@ -150,7 +151,7 @@ export class TrayView {
     g.rect(body.x, body.y, body.w, body.h).fill(PAL.shadow);
     g.rect(body.x, body.y, Math.round((body.w * left) / TRAY_LIFETIME_TICKS), body.h).fill(PAL.title);
 
-    this.message.text = 'Click to install';
+    this.message.text = t('dlg.ad.clickToInstall');
     this.message.style.fill = PAL.text;
     const bodyTop = tray.y + 2 + TITLE_H;
     this.message.position.set(tray.x + 6, bodyTop + Math.floor((tray.h - TITLE_H - 12) / 2));

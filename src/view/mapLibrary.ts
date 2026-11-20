@@ -1,5 +1,6 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
+import { t } from '../i18n/index.ts';
 import type { EditorMapEntry } from '../core/editorstore.ts';
 import type { Level } from '../core/levels.ts';
 
@@ -25,7 +26,7 @@ const DLG_SCROLL_W = 10;
 export function mapSizeText(level: Level): string {
   const walls = level.walls.length;
   const toggles = (level.toggles ?? []).length;
-  return toggles > 0 ? `${walls} walls, ${toggles} shutters` : `${walls} walls`;
+  return toggles > 0 ? t('dlg.mapLibrary.wallsShutters', { walls, toggles }) : t('dlg.mapLibrary.walls', { walls });
 }
 
 /** An ISO timestamp collapsed to the local date, for the row's date column. */
@@ -34,7 +35,7 @@ export function formatSavedAt(iso: string): string {
   if (Number.isNaN(d.getTime())) return iso;
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
+  return d.getFullYear() + '-' + m + '-' + day;
 }
 
 export interface MapLibraryLayout {
@@ -135,7 +136,7 @@ export class MapLibraryView {
 
   constructor() {
     this.root.addChild(this.g);
-    this.title = makeText('Open map', PAL.titleInverse, true);
+    this.title = makeText(t('dlg.mapLibrary.openTitle'), PAL.titleInverse, true);
     this.title.anchor.set(0, 0.5);
     this.root.addChild(this.title);
     for (let i = 0; i < MAX_ROWS; i++) {
@@ -147,11 +148,11 @@ export class MapLibraryView {
       this.metaTexts.push(m);
       this.root.addChild(n, m);
     }
-    this.loadText = makeText('Load', PAL.text);
+    this.loadText = makeText(t('dlg.mapLibrary.load'), PAL.text);
     this.loadText.anchor.set(0.5, 0.5);
-    this.deleteText = makeText('Delete', PAL.text);
+    this.deleteText = makeText(t('dlg.mapLibrary.delete'), PAL.text);
     this.deleteText.anchor.set(0.5, 0.5);
-    this.cancelText = makeText('Cancel', PAL.text);
+    this.cancelText = makeText(t('dlg.mapLibrary.cancel'), PAL.text);
     this.cancelText.anchor.set(0.5, 0.5);
     this.root.addChild(this.loadText, this.deleteText, this.cancelText);
   }
@@ -172,7 +173,7 @@ export class MapLibraryView {
     bevel(g, d.rect, true, PAL.face);
     g.rect(d.rect.x + 2, d.rect.y + 2, d.rect.w - 4, DLG_TITLE_H).fill(PAL.title);
 
-    this.title.text = mode === 'open' ? 'Open map' : 'Library full — choose a map to replace';
+    this.title.text = mode === 'open' ? t('dlg.mapLibrary.openTitle') : t('dlg.mapLibrary.replaceTitle');
     this.title.position.set(d.rect.x + 6, d.rect.y + 2 + DLG_TITLE_H / 2);
 
     bevel(g, d.list, false, PAL.face);
@@ -192,7 +193,7 @@ export class MapLibraryView {
       nameT.text = entry.name;
       nameT.style.fill = selected ? PAL.titleInverse : PAL.text;
       nameT.position.set(r.x + 6, r.y + r.h / 2);
-      metaT.text = `${formatSavedAt(entry.savedAt)}  \u00b7  ${mapSizeText(entry.level)}`;
+      metaT.text = t('dlg.mapLibrary.meta', { date: formatSavedAt(entry.savedAt), size: mapSizeText(entry.level) });
       metaT.style.fill = selected ? PAL.titleInverse : PAL.shadow;
       metaT.position.set(r.x + r.w - 6, r.y + r.h / 2);
       visible++;
@@ -207,7 +208,7 @@ export class MapLibraryView {
       bevel(g, d.thumb, true, PAL.face);
     }
 
-    const primaryLabel = mode === 'open' ? 'Load' : 'Replace';
+    const primaryLabel = mode === 'open' ? t('dlg.mapLibrary.load') : t('dlg.mapLibrary.replace');
     const primaryHover = hover?.type === 'load';
     const delHover = hover?.type === 'delete';
     const cancelHover = hover?.type === 'cancel';
@@ -218,14 +219,14 @@ export class MapLibraryView {
     this.loadText.position.set(d.primary.x + d.primary.w / 2, d.primary.y + d.primary.h / 2);
     if (d.del) {
       bevel(g, d.del, true, delHover ? PAL.highlight : PAL.face);
-      this.deleteText.text = 'Delete';
+      this.deleteText.text = t('dlg.mapLibrary.delete');
       this.deleteText.style.fill = selectedId !== null ? PAL.text : PAL.shadow;
       this.deleteText.position.set(d.del.x + d.del.w / 2, d.del.y + d.del.h / 2);
     } else {
       this.deleteText.text = '';
     }
     bevel(g, d.cancel, true, cancelHover ? PAL.highlight : PAL.face);
-    this.cancelText.text = 'Cancel';
+    this.cancelText.text = t('dlg.mapLibrary.cancel');
     this.cancelText.style.fill = PAL.text;
     this.cancelText.position.set(d.cancel.x + d.cancel.w / 2, d.cancel.y + d.cancel.h / 2);
   }
@@ -278,10 +279,10 @@ export class NameDialogView {
   private readonly cancel: Text;
 
   constructor() {
-    this.title = makeText('Save map', PAL.titleInverse, true);
+    this.title = makeText(t('dlg.mapLibrary.saveTitle'), PAL.titleInverse, true);
     this.field = makeText('', PAL.text);
-    this.ok = makeText('OK', PAL.text);
-    this.cancel = makeText('Cancel', PAL.text);
+    this.ok = makeText(t('dlg.mapLibrary.ok'), PAL.text);
+    this.cancel = makeText(t('dlg.mapLibrary.cancel'), PAL.text);
     this.title.anchor.set(0, 0.5);
     this.field.anchor.set(0, 0.5);
     this.ok.anchor.set(0.5, 0.5);
@@ -298,7 +299,7 @@ export class NameDialogView {
     bevel(g, d.rect, true, PAL.face);
     g.rect(d.rect.x + 2, d.rect.y + 2, d.rect.w - 4, NAME_TITLE_H).fill(PAL.title);
 
-    this.title.text = 'Save map';
+    this.title.text = t('dlg.mapLibrary.saveTitle');
     this.title.position.set(d.rect.x + 6, d.rect.y + 2 + NAME_TITLE_H / 2);
 
     bevel(g, d.field, false, PAL.highlight);
@@ -307,9 +308,9 @@ export class NameDialogView {
 
     bevel(g, d.ok, true, hover === 'ok' ? PAL.highlight : PAL.face);
     bevel(g, d.cancel, true, hover === 'cancel' ? PAL.highlight : PAL.face);
-    this.ok.text = 'OK';
+    this.ok.text = t('dlg.mapLibrary.ok');
     this.ok.position.set(d.ok.x + d.ok.w / 2, d.ok.y + d.ok.h / 2);
-    this.cancel.text = 'Cancel';
+    this.cancel.text = t('dlg.mapLibrary.cancel');
     this.cancel.position.set(d.cancel.x + d.cancel.w / 2, d.cancel.y + d.cancel.h / 2);
   }
 }

@@ -13,6 +13,7 @@ import {
 } from './chrome.ts';
 import type { Profile, RunRecord } from '../core/save.ts';
 import { bestByMap, runTotals } from '../core/runs.ts';
+import { t } from '../i18n/index.ts';
 
 /**
  * The Records viewer (docs/RUN-RECORDS.md): a fixed Windows 95 window reachable from the main menu
@@ -63,23 +64,24 @@ export function buildRecordsRows(runs: readonly RunRecord[]): RecordsRow[] {
 
 /** The totals header line; `Runs 0` when nothing has been recorded. */
 export function totalsLine(runs: readonly RunRecord[], bestWave: number): string {
-  if (runs.length === 0) return 'Runs 0';
-  const t = runTotals(runs);
-  return `Runs ${t.runs} · Wins ${t.wins} · Defeats ${t.defeats} · Reboots ${t.reboots} · Best wave ${bestWave}`;
+  if (runs.length === 0) return t('dlg.records.emptyRuns');
+  const totals = runTotals(runs);
+  return t('dlg.records.totals', { runs: totals.runs, wins: totals.wins, defeats: totals.defeats, reboots: totals.reboots, bestWave });
 }
 
 /** The best-by-map footer line, computed from the records alone. */
 export function bestByMapLine(runs: readonly RunRecord[]): string {
   const best = bestByMap(runs);
   if (best.length === 0) return '';
-  return `Best by map — ${best.map((b) => `${b.mapName} ${b.wave}`).join(', ')}`;
+  const parts = best.map((b) => b.mapName + ' ' + b.wave).join(', ');
+  return t('dlg.records.bestByMap', { maps: parts });
 }
 
 export function outcomeLabel(outcome: RunRecord['outcome']): string {
-  if (outcome === 'victory') return 'Victory';
-  if (outcome === 'defeat') return 'Defeat';
-  if (outcome === 'reboot') return 'Reboot';
-  return 'Daily';
+  if (outcome === 'victory') return t('dlg.records.victory');
+  if (outcome === 'defeat') return t('dlg.records.defeat');
+  if (outcome === 'reboot') return t('dlg.records.reboot');
+  return t('dlg.records.daily');
 }
 
 /** The compact date for a record's ISO timestamp: `2026-11-20T…` -> `2026-11-20`. */
@@ -205,7 +207,7 @@ function makeText(text: string, size: number, bold = false, fill: number): Text 
 }
 
 /** The fixed column headers, drawn once above the scrolling data. */
-const HEADER_LABELS = ['#', 'Wave', 'Map', 'Outcome', 'Date'] as const;
+const HEADER_LABELS = [t('dlg.records.colRank'), t('dlg.records.colWave'), t('dlg.records.colMap'), t('dlg.records.colOutcome'), t('dlg.records.colDate')] as const;
 
 export class RecordsView {
   readonly root = new Container();
@@ -221,7 +223,7 @@ export class RecordsView {
   private readonly cells: Text[] = [];
 
   constructor() {
-    this.titleText = makeText('Records', FONT_SIZE.body, true, PAL.titleInverse);
+    this.titleText = makeText(t('dlg.records.title'), FONT_SIZE.body, true, PAL.titleInverse);
     this.titleText.anchor.set(0, 0.5);
     this.totalsText = makeText('', FONT_SIZE.small, false, PAL.text);
     this.totalsText.anchor.set(0, 0.5);
@@ -270,7 +272,7 @@ export class RecordsView {
 
     bevel(g, rl.window, true, PAL.face);
     g.rect(rl.title.x, rl.title.y, rl.title.w, rl.title.h).fill(PAL.title);
-    this.titleText.text = 'Records';
+    this.titleText.text = t('dlg.records.title');
     this.titleText.position.set(rl.title.x + 6, rl.title.y + 2 + TITLE_H / 2);
 
     // Close box glyph.
@@ -305,7 +307,7 @@ export class RecordsView {
     this.dataMask.rect(rl.data.x, rl.data.y, rl.data.w, rl.data.h).fill(0xffffff);
 
     if (rl.empty) {
-      this.emptyText.text = 'No runs recorded yet.';
+      this.emptyText.text = t('dlg.records.empty');
       this.emptyText.position.set(rl.data.x + rl.data.w / 2, rl.data.y + rl.data.h / 2);
       for (const t of this.cells) t.text = '';
     } else {
@@ -318,11 +320,11 @@ export class RecordsView {
         const cy = y + Math.floor(RECORDS_ROW_H / 2);
 
         if (row.kind === 'separator') {
-          const t = this.cellAt(cellIndex++);
-          t.text = 'Earlier';
-          t.style.fill = PAL.title;
-          t.style.fontWeight = 'bold';
-          t.position.set(x0, cy);
+          const sep = this.cellAt(cellIndex++);
+          sep.text = t('dlg.records.earlier');
+          sep.style.fill = PAL.title;
+          sep.style.fontWeight = 'bold';
+          sep.position.set(x0, cy);
           continue;
         }
 

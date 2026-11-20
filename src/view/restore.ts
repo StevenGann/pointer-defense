@@ -32,6 +32,7 @@ import {
 } from '../core/tree.ts';
 import { SPEC_CAPS, SPEC_KINDS, SPEC_NAMES, specLevelCost, specEffectText, type Profile, type SpecKind, type SpecLevels } from '../core/save.ts';
 import { restartPointsGained, type RunState } from '../core/state.ts';
+import { t } from '../i18n/index.ts';
 import { formatNumber } from '../core/format.ts';
 
 /**
@@ -60,7 +61,7 @@ export function restoreProgress(s: RunState): { points: number; pointsNeeded: nu
 
 /** The payout sentence for the Restore Point tab, with the live numbers. */
 export function restorePayoutText(s: RunState, profile: Profile): string {
-  return `Restart Windows converts this run into ${restartPointsGained(s, profile)} Restore Points`;
+  return t('dlg.restore.payout', { points: restartPointsGained(s, profile) });
 }
 
 export interface RestoreSpecRow {
@@ -133,7 +134,7 @@ export function computeRestoreLayout(l: Layout, profile: Profile, s: RunState, s
   };
 
   const tabStrip: Rect = { x: window.x + 2, y: titleBar.y + titleBar.h, w: w - 4, h: TAB_H };
-  const tabLabels = ['Restore Point', 'Specs', 'Tree'];
+  const tabLabels = [t('dlg.restore.tabRestore'), t('dlg.restore.tabSpecs'), t('dlg.restore.tabTree')];
   const activeIdx = session.tab === 'restore' ? 0 : session.tab === 'specs' ? 1 : 2;
   const tabs = computeTabStrip(tabStrip, tabLabels, activeIdx).map((t, i) => ({
     id: (i === 0 ? 'restore' : i === 1 ? 'specs' : 'tree') as RestoreTab,
@@ -154,9 +155,9 @@ export function computeRestoreLayout(l: Layout, profile: Profile, s: RunState, s
   const payout: Rect = { x: tabBody.x, y: tabBody.y, w: tabBody.w, h: 34 };
   const restartButton: Rect = { x: tabBody.x, y: payout.y + payout.h + 10, w: 150, h: 32 };
   const buttons: RestoreButton[] = [
-    { id: 'restart', label: 'Restart Windows', rect: restartButton, default: true },
-    { id: 'apply', label: 'Apply', rect: apply, default: false },
-    { id: 'close', label: 'Close', rect: cancel, default: false },
+    { id: 'restart', label: t('dlg.restore.restart'), rect: restartButton, default: true },
+    { id: 'apply', label: t('dlg.restore.apply'), rect: apply, default: false },
+    { id: 'close', label: t('dlg.restore.close'), rect: cancel, default: false },
   ];
   const prog = restoreProgress(s);
   const progress = { rect: { x: tabBody.x, y: restartButton.y + restartButton.h + 16, w: tabBody.w - 40, h: 14 }, ...prog };
@@ -164,9 +165,9 @@ export function computeRestoreLayout(l: Layout, profile: Profile, s: RunState, s
   // Specs tab.
   const specsField: Rect = { x: tabBody.x, y: tabBody.y, w: tabBody.w, h: tabBody.h };
   const specs: ListColumn[] = [
-    { title: 'Name', w: 110 },
-    { title: 'Level', w: 100 },
-    { title: 'Effect', w: 220 },
+    { title: t('dlg.restore.colName'), w: 110 },
+    { title: t('dlg.restore.colLevel'), w: 100 },
+    { title: t('dlg.restore.colEffect'), w: 220 },
   ];
   const specGeom = computeListView(specsField, specs, 24, SPEC_KINDS.length, 0);
   const specColX = specGeom.colX;
@@ -201,7 +202,7 @@ function buildTreeRows(area: Rect, profile: Profile, session: RestoreSession): R
     const expanded = session.expanded === tier;
     const tierRect: Rect = { x: area.x, y, w: area.w, h: TREE_ROW_H };
     const expander: Rect = { x: area.x + 4, y: y + 2, w: 16, h: 16 };
-    rows.push({ kind: 'tier', tier, node: null, rect: tierRect, expander, checkbox: null, owned: false, canBuy: false, expanded, locked: !unlocked, label: `Tier ${tier}`, price: '' });
+    rows.push({ kind: 'tier', tier, node: null, rect: tierRect, expander, checkbox: null, owned: false, canBuy: false, expanded, locked: !unlocked, label: t('dlg.restore.tier', { tier }), price: '' });
     y += TREE_ROW_H;
     if (expanded) {
       for (const node of tierNodes) {
@@ -352,17 +353,17 @@ export class RestoreView {
   private readonly statusTexts: Text[] = [];
 
   constructor() {
-    this.titleText = makeText('System Properties', FONT_SIZE.body, true, PAL.titleInverse);
+    this.titleText = makeText(t('dlg.restore.title'), FONT_SIZE.body, true, PAL.titleInverse);
     this.titleText.anchor.set(0, 0.5);
     this.payoutText = makeText('', FONT_SIZE.small, false, PAL.text);
     this.payoutText.anchor.set(0, 0.5);
-    this.restartText = makeText('Restart Windows', FONT_SIZE.body, true, PAL.text);
+    this.restartText = makeText(t('dlg.restore.restart'), FONT_SIZE.body, true, PAL.text);
     this.restartText.anchor.set(0.5, 0.5);
     this.progressText = makeText('', FONT_SIZE.small, false, PAL.text);
     this.progressText.anchor.set(0, 0.5);
-    this.applyText = makeText('Apply', FONT_SIZE.body, false, PAL.text);
+    this.applyText = makeText(t('dlg.restore.apply'), FONT_SIZE.body, false, PAL.text);
     this.applyText.anchor.set(0.5, 0.5);
-    this.cancelText = makeText('Close', FONT_SIZE.body, false, PAL.text);
+    this.cancelText = makeText(t('dlg.restore.close'), FONT_SIZE.body, false, PAL.text);
     this.cancelText.anchor.set(0.5, 0.5);
     this.root.addChild(this.g, this.titleText, this.payoutText, this.restartText, this.progressText, this.applyText, this.cancelText);
     for (let i = 0; i < 40; i++) {
@@ -419,10 +420,10 @@ export class RestoreView {
 
     const rl = computeRestoreLayout(l, profile, s, session);
     drawWindowChrome(g, rl.window, { close: true, minimize: false, maximize: false });
-    this.titleText.text = 'System Properties';
+    this.titleText.text = t('dlg.restore.title');
     this.titleText.position.set(rl.titleBar.x + 6, rl.titleBar.y + TITLE_H / 2);
 
-    drawTabStrip(g, rl.tabStrip, ['Restore Point', 'Specs', 'Tree'], session.tab === 'restore' ? 0 : session.tab === 'specs' ? 1 : 2);
+    drawTabStrip(g, rl.tabStrip, [t('dlg.restore.tabRestore'), t('dlg.restore.tabSpecs'), t('dlg.restore.tabTree')], session.tab === 'restore' ? 0 : session.tab === 'specs' ? 1 : 2);
     for (let i = 0; i < rl.tabs.length; i++) {
       const t = this.tabTextAt(i);
       const tab = rl.tabs[i];
@@ -456,9 +457,9 @@ export class RestoreView {
     const panels = drawStatusBar(g, rl.statusBar, [0, 130]);
     const totalSpecs = SPEC_KINDS.reduce((sum, k) => sum + profile.specs[k], 0);
     const totalCap = SPEC_KINDS.reduce((sum, k) => sum + SPEC_CAPS[k], 0);
-    this.statusTexts[0].text = `Restore Points ${profile.rp}`;
+    this.statusTexts[0].text = t('dlg.restore.statusRp', { rp: profile.rp });
     this.statusTexts[0].position.set(panels[0].x + 4, panels[0].y + Math.floor(panels[0].h / 2));
-    this.statusTexts[1].text = `Specs ${totalSpecs}/${totalCap}`;
+    this.statusTexts[1].text = t('dlg.restore.statusSpecs', { total: totalSpecs, cap: totalCap });
     this.statusTexts[1].position.set(panels[1].x + 4, panels[1].y + Math.floor(panels[1].h / 2));
   }
 
@@ -476,7 +477,7 @@ export class RestoreView {
     this.restartText.text = restartBtn.label;
     this.restartText.position.set(restartBtn.rect.x + restartBtn.rect.w / 2, restartBtn.rect.y + restartBtn.rect.h / 2);
 
-    this.progressText.text = 'Progress to the next point';
+    this.progressText.text = t('dlg.restore.progress');
     this.progressText.position.set(rl.progress.rect.x, rl.progress.rect.y - 16);
     drawSegmentedBar(g, rl.progress.rect, rl.progress.fill);
   }
@@ -528,11 +529,13 @@ export class RestoreView {
     let lastNodeY = -1;
     for (const row of rl.treeRows) {
       if (row.kind === 'tier') {
-        const t = this.rowTextAt(ti++);
-        t.text = row.locked ? `Tier ${row.tier} — locked until level ${TIER_UNLOCK_LEVEL[row.tier as 1 | 2 | 3 | 4 | 5]}` : `Tier ${row.tier}`;
-        t.style.fontWeight = 'bold';
-        t.style.fill = row.locked ? PAL.shadow : PAL.title;
-        t.position.set(row.rect.x + 26, row.rect.y + Math.floor(TREE_ROW_H / 2));
+        const tierText = this.rowTextAt(ti++);
+        tierText.text = row.locked
+          ? t('dlg.restore.tierLocked', { tier: row.tier, level: TIER_UNLOCK_LEVEL[row.tier as 1 | 2 | 3 | 4 | 5] })
+          : t('dlg.restore.tier', { tier: row.tier });
+        tierText.style.fontWeight = 'bold';
+        tierText.style.fill = row.locked ? PAL.shadow : PAL.title;
+        tierText.position.set(row.rect.x + 26, row.rect.y + Math.floor(TREE_ROW_H / 2));
         const ex = row.expander!;
         bevel(g, ex, true, PAL.face);
         g.rect(ex.x, ex.y, ex.w, ex.h).stroke({ width: 1, color: PAL.dark });

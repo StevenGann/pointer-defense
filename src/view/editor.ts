@@ -1,5 +1,6 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
+import { t } from '../i18n/index.ts';
 import { COLS, ROWS } from '../core/grid.ts';
 import {
   EDITOR_TOOLS,
@@ -20,14 +21,14 @@ export type EditorAction = 'undo' | 'redo' | 'new' | 'open' | 'save' | 'clear' |
 
 const TOOLBAR_ACTIONS: readonly EditorAction[] = ['undo', 'redo', 'new', 'open', 'save', 'clear', 'test', 'copy'];
 const TOOLBAR_LABELS: Readonly<Record<EditorAction, string>> = {
-  undo: 'Undo',
-  redo: 'Redo',
-  new: 'New',
-  open: 'Open\u2026',
-  save: 'Save',
-  clear: 'Clear',
-  test: 'Test',
-  copy: 'Copy code',
+  undo: t('dlg.editor.undo'),
+  redo: t('dlg.editor.redo'),
+  new: t('dlg.editor.new'),
+  open: t('dlg.editor.open'),
+  save: t('dlg.editor.save'),
+  clear: t('dlg.editor.clear'),
+  test: t('dlg.editor.test'),
+  copy: t('dlg.editor.copy'),
 };
 
 const PALETTE_H = 30;
@@ -74,9 +75,9 @@ export function computeEditorLayout(l: Layout, model: EditorModel): EditorLayout
     const x = l.rightPanel.x + pad;
     const w = l.rightPanel.w - pad * 2;
     const source: { field: ToggleFieldLayout['field']; label: string }[] = [
-      { field: 'periodTicks', label: 'period' },
-      { field: 'openTicks', label: 'open' },
-      { field: 'phaseTicks', label: 'phase' },
+      { field: 'periodTicks', label: t('dlg.editor.togglePeriod') },
+      { field: 'openTicks', label: t('dlg.editor.toggleOpen') },
+      { field: 'phaseTicks', label: t('dlg.editor.togglePhase') },
     ];
     const fields: ToggleFieldLayout[] = source.map((f, i) => {
       const rowY = l.rightPanel.y + 40 + i * 30;
@@ -139,10 +140,10 @@ export class EditorView {
   constructor() {
     this.paletteTexts = EDITOR_TOOLS.map((t) => makeText(TOOL_NAMES[t], PAL.text));
     this.toolbarTexts = TOOLBAR_ACTIONS.map((a) => makeText(TOOLBAR_LABELS[a], PAL.text, false, FONT_SIZE.small));
-    this.startText = makeText('S', PAL.title, true);
-    this.exitText = makeText('X', PAL.maroon, true);
+    this.startText = makeText(t('dlg.editor.start'), PAL.title, true);
+    this.exitText = makeText(t('dlg.editor.exit'), PAL.maroon, true);
     this.statusText = makeText('', PAL.text, false, FONT_SIZE.small);
-    this.toggleTitle = makeText('Shutter', PAL.text, true, FONT_SIZE.small);
+    this.toggleTitle = makeText(t('dlg.editor.shutter'), PAL.text, true, FONT_SIZE.small);
     for (let i = 0; i < 3; i++) this.toggleValues.push(makeText('', PAL.text, false, FONT_SIZE.small));
     this.root.addChild(this.g);
     for (const t of this.paletteTexts) {
@@ -220,7 +221,7 @@ export class EditorView {
     if (el.togglePanel) {
       const panel = el.togglePanel;
       bevel(g, panel.rect, false, PAL.face);
-      this.toggleTitle.text = 'Shutter';
+      this.toggleTitle.text = t('dlg.editor.shutter');
       this.toggleTitle.position.set(panel.rect.x + 4, panel.rect.y + 14);
       const timing = editorToggleAt(model, model.selectedShutter!.col, model.selectedShutter!.row)!;
       for (let i = 0; i < panel.fields.length; i++) {
@@ -236,7 +237,7 @@ export class EditorView {
         g.moveTo(px2 - 4, py2).lineTo(px2 + 4, py2).stroke({ width: 1, color: PAL.text });
         g.moveTo(px2, py2 - 4).lineTo(px2, py2 + 4).stroke({ width: 1, color: PAL.text });
         const label = this.toggleValues[i];
-        label.text = `${f.label} ${value}`;
+        label.text = t('dlg.editor.toggleValue', { label: f.label, value });
         label.position.set(f.minus.x + f.minus.w + 8, f.minus.y + f.minus.h / 2);
       }
     }
@@ -250,7 +251,7 @@ export class EditorView {
       this.statusText.text = problem;
       this.statusText.style.fill = PAL.maroon;
     } else {
-      this.statusText.text = 'Map ready — Test or Copy code.';
+      this.statusText.text = t('dlg.editor.ready');
       this.statusText.style.fill = PAL.text;
     }
     this.statusText.position.set(l.statusPanes.left.x + 4, l.statusPanes.left.y + l.statusPanes.left.h / 2);

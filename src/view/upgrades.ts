@@ -25,6 +25,7 @@ import {
 } from './chrome.ts';
 import { getArtTexture, UPGRADE_PLACEHOLDER } from './art.ts';
 import { textWidth } from './hud.ts';
+import { t } from '../i18n/index.ts';
 import { formatNumber } from '../core/format.ts';
 import type { RunState } from '../core/state.ts';
 import {
@@ -116,7 +117,7 @@ export function computeUpgradesLayout(l: Layout, s: RunState, tab: UpgradesTab =
   const toolbarButtons = [tbBtn('buy'), tbBtn('info'), tbBtn('scroll')];
 
   const tabStrip: Rect = { x: window.x + 2, y: toolbar.y + toolbar.h, w: w - 4, h: TAB_H };
-  const tabLabels = ['Available', 'Owned'];
+  const tabLabels = [t('dlg.upgrades.tabAvailable'), t('dlg.upgrades.tabOwned')];
   const activeIdx = tab === 'available' ? 0 : 1;
   const tabs = computeTabStrip(tabStrip, tabLabels, activeIdx).map((t, i) => ({
     id: (i === 0 ? 'available' : 'owned') as UpgradesTab,
@@ -130,8 +131,8 @@ export function computeUpgradesLayout(l: Layout, s: RunState, tab: UpgradesTab =
   const cancel: Rect = { x: statusBar.x + statusBar.w - BUTTON_W - 6, y: buttonRowY, w: BUTTON_W, h: BUTTON_H };
   const ok: Rect = { x: cancel.x - BUTTON_W - 6, y: buttonRowY, w: BUTTON_W, h: BUTTON_H };
   const buttons: UpgradesButton[] = [
-    { id: 'ok', label: 'OK', rect: ok, default: true },
-    { id: 'cancel', label: 'Cancel', rect: cancel, default: false },
+    { id: 'ok', label: t('dlg.upgrades.ok'), rect: ok, default: true },
+    { id: 'cancel', label: t('dlg.upgrades.cancel'), rect: cancel, default: false },
   ];
   const descStrip: Rect = { x: window.x + 8, y: buttonRowY - 6 - DESC_H, w: w - 16, h: DESC_H };
 
@@ -145,17 +146,17 @@ export function computeUpgradesLayout(l: Layout, s: RunState, tab: UpgradesTab =
   const columns: ListColumn[] =
     tab === 'available'
       ? [
-          { title: 'Icon', w: ICON_COL_W },
-          { title: 'Upgrade', w: 150 },
-          { title: 'Unlocks', w: 250 },
-          { title: 'Cost', w: 70 },
-          { title: 'Status', w: 114 },
+          { title: t('dlg.upgrades.colIcon'), w: ICON_COL_W },
+          { title: t('dlg.upgrades.colUpgrade'), w: 150 },
+          { title: t('dlg.upgrades.colUnlocks'), w: 250 },
+          { title: t('dlg.upgrades.colCost'), w: 70 },
+          { title: t('dlg.upgrades.colStatus'), w: 114 },
         ]
       : [
-          { title: 'Icon', w: ICON_COL_W },
-          { title: 'Upgrade', w: 170 },
-          { title: 'Unlocks', w: 300 },
-          { title: 'Status', w: 114 },
+          { title: t('dlg.upgrades.colIcon'), w: ICON_COL_W },
+          { title: t('dlg.upgrades.colUpgrade'), w: 170 },
+          { title: t('dlg.upgrades.colUnlocks'), w: 300 },
+          { title: t('dlg.upgrades.colStatus'), w: 114 },
         ];
 
   const list = computeListView(listField, columns, UPGRADE_ROW_H, defs.length, scroll);
@@ -180,22 +181,22 @@ export function upgradeRowBuyable(row: Pick<UpgradeRow, 'owned' | 'affordable'>)
 
 /** The cart's caption: `Buy 1,200`, or `OWNED`. */
 export function upgradeButtonText(row: Pick<UpgradeRow, 'def' | 'owned'>): string {
-  return row.owned ? 'OWNED' : `Buy ${formatNumber(row.def.cost)}`;
+  return row.owned ? t('dlg.upgrades.owned') : t('dlg.upgrades.buy', { cost: formatNumber(row.def.cost) });
 }
 
 /** The status bar's summary: revealed of total, and owned among the revealed (never the full 14). */
 export function upgradesStatusText(s: Pick<RunState, 'wave' | 'upgrades'>): string {
   const revealed = revealedUpgrades(s);
   const owned = revealed.filter((d) => hasUpgrade(s, d.id)).length;
-  return `${revealed.length} of ${GLOBAL_UPGRADES.length} unlocked · ${owned} owned`;
+  return t('dlg.upgrades.statusCounts', { revealed: revealed.length, total: GLOBAL_UPGRADES.length, owned });
 }
 
 /** The empty-list caption, printed when nothing is revealed yet; empty once an upgrade exists. */
 export function upgradesEmptyLines(s: Pick<RunState, 'wave'>): string[] {
   if (revealedUpgrades(s).length > 0) return [];
-  const lines = ['No upgrades unlocked yet.'];
+  const lines = [t('dlg.upgrades.empty')];
   const next = GLOBAL_UPGRADES.filter((d) => d.wave > s.wave).map((d) => d.wave);
-  if (next.length > 0) lines.push(`The next unlocks at wave ${Math.min(...next)}.`);
+  if (next.length > 0) lines.push(t('dlg.upgrades.nextUnlock', { wave: Math.min(...next) }));
   return lines;
 }
 
@@ -203,7 +204,7 @@ export function upgradesEmptyLines(s: Pick<RunState, 'wave'>): string[] {
 export function globalUpgradeTooltipLines(def: UpgradeDef, s: RunState): string[] {
   const lines = [def.detail];
   if (!hasUpgrade(s, def.id) && s.economy.salvage < def.cost) {
-    lines.push(`Need ${formatNumber(def.cost - s.economy.salvage)} more`);
+    lines.push(t('dlg.upgrades.needMore', { amount: formatNumber(def.cost - s.economy.salvage) }));
   }
   return lines;
 }
@@ -319,12 +320,12 @@ export class UpgradesView {
   private readonly iconLayer = new Container();
 
   constructor() {
-    this.titleText = makeText('Global Upgrades', FONT_SIZE.body, true, PAL.titleInverse);
+    this.titleText = makeText(t('dlg.upgrades.title'), FONT_SIZE.body, true, PAL.titleInverse);
     this.descText = makeText('', FONT_SIZE.small, false, PAL.text);
     this.descText.style.fontStyle = 'italic';
-    this.okText = makeText('OK', FONT_SIZE.body, false, PAL.text);
+    this.okText = makeText(t('dlg.upgrades.ok'), FONT_SIZE.body, false, PAL.text);
     this.okText.anchor.set(0.5, 0.5);
-    this.cancelText = makeText('Cancel', FONT_SIZE.body, false, PAL.text);
+    this.cancelText = makeText(t('dlg.upgrades.cancel'), FONT_SIZE.body, false, PAL.text);
     this.cancelText.anchor.set(0.5, 0.5);
     this.root.addChild(this.g, this.iconLayer, this.titleText, this.descText, this.okText, this.cancelText);
   }
@@ -411,7 +412,7 @@ export class UpgradesView {
     const ul = computeUpgradesLayout(l, s, session.tab, session.scroll);
 
     drawWindowChrome(g, ul.window, { close: true, minimize: false, maximize: false });
-    this.titleText.text = 'Global Upgrades';
+    this.titleText.text = t('dlg.upgrades.title');
     this.titleText.position.set(ul.titleBar.x + 6, ul.titleBar.y + TITLE_H / 2);
 
     // Toolbar.
@@ -429,7 +430,7 @@ export class UpgradesView {
     }
 
     // Tabs.
-    drawTabStrip(g, ul.tabStrip, ['Available', 'Owned'], session.tab === 'available' ? 0 : 1);
+    drawTabStrip(g, ul.tabStrip, [t('dlg.upgrades.tabAvailable'), t('dlg.upgrades.tabOwned')], session.tab === 'available' ? 0 : 1);
     for (let i = 0; i < ul.tabs.length; i++) {
       const t = this.tabTextAt(i);
       const tab = ul.tabs[i];
@@ -494,13 +495,13 @@ export class UpgradesView {
         cost.position.set(ul.list.colX[3] + 4, midY);
 
         const status = this.rowTextAt(ti++);
-        status.text = 'Available';
+        status.text = t('dlg.upgrades.rowAvailable');
         status.style.fill = textColor;
         status.style.fontWeight = 'normal';
         status.position.set(ul.list.colX[4] + 4, midY);
       } else {
         const status = this.rowTextAt(ti++);
-        status.text = 'Owned';
+        status.text = t('dlg.upgrades.rowOwned');
         status.style.fill = textColor;
         status.style.fontWeight = 'normal';
         status.position.set(ul.list.colX[3] + 4, midY);
@@ -550,7 +551,7 @@ export class UpgradesView {
     const panels = drawStatusBar(g, ul.statusBar, [0, 150]);
     this.statusTextAt(0).text = upgradesStatusText(s);
     this.statusTextAt(0).position.set(panels[0].x + 4, panels[0].y + Math.floor(panels[0].h / 2));
-    this.statusTextAt(1).text = `Salvage ${formatNumber(s.economy.salvage)}`;
+    this.statusTextAt(1).text = t('dlg.upgrades.salvage', { amount: formatNumber(s.economy.salvage) });
     this.statusTextAt(1).position.set(panels[1].x + 4, panels[1].y + Math.floor(panels[1].h / 2));
     for (let i = 2; i < this.statusTexts.length; i++) this.statusTexts[i].text = '';
   }
