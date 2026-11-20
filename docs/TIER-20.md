@@ -26,7 +26,8 @@ Tier 20 is therefore `1.25 × 1.09^18 = 5.90×` base damage. Range grows `+1 %` 
 `+10 %` (tier 11 and beyond hold), so late towers do not out-range the maps.
 
 Tiers 1–5 keep exactly today's behaviour: tier 2 is ×1.25, and tiers 3–5 get their power from branch
-depth, unchanged.
+depth, unchanged. A branched tower therefore joins the damage ladder at tier 6 (`1.09^(tier−5)`)
+rather than tier 3, because its tiers 3–5 are already paid for in branch depth.
 
 ## Branch depth, capped
 
@@ -54,14 +55,17 @@ cost(tier)   = roundCost(baseCost * factor(tier))
 `roundCost` rounds to a readable figure: nearest 5 under $100, nearest 10 under $1,000, nearest 50
 above. Prices must be integers and strictly increasing.
 
-What that buys, per kind (build cost × 385 cumulative, 62× for the final step):
+What that buys, per kind, summing the rounded prices the game actually charges:
 
-| Kind | Build | Tier 20 total |
-|---|---|---|
-| Gun | $25 | $9,617 |
-| Laser | $70 | $26,928 |
-| Taser | $80 | $30,785 |
-| Cannon | $90 | $34,621 |
+| Kind | Build | Tier 20 total | Final step |
+|---|---|---|---|
+| Gun | $25 | $9,566 | $1,550 |
+| Laser | $70 | $26,902 | $4,350 |
+| Taser | $80 | $30,808 | $5,000 |
+| Cannon | $90 | $34,584 | $5,600 |
+
+(An earlier draft of this table rounded once at the end; the figures above are the sum of the rounded
+per-step prices, which is what a player pays. The smoke suite freezes these.)
 
 A wave-100 run earns roughly $25,000 before kill bounties, so a maxed Gun is a deliberate long goal
 and a maxed Cannon is endless-mode territory. That is the intent: the ladder is a sink, not a
