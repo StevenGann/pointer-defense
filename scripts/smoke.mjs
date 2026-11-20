@@ -97,7 +97,8 @@ import { computeEditorLayout, editorToolbarAt } from '../src/view/editor.ts';
 import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, ENEMY_KINDS, BOSS_KINDS, isBossKind, isBossVariant, isPopupEnemy, isFlyerKind, slowFactorFor, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS, CARRIER_BROOD_COUNT, CARRIER_BROOD_INTERVAL_TICKS, CARRIER_BROOD_SCATTER_TICKS, CARRIER_DEATH_BROOD_COUNT, DREADNOUGHT_PLATING, WIRECUTTER_EMP_RADIUS, WIRECUTTER_EMP_TICKS, RAM_TOWER_DPS, RAM_TURRET_DAMAGE, RAM_TURRET_RANGE } from '../src/core/enemies.ts';
 import { missileSeed, AA_SALVO_COUNT } from '../src/core/projectiles.ts';
 import { rngNext } from '../src/core/rng.ts';
-import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS } from '../src/core/ads.ts';
+import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS, AD_KINDS } from '../src/core/ads.ts';
+import { AD_TIPS } from '../src/content/adTips.ts';
 import {
   comboMultiplier,
   clickDamage,
@@ -131,7 +132,7 @@ import { restartWindows, checkAchievements, enterEndless, pointerDamageMult, tow
 import { cheatsEnabled, setCheatsVisibleForTests, SPAWN_KINDS } from '../src/core/cheats.ts';
 import { dashRects, offsetSegment, routeOffset } from '../src/view/route.ts';
 import { enemyDrawOrder, popupCloseHit, popupCloseRect, popupWindowRect, POPUP_TITLE_H, POPUP_CLOSE_W, POPUP_CLOSE_H } from '../src/view/popupEnemy.ts';
-import { adCloseRect } from '../src/view/ad.ts';
+import { adCloseRect, wrapAdTip, adRewardLineY, adTipMaxWidth } from '../src/view/ad.ts';
 import {
   hatchSegments,
   lerpColor,
@@ -4584,6 +4585,127 @@ function cursorTower(tier, branch) {
   spawnAd(s2, 'screensaver');
   for (let i = 0; i < AD_LIFETIME_TICKS; i++) tick(s2);
   check(s2.ad === null, `the ad expires after ${AD_LIFETIME_TICKS / TICK_HZ} s`);
+}
+
+// --- Ad tips: layout, selection, the Blue Screen trap, and no repeats (docs/ADS-TIPS.md) --------
+{
+  // Geometry: the dialog grows to 220x92 and the reward line keeps its pre-tip place.
+  const s = createRunState();
+  const ad = spawnAd(s, 'defrag');
+  check(AD_W === 220 && AD_H === 92, `the ad is ${AD_W}x${AD_H} (220x92)`);
+  check(adRewardLineY(ad) === ad.y + 2 + TITLE_H + 19, 'the reward line stays 19 px below the title bar');
+  check(adTipMaxWidth(ad) === 208, `the tip block has a ${adTipMaxWidth(ad)} px text budget`);
+  check(ad.tip !== null, 'defrag carries a tip');
+
+  // Every tip in every locale wraps to at most three 11 px lines inside the 220 px box. The headless
+  // textWidth estimate is what the browser uses for layout, so a fourth line here is a fourth line in
+  // game. The report prints the max line count per locale.
+  const codes = ['en', 'es', 'fr', 'ru', 'uk', 'zh-Hans', 'he'];
+  const maxW = adTipMaxWidth(ad);
+  let fit = true;
+  const perLocaleMax = {};
+  for (const code of codes) {
+    const mod = await import(`../src/i18n/${code}/index.ts`);
+    setLocale(mod[Object.keys(mod)[0]], code);
+    clearTextWidthCache();
+    setDirection(code === 'he' ? 'rtl' : 'ltr');
+    let max = 0;
+    for (const id of AD_TIPS) {
+      const text = t(`ads.tip.${id}`);
+      const lines = wrapAdTip(text, maxW);
+      max = Math.max(max, lines.length);
+      if (lines.length > 3) {
+        fit = false;
+        console.log(`  tip overflow: ${code} "${id}" needs ${lines.length} lines`);
+      }
+      for (const line of lines) {
+        if (textWidth(line, FONT_SIZE.small) > maxW) {
+          fit = false;
+          console.log(`  tip over-wide: ${code} "${id}" line "${line}" is ${textWidth(line, FONT_SIZE.small)} px`);
+        }
+      }
+    }
+    perLocaleMax[code] = max;
+  }
+  check(fit, 'every tip wraps inside three 11 px lines in all seven locales');
+  console.log(`  ad-tip line counts (max per locale): ${JSON.stringify(perLocaleMax)}`);
+  setLocale(en, 'en');
+  clearTextWidthCache();
+  setDirection('ltr');
+}
+
+{
+  // Selection is a pure function of ad.id and the pool length, seeded per run: a replayed run shows
+  // the same tip, and the choice never reads or advances the run's RNG stream.
+  const critRolls = (rng, n) => {
+    const out = [];
+    let r = rng;
+    for (let i = 0; i < n; i++) {
+      const res = nextCritRoll(r, false, false);
+      out.push(res.crit);
+      r = res.next;
+    }
+    return out;
+  };
+
+  const base = createRunState();
+  base.rng = 0x5eed1234;
+  const rollsWithoutAds = critRolls(base.rng, 24);
+
+  const withAds = createRunState();
+  withAds.rng = 0x5eed1234;
+  const tips = [];
+  for (let i = 0; i < 5; i++) {
+    withAds.ad = null;
+    tips.push(spawnAd(withAds, 'defrag').tip);
+  }
+  const rollsWithAds = critRolls(withAds.rng, 24);
+  check(JSON.stringify(rollsWithoutAds) === JSON.stringify(rollsWithAds),
+    'choosing tips leaves the crit-roll stream byte-identical');
+
+  const replay = createRunState();
+  replay.rng = 0x5eed1234;
+  const replayTips = [];
+  for (let i = 0; i < 5; i++) {
+    replay.ad = null;
+    replayTips.push(spawnAd(replay, 'defrag').tip);
+  }
+  check(JSON.stringify(tips) === JSON.stringify(replayTips), 'the same seed shows the same tips on the same ads');
+
+  // Consecutive ads advance the cursor, so adjacent ads never share a tip.
+  const other = createRunState();
+  const first = spawnAd(other, 'defrag').tip;
+  other.ad = null;
+  const second = spawnAd(other, 'autoupdate').tip;
+  check(first !== null && second !== null && first !== second, 'different ads fall on different tips');
+}
+
+{
+  // A run shows the whole pool once before any tip repeats: the cursor cycles the pool.
+  const s = createRunState();
+  const seen = [];
+  for (let i = 0; i < AD_TIPS.length; i++) {
+    s.ad = null;
+    seen.push(spawnAd(s, 'defrag').tip);
+  }
+  check(new Set(seen).size === AD_TIPS.length, `a run shows all ${AD_TIPS.length} tips before any repeats`);
+  s.ad = null;
+  const next = spawnAd(s, 'defrag').tip;
+  check(next === seen[0], 'after the pool is exhausted the cycle starts over at the first tip');
+}
+
+{
+  // Blue Screen keeps the block but carries no tip; every other kind carries one.
+  const s = createRunState();
+  const bs = spawnAd(s, 'bluescreen');
+  check(bs.tip === null, 'Blue Screen has no tip');
+  let allTipped = true;
+  for (const kind of AD_KINDS) {
+    if (kind === 'bluescreen') continue;
+    s.ad = null;
+    if (spawnAd(s, kind).tip === null) allTipped = false;
+  }
+  check(allTipped, 'every ad kind except Blue Screen carries a tip');
 }
 
 {

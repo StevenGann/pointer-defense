@@ -6,6 +6,7 @@ import { COLS, ROWS, tileAt } from './grid.ts';
 import { buildField, isSealed } from './pathfield.ts';
 import { rngNext } from './rng.ts';
 import { buffKillMult } from './upgrades.ts';
+import { AD_TIPS, type AdTipId } from '../content/adTips.ts';
 
 /**
  * Desktop ads: rare timed bonuses that appear on the desktop during a wave and pay when their close
@@ -31,23 +32,24 @@ export const AD_KINDS: readonly AdKind[] = [
 ];
 
 interface AdSpec {
-  readonly title: string;
-  readonly message: string;
+  /** Relative spawn weight; a heavier kind appears more often. */
   readonly weight: number;
 }
 
 export const AD_SPECS: Readonly<Record<AdKind, AdSpec>> = {
-  defrag: { title: 'Defrag complete', message: 'Close for +8% salvage', weight: 30 },
-  autoupdate: { title: 'AutoUpdate', message: 'Close for +40% towers', weight: 20 },
-  timezone: { title: 'Time Zone Change', message: 'Close for -50% speed', weight: 15 },
-  freeware: { title: 'Freeware', message: 'Close for a free Gun', weight: 15 },
-  screensaver: { title: 'Screensaver', message: 'Close for 25 damage', weight: 10 },
-  bluescreen: { title: 'Blue Screen', message: 'Close for nothing', weight: 10 },
+  defrag: { weight: 30 },
+  autoupdate: { weight: 20 },
+  timezone: { weight: 15 },
+  freeware: { weight: 15 },
+  screensaver: { weight: 10 },
+  bluescreen: { weight: 10 },
 };
 
 export interface Ad {
   readonly id: number;
   readonly kind: AdKind;
+  /** The tip shown under the offer, or null for the Blue Screen trap (docs/ADS-TIPS.md). */
+  readonly tip: AdTipId | null;
   /** Ticks remaining before it silently vanishes. */
   ttl: number;
   /** Top-left corner of the dialog, chosen at random on the desktop by the sim. */
@@ -68,8 +70,17 @@ interface ViewportRect {
 export const AD_LIFETIME_TICKS = secondsToTicks(8);
 
 /** An ad's chrome is the main window's scale: it is a small dialog, not a shrunken one. */
-export const AD_W = 176;
-export const AD_H = 64;
+export const AD_W = 220;
+export const AD_H = 92;
+
+/** Defrag pays this fraction of current salvage on close (the reward line reads it back as +8 %). */
+export const AD_DEFRAG_SALVAGE_PCT = 0.08;
+/** AutoUpdate multiplies tower damage by this while it lasts (+40 %). */
+export const AD_AUTOUPDATE_DAMAGE_MULT = 1.4;
+/** Time Zone multiplies enemy speed by this while it lasts (-50 %). */
+export const AD_TIMEZONE_SPEED_MULT = 0.5;
+/** Screensaver's flat damage to every enemy (25). */
+export const AD_SCREENSAVER_DAMAGE = 25;
 
 /** An ad is placed with an 8 px margin from the board field's edges, never over chrome or panels. */
 const AD_MARGIN = 8;
@@ -94,6 +105,25 @@ function nextFloat(s: RunState): number {
  *  not consume `s.rng` — that would shift every later crit roll and change the balance harness. */
 function hashUnit(seed: number): number {
   return rngNext(seed | 0).value;
+}
+
+/** A deterministic integer in [0, mod) hashed from `seed`, without touching the run's RNG stream. */
+export function hashIndex(seed: number, mod: number): number {
+  return Math.floor(rngNext(seed | 0).value * mod);
+}
+
+/**
+ * The tip an ad shows, and the cursor to carry forward. Blue Screen has no tip. The cursor is seeded
+ * from `hash(ad.id, pool.length)` on the first tip of a run and then cycles the pool, so a run shows
+ * every tip once before repeating, a replayed seed lands on the same tip, and the pointer's crit
+ * rolls are never read or advanced.
+ */
+export function adTipId(kind: AdKind, id: number, cursor: number): { tip: AdTipId | null; cursor: number } {
+  if (kind === 'bluescreen') return { tip: null, cursor };
+  let next = cursor;
+  if (next < 0) next = hashIndex(id, AD_TIPS.length);
+  const tip = AD_TIPS[next];
+  return { tip, cursor: (next + 1) % AD_TIPS.length };
 }
 
 function nextFirstAttemptDelayTicks(s: RunState): number {
@@ -152,9 +182,12 @@ export function spawnAd(s: RunState, kind?: AdKind): Ad | null {
   // Hash the run's current RNG state together with the ad id: the position is deterministic for a
   // given seed, differs between ads, and never consumes the stream the sim (and balance) relies on.
   const seed = (s.rng ^ Math.imul(id, 0x9e3779b9)) | 0;
+  const { tip, cursor } = adTipId(k, id, s.adTipCursor);
+  s.adTipCursor = cursor;
   const ad: Ad = {
     id: s.nextId++,
     kind: k,
+    tip,
     ttl: AD_LIFETIME_TICKS,
     x: region.x + Math.round(hashUnit(seed) * spanX),
     y: region.y + Math.round(hashUnit(seed ^ 0x6d2b79f5) * spanY),
@@ -215,7 +248,7 @@ export function dismissAd(s: RunState, id: number): boolean {
 function applyEffect(s: RunState, kind: AdKind): void {
   switch (kind) {
     case 'defrag':
-      earn(s.economy, Math.floor(s.economy.salvage * 0.08));
+      earn(s.economy, Math.floor(s.economy.salvage * AD_DEFRAG_SALVAGE_PCT));
       break;
     case 'autoupdate':
       s.towerDamageBuffTicks = secondsToTicks(10);
@@ -267,8 +300,8 @@ function applyScreensaver(s: RunState): void {
     if (e.dead) continue;
     if (e.kind === 'popup') continue; // the window only dies to its close box
     e.stunUntilTick = s.tick + secondsToTicks(0.5);
-    e.hp -= 25;
-    s.events.push({ type: 'damage', x: e.x, y: e.y, amount: 25, weak: false, id: e.id });
+    e.hp -= AD_SCREENSAVER_DAMAGE;
+    s.events.push({ type: 'damage', x: e.x, y: e.y, amount: AD_SCREENSAVER_DAMAGE, weak: false, id: e.id });
     if (e.hp <= 1e-9) {
       e.hp = 0;
       e.dead = true;
