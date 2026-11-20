@@ -1,4 +1,5 @@
 import type { Catalogue } from '../index.ts';
+import { help } from './help.ts';
 
 /**
  * The Spanish (European) catalogue — a machine draft pending native review.
@@ -8,6 +9,8 @@ import type { Catalogue } from '../index.ts';
  * 'Pointer Defense' plus HP, DPS and id-like tokens are left untranslated.
  */
 export const es: Catalogue = {
+  ...help,
+
   // Menu-bar words and every File / View / Cheats / Help item.
   'menu.file': 'Archivo',
   'menu.view': 'Ver',
