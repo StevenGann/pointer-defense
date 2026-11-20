@@ -146,7 +146,7 @@ import {
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
 import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName, TOOLTIP_BLUE } from '../src/view/tooltipText.ts';
-import { BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre } from '../src/view/board.ts';
+import { drawTower, clearTowerSprites, BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, computeWindowChromeGeom, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
 import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, statusPerfText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect, modalRect, modalMessageTop } from '../src/view/hud.ts';
@@ -11505,6 +11505,44 @@ function dailyState(date) {
   setLocale(en, 'en');
   clearTextWidthCache();
   setDirection('ltr');
+}
+
+// The per-tower sprite pools are indexed by tower slot, not by tower id, so a slot hands its sprites
+// to whatever tower stands there next. A wall takes no turret, branch mark or wrench; if the slot is
+// not cleared first it keeps the previous tenant's, which is how a sold gun's barrel stayed on the
+// board — frozen, still pointing where the gun last aimed — after the tower was gone.
+{
+  const fakeSprite = () => ({
+    visible: true,
+    texture: null,
+    position: { set() {} },
+    width: 0,
+    height: 0,
+    tint: 0,
+    rotation: 0,
+    alpha: 1,
+    anchor: { set() {} },
+  });
+  const fakeGfx = () => {
+    const p = new Proxy({}, { get: () => () => p });
+    return p;
+  };
+
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  check(placeTower(s, 'wall', 3, 3), 'phantom turret: a wall can be placed for the test');
+  const wall = towerAt(s, 3, 3);
+  const turret = fakeSprite();
+  const mark = fakeSprite();
+  const wrench = fakeSprite();
+  drawTower(fakeSprite(), turret, mark, wrench, fakeGfx(), wall, { x: 0, y: 0, cell: 32 }, 32, 0);
+  check(turret.visible === false, 'phantom turret: a wall turns off a turret left in its slot');
+  check(mark.visible === false, 'phantom turret: a wall turns off a branch mark left in its slot');
+  check(wrench.visible === false, 'phantom turret: a wall turns off a wrench left in its slot');
+
+  const sprites = [fakeSprite(), fakeSprite(), fakeSprite()];
+  clearTowerSprites(sprites);
+  check(sprites.every((sp) => sp.visible === false), 'phantom turret: clearTowerSprites hides every pooled sprite');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

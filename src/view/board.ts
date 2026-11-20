@@ -1058,7 +1058,7 @@ function dottedLine(g: Graphics, x1: number, y1: number, x2: number, y2: number,
   g.stroke({ width: 1, color });
 }
 
-function drawTower(
+export function drawTower(
   baseSprite: Sprite,
   turretSprite: Sprite,
   markSprite: Sprite,
@@ -1074,6 +1074,10 @@ function drawTower(
 ): void {
   const cx = board.x + (t.col + 0.5) * cell;
   const cy = board.y + (t.row + 0.5) * cell;
+  // These sprites are pooled by tower slot, so each one still carries the look of whichever tower
+  // held the slot last frame. Clear the slot before drawing: a wall takes no turret, mark or wrench,
+  // and leaving the previous tower's turret lit is how frozen barrels survived their tower.
+  clearTowerSprites([turretSprite, markSprite, wrenchSprite]);
   if (t.kind === 'wall') {
     const repairing = isRepairing(t, clock);
     drawWallTower(baseSprite, overlayA, overlayB, g, { ...t, locked: isGateLocked(t, clock), repairing }, cx, cy, cell);
@@ -1108,6 +1112,19 @@ function drawTower(
     const r = pipRect(cx, cy, cell, pipUsesBottomCorner(t, clock));
     drawPip(g, r);
   }
+}
+
+/**
+ * Hide the pooled per-tower sprites a tower slot owns before the slot is redrawn.
+ *
+ * The pools are indexed by tower slot, not by tower id, so a slot passes from tower to tower as the
+ * roster changes. Anything the new tenant does not draw keeps the previous tenant's texture, alpha
+ * and position — a sold gun's barrel sitting on a wall, a repaired tower's wrench, a branch mark on
+ * a tower that never branched. Clearing first makes every branch responsible only for turning its
+ * own sprites on.
+ */
+export function clearTowerSprites(sprites: readonly { visible: boolean }[]): void {
+  for (const s of sprites) s.visible = false;
 }
 
 /** Draw a non-wall tower as a base sprite plus a rotating turret sprite, or the procedural fallback. */
