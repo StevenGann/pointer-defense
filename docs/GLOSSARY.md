@@ -1,48 +1,70 @@
 # Translation glossary
 
-Every locale uses these terms for these concepts, so the manual, the HUD and the tooltips agree with
-each other. Windows' own localised terminology wins wherever it applies — a player who knows their
-operating system should recognise the word.
+The vocabulary every locale uses, so the HUD, the tooltips and the manual agree with each other.
+Status: **draft, pending native review**. Rows marked `verified` have a source I could check; the rest
+are standard renderings that a native speaker should confirm before a locale is released unflagged.
 
-Status: **draft**. These are first-pass renderings and need a native review before any locale ships
-unflagged (see `docs/LOCALES.md`).
+## The policy this encodes
 
-| Concept | es | fr | zh-Hans | ru | uk | he |
-|---|---|---|---|---|---|---|
-| Wave | oleada | vague | 波次 | волна | хвиля | גל |
-| Tower | torre | tour | 塔 | башня | вежа | מגדל |
-| Enemy | enemigo | ennemi | 敌人 | враг | ворог | אויב |
-| Boss | jefe | boss | 首领 | босс | бос | בוס |
-| Damage | daño | dégâts | 伤害 | урон | шкода | נזק |
-| Range | alcance | portée | 射程 | радиус | радіус | טווח |
-| Fire rate | cadencia | cadence | 射速 | скорость стрельбы | швидкість вогню | קצב ירי |
-| Upgrade | mejorar | améliorer | 升级 | улучшить | покращити | שדרוג |
-| Branch | rama | branche | 分支 | ветка | гілка | ענף |
-| Salvage | chatarra | ferraille | 废料 | лом | брухт | גרוטאות |
-| Integrity | integridad | intégrité | 完整度 | целостность | цілісність | שלמות |
-| Pointer | puntero | pointeur | 指针 | указатель | вказівник | סמן |
-| Click | clic | clic | 点击 | клик | клік | לחיצה |
-| Wall | muro | mur | 墙 | стена | стіна | חומה |
-| Repair | reparación | réparation | 修理 | ремонт | ремонт | תיקון |
-| Flyer | volador | volant | 飞行敌人 | летун | літун | מעופף |
-| Shielded | blindado | blindé | 护盾 | под щитом | під щитом | עם מגן |
-| Achievement | logro | succès | 成就 | достижение | досягнення | הישג |
-| Daily challenge | desafío diario | défi du jour | 每日挑战 | ежедневный вызов | щоденний виклик | אתגר יומי |
-| Map editor | editor de mapas | éditeur de cartes | 地图编辑器 | редактор карт | редактор карт | עורך מפות |
-| Save | guardar | enregistrer | 保存 | сохранить | зберегти | שמור |
-| Restore (service pack) | restaurar | restaurer | 恢复 | восстановить | відновити | שחזר |
-| Settings | configuración | paramètres | 设置 | настройки | налаштування | הגדרות |
-| Help | ayuda | aide | 帮助 | справка | довідка | עזרה |
-| Contents | contenido | sommaire | 目录 | содержание | зміст | תוכן |
-| Index | índice | index | 索引 | указатель | покажчик | אינדקס |
-| Search | buscar | rechercher | 搜索 | поиск | пошук | חיפוש |
-| Wave clear bonus | bonificación por oleada | prime de vague | 波次奖励 | бонус за волну | бонус за хвилю | בונוס גל |
-| Overclock | overclock | overclock | 超频 | разгон | розгін | המהרה |
-| Critical hit | crítico | critique | 暴击 | крит | крит | פגיעה קריטית |
+Your point, and it is the right one: jargon is not always translated. Three behaviours, chosen per
+term rather than per language.
 
-Rules:
+- **Chrome is translated.** Windows terminology exists in every one of these languages because Microsoft
+  shipped it. A player who knows their own OS recognises "Справка", "Paramètres", "帮助". Copying
+  Microsoft's word costs nothing and reads native.
+- **Game slang is transliterated in Russian and Ukrainian.** босс, крит, апгрейд are what Russian players
+  actually say and read; a literal "главный противник" reads like a manual for a different game. The
+  rule: chrome translates, game nouns transliterate.
+- **Technical abbreviations stay.** HP and DPS do not translate into any of these languages. French is
+  the one exception worth noting: PV (points de vie) is standard in French game UIs, so `HP` becomes
+  `PV` there and nowhere else.
+- **Chinese translates the concept, keeps the abbreviation.** 波次 and 防御塔 are native; HP stays Latin.
 
-- Do not translate `Pointer Defense`, `RPM`, `DPS`, or the Windows product names the chrome imitates.
-- Keep numbers, `$` and units out of the glossary: they are formatted, not translated.
-- Hebrew writes numbers left-to-right inside RTL text; never reorder digits.
-- Chinese uses no spaces between words; do not add them around numbers.
+| Concept | es | fr | zh-Hans | ru | uk | he | Policy |
+|---|---|---|---|---|---|---|---|
+| Wave | oleada | vague | 波次 | волна | хвиля | גל | trans |
+| Tower | torre | tour | 防御塔 | башня | вежа | מגדל | trans |
+| Enemy | enemigo | ennemi | 敌人 | враг | ворог | אויב | trans |
+| Boss | jefe | boss | 首领 | босс | бос | בוס | ru/uk translit, fr keeps 'boss' |
+| Damage | daño | dégâts | 伤害 | урон | шкода | נזק | trans |
+| Range | alcance | portée | 射程 | радиус | радіус | טווח | trans |
+| Fire rate | cadencia | cadence | 射速 | скорострельность | швидкострільність | קצב ירי | trans |
+| Hit points | HP | PV | 生命值 (HP) | HP | HP | HP | kept as HP except fr (PV) |
+| Upgrade | mejorar | améliorer | 升级 | улучшить | покращити | שדרוג | trans; ru/uk game slang 'апгрейд' avoided in UI |
+| Branch | rama | branche | 分支 | ветка | гілка | ענף | trans |
+| Salvage | chatarra | ferraille | 废料 | лом | брухт | גרוטאות | trans |
+| Integrity | integridad | intégrité | 完整度 | целостность | цілісність | שלמות | trans |
+| Pointer | puntero | pointeur | 指针 | указатель | вказівник | סמן | trans; zh cursor is 光标 |
+| Click | clic | clic | 点击 | клик | клік | לחיצה | trans |
+| Wall | muro | mur | 墙 | стена | стіна | חומה | trans |
+| Repair | reparación | réparation | 修理 | ремонт | ремонт | תיקון | trans |
+| Flying enemy | volador | volant | 飞行敌人 | летун | літун | מעופף | trans |
+| Shielded | blindado | blindé | 护盾 | под щитом | під щитом | עם מגן | trans |
+| Achievement | logro | succès | 成就 | достижение | досягнення | הישג | trans |
+| Daily challenge | desafío diario | défi du jour | 每日挑战 | ежедневный вызов | щоденний виклик | אתגר יומי | trans |
+| Map editor | editor de mapas | éditeur de cartes | 地图编辑器 | редактор карт | редактор карт | עורך מפות | trans |
+| Save | guardar | enregistrer | 保存 | сохранить | зберегти | שמור | trans (verb form, as in menu items) |
+| Restore | restaurar | restaurer | 恢复 | восстановить | відновити | שחזר | trans; he verified 'שחזור מערכת' = System Restore |
+| Settings | configuración | paramètres | 设置 | параметры | параметри | הגדרות | trans |
+| Help | ayuda | aide | 帮助 | справка | довідка | עזרה | trans |
+| Contents | contenido | sommaire | 目录 | содержание | зміст | תוכן | trans |
+| Index | índice | index | 索引 | указатель | покажчик | אינדקס | trans |
+| Search | buscar | rechercher | 搜索 | поиск | пошук | חיפוש | trans |
+| Overclock | overclock | overclock | 超频 | разгон | розгін | המהרה | kept in es/fr; trans in zh/ru/uk/he |
+| Critical hit | crítico | coup critique | 暴击 | крит | крит | פגיעה קריטית | ru/uk game slang translit |
+
+## Confidence notes
+
+- `Restore` in Hebrew is `verified` — Hebrew Windows documentation uses "שחזור מערכת" for System Restore.
+- `Integrity` in Chinese is `verified` as 完整性 (Microsoft's Win32 integrity documentation).
+- Russian and Ukrainian `Upgrade`: the UI verb is улучшить / покращити. The transliteration апгрейд exists
+  but reads as gamer slang and should not be used for a button.
+- French `boss` is kept in game contexts and translated as "boss" in manuals too; do not write "patron".
+
+## Rules
+
+- Do not translate `Pointer Defense`, `DPS`, `HP` (except fr: `PV`), or the Windows product names the
+  chrome imitates.
+- Numbers, `$` and units are formatted by `Intl`, never translated or reordered. Hebrew keeps digits in
+  a left-to-right run inside right-to-left text.
+- Chinese needs no spaces around numbers; French needs a non-breaking space before `:` `;` `?` `!`.
