@@ -44,6 +44,7 @@ import {
 import { SPEC_CAPS, rpGain, specLevelCost, specEffectCompactText, type Profile } from '../core/save.ts';
 import { earlyCallBonus } from '../core/waves.ts';
 import { branchName } from '../view/tooltipText.ts';
+import { artNameForEnemy, artNameForTowerBase, artNameForTowerTurret } from '../view/art.ts';
 
 /**
  * The Help viewer's content: one page per mechanic, enemy, boss and tower.
@@ -74,6 +75,16 @@ export interface HelpPage {
   readonly category: HelpCategory;
   readonly gate: HelpGate;
   readonly body: readonly string[];
+  /** The page's subject art (docs/HELP-ART.md): an enemy sprite, or a tower's base (and turret). */
+  readonly art?: HelpPageArt;
+}
+
+/** The two textures a Help page's preview box shows, at twice the board's in-game size. */
+export interface HelpPageArt {
+  /** The body texture: the enemy sprite, or a tower's base. */
+  readonly base: string;
+  /** A tower's turret, drawn over the base. Absent for enemies and for art with no turret split. */
+  readonly turret?: string;
 }
 
 export const HELP_CATEGORIES: readonly { id: HelpCategory; title: string }[] = [
@@ -284,12 +295,14 @@ function enemyStatsLine(kind: EnemyKind): string {
 }
 
 function enemyPage(kind: EnemyKind): HelpPage {
+  const artName = artNameForEnemy(kind);
   return {
     id: `enemy-${kind}`,
     title: ENEMY_STATS[kind].name,
     category: 'enemies',
     gate: { kind: 'enemy', enemy: kind },
     body: [enemyStatsLine(kind), ENEMY_ANSWER[kind as keyof typeof ENEMY_ANSWER]],
+    ...(artName !== null ? { art: { base: artName } } : {}),
   };
 }
 
@@ -342,6 +355,7 @@ const BOSS_TEXT: Readonly<Record<string, { gimmick: string; answer: string }>> =
 function bossPage(kind: EnemyKind): HelpPage {
   const st = ENEMY_STATS[kind];
   const text = BOSS_TEXT[kind];
+  const artName = artNameForEnemy(kind);
   return {
     id: `boss-${kind}`,
     title: st.name,
@@ -352,6 +366,7 @@ function bossPage(kind: EnemyKind): HelpPage {
       text.gimmick,
       text.answer,
     ],
+    ...(artName !== null ? { art: { base: artName } } : {}),
   };
 }
 
@@ -523,12 +538,15 @@ function branchesLine(kind: TowerKind): string {
 }
 
 function towerPage(kind: TowerKind): HelpPage {
+  const base = artNameForTowerBase(kind);
+  const turret = artNameForTowerTurret(kind);
   return {
     id: `tower-${kind}`,
     title: TOWER_STATS[kind].name,
     category: 'towers',
     gate: { kind: 'tower', tower: kind },
     body: [...towerStatBlock(kind), TOWER_ROLE[kind], branchesLine(kind)],
+    ...(base !== null ? { art: { base, ...(turret !== null ? { turret } : {}) } } : {}),
   };
 }
 

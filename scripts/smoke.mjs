@@ -167,7 +167,7 @@ import {
 } from '../src/view/bossBars.ts';
 import { backingStorePixelSize } from '../src/view/screen.ts';
 import { HELP_PAGES, pageUnlocked, lockedReason, pageById } from '../src/content/help.ts';
-import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, computeHelpScroll, HelpSession, helpIndexList, helpSearchResults, helpTopicPath, HELP_W, HELP_H, HELP_LINE_H, HELP_SCROLL_LINES } from '../src/view/help.ts';
+import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, computeHelpScroll, HelpSession, helpIndexList, helpSearchResults, helpTopicPath, HELP_W, HELP_H, HELP_LINE_H, HELP_HEADING_H, HELP_SCROLL_LINES, layoutPageLines, helpArtLayout } from '../src/view/help.ts';
 import { buildAchievementGrid, gridRowCount, gridCellRect, ACH_COLUMNS, ACH_CELL, ACH_GUTTER, computeAchievementGrid, achievementGridHitAt, AchievementSession } from '../src/view/dialog.ts';
 import {
   ART_MANIFEST,
@@ -7842,6 +7842,81 @@ function helpRecomputeBlock(kind) {
 
   session.contents();
   check(session.expanded === null, 'Contents collapses the tree back to the top');
+}
+
+// --- 45a. Help art previews (docs/HELP-ART.md) -----------------------------------------------
+{
+  // 1. Every enemy and tower page that names art resolves to an asset that exists in the manifest.
+  for (const page of HELP_PAGES) {
+    if (!page.art) continue;
+    check(manifestEntry(page.art.base) !== undefined, `help art: ${page.id} base "${page.art.base}" is in the manifest`);
+    if (page.art.turret !== undefined) {
+      check(manifestEntry(page.art.turret) !== undefined, `help art: ${page.id} turret "${page.art.turret}" is in the manifest`);
+    }
+  }
+}
+
+{
+  // 2 + 3 + 4. Layout: no overlap, the scroll invariant, and full width with no box for art-free pages.
+  const widths = [computeHelpLayout(0, 0, 200).pageText.w, computeHelpLayout(0, 0, 320).pageText.w];
+  const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  for (const page of HELP_PAGES) {
+    for (const width of widths) {
+      const art = helpArtLayout(page, width);
+      const lines = layoutPageLines(page, width);
+
+      // 2. No body line's rectangle overlaps the art box.
+      if (art !== null) {
+        const box = art.box;
+        let clean = true;
+        for (const ln of lines) {
+          if (overlaps({ x: ln.x, y: ln.y, w: ln.width, h: HELP_LINE_H }, box)) clean = false;
+        }
+        check(clean, `help art: no body line overlaps the art box for ${page.id} at ${width}px`);
+      }
+
+      // 3. pageBodyHeight equals the laid-out height (the scroll invariant).
+      const laidOut = lines.length === 0 ? HELP_HEADING_H : lines[lines.length - 1].y + HELP_LINE_H + 4;
+      check(pageBodyHeight(page, width) === laidOut, `help art: pageBodyHeight equals the laid-out height for ${page.id} at ${width}px`);
+
+      // 4. A page with no art lays out exactly as before: full width, no box.
+      if (!page.art) {
+        check(art === null, `help art: ${page.id} draws no art box`);
+        check(lines.every((ln) => ln.x + ln.width === width), `help art: ${page.id} body is full width at ${width}px`);
+      }
+    }
+  }
+}
+
+{
+  // 5. An animated asset cycles frames across ticks; a still one does not.
+  resetArt();
+  const f0 = new Texture({ width: 2, height: 2 });
+  const f1 = new Texture({ width: 3, height: 3 });
+  injectArtFrames('grunt', [f0, f1]);
+  injectArtAnim('grunt', { fps: 10, loop: 'loop', hold: 0, holdAfter: 0, randomStart: false, when: 'always' });
+  check(frameTexture('grunt', 48, 0, 0) === f0, 'help art: an animated asset starts on frame 0 at tick 0');
+  check(frameTexture('grunt', 48, 6, 0) === f1, 'help art: an animated asset advances to frame 1 at tick 6');
+  check(frameTexture('grunt', 48, 12, 0) === f0, 'help art: an animated asset wraps back to frame 0 at tick 12');
+  const still = new Texture({ width: 4, height: 4 });
+  injectArtTexture('gun-base', still);
+  check(frameTexture('gun-base', 48, 0, 0) === still && frameTexture('gun-base', 48, 999, 0) === still,
+    'help art: a still asset stays on frame 0 across ticks');
+  resetArt();
+}
+
+{
+  // 6. A tower page with a turret reports both parts; one without reports the base only.
+  const gun = pageById('tower-gun');
+  check(gun !== undefined && gun.art?.base === 'gun-base' && gun.art.turret === 'gun-turret',
+    'help art: a Gun page reports both its base and turret');
+  const beacon = pageById('tower-beacon');
+  check(beacon !== undefined && beacon.art?.base === 'beacon-base' && beacon.art.turret === undefined,
+    'help art: a Beacon page reports its base only');
+  const wall = pageById('tower-wall');
+  check(wall !== undefined && wall.art === undefined, 'help art: a Wall page (no plinth) names no art');
+  const popup = pageById('enemy-popup');
+  check(popup !== undefined && popup.art === undefined, 'help art: the Pop-up page (runtime enemy) names no art');
 }
 
 // --- 46. Cheats ------------------------------------------------------------------------------
