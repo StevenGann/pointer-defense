@@ -18,6 +18,7 @@ export const fr: Catalogue = {
   'menu.file.newRun': 'Nouvelle partie',
   'menu.file.exit': 'Quitter',
   'menu.view.records': 'Records',
+  'menu.view.language': 'Langue',
   'menu.view.shakeOn': "Secousse d'écran\u00A0: activée",
   'menu.view.shakeOff': "Secousse d'écran\u00A0: désactivée",
   'menu.cheats.godMode': 'Mode divin',

@@ -19,6 +19,7 @@ export const zh: Catalogue = {
   'menu.file.newRun': '新一局',
   'menu.file.exit': '退出',
   'menu.view.records': '记录',
+  'menu.view.language': '语言',
   'menu.view.shakeOn': '屏幕震动：开',
   'menu.view.shakeOff': '屏幕震动：关',
   'menu.cheats.godMode': '无敌模式',

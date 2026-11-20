@@ -1,3 +1,5 @@
+// Must be first: it installs the locale before any data module evaluates a `t()` call.
+import './i18n/boot.ts';
 import { towerName } from './i18n/names.ts';
 import { Application, Container, Graphics, Sprite } from 'pixi.js';
 import './style.css';
@@ -104,7 +106,9 @@ import { contextHelpHitAt, contextHelpPage, nextHelpMode } from './view/contexth
 import { HELP_PAGES, pageUnlocked } from './content/help.ts';
 import { EditorView, editorPaletteAt, editorToggleNudgeAt, editorToolbarAt, type EditorAction, type ToggleNudge } from './view/editor.ts';
 import { MapLibraryView, NameDialogView, computeMapLibrary, computeNameDialog, mapLibraryHitAt, nameDialogButtonAt, type MapLibraryHit, type MapLibraryMode } from './view/mapLibrary.ts';
-import { t } from './i18n/index.ts';
+import { t, currentLocaleName } from './i18n/index.ts';
+import { switchLocale } from './i18n/activate.ts';
+import { LOCALES } from './i18n/locales.ts';
 import pkg from '../package.json';
 
 const app = new Application();
@@ -674,6 +678,10 @@ function buildMenu(name: MenuName): OpenMenu {
         { id: 'records', label: t('menu.view.records') },
         { id: 'separator', label: '', separator: true },
         { id: 'shake', label: profile.shakeOn ? t('menu.view.shakeOn') : t('menu.view.shakeOff') },
+        { id: 'separator', label: '', separator: true },
+        { id: 'language-header', label: t('menu.view.language'), disabled: true },
+        // Each language is named in its own script, so the list is readable whichever one is active.
+        ...LOCALES.map((l) => ({ id: l.code, label: l.label, checked: l.code === currentLocaleName() })),
       ],
     };
   }
@@ -720,6 +728,11 @@ function buildMenu(name: MenuName): OpenMenu {
 
 function menuAction(id: string): void {
   menu = null;
+  const chosenLocale = LOCALES.find((l) => l.code === id);
+  if (chosenLocale) {
+    switchLocale(chosenLocale.code);
+    return;
+  }
   switch (id) {
     case 'restart':
       dialog = {

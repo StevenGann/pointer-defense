@@ -412,7 +412,7 @@ export function computeRightPanel(l: Layout, s: RunState): RightPanelLayout {
 
   const wave = s.wave + 1;
   const def = waveDef(wave);
-  const composition = def ? def.groups.map((grp) => t('hud.compositionEntry', { count: grp.count, kind: grp.kind })) : [];
+  const composition = def ? def.groups.map((grp) => t('hud.compositionEntry', { count: grp.count, kind: enemyName(grp.kind) })) : [];
   const mods = waveModifiers(wave);
   if (mods.length > 0) composition.unshift(t('hud.compositionMods', { modifiers: mods.map((m) => MODIFIER_NAMES[m]).join(' + ') }));
   // Name the type boss ahead of time so its first appearance is telegraphed before it spawns.

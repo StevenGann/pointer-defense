@@ -13,6 +13,7 @@ export const menu = {
   'menu.view.records': 'Records',
   'menu.view.shakeOn': 'Screen shake: On',
   'menu.view.shakeOff': 'Screen shake: Off',
+  'menu.view.language': 'Language',
   'menu.cheats.godMode': 'God Mode',
   'menu.cheats.killAll': 'Kill All',
   'menu.cheats.spawn': 'Spawn',

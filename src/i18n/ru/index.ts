@@ -447,6 +447,7 @@ export const ru = {
   'menu.file.newRun': 'Новый забег',
   'menu.file.exit': 'Выход',
   'menu.view.records': 'Рекорды',
+  'menu.view.language': 'Язык',
   'menu.view.shakeOn': 'Тряска экрана: вкл.',
   'menu.view.shakeOff': 'Тряска экрана: выкл.',
   'menu.cheats.godMode': 'Режим бога',

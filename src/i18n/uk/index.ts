@@ -21,6 +21,7 @@ export const uk: Catalogue = {
   'menu.file.newRun': 'Новий забіг',
   'menu.file.exit': 'Вихід',
   'menu.view.records': 'Рекорди',
+  'menu.view.language': 'Мова',
   'menu.view.shakeOn': 'Трясіння екрана: Увімкнено',
   'menu.view.shakeOff': 'Трясіння екрана: Вимкнено',
   'menu.cheats.godMode': 'Режим Бога',
