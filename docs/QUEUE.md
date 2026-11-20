@@ -37,7 +37,18 @@ Nothing in flight.
 - **Why now:** it is small, it is player-visible, and it closes a localization hole that is already
   shipping in six languages.
 
-### 3. Per-locale width assertions across the chrome
+### 3. Map selection gallery
+
+- **Spec:** `docs/MAP-SELECT.md`.
+- **What ships:** Play opens a six-card gallery instead of starting `LEVELS[0]`; thumbnails are drawn
+  at runtime from each level's own walls and route (no art files, cached per level id); card names use
+  the existing localized `level.*.name` keys; focus order follows the visual order in RTL; the last map
+  is remembered in `pd.map.v1`.
+- **Done when:** every map's thumbnail is distinct and stable, six cards fit the client area in all
+  seven locales, `Enter` starts the focused map, and `Esc` returns to the menu.
+- **Why:** five of six authored maps are currently unreachable without the editor.
+
+### 4. Per-locale width assertions across the chrome
 
 - **Why:** the menu bar got per-locale fit tests when the CJK width bug was fixed; the HUD panels,
   dialogs, buttons and status bar still only assert that English fits. Russian runs ~130% of English
@@ -45,7 +56,7 @@ Nothing in flight.
 - **Done when:** a smoke group measures every fixed-width label in the HUD, the dialogs and the
   status bar under all seven locales and fails on overflow or collision.
 
-### 4. Native review of the six machine-draft catalogues
+### 5. Native review of the six machine-draft catalogues
 
 - **Why:** every non-English catalogue is `draft: true`. Machine translation is worst exactly where
   this UI lives — buttons, jargon, and short labels with no context.
@@ -56,7 +67,7 @@ Nothing in flight.
 
 ## Housekeeping
 
-### 5. Branch and worktree sweep
+### 6. Branch and worktree sweep
 
 - **Why:** the repo carries 100+ merged branches and roughly 50 worktrees; only `pd-upgate` holds
   `main`. It works, it is just noise when looking for something.
