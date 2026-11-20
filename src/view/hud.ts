@@ -425,6 +425,25 @@ export function computeRightPanel(l: Layout, s: RunState): RightPanelLayout {
   return { nextWave, kills, pointer, globalUpgrades };
 }
 
+/** Split a row at its ` · ` separators so no line is wider than `maxWidth`; never breaks a part. */
+export function wrapRowText(text: string, maxWidth: number, size: number): string[] {
+  if (Math.ceil(textWidth(text, size)) <= maxWidth) return [text];
+  const parts = text.split(' · ');
+  const out: string[] = [];
+  let current = '';
+  for (const part of parts) {
+    const next = current === '' ? part : `${current} · ${part}`;
+    if (current !== '' && Math.ceil(textWidth(next, size)) > maxWidth) {
+      out.push(current);
+      current = part;
+    } else {
+      current = next;
+    }
+  }
+  if (current !== '') out.push(current);
+  return out;
+}
+
 function computePointerSection(s: RunState, x: number, y: number, w: number): PointerSection {
   const name = pointerInfo(s.pointer).name;
   const dmg = fmtClickDamage(clickDamage(s.pointer));
@@ -433,7 +452,12 @@ function computePointerSection(s: RunState, x: number, y: number, w: number): Po
     stage >= 2 ? `Overclock ${s.pointer.clickLevel} / ${overclockCeiling(s.wave, overclockCap(s))}` : 'Overclock —';
   const crit = `Crit ${pct(critChance(false, false))}% · mark ${pct(critChance(true, false))}% · weak ${pct(critChance(false, true))}%`;
 
-  const rows = [`${name} · click ${dmg}`, overclock, crit];
+  // The right column is 156 px wide: the crit line is too long to fit on one row, so every row is
+  // wrapped at its separators rather than clipped or shrunk.
+  const rowWidth = w - 12 - 4;
+  const rows = [`${name} · click ${dmg}`, overclock, crit].flatMap((text) =>
+    wrapRowText(text, rowWidth, FONT_SIZE.body),
+  );
 
   const hasOverride = stage >= 2;
   const innerX = x + 4;
@@ -673,7 +697,7 @@ export class HudView {
   private readonly killsRows: Text[] = [makeText(''), makeText(''), makeText('')];
   private readonly comboText = makeText('', true);
   private readonly pointerTitle = makeText('POINTER', true);
-  private readonly pointerRows: Text[] = [makeText(''), makeText(''), makeText(''), makeText('')];
+  private readonly pointerRows: Text[] = [makeText(''), makeText(''), makeText(''), makeText(''), makeText(''), makeText('')];
   private readonly globalTitle = makeText('GLOBAL UPGRADES', true);
   private readonly globalRows: Text[] = [makeText(''), makeText(''), makeText('')];
 

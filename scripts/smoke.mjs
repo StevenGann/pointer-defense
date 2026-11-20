@@ -4415,7 +4415,7 @@ function cursorTower(tier, branch) {
   const right = computeRightPanel(computeLayout(1280, 720), s);
   check(right.pointer !== undefined, 'the right column has a POINTER section');
   check(right.pointer.override !== null, 'the POINTER section carries the Override checkbox at stage 2');
-  check(right.pointer.rows.length === 3, 'the POINTER section lists stage, overclock and crits');
+  check(right.pointer.rows.length >= 3, 'the POINTER section lists stage, overclock and crits');
   check(right.globalUpgrades.title === 'GLOBAL UPGRADES', 'the right column ends with GLOBAL UPGRADES');
   check(
     right.globalUpgrades.rows.length === 2 &&
@@ -10686,3 +10686,31 @@ function dailyState(date) {
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
 process.exit(failures === 0 ? 0 : 1);
+// --- 30b. No POINTER row is wider than the panel ----------------------------------------------
+{
+  for (const [w, h] of [[1280, 720], [1024, 640]]) {
+    for (const stage of [1, 2, 3]) {
+      for (const wave of [1, 40, 100]) {
+        const s = createRunState();
+        s.pointer.stage = stage;
+        s.wave = wave;
+        const section = computeRightPanel(computeLayout(w, h), s).pointer;
+        const maxW = section.rows[0].rect.w - 4;
+        check(
+          section.rows.every((r) => Math.ceil(textWidth(r.text, 13)) <= maxW),
+          `every POINTER row fits the panel at ${w}x${h}, stage ${stage}, wave ${wave}`,
+        );
+      }
+    }
+  }
+  const s = createRunState();
+  const section = computeRightPanel(computeLayout(1024, 640), s).pointer;
+  check(
+    section.rows.length > 3,
+    'the long crit line wraps onto its own row rather than overflowing',
+  );
+  check(
+    section.rows.every((r) => !r.text.includes('  ')),
+    'wrapped POINTER rows carry no double spaces',
+  );
+}
