@@ -1357,9 +1357,19 @@
       "rev": "a96d2bdd81"
     },
     {
+      "name": "ui/cursor-help",
+      "frames": 1,
+      "rev": "c9eb4029a0"
+    },
+    {
       "name": "ui/glyph-close",
       "frames": 1,
       "rev": "af19bb5a37"
+    },
+    {
+      "name": "ui/glyph-help",
+      "frames": 1,
+      "rev": "ad5725cccf"
     },
     {
       "name": "ui/glyph-maximize",
@@ -1394,72 +1404,72 @@
     {
       "name": "upgrades/autoloader",
       "frames": 1,
-      "rev": "950da9994b"
+      "rev": "4a43795bdf"
     },
     {
       "name": "upgrades/ballistic-telemetry",
       "frames": 1,
-      "rev": "950da9994b"
+      "rev": "dc2d7faf8c"
     },
     {
       "name": "upgrades/bounty-board",
       "frames": 1,
-      "rev": "950da9994b"
+      "rev": "1e1bc9b793"
     },
     {
       "name": "upgrades/bulk-requisition",
       "frames": 1,
-      "rev": "950da9994b"
+      "rev": "0fe0be0e4f"
     },
     {
       "name": "upgrades/chain-reaction",
       "frames": 1,
-      "rev": "950da9994b"
+      "rev": "b24510dc44"
     },
     {
       "name": "upgrades/compound-interest",
       "frames": 1,
-      "rev": "950da9994b"
+      "rev": "915f5ed297"
     },
     {
       "name": "upgrades/coolant",
       "frames": 1,
-      "rev": "950da9994b"
+      "rev": "cac31611ee"
     },
     {
       "name": "upgrades/double-buffer",
       "frames": 1,
-      "rev": "950da9994b"
+      "rev": "f8cde37ab4"
     },
     {
       "name": "upgrades/emergency-patch",
       "frames": 1,
-      "rev": "950da9994b"
+      "rev": "da1e3495d9"
     },
     {
       "name": "upgrades/salvage-contract",
       "frames": 1,
-      "rev": "950da9994b"
+      "rev": "857c516aab"
     },
     {
       "name": "upgrades/shutter-licence",
       "frames": 1,
-      "rev": "950da9994b"
+      "rev": "32b9791bf0"
     },
     {
       "name": "upgrades/structural-warranty",
       "frames": 1,
-      "rev": "950da9994b"
+      "rev": "cbae23c20f"
     },
     {
       "name": "upgrades/system-tray",
       "frames": 1,
-      "rev": "950da9994b"
+      "rev": "fc0157388e"
     },
     {
       "name": "upgrades/wide-reticle",
       "frames": 1,
-      "rev": "950da9994b"
+      "rev": "6936f58de8"
     },
     {
       "name": "wall/wall-bulwark",

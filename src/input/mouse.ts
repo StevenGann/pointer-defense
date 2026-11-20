@@ -1,6 +1,6 @@
 import type { Application } from 'pixi.js';
 import { claimTray, hasUpgrade } from '../core/upgrades.ts';
-import { menuItemAt, menuNameAt, pixelToWorld, pointInRect, type Layout, type MenuName } from '../view/chrome.ts';
+import { computeTitleControls, menuItemAt, menuNameAt, pixelToWorld, pointInRect, type Layout, type MenuName } from '../view/chrome.ts';
 import { hudButtonAt, hudControlAt, modalRestartAt, victoryButtonAt, type HudAction } from '../view/hud.ts';
 import { adCloseRect, trayHit } from '../view/ad.ts';
 import { menuEntryAt, type OpenMenu } from '../view/menu.ts';
@@ -103,6 +103,10 @@ export interface MouseContext {
   buySpec: (kind: SpecKind) => void;
   toggleAutoWave: () => void;
   notice: (message: string) => void;
+  helpMode: () => boolean;
+  helpPress: () => void;
+  helpClick: (x: number, y: number) => void;
+  helpCancel: () => void;
   helpOpen: () => boolean;
   helpPointerDown: (x: number, y: number, button: number) => boolean;
   helpPointerMove: (x: number, y: number) => void;
@@ -228,6 +232,20 @@ export class MouseController {
     const s = this.ctx.state();
     const l = this.ctx.layout();
     const { x, y } = this.localPoint(e);
+
+    // The context-help box in the run window's title bar toggles the mode.
+    if (e.button === 0 && pointInRect(computeTitleControls(l.title).help, x, y)) {
+      this.ctx.helpPress();
+      return;
+    }
+
+    // In context-help mode the click is swallowed: a left click resolves a topic, a right click
+    // cancels the mode, and neither reaches the game (docs/CONTEXT-HELP.md).
+    if (this.ctx.helpMode()) {
+      if (e.button === 2) this.ctx.helpCancel();
+      else if (e.button === 0) this.ctx.helpClick(x, y);
+      return;
+    }
 
     // The help window swallows any click inside it, left or right button, so a click there never
     // reaches the board, the HUD or the palette behind it.
@@ -448,6 +466,11 @@ export class MouseController {
     if (this.ctx.screen() !== 'run') return;
 
     if (e.key === 'Escape') {
+      // Esc cancels the context-help mode first (docs/CONTEXT-HELP.md).
+      if (this.ctx.helpMode()) {
+        this.ctx.helpCancel();
+        return;
+      }
       const s = this.ctx.state();
       // A modal dialog or open menu closes first, then Help, achievements, Restore and Global
       // Upgrades; only with none of them open does Esc clear the selection or exit the run. Closing

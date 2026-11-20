@@ -147,7 +147,7 @@ import {
 import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName, TOOLTIP_BLUE } from '../src/view/tooltipText.ts';
 import { BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
-import { computeLayout, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
+import { computeLayout, computeWindowChromeGeom, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
 import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, statusPerfText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect } from '../src/view/hud.ts';
 import { FloatingNumbersView } from '../src/view/numbers.ts';
 import { nextQuality } from '../src/core/quality.ts';
@@ -168,6 +168,7 @@ import {
 import { backingStorePixelSize } from '../src/view/screen.ts';
 import { HELP_PAGES, pageUnlocked, lockedReason, pageById } from '../src/content/help.ts';
 import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, computeHelpScroll, HelpSession, helpIndexList, helpSearchResults, helpTopicPath, HELP_W, HELP_H, HELP_LINE_H, HELP_HEADING_H, HELP_SCROLL_LINES, layoutPageLines, helpArtLayout } from '../src/view/help.ts';
+import { nextHelpMode, contextHelpPage, contextHelpHitAt } from '../src/view/contexthelp.ts';
 import { buildAchievementGrid, gridRowCount, gridCellRect, ACH_COLUMNS, ACH_CELL, ACH_GUTTER, computeAchievementGrid, achievementGridHitAt, AchievementSession } from '../src/view/dialog.ts';
 import {
   ART_MANIFEST,
@@ -10872,6 +10873,118 @@ function dailyState(date) {
     return h.digest('hex');
   };
   check(hash('full') === hash('lean'), '900-tick determinism hash is identical pinned to lean and full');
+}
+
+// --- Context help 1: the mapping table (docs/CONTEXT-HELP.md) --------------------------------
+{
+  const page = (hit) => contextHelpPage(hit);
+
+  for (const kind of TOWER_KINDS) {
+    const expected = kind === 'wall' ? 'mechanics-walls' : `tower-${kind}`;
+    check(page({ kind: 'tower', tower: kind }) === expected, `context help: a ${kind} tower maps to ${expected}`);
+  }
+  for (const kind of ENEMY_KINDS) {
+    check(page({ kind: 'enemy', enemy: kind }) === `enemy-${kind}`, `context help: a ${kind} maps to enemy-${kind}`);
+  }
+  for (const kind of BOSS_KINDS) {
+    check(page({ kind: 'enemy', enemy: kind }) === `boss-${kind}`, `context help: a ${kind} maps to boss-${kind}`);
+  }
+
+  check(page({ kind: 'control', control: 'pointer' }) === 'mechanics-pointer', 'context help: the pointer control maps to mechanics-pointer');
+  check(page({ kind: 'board' }) === 'mechanics-pointer', 'context help: a bare board click maps to mechanics-pointer');
+  check(page({ kind: 'control', control: 'salvage' }) === 'mechanics-salvage', 'context help: the salvage readout maps to mechanics-salvage');
+  check(page({ kind: 'control', control: 'wave' }) === 'mechanics-early-call', 'context help: the wave button maps to mechanics-early-call');
+  check(page({ kind: 'control', control: 'next-wave' }) === 'mechanics-early-call', 'context help: the next-wave panel maps to mechanics-early-call');
+  check(page({ kind: 'control', control: 'upgrades' }) === null, 'context help: the upgrades panel maps to null');
+  check(page({ kind: 'control', control: 'integrity' }) === null, 'context help: the integrity readout maps to null');
+  check(page({ kind: 'control', control: 'specs' }) === null, 'context help: the specs control maps to null');
+  check(page({ kind: 'control', control: 'records' }) === null, 'context help: the records control maps to null');
+  check(page({ kind: 'none' }) === null, 'context help: nothing under the pointer maps to null');
+}
+
+// --- Context help 2: nextHelpMode truth table -------------------------------------------------
+{
+  check(nextHelpMode(false, 'press-help') === true, 'nextHelpMode: press-help turns the mode on');
+  check(nextHelpMode(true, 'press-help') === false, 'nextHelpMode: press-help toggles the mode off');
+  check(nextHelpMode(true, 'click') === false, 'nextHelpMode: click clears the mode');
+  check(nextHelpMode(false, 'click') === false, 'nextHelpMode: click keeps the mode off');
+  check(nextHelpMode(true, 'cancel') === false, 'nextHelpMode: cancel clears the mode');
+  check(nextHelpMode(false, 'cancel') === false, 'nextHelpMode: cancel keeps the mode off');
+}
+
+// --- Context help 3: the four boxes fit inside the title bar at 640 and 1280 px ---------------
+{
+  const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  for (const vw of [640, 1280]) {
+    const geom = computeWindowChromeGeom(computeLayout(vw, 480).window);
+    const boxes = [geom.help, geom.minimize, geom.maximize, geom.close];
+    let inside = true;
+    for (const b of boxes) {
+      if (b.x < geom.titleBar.x || b.y < geom.titleBar.y || b.x + b.w > geom.titleBar.x + geom.titleBar.w || b.y + b.h > geom.titleBar.y + geom.titleBar.h) inside = false;
+    }
+    let clean = true;
+    for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) if (overlaps(boxes[i], boxes[j])) clean = false;
+    check(inside, `context help: the four boxes sit inside the title bar at ${vw}px`);
+    check(clean, `context help: the four boxes do not overlap at ${vw}px`);
+    check(geom.help.x < geom.minimize.x && geom.minimize.x < geom.maximize.x && geom.maximize.x < geom.close.x,
+      `context help: the boxes are ordered help, minimise, maximise, close at ${vw}px`);
+  }
+}
+
+// --- Context help 4: HelpSession.openAt selects a page or changes nothing ----------------------
+{
+  const layout = computeLayout(1280, 720);
+  const profile = defaultProfile();
+  const session = new HelpSession();
+
+  check(session.openAt('tower-gun', profile, layout) === true, 'openAt a real page opens the viewer');
+  check(session.open && session.pageId === 'tower-gun', 'openAt selects the page');
+  check(session.scroll === 0, 'openAt scrolls the page to the top');
+
+  const before = session.pageId;
+  check(session.openAt('nope', profile, layout) === false, 'openAt a missing page returns false');
+  check(session.pageId === before, 'openAt a missing page changes nothing');
+
+  check(session.openAt('enemy-flyer', profile, layout) === false, 'openAt a page gated by an unseen enemy returns false');
+  check(session.pageId === before, 'openAt a locked page changes nothing');
+}
+
+// --- Context help 5: a help-mode click never mutates the run state -----------------------------
+{
+  const layout = computeLayout(1280, 800);
+  const s = createRunState();
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 5, 5);
+  selectTower(s, 'wall'); // armed, so a normal board click would place a wall
+  s.phase = 'wave';
+  const e = createEnemy(s.nextId++, 'grunt', 1, SPAWN, EXIT);
+  e.x = 10.5;
+  e.y = 6.5;
+  e.prevX = 10.5;
+  e.prevY = 6.5;
+  e.col = 10;
+  e.row = 6;
+  e.dist = 0;
+  e.targetCol = -1;
+  e.targetRow = -1;
+  s.enemies.push(e);
+
+  const before = JSON.stringify(captureRun(s));
+
+  const hud = computeHud(layout, s);
+  const right = computeRightPanel(layout, s);
+  const probe = (x, y) => contextHelpPage(contextHelpHitAt(s, layout, x, y));
+  probe(hud.wave.x + hud.wave.w / 2, hud.wave.y + hud.wave.h / 2); // would start a wave
+  probe(hud.towers[0].rect.x + 4, hud.towers[0].rect.y + hud.towers[0].rect.h / 2); // would select a tower
+  probe(hud.salvage.x + hud.salvage.w / 2, hud.salvage.y + hud.salvage.h / 2);
+  probe(hud.integrity.x + hud.integrity.w / 2, hud.integrity.y + hud.integrity.h / 2);
+  probe(right.nextWave.rect.x + 4, right.nextWave.rect.y + 4);
+  probe(layout.board.x + 15.5 * layout.board.cell, layout.board.y + 9.5 * layout.board.cell); // an empty tile where a click would place a tower
+  const wp = worldToPixel(layout, 10.5, 6.5);
+  probe(wp.x, wp.y); // would click the enemy
+
+  const after = JSON.stringify(captureRun(s));
+  check(before === after, 'a click in help mode places no tower, starts no wave, and leaves the run state byte-identical');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

@@ -650,6 +650,21 @@ export class HelpSession {
     this.select(id);
   }
 
+  /**
+   * Open the viewer at a specific page (docs/CONTEXT-HELP.md): selects it in the nav panel, scrolled
+   * to the top. Returns false — and changes nothing — when the page does not exist or is locked.
+   */
+  openAt(pageId: string, profile: Profile, layout: Layout): boolean {
+    const page = pageById(pageId);
+    if (!page || !pageUnlocked(page, profile)) return false;
+    this.show(layout);
+    const chapter = HELP_CATEGORIES.findIndex((c) => c.id === page.category);
+    if (chapter >= 0) this.expanded = chapter;
+    this.status = '';
+    this.select(pageId);
+    return true;
+  }
+
   /** Handle a click on a tree row: chapters toggle, locked pages explain, unlocked pages open. */
   clickTree(row: HelpRow): void {
     if (row.kind === 'chapter') {

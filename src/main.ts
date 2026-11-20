@@ -98,7 +98,8 @@ import {
   saveLibraryMap,
   type EditorMapEntry,
 } from './core/editorstore.ts';
-import { LoadDialogView, menuButtonAt, MenuScreenView, loadDialogButtonAt, computeLoadDialog, menuWindowCloseAt, type MenuButtonId } from './view/menuScreen.ts';
+import { LoadDialogView, menuButtonAt, MenuScreenView, loadDialogButtonAt, computeLoadDialog, menuWindowCloseAt, menuWindowHelpAt, type MenuButtonId } from './view/menuScreen.ts';
+import { contextHelpHitAt, contextHelpPage, nextHelpMode } from './view/contexthelp.ts';
 import { HELP_PAGES, pageUnlocked } from './content/help.ts';
 import { EditorView, editorPaletteAt, editorToggleNudgeAt, editorToolbarAt, type EditorAction, type ToggleNudge } from './view/editor.ts';
 import { MapLibraryView, NameDialogView, computeMapLibrary, computeNameDialog, mapLibraryHitAt, nameDialogButtonAt, type MapLibraryHit, type MapLibraryMode } from './view/mapLibrary.ts';
@@ -214,9 +215,9 @@ const achievementView = new AchievementGridView();
 // its cached procedural art and re-reads the texture lookup on the next frame.
 onArtInvalidate(() => {
   board.invalidateArt();
-  drawCursorArrow();
+  drawCursor();
 });
-void preloadArt().then(() => drawCursorArrow());
+void preloadArt().then(() => drawCursor());
 
 const root = new Container();
 app.stage.addChild(root);
@@ -255,6 +256,8 @@ let dialog: DialogModel | null = null;
 let cheatNotified: RunState | null = null;
 /** The run the Global Upgrades dialog was last drawn for; a different run closes it. */
 let upgradesState: RunState | null = null;
+/** The context-help mode (docs/CONTEXT-HELP.md): the ? box arms the pointer for one help lookup. */
+let helpCursor = false;
 
 /**
  * Open the Global Upgrades dialog — never over another modal (docs/GLOBAL-UPGRADES.md §1): not over
@@ -380,7 +383,61 @@ function drawCursorArrow(): void {
       .stroke({ width: 1, color: PAL.dark });
   }
 }
-drawCursorArrow();
+
+function drawCursorHelp(): void {
+  const tex = getArtTexture('cursor-help', 16);
+  if (tex !== null) {
+    cursor.texture = tex;
+    cursor.width = 16;
+    cursor.height = 16;
+    cursor.rotation = 0;
+    cursor.alpha = 1;
+    cursor.tint = 0xffffff;
+    cursor.visible = true;
+    cursorFallback.visible = false;
+  } else {
+    cursor.visible = false;
+    cursorFallback.visible = true;
+    cursorFallback.clear();
+    // The arrow with a drawn ? badge at its heel, so the mode is never invisible before art loads.
+    cursorFallback
+      .poly([0, 0, 0, 13, 3.5, 10, 5.5, 16, 8, 14, 6.5, 10, 11, 10])
+      .fill(PAL.highlight)
+      .stroke({ width: 1, color: PAL.dark });
+    cursorFallback.circle(11, 11.5, 4.25).fill(PAL.highlight).stroke({ width: 1, color: PAL.dark });
+    cursorFallback.arc(11, 10.3, 1.6, Math.PI * 0.8, Math.PI * 1.85).stroke({ width: 1, color: PAL.dark });
+    cursorFallback.moveTo(12.2, 10.8).lineTo(11.7, 12.1).stroke({ width: 1, color: PAL.dark });
+    cursorFallback.circle(11.7, 13.1, 0.7).fill(PAL.dark);
+  }
+}
+
+function drawCursor(): void {
+  if (helpCursor) drawCursorHelp();
+  else drawCursorArrow();
+}
+drawCursor();
+
+function setHelpCursor(next: boolean): void {
+  if (helpCursor === next) return;
+  helpCursor = next;
+  drawCursor();
+}
+
+function helpPress(): void {
+  setHelpCursor(nextHelpMode(helpCursor, 'press-help'));
+}
+
+function helpCancel(): void {
+  setHelpCursor(nextHelpMode(helpCursor, 'cancel'));
+}
+
+/** Resolve the thing under the pointer and open Help at its page, or just clear the mode. */
+function helpClick(x: number, y: number): void {
+  const hit = contextHelpHitAt(state, layout, x, y);
+  const pageId = contextHelpPage(hit);
+  setHelpCursor(nextHelpMode(helpCursor, 'click'));
+  if (pageId !== null) helpSession.openAt(pageId, profile, layout);
+}
 
 // --- Meta-game wiring ---------------------------------------------------------------------------
 
@@ -1152,6 +1209,10 @@ const mouse = new MouseController(app, {
     saveProfile(profile);
   },
   notice: (message) => hud.showNotice(message),
+  helpMode: () => helpCursor,
+  helpPress,
+  helpClick,
+  helpCancel,
   helpOpen: () => helpSession.open,
   helpPointerDown: (x: number, y: number, button: number): boolean => {
     const hl = computeHelpLayout(helpSession.x, helpSession.y, helpSession.navW);
@@ -1483,6 +1544,15 @@ app.canvas.addEventListener('pointermove', (e) => {
 app.canvas.addEventListener('pointerdown', (e) => {
   const { x, y } = canvasPoint(e);
   if (screen === 'menu') {
+    // The context-help box toggles the mode; while on, any click (left or right) clears it.
+    if (!loadOpen && menuWindowHelpAt(layout, x, y)) {
+      if (e.button === 0) helpPress();
+      return;
+    }
+    if (helpCursor) {
+      if (e.button === 2 || e.button === 0) helpCancel();
+      return;
+    }
     // The menu window's close box does nothing but a soft beep (it is the menu; there is nowhere to go).
     if (!loadOpen && menuWindowCloseAt(layout, x, y)) {
       sfx.play('adClose');
@@ -1651,6 +1721,10 @@ window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   if (typingTarget(e.target)) return;
   if (screen === 'menu') {
+    if (helpCursor && e.key === 'Escape') {
+      helpCancel();
+      return;
+    }
     if (recordsSession.open && e.key === 'Escape') {
       recordsSession.hide();
       return;
@@ -1928,12 +2002,18 @@ app.ticker.add((ticker) => {
     pmark('bossBars', () => bossBars.draw(state, layout, profile.shakeOn));
     const frameMs = qualityFrameMs();
     pmark('hud', () =>
-      hud.draw(state, layout, mouse.hover.hud, {
-        quality,
-        frameMs,
-        fps: Math.round(1000 / frameMs),
-        showFps: PERF_FPS,
-      }),
+      hud.draw(
+        state,
+        layout,
+        mouse.hover.hud,
+        {
+          quality,
+          frameMs,
+          fps: Math.round(1000 / frameMs),
+          showFps: PERF_FPS,
+        },
+        helpCursor,
+      ),
     );
     pmark('ad', () => ad.draw(state));
     pmark('tray', () => trayView.draw(state));
