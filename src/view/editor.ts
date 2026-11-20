@@ -16,12 +16,15 @@ import {
  * first validation problem as you draw (docs/design.md §20.2).
  */
 
-export type EditorAction = 'undo' | 'redo' | 'clear' | 'test' | 'copy';
+export type EditorAction = 'undo' | 'redo' | 'new' | 'open' | 'save' | 'clear' | 'test' | 'copy';
 
-const TOOLBAR_ACTIONS: readonly EditorAction[] = ['undo', 'redo', 'clear', 'test', 'copy'];
+const TOOLBAR_ACTIONS: readonly EditorAction[] = ['undo', 'redo', 'new', 'open', 'save', 'clear', 'test', 'copy'];
 const TOOLBAR_LABELS: Readonly<Record<EditorAction, string>> = {
   undo: 'Undo',
   redo: 'Redo',
+  new: 'New',
+  open: 'Open\u2026',
+  save: 'Save',
   clear: 'Clear',
   test: 'Test',
   copy: 'Copy code',
@@ -53,11 +56,15 @@ export function computeEditorLayout(l: Layout, model: EditorModel): EditorLayout
     rect: { x: l.leftPanel.x + pad, y: l.leftPanel.y + 10 + i * (PALETTE_H + PALETTE_GAP), w: l.leftPanel.w - pad * 2, h: PALETTE_H },
   }));
 
-  const toolbarX0 = l.board.x + Math.floor((l.boardW - (TOOLBAR_ACTIONS.length * TOOLBAR_W + (TOOLBAR_ACTIONS.length - 1) * TOOLBAR_GAP)) / 2);
+  // The seven visible buttons may shrink to keep every label readable at 1024 x 640; the width is
+  // still capped at the comfortable default so the larger board keeps its full-size buttons.
+  const n = TOOLBAR_ACTIONS.length;
+  const toolbarW = Math.min(TOOLBAR_W, Math.floor((l.boardW - (n - 1) * TOOLBAR_GAP) / n));
+  const toolbarX0 = l.board.x + Math.floor((l.boardW - (n * toolbarW + (n - 1) * TOOLBAR_GAP)) / 2);
   const toolbarY = l.board.y + l.boardH + 8;
   const toolbar = TOOLBAR_ACTIONS.map((id, i) => ({
     id,
-    rect: { x: toolbarX0 + i * (TOOLBAR_W + TOOLBAR_GAP), y: toolbarY, w: TOOLBAR_W, h: TOOLBAR_H },
+    rect: { x: toolbarX0 + i * (toolbarW + TOOLBAR_GAP), y: toolbarY, w: toolbarW, h: TOOLBAR_H },
   }));
 
   let togglePanel: EditorLayout['togglePanel'] = null;
@@ -258,8 +265,11 @@ function isActionEnabled(action: EditorAction, model: EditorModel): boolean {
       return model.redoStack.length > 0;
     case 'test':
     case 'copy':
+    case 'save':
       return editorValidation(model) === null;
     case 'clear':
+    case 'new':
+    case 'open':
       return true;
   }
 }

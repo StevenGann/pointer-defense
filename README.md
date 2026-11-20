@@ -42,6 +42,9 @@ start; Cannon unlocks at wave 4, Frost at 6, Beacon at 8, Laser at 11, Taser at 
 Cursor at 24. A locked tower stays visible in the palette, greyed out, and its tooltip (or a keypress
 on its number) tells you which wave it arrives in.
 
+The map editor keeps your work: it auto-saves the drawing as a draft that survives a reload, and its
+**Save** / **Open…** toolbar buttons keep a small local library of up to 50 maps to reuse and re-edit.
+
 ## Development
 
 Requires Node 22.18 or later (TypeScript types are stripped natively, no build step for the scripts).

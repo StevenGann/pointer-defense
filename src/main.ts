@@ -67,9 +67,11 @@ import { encodeLevel, decodeCode } from './core/codec.ts';
 import {
   clearEditor,
   createEditor,
+  editorIsEmpty,
   editorLevel,
   editorPlayable,
   editorToggleAt,
+  editorValidation,
   eraseEditor,
   paintEditor,
   redoEditor,
@@ -78,9 +80,24 @@ import {
   undoEditor,
   type EditorModel,
 } from './core/editor.ts';
+import {
+  applyDraft,
+  applyMapEntry,
+  deleteLibraryMap,
+  LIBRARY_MAX,
+  loadEditorDraft,
+  loadLibrary,
+  replaceLibraryMap,
+  sanitizeMapName,
+  saveEditorDraft,
+  saveLibrary,
+  saveLibraryMap,
+  type EditorMapEntry,
+} from './core/editorstore.ts';
 import { LoadDialogView, menuButtonAt, MenuScreenView, loadDialogButtonAt, computeLoadDialog, type MenuButtonId } from './view/menuScreen.ts';
 import { HELP_PAGES, pageUnlocked } from './content/help.ts';
 import { EditorView, editorPaletteAt, editorToggleNudgeAt, editorToolbarAt, type EditorAction, type ToggleNudge } from './view/editor.ts';
+import { MapLibraryView, NameDialogView, computeMapLibrary, computeNameDialog, mapLibraryHitAt, nameDialogButtonAt, type MapLibraryHit, type MapLibraryMode } from './view/mapLibrary.ts';
 import pkg from '../package.json';
 
 const app = new Application();
@@ -176,6 +193,8 @@ const tooltip = new TooltipView();
 const menuScreenView = new MenuScreenView();
 const loadDialogView = new LoadDialogView();
 const editorView = new EditorView();
+const mapLibraryView = new MapLibraryView();
+const nameDialogView = new NameDialogView();
 const helpSession = new HelpSession();
 const helpView = new HelpView();
 const restoreView = new RestoreView();
@@ -194,7 +213,7 @@ void preloadArt().then(() => drawCursorArrow());
 
 const root = new Container();
 app.stage.addChild(root);
-root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, helpView.root, restoreView.root, upgradesView.root, achievementView.root, ad.root, trayView.root, menuView.root, dialogView.root, tooltip.root, menuScreenView.root, loadDialogView.root, editorView.root);
+root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, helpView.root, restoreView.root, upgradesView.root, achievementView.root, ad.root, trayView.root, menuView.root, dialogView.root, tooltip.root, menuScreenView.root, loadDialogView.root, editorView.root, mapLibraryView.root, nameDialogView.root);
 
 sfx.setEnabled(profile.soundOn);
 sfx.setVolume(profile.volume);
@@ -234,6 +253,13 @@ let screen: Screen =
   continueState !== null ? 'menu' : profile.lastChoice === 'editor' ? 'editor' : profile.lastChoice === 'load' ? 'menu' : 'run';
 let runOrigin: 'play' | 'load' | 'editor' = 'play';
 const editor: EditorModel = createEditor();
+/** The saved maps (docs/EDITOR-LIBRARY.md), newest first, loaded once at boot. */
+let editorLib: EditorMapEntry[] = loadLibrary();
+// Opening the editor restores the draft (docs/EDITOR-LIBRARY.md), so a reload never loses work.
+{
+  const draft = loadEditorDraft();
+  if (draft !== null) applyDraft(editor, draft);
+}
 let loadText = '';
 let loadStatus = '';
 let loadOpen = profile.lastChoice === 'load';
@@ -638,6 +664,10 @@ function dialogAction(id: string): void {
     doNewRun();
     return;
   }
+  if (id === 'editor-new') {
+    doEditorNew();
+    return;
+  }
   if (id === 'cancel' || id === 'close') {
     dialog = null;
   }
@@ -833,6 +863,151 @@ function showEditorNotice(msg: string, ms = 2500): void {
   }, ms);
 }
 
+// --- Editor draft persistence (docs/EDITOR-LIBRARY.md) ----------------------------------------
+
+/** Trailing debounce: at most one draft write a second, whatever the edit rate. */
+let draftTimer: ReturnType<typeof setTimeout> | null = null;
+function scheduleDraftSave(force = false): void {
+  if (force) {
+    if (draftTimer !== null) {
+      clearTimeout(draftTimer);
+      draftTimer = null;
+    }
+    saveEditorDraft(editor);
+    return;
+  }
+  if (draftTimer !== null) return;
+  draftTimer = setTimeout(() => {
+    draftTimer = null;
+    saveEditorDraft(editor);
+  }, 1000);
+}
+
+// --- Editor library dialog ---------------------------------------------------------------------
+
+let libOpen = false;
+let libMode: MapLibraryMode = 'open';
+let libSelectedId: string | null = null;
+let libScroll = 0;
+let libHover: MapLibraryHit = null;
+
+let saveNameOpen = false;
+let saveNameText = '';
+let nameHover: 'ok' | 'cancel' | null = null;
+
+function openLibrary(): void {
+  libMode = 'open';
+  libSelectedId = null;
+  libScroll = 0;
+  libOpen = true;
+}
+
+function closeLibrary(): void {
+  libOpen = false;
+  libSelectedId = null;
+}
+
+function loadSelectedMap(): void {
+  if (libSelectedId === null) return;
+  const entry = editorLib.find((m) => m.id === libSelectedId);
+  if (!entry) return;
+  applyMapEntry(editor, entry);
+  scheduleDraftSave(true);
+  closeLibrary();
+  showEditorNotice(`Loaded "${entry.name}"`);
+}
+
+function deleteSelectedMap(): void {
+  if (libSelectedId === null) return;
+  editorLib = deleteLibraryMap(editorLib, libSelectedId);
+  saveLibrary(editorLib);
+  libSelectedId = null;
+}
+
+function doEditorSave(name: string): void {
+  if (!editorPlayable(editor)) return;
+  const savedAt = new Date().toISOString();
+  const level = editorLevel(editor);
+  const result =
+    editor.libraryId !== null
+      ? saveLibraryMap(editorLib, editor.libraryId, name, level, savedAt)
+      : saveLibraryMap(editorLib, null, name, level, savedAt);
+  editorLib = result.maps;
+  editor.libraryId = result.entry.id;
+  editor.name = result.entry.name;
+  saveLibrary(editorLib);
+  scheduleDraftSave(true);
+  showEditorNotice(`Saved "${result.entry.name}"`);
+}
+
+function editorSave(): void {
+  if (!editorPlayable(editor)) {
+    showEditorNotice(`Cannot save: ${editorValidation(editor)}`);
+    return;
+  }
+  if (editor.libraryId === null && editor.name === '') {
+    saveNameOpen = true;
+    saveNameText = editor.name;
+    nameInput.value = editor.name;
+    nameInput.focus();
+    nameInput.select();
+    return;
+  }
+  if (editor.libraryId === null && editorLib.length >= LIBRARY_MAX) {
+    libMode = 'replace';
+    libSelectedId = null;
+    libScroll = 0;
+    libOpen = true;
+    return;
+  }
+  doEditorSave(editor.name);
+}
+
+function confirmSaveName(): void {
+  const name = sanitizeMapName(saveNameText);
+  saveNameOpen = false;
+  nameInput.blur();
+  editor.name = name;
+  editorSave();
+}
+
+function replaceSelectedMap(): void {
+  if (libSelectedId === null) return;
+  const name = editor.name === '' ? 'Untitled' : editor.name;
+  const savedAt = new Date().toISOString();
+  const result = replaceLibraryMap(editorLib, libSelectedId, name, editorLevel(editor), savedAt);
+  editorLib = result.maps;
+  editor.libraryId = result.entry.id;
+  editor.name = result.entry.name;
+  saveLibrary(editorLib);
+  scheduleDraftSave(true);
+  closeLibrary();
+  showEditorNotice(`Saved "${result.entry.name}"`);
+}
+
+function editorNew(): void {
+  if (!editorIsEmpty(editor)) {
+    dialog = {
+      title: 'New map',
+      rows: [{ text: 'Discard the current drawing and start a new map?' }],
+      buttons: [
+        { id: 'editor-new', label: 'OK' },
+        { id: 'cancel', label: 'Cancel' },
+      ],
+    };
+    return;
+  }
+  doEditorNew();
+}
+
+function doEditorNew(): void {
+  clearEditor(editor);
+  editor.name = '';
+  editor.libraryId = null;
+  scheduleDraftSave(true);
+  showEditorNotice('New map');
+}
+
 const mouse = new MouseController(app, {
   layout: () => layout,
   state: () => state,
@@ -993,12 +1168,24 @@ function handleEditorAction(action: EditorAction): void {
   switch (action) {
     case 'undo':
       undoEditor(editor);
+      scheduleDraftSave();
       break;
     case 'redo':
       redoEditor(editor);
+      scheduleDraftSave();
+      break;
+    case 'new':
+      editorNew();
+      break;
+    case 'open':
+      openLibrary();
+      break;
+    case 'save':
+      editorSave();
       break;
     case 'clear':
       clearEditor(editor);
+      scheduleDraftSave(true);
       break;
     case 'test':
       testMap();
@@ -1016,6 +1203,7 @@ function nudgeEditorToggle(nudge: ToggleNudge): void {
   if (!t) return;
   const step = 60;
   setEditorToggle(editor, s.col, s.row, nudge.field, t[nudge.field] + nudge.dir * step);
+  scheduleDraftSave();
 }
 
 // The load-code text field: an invisible HTML input overlaid on the Pixi-drawn field, so paste and
@@ -1050,6 +1238,36 @@ loadInput.addEventListener('keydown', (e) => {
   }
 });
 
+// The save-name text field: an invisible HTML input overlaid on the name dialog's field, so typing
+// works natively while the look stays in the canvas. The dialog itself draws the text.
+const nameInput = document.createElement('input');
+nameInput.type = 'text';
+nameInput.autocomplete = 'off';
+nameInput.spellcheck = false;
+nameInput.maxLength = 24;
+nameInput.style.position = 'fixed';
+nameInput.style.border = 'none';
+nameInput.style.background = 'transparent';
+nameInput.style.color = 'transparent';
+nameInput.style.caretColor = '#000000';
+nameInput.style.outline = 'none';
+nameInput.style.padding = '0 4px';
+nameInput.style.boxSizing = 'border-box';
+nameInput.style.font = '13px Tahoma, Verdana, Geneva, sans-serif';
+nameInput.style.display = 'none';
+nameInput.style.zIndex = '10';
+document.body.appendChild(nameInput);
+nameInput.addEventListener('input', () => {
+  saveNameText = nameInput.value;
+});
+nameInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') confirmSaveName();
+  else if (e.key === 'Escape') {
+    saveNameOpen = false;
+    nameInput.blur();
+  }
+});
+
 app.canvas.addEventListener('pointermove', (e) => {
   const { x, y } = canvasPoint(e);
   if (screen === 'menu') {
@@ -1058,11 +1276,20 @@ app.canvas.addEventListener('pointermove', (e) => {
     return;
   }
   if (screen === 'editor') {
-    editorActionHover = editorToolbarAt(layout, editor, x, y);
-    const hit = boardHit(x, y);
-    if (painting && hit.onBoard) {
-      const refusal = paintEditor(editor, hit.col, hit.row);
-      if (refusal) showEditorNotice(refusal);
+    if (libOpen) {
+      libHover = mapLibraryHitAt(layout, editorLib, libMode, x, y, libScroll);
+    } else if (saveNameOpen) {
+      nameHover = nameDialogButtonAt(layout, x, y);
+    }
+    const modalOpen = libOpen || saveNameOpen || dialog !== null;
+    editorActionHover = modalOpen ? null : editorToolbarAt(layout, editor, x, y);
+    if (!modalOpen) {
+      const hit = boardHit(x, y);
+      if (painting && hit.onBoard) {
+        const refusal = paintEditor(editor, hit.col, hit.row);
+        if (refusal) showEditorNotice(refusal);
+        else scheduleDraftSave();
+      }
     }
     return;
   }
@@ -1099,10 +1326,40 @@ app.canvas.addEventListener('pointerdown', (e) => {
     return;
   }
   if (screen === 'editor') {
+    if (libOpen) {
+      if (e.button !== 0) return;
+      const hit = mapLibraryHitAt(layout, editorLib, libMode, x, y, libScroll);
+      if (hit?.type === 'row') libSelectedId = hit.id;
+      else if (hit?.type === 'load') {
+        if (libMode === 'replace') replaceSelectedMap();
+        else loadSelectedMap();
+      } else if (hit?.type === 'delete') deleteSelectedMap();
+      else if (hit?.type === 'cancel') closeLibrary();
+      return;
+    }
+    if (saveNameOpen) {
+      if (e.button !== 0) return;
+      const btn = nameDialogButtonAt(layout, x, y);
+      if (btn === 'ok') confirmSaveName();
+      else if (btn === 'cancel') {
+        saveNameOpen = false;
+        nameInput.blur();
+      }
+      return;
+    }
+    if (dialog) {
+      if (e.button !== 0) return;
+      const id = dialogButtonAt(layout, dialog, x, y);
+      if (id) dialogAction(id);
+      return;
+    }
     if (e.button === 2) {
       e.preventDefault();
       const hit = boardHit(x, y);
-      if (hit.onBoard) eraseEditor(editor, hit.col, hit.row);
+      if (hit.onBoard) {
+        eraseEditor(editor, hit.col, hit.row);
+        scheduleDraftSave();
+      }
       return;
     }
     if (e.button !== 0) return;
@@ -1126,7 +1383,10 @@ app.canvas.addEventListener('pointerdown', (e) => {
       painting = true;
       const refusal = paintEditor(editor, hit.col, hit.row);
       if (refusal) showEditorNotice(refusal);
-      else grantAchievement('editor-first');
+      else {
+        scheduleDraftSave();
+        grantAchievement('editor-first');
+      }
     }
     return;
   }
@@ -1144,6 +1404,14 @@ app.canvas.addEventListener('wheel', (e) => {
     if (pointInRect(hl.pagePanel, x, y)) {
       e.preventDefault();
       helpSession.scrollBy(Math.sign(e.deltaY) * HELP_LINE_H * HELP_SCROLL_LINES, hl);
+      return;
+    }
+  }
+  if (screen === 'editor' && libOpen) {
+    const ml = computeMapLibrary(layout, editorLib, libMode, libScroll);
+    if (pointInRect(ml.list, x, y)) {
+      e.preventDefault();
+      libScroll = Math.min(Math.max(0, libScroll + Math.sign(e.deltaY) * 26), ml.maxScroll);
       return;
     }
   }
@@ -1188,16 +1456,26 @@ window.addEventListener('keydown', (e) => {
   }
   if (screen === 'editor') {
     if (e.key === 'Escape') {
-      screen = 'menu';
+      if (libOpen) closeLibrary();
+      else if (saveNameOpen) {
+        saveNameOpen = false;
+        nameInput.blur();
+      } else if (dialog) dialog = null;
+      else {
+        scheduleDraftSave(true);
+        screen = 'menu';
+      }
       return;
     }
     if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
       if (e.shiftKey) redoEditor(editor);
       else undoEditor(editor);
+      scheduleDraftSave();
       return;
     }
     if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || e.key === 'Y')) {
       redoEditor(editor);
+      scheduleDraftSave();
       return;
     }
     return;
@@ -1423,11 +1701,13 @@ app.ticker.add((ticker) => {
   achievementView.root.visible = running && achievementSession.open;
   ad.root.visible = running;
   menuView.root.visible = running;
-  dialogView.root.visible = running || screen === 'menu';
+  dialogView.root.visible = running || screen === 'menu' || screen === 'editor';
   tooltip.root.visible = running;
   menuScreenView.root.visible = screen === 'menu';
   loadDialogView.root.visible = screen === 'menu' && loadOpen;
   editorView.root.visible = screen === 'editor';
+  mapLibraryView.root.visible = screen === 'editor' && libOpen;
+  nameDialogView.root.visible = screen === 'editor' && saveNameOpen;
 
   if (screen === 'menu') {
     const label = continueState !== null ? continueLabel(continueState) : null;
@@ -1445,8 +1725,23 @@ app.ticker.add((ticker) => {
       loadInput.style.display = 'none';
     }
   } else if (screen === 'editor') {
-    editorView.draw(layout, editor, { tool: null, action: editorActionHover }, editorNotice);
+    editorView.draw(layout, editor, { tool: null, action: libOpen || saveNameOpen || dialog !== null ? null : editorActionHover }, editorNotice);
     loadInput.style.display = 'none';
+    if (libOpen) {
+      mapLibraryView.draw(layout, editorLib, libMode, libSelectedId, libHover, libScroll);
+    }
+    if (saveNameOpen) {
+      nameDialogView.draw(layout, saveNameText, nameHover);
+      const d = computeNameDialog(layout);
+      nameInput.style.display = 'block';
+      nameInput.style.left = `${d.field.x}px`;
+      nameInput.style.top = `${d.field.y}px`;
+      nameInput.style.width = `${d.field.w}px`;
+      nameInput.style.height = `${d.field.h}px`;
+    } else {
+      nameInput.style.display = 'none';
+    }
+    if (dialog) dialogView.draw(dialog, layout);
   }
 
   cursor.position.set(mouse.hover.x, mouse.hover.y);
@@ -1597,8 +1892,15 @@ app.renderer.on('resize', () => {
   }
 });
 
-// A closing or backgrounded tab writes immediately (docs/RUN-SAVE.md), so the run survives.
-window.addEventListener('pagehide', () => maybeSaveRun(true));
+// A closing or backgrounded tab writes immediately (docs/RUN-SAVE.md), so the run and the editor
+// draft survive.
+window.addEventListener('pagehide', () => {
+  maybeSaveRun(true);
+  scheduleDraftSave(true);
+});
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden') maybeSaveRun(true);
+  if (document.visibilityState === 'hidden') {
+    maybeSaveRun(true);
+    scheduleDraftSave(true);
+  }
 });

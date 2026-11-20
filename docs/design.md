@@ -1484,8 +1484,19 @@ Palette (single-click select, drag to paint, right-click erases):
 | Exit | exactly one; same rule |
 | Eraser | floor |
 
-Toolbar: **Undo** / **Redo** (at least 50 steps), **Clear**, **Test** (starts a run on the drawing,
-with a way back that keeps it), **Copy code** (writes the share code to the clipboard).
+Toolbar: **Undo** / **Redo** (at least 50 steps), **New**, **Open…**, **Save**, **Clear**, **Test**
+(starts a run on the drawing, with a way back that keeps it), **Copy code** (writes the share code to
+the clipboard). The buttons shrink to keep every label readable at 1024 × 640.
+
+The editor keeps your work (docs/EDITOR-LIBRARY.md). Every edit writes the drawing to
+`pd.editor.draft.v1`, debounced to one write a second, and opening the editor restores it — a reload
+or an Esc to the menu never loses work. **Save** writes the drawing into `pd.editor.lib.v1`, a library
+of at most 50 maps, newest first; a second Save updates the same entry rather than duplicating, and
+**Open…** lists the saved maps (name, date, size) with **Load**, **Delete** and Cancel. After **Load**
+the map becomes the draft and its name the drawing's name, so a following Save updates it. **New**
+clears the board after a confirm when the draft is not empty and leaves the drawing unnamed, so the
+next Save asks for a name (1–24 printable characters; empty becomes "Untitled"). The status line
+reports every save and load: `Saved "The Corridor II"`, `Loaded "Fork"`.
 
 Constraints are enforced while you draw, not after: exactly one start, exactly one exit, at most
 `MAX_TOGGLES` shutters, and **a route must exist from start to exit through floor and open shutter
