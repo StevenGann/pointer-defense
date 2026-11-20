@@ -22,8 +22,9 @@ Damage per tier, as a multiplier on the kind's base damage:
 |---|---|---|---|
 | Damage | 1.0 | 1.25 | each tier ×1.09 on the one before |
 
-Tier 20 is therefore `1.25 × 1.09^18 = 5.90×` base damage. Range grows `+1 %` per tier, capped at
-`+10 %` (tier 11 and beyond hold), so late towers do not out-range the maps.
+Tier 20 is therefore `1.25 × 1.09^18 = 5.90×` base damage. Range grows `+1 %` per tier from tier 6,
+capped at `+10 %` (held from tier 15) and stacked on the existing tier-2 `+2 %`, so late towers do not
+out-range the maps.
 
 Tiers 1–5 keep exactly today's behaviour: tier 2 is ×1.25, and tiers 3–5 get their power from branch
 depth, unchanged. A branched tower therefore joins the damage ladder at tier 6 (`1.09^(tier−5)`)
