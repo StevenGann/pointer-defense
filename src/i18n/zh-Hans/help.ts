@@ -188,4 +188,11 @@ export const help: Catalogue = {
   'help.tower-cursor.4': '- **{name}** — {cost}：{rate} 次/秒，半径 {radius} 格。',
   'help.tower-cursor.5': '- **{name}** — {cost}：半径内无敌人时，修理 HP 低于 {pct} 的防御塔。',
   'help.tower-cursor.6': '第二个光标，以你一半的点击伤害点击敌人。升级指针即可让它更强。',
+
+  // Synergies (always available; docs/SYNERGIES.md §6).
+  'help.synergy.title': '协同',
+  'help.synergy.1': '相邻的两座合适类型的防御塔会形成协同。相邻指并排——北、南、东或西，绝不沿对角线。',
+  'help.synergy.2': '**同步射击** — 相邻的防空塔会一齐开火：较快的那座领射，其余随它开火。普通防空塔每 {interval} 刻开火一次。',
+  'help.synergy.3': '跟随者会按住射击，直到领射者在该刻开火。它最多等待领射者 {window} 刻，且总计绝不超过 {cap} 刻。',
+  'help.synergy.4': '同步射击与不同步射击的威力完全相同——没有伤害或射速加成——只是与其余射击同时命中。',
 };

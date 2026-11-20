@@ -55,10 +55,12 @@ import { FLYER_OFF_KIND_DAMAGE,
   NO_BUILD_MESSAGE,
   AUTO_WAVE_DELAY_TICKS,
   STARTING_INTEGRITY,
+  synergyLayout,
   rebuildField,
 } from '../src/core/state.ts';
 import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE, MINE_BLAST_RADIUS, CURSOR_CLICK_DAMAGE_FACTOR, repairHealRate, repairRadius, MAX_TIER, TIERS, kindMaxTier, COMBAT_KINDS } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
+import { AA_HOLD_CAP, AA_HOLD_WINDOW, AA_MIN_CLUSTER, buildSynergyLayout, leads, SYNERGIES } from '../src/core/synergy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { WAVE_COUNT, buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, FLYER_FLIGHT_MEMBER_TICKS, FLYER_FLIGHT_SIZE, flyerSwarmFactor, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers, WAVE_ENEMY_CAP } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
@@ -146,7 +148,7 @@ import {
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
 import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName, TOOLTIP_BLUE } from '../src/view/tooltipText.ts';
-import { drawTower, clearTowerSprites, BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre } from '../src/view/board.ts';
+import { drawTower, clearTowerSprites, BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre, synergyEdgeEndpoints, synergyEdgeStyle } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, computeWindowChromeGeom, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
 import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, statusPerfText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect, modalRect, modalMessageTop } from '../src/view/hud.ts';
@@ -11366,6 +11368,408 @@ function dailyState(date) {
   const bad = helpKeys.filter((k) => en[k].includes(interpolation));
   check(bad.length === 0,
     `no help string keeps a raw ${interpolation} (bad: ${bad.join(', ') || 'none'})`);
+}
+
+// --- Synergies (docs/SYNERGIES.md §7) -----------------------------------------------------------
+// 1. Orthogonal adjacency forms edges; a diagonal pair does not.
+{
+  const diag = allUnlocked();
+  diag.economy.salvage = 1e9;
+  check(placeTower(diag, 'aa', 5, 5), 'synergy: place the first AA');
+  check(placeTower(diag, 'aa', 6, 6), 'synergy: place a diagonal AA');
+  check(buildSynergyLayout(diag.towers).edges.length === 0, 'a diagonal AA pair forms no edge');
+
+  const ortho = allUnlocked();
+  ortho.economy.salvage = 1e9;
+  placeTower(ortho, 'aa', 5, 5);
+  placeTower(ortho, 'aa', 5, 6);
+  check(buildSynergyLayout(ortho.towers).edges.length === 1, 'an orthogonal AA pair forms one edge');
+
+  check(
+    SYNERGIES.length === 1 && SYNERGIES[0].id === 'aa-sync' && SYNERGIES[0].color === 0xffe14d && SYNERGIES[0].dash === 4 && SYNERGIES[0].gap === 3,
+    'the catalogue is one amber aa-sync row, dash 4 on / 3 off',
+  );
+}
+
+// 2. Direction: the shorter interval leads; ties break north, then west.
+{
+  const a = createTower(1, 'aa', 5, 5);
+  const b = createTower(2, 'aa', 5, 6);
+  b.tier = 3;
+  b.branch = 'A'; // Flak is slower at every tier
+  check(leads(a, b) && !leads(b, a), 'the faster AA leads the slower Flak');
+
+  const north = createTower(3, 'aa', 5, 5);
+  const south = createTower(4, 'aa', 5, 6);
+  check(leads(north, south) && !leads(south, north), 'equal intervals: the northern tower leads');
+
+  const west = createTower(5, 'aa', 4, 5);
+  const east = createTower(6, 'aa', 5, 5);
+  check(leads(west, east) && !leads(east, west), 'equal intervals: the western tower leads');
+}
+
+// 3. The comparison is a strict total order, and sorting a ring puts every leader first.
+{
+  const towers = [createTower(1, 'aa', 5, 5), createTower(2, 'aa', 6, 5), createTower(3, 'aa', 5, 6), createTower(4, 'aa', 6, 6)];
+  let total = true;
+  for (let i = 0; i < towers.length; i++) {
+    for (let j = 0; j < towers.length; j++) {
+      if (i !== j && leads(towers[i], towers[j]) === leads(towers[j], towers[i])) total = false;
+    }
+  }
+  check(total, 'leads is a strict total order: exactly one of leads(a,b)/leads(b,a) holds');
+
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  for (const [c, r] of [[5, 5], [6, 5], [5, 6], [6, 6]]) placeTower(s, 'aa', c, r);
+  const layout = buildSynergyLayout(s.towers);
+  const cluster = layout.clusters[0];
+  check(cluster !== undefined && cluster.members.length === 4, 'a 2x2 block forms one four-tower cluster');
+  let ordered = true;
+  for (const edge of layout.edges) {
+    if (cluster.members.indexOf(edge.lead) > cluster.members.indexOf(edge.follow)) ordered = false;
+  }
+  check(ordered, 'in a ring, every leader precedes its follower in the sorted member order');
+}
+
+// 4. Propagation: a chain of five fires all five on one tick, in one lead-order pass.
+{
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  for (let r = 3; r <= 7; r++) check(placeTower(s, 'aa', 5, r), `synergy chain: AA at (5,${r})`);
+  const chain = [3, 4, 5, 6, 7].map((r) => towerAt(s, 5, r));
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 5.5);
+  flyer.hp = flyer.maxHp = 1e9;
+  s.enemies.push(flyer);
+  for (const t of chain) t.angle = Math.atan2(5.5 - (t.col + 0.5), -(5.5 - (t.row + 0.5)));
+  tick(s);
+  check(chain.every((t) => t.damageDealt > 0), 'a chain of five AAs all fire');
+  check(chain.every((t) => t.cooldown === 32), 'all five fired on the same tick (cooldown 32)');
+}
+
+// 5. Holding: a ready follower with a live, in-window leader does not fire, and never writes a cooldown.
+{
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'aa', 5, 5);
+  placeTower(s, 'aa', 5, 6);
+  const leader = towerAt(s, 5, 5);
+  const follower = towerAt(s, 5, 6);
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+  flyer.hp = flyer.maxHp = 1e9;
+  s.enemies.push(flyer);
+  for (const t of [leader, follower]) t.angle = Math.atan2(5.5 - (t.col + 0.5), -(4.0 - (t.row + 0.5)));
+  leader.cooldown = 1;
+  follower.cooldown = 0;
+  tick(s);
+  check(follower.damageDealt === 0 && follower.cooldown === 0, 'a ready follower holds and never writes a cooldown');
+  check(leader.damageDealt === 0, 'the leader has not fired yet either');
+  tick(s);
+  check(leader.damageDealt > 0 && follower.damageDealt > 0, 'the follower fires the tick its leader fires');
+}
+
+// 6. Abandonment: the follower fires anyway when the leader is offline, has no target, is outside the
+//    window, or the follower has held past the backstop.
+{
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'aa', 5, 5);
+  placeTower(s, 'aa', 5, 6);
+  const leader = towerAt(s, 5, 5);
+  const follower = towerAt(s, 5, 6);
+  leader.hp = 0; // offline, not gone: still forms an edge but cannot lead
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+  flyer.hp = flyer.maxHp = 1e9;
+  s.enemies.push(flyer);
+  follower.angle = Math.atan2(5.5 - (follower.col + 0.5), -(4.0 - (follower.row + 0.5)));
+  follower.cooldown = 0;
+  tick(s);
+  check(follower.damageDealt > 0, 'a follower fires when its leader is offline');
+}
+{
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'aa', 5, 5);
+  placeTower(s, 'aa', 5, 6);
+  const leader = towerAt(s, 5, 5);
+  const follower = towerAt(s, 5, 6);
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 9.5); // in the follower's range, outside the leader's
+  flyer.hp = flyer.maxHp = 1e9;
+  s.enemies.push(flyer);
+  follower.angle = Math.atan2(5.5 - (follower.col + 0.5), -(9.5 - (follower.row + 0.5)));
+  follower.cooldown = 0;
+  leader.cooldown = 0;
+  tick(s);
+  check(follower.damageDealt > 0, 'a follower fires when its leader has no target in range');
+}
+{
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'aa', 5, 5);
+  placeTower(s, 'aa', 5, 6);
+  const leader = towerAt(s, 5, 5);
+  const follower = towerAt(s, 5, 6);
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+  flyer.hp = flyer.maxHp = 1e9;
+  s.enemies.push(flyer);
+  for (const t of [leader, follower]) t.angle = Math.atan2(5.5 - (t.col + 0.5), -(4.0 - (t.row + 0.5)));
+  leader.cooldown = AA_HOLD_WINDOW + 10; // further away than the window
+  follower.cooldown = 0;
+  tick(s);
+  check(follower.damageDealt > 0, 'a follower fires when its leader is further away than the window');
+}
+{
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'aa', 5, 5);
+  placeTower(s, 'aa', 5, 6);
+  const leader = towerAt(s, 5, 5);
+  const follower = towerAt(s, 5, 6);
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+  flyer.hp = flyer.maxHp = 1e9;
+  s.enemies.push(flyer);
+  for (const t of [leader, follower]) t.angle = Math.atan2(5.5 - (t.col + 0.5), -(4.0 - (t.row + 0.5)));
+  leader.cooldown = 1;
+  follower.cooldown = 0;
+  synergyLayout(s); // warm the memoised layout so the tick does not clear the seeded hold
+  s.synergyHoldSince.set(follower.id, s.tick - AA_HOLD_CAP); // held a full backstop already
+  s.synergyHoldTarget.set(follower.id, flyer.id);
+  tick(s);
+  check(follower.damageDealt > 0, 'a follower that has held past the cap fires regardless');
+}
+
+// 7. Rate preservation: a clustered Flak keeps its own interval, never the leader's.
+{
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'aa', 5, 5);
+  placeTower(s, 'aa', 5, 6);
+  const leader = towerAt(s, 5, 5);
+  const flak = towerAt(s, 5, 6);
+  upgradeTower(s, 5, 6);
+  chooseBranch(s, 5, 6, 'A'); // Flak: 54 ticks, follows the 33-tick leader
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+  flyer.hp = flyer.maxHp = 1e9;
+  s.enemies.push(flyer);
+  for (const t of [leader, flak]) t.angle = Math.atan2(5.5 - (t.col + 0.5), -(4.0 - (t.row + 0.5)));
+  tick(s);
+  check(leader.cooldown === 32 && leader.damageDealt > 0, 'the plain AA leader fires on its 33-tick interval');
+  check(flak.cooldown === towerIntervalTicks(s, effectiveStats(flak).fireInterval) - 1, 'the Flak keeps its own interval, never the leader\'s');
+  check(s.projectiles.some((p) => p.kind === 'shell' && p.towerId === flak.id), 'the Flak launched its shell on the same tick');
+}
+
+// 8. No multiplier: a synchronized shot deals exactly the lone tower's damage.
+{
+  const fireLone = () => {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    placeTower(s, 'aa', 5, 5);
+    const lone = towerAt(s, 5, 5);
+    s.phase = 'wave';
+    const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+    flyer.hp = flyer.maxHp = 1e9;
+    s.enemies.push(flyer);
+    lone.angle = 0;
+    for (let i = 0; i < 60 && lone.damageDealt === 0; i++) tick(s);
+    return lone.damageDealt;
+  };
+  const loneDamage = fireLone();
+  check(Math.abs(loneDamage - 5.2) < 1e-6, `a lone AA deals ${loneDamage.toFixed(2)} (2.6 x 2)`);
+
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'aa', 5, 5);
+  placeTower(s, 'aa', 5, 6);
+  const lead = towerAt(s, 5, 5);
+  const fol = towerAt(s, 5, 6);
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+  flyer.hp = flyer.maxHp = 1e9;
+  s.enemies.push(flyer);
+  for (const t of [lead, fol]) t.angle = 0;
+  for (let i = 0; i < 60 && lead.damageDealt === 0; i++) tick(s);
+  check(lead.damageDealt === loneDamage, `a synchronized leader shot is exactly as strong (${lead.damageDealt} vs ${loneDamage})`);
+  check(fol.damageDealt === loneDamage, `a synchronized follower shot is exactly as strong (${fol.damageDealt} vs ${loneDamage})`);
+}
+
+// 9. No cooldown rewriting: a clustered leader's cooldown trace matches a lone tower's exactly.
+{
+  const trace = (clustered) => {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    placeTower(s, 'aa', 5, 5);
+    if (clustered) placeTower(s, 'aa', 5, 6);
+    const t = towerAt(s, 5, 5);
+    s.phase = 'wave';
+    const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+    flyer.hp = flyer.maxHp = 1e9;
+    s.enemies.push(flyer);
+    t.angle = 0;
+    if (clustered) towerAt(s, 5, 6).angle = 0;
+    const seq = [];
+    for (let i = 0; i < 100; i++) {
+      tick(s);
+      seq.push(t.cooldown);
+    }
+    return seq.join(',');
+  };
+  check(trace(false) === trace(true), 'a clustered leader\'s cooldown sequence is identical to a lone tower\'s');
+}
+
+// 10. Mixed branches: a Flak beside a Missile AA fires on one tick, and a missile from the volley
+//     still reaches a flyer beyond the tower's 3.4-tile range.
+{
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'aa', 5, 5);
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'B'); // Missile: 33 ticks, leads
+  placeTower(s, 'aa', 5, 6);
+  upgradeTower(s, 5, 6);
+  chooseBranch(s, 5, 6, 'A'); // Flak: 54 ticks, follows
+  const missileTower = towerAt(s, 5, 5);
+  const flak = towerAt(s, 5, 6);
+  s.phase = 'wave';
+  const near = stationary(1, 'flyer', 40, 5.5, 4.0);
+  const far = stationary(2, 'flyer', 40, 5.5, 0.0);
+  near.hp = near.maxHp = 1e9;
+  far.hp = far.maxHp = 1e9;
+  s.enemies.push(near, far);
+  for (const t of [missileTower, flak]) t.angle = Math.atan2(5.5 - (t.col + 0.5), -(4.0 - (t.row + 0.5)));
+  tick(s); // both fire as one volley
+  check(s.projectiles.filter((p) => p.kind === 'missile').length === 4, 'the Missile AA launched its salvo');
+  check(s.projectiles.filter((p) => p.kind === 'shell').length === 1, 'the Flak launched its shell in the same volley');
+  check(missileTower.cooldown === 32 && flak.cooldown === 53, 'Missile and Flak both fired on one tick');
+  const towerDist = Math.hypot(far.x - (missileTower.col + 0.5), far.y - (missileTower.row + 0.5));
+  check(towerDist > effectiveStats(missileTower).range, `the far flyer is beyond the AA's range (${towerDist.toFixed(1)})`);
+  near.dead = true;
+  missileTower.cooldown = 100000;
+  flak.cooldown = 100000;
+  let damagedFar = false;
+  for (let i = 0; i < 120 && s.projectiles.length > 0; i++) {
+    tick(s);
+    if (far.hp < far.maxHp) damagedFar = true;
+  }
+  check(damagedFar, 'a missile from the synchronized volley damages a flyer beyond the tower range');
+}
+
+// 11. Losing target: a follower whose held target dies stops holding and fires at what it can still see.
+{
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'aa', 5, 5);
+  placeTower(s, 'aa', 5, 6);
+  const leader = towerAt(s, 5, 5);
+  const follower = towerAt(s, 5, 6);
+  s.phase = 'wave';
+  const a = stationary(1, 'flyer', 20, 5.5, 4.0);
+  const b = stationary(2, 'flyer', 20, 5.5, 4.5); // same bearing, so no re-aim delays the shot
+  a.hp = a.maxHp = 1e9;
+  b.hp = b.maxHp = 1e9;
+  s.enemies.push(a, b);
+  leader.angle = 0;
+  follower.angle = 0;
+  leader.cooldown = 10; // in the window, but several ticks away from firing
+  follower.cooldown = 0;
+  tick(s);
+  check(follower.damageDealt === 0 && s.synergyHoldTarget.get(follower.id) === a.id, 'the follower holds, pinned to its first target');
+  a.dead = true; // the held target dies mid-hold
+  tick(s);
+  check(follower.damageDealt > 0 && b.hp < b.maxHp, 'the follower abandons the hold and fires at what it can still see');
+  check(leader.damageDealt === 0, 'the follower did not wait out the leader\'s window');
+}
+
+// 12. Isolation: a lone AA keeps the existing path, and the non-flyer determinism hash does not move.
+{
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'aa', 5, 5);
+  const lone = towerAt(s, 5, 5);
+  s.phase = 'wave';
+  const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+  flyer.hp = flyer.maxHp = 1e9;
+  s.enemies.push(flyer);
+  lone.angle = 0;
+  tick(s);
+  check(synergyLayout(s).clusters.length === 0, 'a lone AA forms no cluster');
+  check(lone.cooldown === 32 && Math.abs(lone.damageDealt - 5.2) < 1e-6, 'a lone AA\'s cooldown and damage are unchanged');
+  // The non-flyer fixture hash (asserted earlier, "flyer flight: a non-flyer fixture run ...") covers
+  // determinism: the synergy adds no RNG draw and never touches the non-AA path, so it stays put.
+}
+
+// 13. Save round-trip mid-hold: holding is a runtime fact, never serialized.
+{
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'aa', 5, 5);
+  placeTower(s, 'aa', 5, 6);
+  const follower = towerAt(s, 5, 6);
+  s.synergyHoldSince.set(follower.id, s.tick);
+  s.synergyHoldTarget.set(follower.id, 123);
+  check(s.synergyHoldSince.size === 1, 'a follower is mid-hold before the save');
+  const saved = captureRun(s);
+  check(saved.synergyHoldSince === undefined && saved.synergyHoldTarget === undefined, 'the hold state is never written to a save');
+  const restored = restoreRun(saved);
+  check(restored !== null && restored.synergyHoldSince.size === 0, 'a save taken mid-hold resumes with no follower stuck holding');
+}
+
+// 14. Role flip: upgrading a partner into a Flak flips the edge's direction on the next rebuild.
+{
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'aa', 5, 5);
+  placeTower(s, 'aa', 6, 5);
+  const north = towerAt(s, 5, 5);
+  const east = towerAt(s, 6, 5);
+  check(leads(north, east), 'before the upgrade the western tower leads');
+  upgradeTower(s, 5, 5);
+  chooseBranch(s, 5, 5, 'A'); // slows the western tower below its partner
+  check(leads(east, north), 'upgrading the partner into a Flak flips the edge direction');
+  const edge = synergyLayout(s).edges[0];
+  check(edge.lead.id === east.id && edge.follow.id === north.id, 'the rebuilt edge points the new way');
+}
+
+// 15. Layer order: synergy sits below towerSprites and above path/shadows; the list stays frozen.
+{
+  const order = BOARD_LAYER_ORDER;
+  check(Object.isFrozen(BOARD_LAYER_ORDER), 'the board layer list is frozen');
+  check(order.indexOf('synergy') === order.indexOf('towerSprites') - 1, 'synergy sits directly below towerSprites');
+  check(order.indexOf('synergy') > order.indexOf('path'), 'synergy sits above the path');
+  check(order.indexOf('synergy') > order.indexOf('shadows'), 'synergy sits above the enemy shadows');
+}
+
+// 16. Quality: lean draws flat lines with no drift; full pulses and drifts.
+{
+  const period = SYNERGIES[0].dash + SYNERGIES[0].gap;
+  check(synergyEdgeStyle(0, 'lean', period).alpha === 0.3, 'lean draws flat lines at alpha 0.30');
+  check(synergyEdgeStyle(0, 'full', period).alpha === 0.38, 'full starts at alpha 0.38');
+  check(synergyEdgeStyle(1, 'full', period).alpha !== synergyEdgeStyle(2, 'full', period).alpha, 'full pulses the alpha');
+  check(synergyEdgeStyle(0, 'lean', period).offset === 0 && synergyEdgeStyle(50, 'lean', period).offset === 0, 'lean draws with no dash drift');
+  check(synergyEdgeStyle(1, 'full', period).offset !== synergyEdgeStyle(2, 'full', period).offset, 'full drifts the dash offset');
+}
+
+// 17. RTL: edge positions are byte-identical under a dir:'rtl' locale.
+{
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'aa', 5, 5);
+  placeTower(s, 'aa', 5, 6);
+  const edge = buildSynergyLayout(s.towers).edges[0];
+  const board = { x: 100, y: 50, cell: 20 };
+  const line = () => JSON.stringify(synergyEdgeEndpoints(edge, board, 20));
+  setDirection('ltr');
+  const ltr = line();
+  setDirection('rtl');
+  const rtl = line();
+  setDirection('ltr');
+  check(ltr === rtl, 'edge positions are byte-identical under RTL');
 }
 
 // --- RTL (docs/RTL.md) -------------------------------------------------------------------------

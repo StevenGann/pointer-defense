@@ -11,10 +11,12 @@ import {
   towerAuraSources,
   currentRoutes,
   selectedTower,
+  synergyLayout,
   towerRangeMult,
   type Mine,
   type RunState,
 } from '../core/state.ts';
+import type { SynergyEdge } from '../core/synergy.ts';
 import {
   baseEnemyKind,
   isBossKind,
@@ -28,6 +30,7 @@ import {
 } from '../core/enemies.ts';
 import { cursorRadius, effectiveStats, isEmpDisabled, isFullyUpgraded, isGateLocked, isOffline, isRepairing, repairProgress, repairRadius, TOWER_STATS, type Branch, type Tower, type TowerKind } from '../core/towers.ts';
 import { tileAt, COLS, ROWS, type Grid, type Tile } from '../core/grid.ts';
+import { TICK_HZ } from '../core/time.ts';
 import { toggleOpenAt, togglePhase, toggleProgress, type LevelToggle } from '../core/levels.ts';
 import { dashRects, offsetSegment, routeOffset, type RouteSegment } from './route.ts';
 import {
@@ -256,7 +259,7 @@ export function enemyHealthBarVisible(e: Enemy): boolean {
  * shadow lies on the floor beneath mines, walls, towers, pop-ups and enemies.
  */
 export const BOARD_LAYER_ORDER = Object.freeze([
-  'tileSprites', 'tiles', 'path', 'shadows', 'mines', 'mineArt', 'shutterSprites', 'toggles', 'towerSprites',
+  'tileSprites', 'tiles', 'path', 'shadows', 'mines', 'mineArt', 'shutterSprites', 'toggles', 'synergy', 'towerSprites',
   'towers', 'auras', 'wrenches', 'popups', 'enemies', 'enemyBodies', 'enemyFx', 'cursorArrows', 'ghost', 'overlay',
   'projectileArt',
 ] as const);
@@ -293,6 +296,7 @@ export class BoardView {
   private readonly shutterSprites = new Container();
   private readonly shutterSpritePool: Sprite[] = [];
   private readonly toggles = new Graphics();
+  private readonly synergy = new Graphics();
   private readonly towers = new Graphics();
   private readonly auras = new Container();
   private readonly auraSprites: Sprite[] = [];
@@ -342,6 +346,7 @@ export class BoardView {
       mineArt: this.mineArt,
       shutterSprites: this.shutterSprites,
       toggles: this.toggles,
+      synergy: this.synergy,
       towerSprites: this.towerSprites,
       towers: this.towers,
       auras: this.auras,
@@ -555,6 +560,7 @@ export class BoardView {
     hover: BoardHover,
     knockbackFor?: (id: number, tick: number) => { dx: number; dy: number } | null,
     quality: QualityLevel = 'full',
+    showSynergy: boolean = true,
   ): void {
     const { board } = l;
     const cell = board.cell;
@@ -604,6 +610,13 @@ export class BoardView {
     this.enemyFx.clear();
     this.popupGfx.clear();
     this.overlay.clear();
+
+    this.synergy.clear();
+    if (showSynergy) {
+      for (const edge of synergyLayout(state).edges) {
+        drawSynergyEdge(this.synergy, edge, board, cell, state.clock, quality);
+      }
+    }
 
     this.toggles.clear();
     let shutterIndex = 0;
@@ -1024,6 +1037,79 @@ export function dashedLine(
 ): void {
   for (const r of dashRects(x0, y0, x1, y1, dash, gap, thick)) {
     g.rect(r.x, r.y, r.w, r.h).fill(color);
+  }
+}
+
+/** Synergy edges (docs/SYNERGIES.md §5): amber dashed lines, trimmed off the tower art, pulsing. */
+const SYNERGY_ALPHA = 0.38;
+const SYNERGY_ALPHA_LEAN = 0.3;
+const SYNERGY_PULSE = 0.1;
+const SYNERGY_PULSE_HZ = 1.1;
+const SYNERGY_WIDTH = 2;
+const SYNERGY_TRIM = 0.28;
+/** Dash drift speed in pixels per tick, so the pattern moves leader -> follower over time. */
+const SYNERGY_DRIFT = 0.25;
+
+/** The trimmed world-space endpoints of a synergy edge, for drawing and for the RTL identity check. */
+export function synergyEdgeEndpoints(
+  edge: SynergyEdge,
+  board: { x: number; y: number; cell: number },
+  cell: number,
+): { x0: number; y0: number; x1: number; y1: number } {
+  const ax = board.x + (edge.lead.col + 0.5) * cell;
+  const ay = board.y + (edge.lead.row + 0.5) * cell;
+  const bx = board.x + (edge.follow.col + 0.5) * cell;
+  const by = board.y + (edge.follow.row + 0.5) * cell;
+  const trim = SYNERGY_TRIM * cell;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = Math.hypot(dx, dy);
+  const ux = dx / len;
+  const uy = dy / len;
+  return { x0: ax + ux * trim, y0: ay + uy * trim, x1: bx - ux * trim, y1: by - uy * trim };
+}
+
+/** The line's alpha and dash offset for a tick. `lean` is flat (no pulse, no drift); `full` pulses. */
+export function synergyEdgeStyle(clock: number, quality: QualityLevel, period: number): { alpha: number; offset: number } {
+  const alpha =
+    quality === 'lean'
+      ? SYNERGY_ALPHA_LEAN
+      : SYNERGY_ALPHA + SYNERGY_PULSE * Math.sin((clock * SYNERGY_PULSE_HZ * Math.PI * 2) / TICK_HZ);
+  const offset = quality === 'lean' ? 0 : ((clock * SYNERGY_DRIFT) % period + period) % period;
+  return { alpha, offset };
+}
+
+function drawSynergyEdge(
+  g: Graphics,
+  edge: SynergyEdge,
+  board: { x: number; y: number; cell: number },
+  cell: number,
+  clock: number,
+  quality: QualityLevel,
+): void {
+  const { x0, y0, x1, y1 } = synergyEdgeEndpoints(edge, board, cell);
+  const period = edge.dash + edge.gap;
+  const { alpha, offset } = synergyEdgeStyle(clock, quality, period);
+
+  const half = SYNERGY_WIDTH / 2;
+  const length = Math.hypot(x1 - x0, y1 - y0);
+  const lx = (x1 - x0) / length;
+  const ly = (y1 - y0) / length;
+  for (let d = -offset; d < length; d += period) {
+    const start = Math.max(0, d);
+    const end = Math.min(length, d + edge.dash);
+    if (end <= start) continue;
+    const sx = x0 + lx * start;
+    const sy = y0 + ly * start;
+    if (lx === 0) {
+      const x = Math.round(sx);
+      const y = Math.round(sy);
+      g.rect(x - half, y, SYNERGY_WIDTH, end - start).fill({ color: edge.color, alpha });
+    } else {
+      const x = Math.round(sx);
+      const y = Math.round(sy);
+      g.rect(x, y - half, end - start, SYNERGY_WIDTH).fill({ color: edge.color, alpha });
+    }
   }
 }
 

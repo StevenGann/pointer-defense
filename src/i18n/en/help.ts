@@ -84,6 +84,13 @@ export const help = {
   'help.mechanics-endless.1': 'After the hundredth wave you can choose Endless and keep going.',
   'help.mechanics-endless.2': 'Endless waves keep getting harder. There is no final wave.',
 
+  // Synergies (always available; docs/SYNERGIES.md §6).
+  'help.synergy.title': 'Synergies',
+  'help.synergy.1': 'Two adjacent towers of the right kinds link into a synergy. Adjacent means side by side — north, south, east or west, never diagonal.',
+  'help.synergy.2': '**Synchronized Fire** — adjacent AA towers fire as one: the faster one leads and the others fire with it. A plain AA fires every {interval} ticks.',
+  'help.synergy.3': 'A follower holds its shot until its leader fires that tick. It waits at most {window} ticks for the leader, and never more than {cap} ticks in all.',
+  'help.synergy.4': 'A synchronized shot is exactly as strong as an unsynchronized one — no damage or rate bonus — it just lands with the rest.',
+
   // Enemies: the generated stats line (body line 1) and the answer paragraph (body line 2).
   'help.enemy-grunt.1': '{hp} HP · {speed} tiles/s.',
   'help.enemy-grunt.2': 'The basic creep and the unit everything else is measured against. Anything kills it — it is the enemy you build and shoot while learning the board.',

@@ -28,6 +28,7 @@ import {
 } from '../core/towers.ts';
 import { TICK_HZ } from '../core/time.ts';
 import { AA_SALVO_COUNT } from '../core/projectiles.ts';
+import { AA_HOLD_CAP, AA_HOLD_WINDOW } from '../core/synergy.ts';
 import { RAM_SALVAGE_PER_POINT } from '../core/state.ts';
 import {
   CRIT_BASE_CHANCE,
@@ -291,6 +292,22 @@ const mechanicsPages: readonly HelpPage[] = [
 ];
 
 // ---------------------------------------------------------------------------------------------
+// Synergies (always available; docs/SYNERGIES.md §6)
+
+const synergyPage: HelpPage = {
+  id: 'synergy',
+  title: t('help.synergy.title'),
+  category: 'mechanics',
+  gate: { kind: 'none' },
+  body: [
+    t('help.synergy.1'),
+    t('help.synergy.2', { interval: Math.round(TOWER_STATS.aa.fireInterval) }),
+    t('help.synergy.3', { window: AA_HOLD_WINDOW, cap: AA_HOLD_CAP }),
+    t('help.synergy.4'),
+  ],
+};
+
+// ---------------------------------------------------------------------------------------------
 // Enemies (one page per ordinary kind, gated on first encounter)
 
 /** The wave 1 / 25 / 50 / 75 / 100 hit-point table, straight from `waveHpScale` and the base HP. */
@@ -494,6 +511,7 @@ function towerPage(kind: TowerKind): HelpPage {
 export const HELP_PAGES: readonly HelpPage[] = [
   gettingStartedPage,
   ...mechanicsPages,
+  synergyPage,
   ...(ENEMY_KINDS as readonly EnemyKind[]).map(enemyPage),
   bossesInGeneralPage,
   ...(BOSS_KINDS as readonly EnemyKind[]).map(bossPage),

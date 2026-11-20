@@ -186,4 +186,11 @@ export const help: Catalogue = {
   'help.tower-cursor.4': '- **{name}** — {cost}: {rate} clics/s, radio {radius} casillas.',
   'help.tower-cursor.5': '- **{name}** — {cost}: repara torres por debajo del {pct} cuando su radio está despejado.',
   'help.tower-cursor.6': 'Un segundo cursor que hace clic en los enemigos por la mitad de tu daño de clic. Aliméntalo mejorando el puntero.',
+
+  // Synergies (always available; docs/SYNERGIES.md §6).
+  'help.synergy.title': 'Sinergias',
+  'help.synergy.1': 'Dos torres adyacentes del tipo adecuado se enlazan en una sinergia. Adyacente significa lado a lado — norte, sur, este u oeste, nunca en diagonal.',
+  'help.synergy.2': '**Fuego sincronizado** — las torres AA adyacentes disparan a la vez: la más rápida lidera y las demás disparan con ella. Una AA normal dispara cada {interval} ticks.',
+  'help.synergy.3': 'Una seguidora retiene su disparo hasta que su líder dispara en ese tick. Espera como máximo {window} ticks al líder, y nunca más de {cap} ticks en total.',
+  'help.synergy.4': 'Un disparo sincronizado es exactamente tan fuerte como uno sin sincronizar — sin bonus de daño ni de cadencia — solo aterriza con el resto.',
 } as const satisfies Catalogue;

@@ -1045,6 +1045,9 @@ export function restoreRun(save: unknown, profile: Profile = defaultProfile()): 
     towerDamageBuffTicks,
     enemySlowTicks,
     towerDisabled,
+    synergyRev: 0,
+    synergyHoldSince: new Map(),
+    synergyHoldTarget: new Map(),
     rng,
     viewport: {
       width: 1280,
