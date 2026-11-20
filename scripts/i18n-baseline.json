@@ -2,5 +2,6 @@
   "src/view/art.ts",
   "src/view/chrome.ts",
   "src/view/helpMarkdown.ts",
+  "src/view/metrics.ts",
   "src/view/wallAppearance.ts"
 ]

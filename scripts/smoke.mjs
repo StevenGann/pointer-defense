@@ -249,7 +249,8 @@ import {
   SHAKE_MAX_TICKS,
   SHAKE_LEAK_FREEZE_MS,
 } from '../src/view/shake.ts';
-import { t, plural, formatInt, formatMoney } from '../src/i18n/index.ts';
+import { t, plural, formatInt, formatMoney, setLocale } from '../src/i18n/index.ts';
+import { clearTextWidthCache } from '../src/view/metrics.ts';
 import { setDirection, isRtl, mirrorX } from '../src/view/direction.ts';
 import { en } from '../src/i18n/en/index.ts';
 import { extractTKeys, parseCatalogueKeys, checkI18n, scanRoots, walkAllSources, readBaseline } from './i18n-check.mjs';
@@ -11463,6 +11464,47 @@ function dailyState(date) {
     setDirection('ltr');
     check(allFit, `RTL: every HUD label fits its rect at ${vw}x${vh}`);
   }
+}
+
+// A menu bar that lays out by `length * 7` puts the Chinese words on top of each other, because
+// 文件 draws as two ems, not as two Latin letters. Every locale has to fit the bar it is given.
+{
+  const l = computeLayout(1280, 720);
+  const en = (await import('../src/i18n/en/index.ts')).en;
+  const codes = ['es', 'fr', 'ru', 'uk', 'zh-Hans', 'he'];
+  for (const code of codes) {
+    const mod = await import(`../src/i18n/${code}/index.ts`);
+    setLocale(mod[Object.keys(mod)[0]], code);
+    clearTextWidthCache();
+    setDirection(code === 'he' ? 'rtl' : 'ltr');
+    const menu = l.menu;
+    const rects = menuWordRects(menu);
+    const items = menuItems();
+    check(rects.length === items.length, `menu fit: ${code} lays out every menu word`);
+    let fits = true;
+    let overlaps = 0;
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i];
+      if (r.x < menu.x || r.x + r.w > menu.x + menu.w) fits = false;
+      // Direction-agnostic: in RTL the words run right to left, so an ordered comparison would
+      // report every gap as a collision.
+      for (let j = 0; j < i; j++) {
+        const o = rects[j];
+        if (Math.min(o.x + o.w, r.x + r.w) > Math.max(o.x, r.x)) overlaps++;
+      }
+    }
+    check(fits, `menu fit: ${code} words stay inside the menu bar`);
+    check(overlaps === 0, `menu fit: ${code} words do not overlap (${overlaps} collisions)`);
+    // Every word must be clickable in the middle of the pixels it claims.
+    for (let i = 0; i < rects.length; i++) {
+      const r = rects[i];
+      const hit = menuNameAt(menu, Math.round(r.x + r.w / 2), Math.round(menu.y + menu.h / 2));
+      check(hit === items[i].name, `menu fit: ${code} word ${i} is hit-testable`);
+    }
+  }
+  setLocale(en, 'en');
+  clearTextWidthCache();
+  setDirection('ltr');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

@@ -119,40 +119,9 @@ export function statusPerfText(perf: HudPerf | null): string {
   return parts.join(' · ');
 }
 
-let metricsText: Text | null = null;
+import { textWidth } from './metrics.ts';
 
-const TEXT_WIDTH_CACHE_MAX = 256;
-const textWidthCache = new Map<string, number>();
-
-/** Measure a string with the same font the HUD draws with, without adding it to the scene. */
-export function textWidth(text: string, size: number): number {
-  const key = `${size}|${text}`;
-  const cached = textWidthCache.get(key);
-  if (cached !== undefined) return cached;
-
-  // Headless (the smoke harness) has no canvas to rasterize text; estimate from the glyph count so
-  // the layout model can still be computed without a renderer.
-  if (typeof document === 'undefined') {
-    const estimate = Math.ceil(text.length * size * 0.6);
-    if (textWidthCache.size >= TEXT_WIDTH_CACHE_MAX) textWidthCache.clear();
-    textWidthCache.set(key, estimate);
-    return estimate;
-  }
-
-  if (!metricsText) {
-    metricsText = new Text({
-      text: '',
-      style: { fontFamily: FONT, fontSize: size, fill: PAL.text },
-    });
-  }
-  metricsText.style.fontSize = size;
-  metricsText.text = text;
-  const width = metricsText.width;
-
-  if (textWidthCache.size >= TEXT_WIDTH_CACHE_MAX) textWidthCache.clear();
-  textWidthCache.set(key, width);
-  return width;
-}
+export { textWidth };
 
 function fitButtonText(preferred: string, fallbacks: readonly string[], maxWidth = SPEC_BUTTON_MAX): string {
   for (const candidate of [preferred, ...fallbacks]) {

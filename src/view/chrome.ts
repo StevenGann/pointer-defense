@@ -47,7 +47,9 @@ export const PAL = {
   amber: 0x806000,
 } as const;
 
-export const FONT = 'Tahoma, Verdana, Geneva, sans-serif';
+import { FONT, textWidth } from './metrics.ts';
+
+export { FONT };
 /** The monospace stack for code runs inside Help pages. */
 export const CODE_FONT = 'Courier New, monospace';
 
@@ -232,7 +234,7 @@ export function menuWordRects(menu: Rect): Rect[] {
   if (isRtl()) {
     let x = menu.x + menu.w - 6;
     for (const item of items) {
-      const width = item.label.length * 7;
+      const width = textWidth(item.label, FONT_SIZE.body);
       x -= width;
       out.push({ x, y: menu.y, w: width, h: menu.h });
       x -= 8;
@@ -241,7 +243,7 @@ export function menuWordRects(menu: Rect): Rect[] {
   }
   let x = menu.x + 6;
   for (const item of items) {
-    const width = item.label.length * 7;
+    const width = textWidth(item.label, FONT_SIZE.body);
     out.push({ x, y: menu.y, w: width, h: menu.h });
     x += width + 8;
   }
@@ -551,7 +553,7 @@ export function computeTabStrip(rect: Rect, labels: readonly string[], active: n
   const tabs: TabRect[] = [];
   let x = rect.x + 2;
   for (let i = 0; i < labels.length; i++) {
-    const w = labels[i].length * 7 + 22;
+    const w = textWidth(labels[i], FONT_SIZE.body) + 22;
     const isActive = i === active;
     const y = isActive ? rect.y - 2 : rect.y;
     const h = isActive ? TAB_H + 2 : TAB_H;
