@@ -1,4 +1,5 @@
 import type { Catalogue } from '../index.ts';
+import { help } from './help.ts';
 
 /**
  * The French catalogue — a machine draft pending native review.
@@ -8,6 +9,8 @@ import type { Catalogue } from '../index.ts';
  * title 'Pointer Defense' plus id-like tokens are left untranslated. HP becomes PV, DPS stays DPS.
  */
 export const fr: Catalogue = {
+  ...help,
+
   // Menu-bar words and every File / View / Cheats / Help item.
   'menu.file': 'Fichier',
   'menu.view': 'Affichage',
