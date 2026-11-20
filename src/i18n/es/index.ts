@@ -18,6 +18,7 @@ export const es: Catalogue = {
   'menu.file.newRun': 'Nueva partida',
   'menu.file.exit': 'Salir',
   'menu.view.records': 'Récords',
+  'menu.view.language': 'Idioma',
   'menu.view.shakeOn': 'Vibración: Activada',
   'menu.view.shakeOff': 'Vibración: Desactivada',
   'menu.cheats.godMode': 'Modo dios',
