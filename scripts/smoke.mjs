@@ -7684,6 +7684,25 @@ function helpFmtDps(damage, fireTicks) { return fireTicks <= 0 ? '—' : (damage
 }
 
 {
+  // 7. Every locale's Help prose keeps the English Markdown shape: same lines, each the same kind,
+  // and a table row keeps its pipe count. A translation that drops a pipe silently loses a column.
+  const enHelp = (await import('../src/i18n/en/help.ts')).help;
+  const shapeOf = (text) =>
+    text.split('\n').map((line) => {
+      const t = line.trim();
+      if (t.startsWith('## ')) return 'h';
+      if (t.startsWith('- ')) return 'b';
+      if (t.startsWith('|')) return `t${(t.match(/\|/g) ?? []).length}`;
+      return 'p';
+    }).join(',');
+  for (const code of ['es', 'fr', 'ru', 'uk', 'zh-Hans', 'he']) {
+    const mod = await import(`../src/i18n/${code}/help.ts`);
+    const bad = Object.keys(enHelp).filter((k) => shapeOf(enHelp[k]) !== shapeOf(mod.help[k]));
+    check(bad.length === 0, `help prose: ${code} keeps the English Markdown shape (${bad.slice(0, 3).join(', ')})`);
+  }
+}
+
+{
   // 44f3. A long page reports a positive scroll range; a short page reports zero and draws no
   // scrollbar; scrolling past either end clamps.
   const l = computeLayout(1280, 720);
