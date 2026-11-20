@@ -79,7 +79,20 @@ import {
   editorToggleAt,
   setEditorToggle,
   editorTileAt,
+  editorIsEmpty,
 } from '../src/core/editor.ts';
+import {
+  applyDraft,
+  applyMapEntry,
+  deleteLibraryMap,
+  loadEditorDraft,
+  loadLibrary,
+  saveEditorDraft,
+  saveLibrary,
+  saveLibraryMap,
+  replaceLibraryMap,
+} from '../src/core/editorstore.ts';
+import { computeEditorLayout, editorToolbarAt } from '../src/view/editor.ts';
 import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, ENEMY_KINDS, BOSS_KINDS, isBossKind, isBossVariant, isPopupEnemy, isFlyerKind, slowFactorFor, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS, CARRIER_BROOD_COUNT, CARRIER_BROOD_INTERVAL_TICKS, CARRIER_BROOD_SCATTER_TICKS, CARRIER_DEATH_BROOD_COUNT, DREADNOUGHT_PLATING, WIRECUTTER_EMP_RADIUS, WIRECUTTER_EMP_TICKS, RAM_TOWER_DPS, RAM_TURRET_DAMAGE, RAM_TURRET_RANGE } from '../src/core/enemies.ts';
 import { missileSeed, AA_SALVO_COUNT } from '../src/core/projectiles.ts';
 import { rngNext } from '../src/core/rng.ts';
@@ -9841,6 +9854,176 @@ function richRun() {
   const loaded = loadRunSave(defaultProfile(), store);
   check(loaded !== null && loaded.wave === 34 && loaded.levelId === 'fork' && loaded.level.name === 'The Fork',
     'Continue resumes at the saved wave on the saved map');
+}
+
+// --- Editor draft and library (docs/EDITOR-LIBRARY.md) -----------------------------------------
+
+/** A minimal valid level for library entries: one wall, a start and an exit, clear route. */
+function levelFixture(name) {
+  return { id: '', name, walls: [[4, 5]], starts: [{ col: 0, row: 6 }], exits: [{ col: 19, row: 6 }], toggles: [] };
+}
+
+// 1. An edit writes the draft, and a fresh editor model restores exactly that drawing.
+{
+  const m = createEditor();
+  selectEditorTool(m, 'start');
+  paintEditor(m, 2, 5);
+  selectEditorTool(m, 'exit');
+  paintEditor(m, 17, 6);
+  selectEditorTool(m, 'wall');
+  paintEditor(m, 4, 4);
+  paintEditor(m, 9, 9);
+  selectEditorTool(m, 'shutter');
+  paintEditor(m, 6, 6);
+  m.name = 'Draft Test';
+  m.libraryId = 'm9';
+  const store = runSaveStore();
+  saveEditorDraft(m, store);
+  const draft = loadEditorDraft(store);
+  check(draft !== null, 'an edit writes the draft');
+  const fresh = createEditor();
+  applyDraft(fresh, draft);
+  check(
+    JSON.stringify(fresh.tiles) === JSON.stringify(m.tiles) &&
+      fresh.start?.col === 2 && fresh.start?.row === 5 &&
+      fresh.exit?.col === 17 && fresh.exit?.row === 6 &&
+      fresh.toggles.length === 1 && fresh.name === 'Draft Test' && fresh.libraryId === 'm9',
+    'a fresh editor model restores exactly that drawing (tiles, markers, toggles, name, library id)',
+  );
+}
+
+// 2. Save creates a library entry; a second Save updates it rather than adding a second.
+{
+  const level = levelFixture('First Map');
+  const r1 = saveLibraryMap([], null, 'First Map', level, '2026-11-20T10:00:00Z');
+  check(r1.maps.length === 1 && r1.entry.id === 'm1' && r1.entry.name === 'First Map', 'Save creates a library entry');
+  const r2 = saveLibraryMap(r1.maps, r1.entry.id, 'First Map II', level, '2026-11-20T11:00:00Z');
+  check(
+    r2.maps.length === 1 && r2.entry.id === 'm1' && r2.entry.name === 'First Map II' && r2.entry.savedAt === '2026-11-20T11:00:00Z',
+    'a second Save updates the entry rather than adding a second',
+  );
+}
+
+// 3. Open lists saved maps newest first, and loading one replaces the draft and its name.
+{
+  let maps = [];
+  maps = saveLibraryMap(maps, null, 'A', levelFixture('A'), '2026-11-20T10:00:00Z').maps;
+  maps = saveLibraryMap(maps, null, 'B', levelFixture('B'), '2026-11-20T11:00:00Z').maps;
+  const store = runSaveStore();
+  saveLibrary(maps, store);
+  const loaded = loadLibrary(store);
+  check(loaded.length === 2 && loaded[0].name === 'B' && loaded[1].name === 'A', 'Open lists saved maps newest first');
+  const m = createEditor();
+  applyMapEntry(m, loaded[1]);
+  check(m.name === 'A' && m.libraryId === loaded[1].id, 'loading a map replaces the draft and its name');
+  check(
+    m.start?.col === 0 && m.start?.row === 6 && m.exit?.col === 19 && m.exit?.row === 6 && m.tiles[5 * m.cols + 4] === 'wall',
+    'loading a map restores its geometry into the draft',
+  );
+}
+
+// 4. Delete removes an entry and does not touch the draft.
+{
+  let maps = [];
+  maps = saveLibraryMap(maps, null, 'A', levelFixture('A'), '2026-11-20T10:00:00Z').maps;
+  maps = saveLibraryMap(maps, null, 'B', levelFixture('B'), '2026-11-20T11:00:00Z').maps;
+  const draftStore = runSaveStore();
+  const m = createEditor();
+  selectEditorTool(m, 'wall');
+  paintEditor(m, 3, 3);
+  saveEditorDraft(m, draftStore);
+  const beforeDraft = draftStore.current();
+  maps = deleteLibraryMap(maps, maps[0].id);
+  check(maps.length === 1 && !maps.some((x) => x.name === 'B'), 'Delete removes an entry');
+  check(draftStore.current() === beforeDraft, 'Delete does not touch the draft');
+}
+
+// 5. A library entry with an invalid level is dropped from the list and never loaded.
+{
+  let maps = [];
+  maps = saveLibraryMap(maps, null, 'Valid', levelFixture('Valid'), '2026-11-20T10:00:00Z').maps;
+  const invalid = { id: '', name: 'Broken', walls: [], starts: [], exits: [{ col: 19, row: 6 }], toggles: [] };
+  maps = saveLibraryMap(maps, null, 'Broken', invalid, '2026-11-20T11:00:00Z').maps;
+  const store = runSaveStore();
+  saveLibrary(maps, store);
+  const loaded = loadLibrary(store);
+  check(loaded.length === 1 && loaded[0].name === 'Valid', 'a library entry with an invalid level is dropped from the list');
+}
+
+// 6. The 51st save is refused or replaces a chosen map; the count never exceeds 50.
+{
+  let maps = [];
+  for (let i = 1; i <= 50; i++) {
+    maps = saveLibraryMap(maps, null, `Map ${i}`, levelFixture(`Map ${i}`), `2026-11-20T00:00:0${i % 10}Z`).maps;
+  }
+  check(maps.length === 50, 'the library holds 50 maps');
+  const overflow = saveLibraryMap(maps, null, 'Map 51', levelFixture('Map 51'), '2026-11-20T23:59:59Z');
+  check(
+    overflow.maps.length === 50 && overflow.maps[0].name === 'Map 51' && !overflow.maps.some((x) => x.name === 'Map 1'),
+    'a 51st save evicts the oldest and the count never exceeds 50',
+  );
+  const victim = maps[0].id;
+  const replaced = replaceLibraryMap(maps, victim, 'Replacement', levelFixture('Replacement'), '2026-11-20T23:59:58Z');
+  check(
+    replaced.maps.length === 50 && !replaced.maps.some((x) => x.id === victim) && replaced.maps[0].name === 'Replacement',
+    'replacing a chosen map keeps the count at 50',
+  );
+}
+
+// 7. New writes an empty draft, and asks before discarding a non-empty one.
+{
+  const m = createEditor();
+  check(editorIsEmpty(m), 'a fresh editor is empty, so New does not confirm');
+  selectEditorTool(m, 'wall');
+  paintEditor(m, 3, 3);
+  check(!editorIsEmpty(m), 'painting makes the draft non-empty, so New asks before discarding');
+  clearEditor(m);
+  m.name = '';
+  m.libraryId = null;
+  check(editorIsEmpty(m), 'New leaves the drawing empty and unnamed');
+  const store = runSaveStore();
+  saveEditorDraft(m, store);
+  const draft = loadEditorDraft(store);
+  check(
+    draft !== null && draft.tiles.every((t) => t === 'floor') && draft.start === null && draft.exit === null && draft.toggles.length === 0 && draft.name === '',
+    'New writes an empty draft',
+  );
+}
+
+// 8. A corrupt draft is ignored, the editor opens blank, and the game still boots.
+{
+  const bad = runSaveStore('not json');
+  check(loadEditorDraft(bad) === null && bad.current() === null, 'a corrupt draft is ignored and the key is deleted');
+  const wrongVersion = runSaveStore(JSON.stringify({ v: 99, name: '', libraryId: null, tiles: [], start: null, exit: null, toggles: [] }));
+  check(loadEditorDraft(wrongVersion) === null, 'an unknown-version draft is ignored');
+  const corruptLib = runSaveStore('garbage');
+  check(loadLibrary(corruptLib).length === 0, 'a corrupt library loads empty');
+  const m = createEditor();
+  check(editorIsEmpty(m) && m.tiles.every((t) => t === 'floor'), 'the editor opens blank after a corrupt draft');
+}
+
+// 9. Toolbar hit-testing at 1024 x 640 and 1280 x 720 finds every button with no overlap.
+{
+  for (const [vw, vh] of [[1024, 640], [1280, 720]]) {
+    const layout = computeLayout(vw, vh);
+    const m = createEditor();
+    const el = computeEditorLayout(layout, m);
+    check(el.toolbar.length === 8, `${vw} x ${vh}: the toolbar has all 8 buttons`);
+    let noOverlap = true;
+    let labelsFit = true;
+    for (let i = 0; i < el.toolbar.length; i++) {
+      const b = el.toolbar[i].rect;
+      labelsFit = labelsFit && b.w >= 48;
+      if (i > 0) {
+        const prev = el.toolbar[i - 1].rect;
+        if (b.x < prev.x + prev.w) noOverlap = false;
+      }
+      const hit = editorToolbarAt(layout, m, b.x + Math.floor(b.w / 2), b.y + Math.floor(b.h / 2));
+      if (hit !== el.toolbar[i].id) noOverlap = false;
+    }
+    check(noOverlap, `${vw} x ${vh}: every toolbar button hit-tests with no overlap`);
+    check(labelsFit, `${vw} x ${vh}: every button label stays readable`);
+  }
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

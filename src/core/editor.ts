@@ -55,6 +55,10 @@ export interface EditorModel {
   selectedShutter: Tile | null;
   undoStack: EditorSnapshot[];
   redoStack: EditorSnapshot[];
+  /** The drawing's name, prefilled into a Save name prompt; empty while unnamed. */
+  name: string;
+  /** The library entry this drawing came from (Save updates it), or null when it is unsaved. */
+  libraryId: string | null;
 }
 
 export function createEditor(): EditorModel {
@@ -69,7 +73,18 @@ export function createEditor(): EditorModel {
     selectedShutter: null,
     undoStack: [],
     redoStack: [],
+    name: '',
+    libraryId: null,
   };
+}
+
+/** Whether the drawing is empty: no painted tile, marker, shutter or name. */
+export function editorIsEmpty(model: EditorModel): boolean {
+  if (model.start !== null || model.exit !== null) return false;
+  if (model.toggles.length > 0) return false;
+  if (model.name !== '') return false;
+  for (const t of model.tiles) if (t !== 'floor') return false;
+  return true;
 }
 
 export function editorIndex(model: EditorModel, col: number, row: number): number {
@@ -272,7 +287,7 @@ export function editorLevel(model: EditorModel): Level {
   const toggles = model.toggles.map((t) => ({ ...t }));
   const starts: Tile[] = model.start ? [model.start] : [];
   const exits: Tile[] = model.exit ? [model.exit] : [];
-  const level: Level = { id: '', name: '', walls, starts, exits, toggles };
+  const level: Level = { id: '', name: model.name, walls, starts, exits, toggles };
   return { ...level, id: levelFingerprint(level) };
 }
 
