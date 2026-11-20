@@ -196,9 +196,11 @@ intended and safe, because nothing about the role is stored.
   colour and the engine can add a second synergy colour without an art change. The procedural
   `Graphics` dash survives as a fallback drawn underneath the sprite layer, so the line is on screen
   before the SVGs arrive and stays there if an asset is ever removed.
-- **Look.** `0xffe14d` at alpha `0.95`, halo at `0.75 ×` that, with a slow ±0.10 alpha pulse at about
-  1.1 Hz driven by `state.clock`, so no new timer exists to fall out of step. This was raised from
-  `0.38`: at that opacity the indicator read as a smudge on a busy board.
+- **Look.** `0xffe14d` at alpha `0.95`, with a slow ±0.10 alpha pulse at about 1.1 Hz driven by
+  `state.clock`, so no new timer exists to fall out of step. The halo's own weight lives in the SVG:
+  its ring is held at `0.45` opacity and drawn at r=21 of a 64 px box, so it reads as a tint on the
+  floor rather than a second range circle. Opacity is the one thing to tune here — at `0.38` on the
+  old procedural line it read as a smudge, and at full opacity the halo overshadowed the tower.
 - **Direction.** The dash offset drifts from leader to follower. This is the only place a pair's
   direction is visible, and it costs one animated offset per line rather than any new glyph.
 - **Quality.** `full` and `no-shadows` draw the pulse. `lean` draws the same art flat at alpha
