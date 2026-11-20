@@ -149,7 +149,7 @@ import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText
 import { BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, computeWindowChromeGeom, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
-import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, statusPerfText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect } from '../src/view/hud.ts';
+import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, statusPerfText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect, modalRect, modalMessageTop } from '../src/view/hud.ts';
 import { FloatingNumbersView } from '../src/view/numbers.ts';
 import { nextQuality } from '../src/core/quality.ts';
 import { dailyFor, dailyLevel, dailySeed, dailyMenuLabel, dailyAvailable, DAILY_WAVES, hashDaily } from '../src/core/daily.ts';
@@ -10526,6 +10526,21 @@ function dailyState(date) {
   s.wave = 11;
   s.phase = 'build';
   check(waveLabel(s) === 'Wave 12 / 100', 'normal: the HUD label still reads Wave 12 / 100');
+}
+
+// 5. The end-of-run message sits under the title bar and the tallest case still clears the buttons.
+// The message is top-anchored; when it was centre-anchored a four-line victory message grew upward
+// through the title bar and printed over the "Victory" caption.
+{
+  const layout = computeLayout(1280, 800);
+  const lineH = FONT_SIZE.body + 3;
+  for (const [label, m] of [['game over', modalRect(layout)], ['victory', victoryModalRect(layout)]]) {
+    const top = modalMessageTop(m);
+    check(top >= m.y + 22, `modal: the ${label} message starts below the title bar`);
+    check(top + 4 * lineH < m.y + m.h - 24, `modal: four ${label} message lines fit above the buttons`);
+  }
+  const hudSrc = readFileSync(new URL('../src/view/hud.ts', import.meta.url), 'utf8');
+  check(hudSrc.includes('this.modalMessage.anchor.set(0, 0)'), 'modal: the message block stays top-anchored');
 }
 
 // 5. Ending a daily — victory, defeat, or Esc — appends exactly one record with outcome 'daily' and

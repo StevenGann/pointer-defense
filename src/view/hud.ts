@@ -605,7 +605,7 @@ export function hudButtonAt(l: Layout, s: RunState, px: number, py: number): Hud
   return hit && hit.enabled ? hit.action : null;
 }
 
-function modalRect(l: Layout): Rect {
+export function modalRect(l: Layout): Rect {
   const w = 300;
   const h = 132;
   return {
@@ -636,6 +636,14 @@ export function victoryModalRect(l: Layout): Rect {
     w,
     h,
   };
+}
+
+/**
+ * Top edge of the end-of-run message block. The message is top-anchored and starts under the title
+ * bar; it used to be centre-anchored, which made a four-line victory message grow upward into the bar.
+ */
+export function modalMessageTop(m: Rect): number {
+  return m.y + 2 + 20 + 6;
 }
 
 export interface VictoryButtons {
@@ -792,10 +800,14 @@ export class HudView {
     this.salvage.style.fontSize = READOUT_FONT_SIZE;
     this.mapNext.anchor.set(0.5, 0.5);
     this.root.addChild(this.modalG);
-    for (const t of [this.modalTitle, this.modalMessage, this.modalRestart, this.modalButton2]) {
+    for (const t of [this.modalTitle, this.modalRestart, this.modalButton2]) {
       t.anchor.set(0, 0.5);
       this.root.addChild(t);
     }
+    // The message block is top-anchored: it is one line on a game over and four on a victory, so a
+    // centred anchor grew upward into the title bar as soon as the second line arrived.
+    this.modalMessage.anchor.set(0, 0);
+    this.root.addChild(this.modalMessage);
     this.modalTitle.style.fill = PAL.titleInverse;
     this.modalRestart.anchor.set(0.5, 0.5);
     this.modalButton2.anchor.set(0.5, 0.5);
@@ -1278,7 +1290,9 @@ export class HudView {
     this.modalTitle.position.set(m.x + 6, m.y + 2 + 10);
 
     this.modalMessage.text = t('hud.gameOverMessage', { wave: s.wave });
-    this.modalMessage.position.set(m.x + 12, m.y + 2 + 20 + 16);
+    this.modalMessage.style.wordWrap = true;
+    this.modalMessage.style.wordWrapWidth = m.w - 24;
+    this.modalMessage.position.set(m.x + 12, modalMessageTop(m));
     this.modalButton2.text = '';
 
     const r = restartRect(m);
@@ -1303,7 +1317,9 @@ export class HudView {
       t('hud.victorySalvage', { earned: formatNumber(s.economy.earned) }),
       t('hud.victoryIntegrity', { integrity: s.integrity }),
     ].join('\n');
-    this.modalMessage.position.set(m.x + 12, m.y + 2 + 20 + 16);
+    this.modalMessage.style.wordWrap = true;
+    this.modalMessage.style.wordWrapWidth = m.w - 24;
+    this.modalMessage.position.set(m.x + 12, modalMessageTop(m));
 
     const b = victoryButtons(m);
     if (s.daily === null) {
