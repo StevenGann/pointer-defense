@@ -30,6 +30,7 @@ import {
 } from '../core/towers.ts';
 import { earlyCallBonus, MODIFIER_NAMES, typeBossKindForWave, waveDef, waveModifiers } from '../core/waves.ts';
 import { ENEMY_STATS } from '../core/enemies.ts';
+import type { QualityLevel } from '../core/quality.ts';
 import { branchName, fmtClickDamage, targetModeDisplay } from './tooltipText.ts';
 
 /**
@@ -84,6 +85,29 @@ export function waveLabel(s: RunState): string {
     label += ` · ${s.modifiers.map((m) => MODIFIER_NAMES[m]).join(' + ')}`;
   }
   return label;
+}
+
+/** What the governor's current state contributes to the status-bar speed slot. */
+export interface HudPerf {
+  quality: QualityLevel;
+  /** The smoothed frame time in ms, for the `?fps=1` readout. */
+  frameMs: number;
+  /** Frames per second, derived from `frameMs`, for the `?fps=1` readout. */
+  fps: number;
+  /** Whether `?fps=1` is enabled; the readout costs nothing when it is off. */
+  showFps: boolean;
+}
+
+/**
+ * The status-bar speed slot: `×N`, plus the frame-time readout when `?fps=1` is on and a `Q: lean`
+ * indicator whenever the level is below full. The Q indicator shares the slot with the speed figure,
+ * never replacing it.
+ */
+export function speedStatusText(speed: number, perf: HudPerf | null): string {
+  let text = `×${speed}`;
+  if (perf?.showFps) text += ` · ${perf.frameMs.toFixed(1)} ms · ${perf.fps}/s`;
+  if (perf && (perf.quality !== 'full' || perf.showFps)) text += ` · Q: ${perf.quality}`;
+  return text;
 }
 
 let metricsText: Text | null = null;
@@ -801,7 +825,7 @@ export class HudView {
     }
   }
 
-  draw(s: RunState, l: Layout, hoverHud: HudAction | null): void {
+  draw(s: RunState, l: Layout, hoverHud: HudAction | null, perf: HudPerf | null = null): void {
     const g = this.g;
     g.clear();
     this.checkIndex = 0;
@@ -836,7 +860,7 @@ export class HudView {
 
     this.statusWave.text = waveLabel(s);
     this.statusWave.position.set(sp.middle.x + 4, sp.middle.y + Math.floor(sp.middle.h / 2));
-    this.statusSpeed.text = `×${s.speed}`;
+    this.statusSpeed.text = speedStatusText(s.speed, perf);
     this.statusSpeed.position.set(sp.speed.x + 4, sp.speed.y + Math.floor(sp.speed.h / 2));
 
     // Toolbar.

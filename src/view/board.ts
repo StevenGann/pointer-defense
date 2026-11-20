@@ -61,6 +61,7 @@ import {
   popupTitleH,
   popupWindowRect,
 } from './popupEnemy.ts';
+import type { QualityLevel } from '../core/quality.ts';
 
 export { dashRects, offsetSegment, routeOffset } from './route.ts';
 
@@ -102,6 +103,19 @@ export function staticLayerKey(
   board: BoardGeometry,
 ): string {
   return `${state.levelId}|${state.grid.cols}x${state.grid.rows}|${board.x},${board.y},${board.cell}`;
+}
+
+/**
+ * Identity of the live route layer: the tile lists creeps follow right now. It changes only when the
+ * maze changes — a tower placement or sale, a toggle flip, or a map switch — so the route is redrawn
+ * on those events and left alone across ordinary ticks. The cell size is not part of the key because
+ * a resize (or DPR change) already rebuilds the static layer, which drops the cached route with it.
+ */
+export function routeKey(state: RunState): string {
+  const routes = currentRoutes(state);
+  return routes
+    .map((route, i) => `${routes.length}:${i}:${route.map((t) => `${t.col},${t.row}`).join('|')}`)
+    .join(';');
 }
 
 /**
@@ -191,6 +205,26 @@ export function shadowOffsetFor(kind: EnemyKind): Readonly<{ x: number; y: numbe
 /** Whether an enemy kind casts a shadow. Pop-ups are windows, not creatures, and cast nothing. */
 export function shadowVisibleFor(kind: EnemyKind): boolean {
   return kind !== 'popup';
+}
+
+/**
+ * Whether the shadow layer is drawn for an enemy kind at a given quality level: every shadow in
+ * `full`, bosses only in `no-shadows` (the Carrier is a flyer boss, so it is included), none in
+ * `lean`.
+ */
+export function shadowDrawnFor(kind: EnemyKind, quality: QualityLevel): boolean {
+  if (quality === 'lean') return false;
+  if (quality === 'no-shadows') return isBossKind(kind);
+  return true;
+}
+
+/**
+ * Whether a non-boss enemy draws a health arc: it has taken damage, or it carries shield points.
+ * Bosses are handled separately (they always draw a full health bar).
+ */
+export function enemyHealthBarVisible(e: Enemy): boolean {
+  if (isBossKind(e.kind)) return true;
+  return (e.maxHp > 0 && e.hp < e.maxHp) || e.shield > 0 || e.shieldsRemaining > 0;
 }
 
 /**
@@ -496,6 +530,7 @@ export class BoardView {
     alpha: number,
     hover: BoardHover,
     knockbackFor?: (id: number, tick: number) => { dx: number; dy: number } | null,
+    quality: QualityLevel = 'full',
   ): void {
     const { board } = l;
     const cell = board.cell;
@@ -507,7 +542,13 @@ export class BoardView {
       this.drawStatic(state.grid, board, cell);
     }
 
-    if (!PERF_HIDDEN.has('route')) this.drawRoute(currentRoutes(state), board, cell);
+    if (!PERF_HIDDEN.has('route')) {
+      const rkey = routeKey(state);
+      if (rkey !== this.pathKey) {
+        this.pathKey = rkey;
+        this.drawRoute(currentRoutes(state), board, cell);
+      }
+    }
 
     this.mines.clear();
     let mineArtIndex = 0;
@@ -558,7 +599,7 @@ export class BoardView {
       // Wall overlays are drawn after the base so they sit on top of the face sprite.
       const overlayA = t.kind === 'wall' ? this.wallOverlaySprite(wallOverlayIndex++) : null;
       const overlayB = t.kind === 'wall' ? this.wallOverlaySprite(wallOverlayIndex++) : null;
-      drawTower(baseSprite, turretSprite, markSprite, wrenchSprite, this.towers, t, board, cell, state.clock, overlayA, overlayB);
+      drawTower(baseSprite, turretSprite, markSprite, wrenchSprite, this.towers, t, board, cell, state.clock, overlayA, overlayB, quality);
       towerIndex++;
     }
     for (let i = towerIndex; i < this.towerBaseSprites.length; i++) this.towerBaseSprites[i].visible = false;
@@ -569,40 +610,44 @@ export class BoardView {
 
     // Tower-status auras: one sprite per status per tower, cycling on the asset's own animation while
     // the status holds and hidden otherwise. They sit in their own layer above the plinth and never
-    // take pointer events (all board hit-tests are coordinate-based).
-    const healed = healedTowerIds(state);
-    const auraSources = towerAuraSources(state);
-    const disabled = disabledTowerIds(state);
-    let auraIndex = 0;
-    for (const t of state.towers) {
-      const active: Record<AuraStatus, boolean> = {
-        heal: healed.has(t.id),
-        beacon: auraSources.get(t.id)?.has('beacon') ?? false,
-        override: auraSources.get(t.id)?.has('override') ?? false,
-        emp: disabled.has(t.id),
-      };
-      for (const status of AURA_STATUSES) {
-        const sprite = this.auraSprite(auraIndex++);
-        if (!active[status]) {
-          sprite.visible = false;
-          continue;
+    // take pointer events (all board hit-tests are coordinate-based). `lean` skips them entirely.
+    if (quality !== 'lean') {
+      const healed = healedTowerIds(state);
+      const auraSources = towerAuraSources(state);
+      const disabled = disabledTowerIds(state);
+      let auraIndex = 0;
+      for (const t of state.towers) {
+        const active: Record<AuraStatus, boolean> = {
+          heal: healed.has(t.id),
+          beacon: auraSources.get(t.id)?.has('beacon') ?? false,
+          override: auraSources.get(t.id)?.has('override') ?? false,
+          emp: disabled.has(t.id),
+        };
+        for (const status of AURA_STATUSES) {
+          const sprite = this.auraSprite(auraIndex++);
+          if (!active[status]) {
+            sprite.visible = false;
+            continue;
+          }
+          const tex = frameTexture(AURA_ASSET[status], cell, state.clock, t.id);
+          if (tex === null) {
+            sprite.visible = false;
+            continue;
+          }
+          sprite.texture = tex;
+          sprite.visible = true;
+          sprite.position.set(board.x + (t.col + 0.5) * cell, board.y + (t.row + 0.5) * cell);
+          sprite.width = cell;
+          sprite.height = cell;
+          sprite.tint = 0xffffff;
+          sprite.rotation = 0;
+          sprite.alpha = 1;
         }
-        const tex = frameTexture(AURA_ASSET[status], cell, state.clock, t.id);
-        if (tex === null) {
-          sprite.visible = false;
-          continue;
-        }
-        sprite.texture = tex;
-        sprite.visible = true;
-        sprite.position.set(board.x + (t.col + 0.5) * cell, board.y + (t.row + 0.5) * cell);
-        sprite.width = cell;
-        sprite.height = cell;
-        sprite.tint = 0xffffff;
-        sprite.rotation = 0;
-        sprite.alpha = 1;
       }
+      for (let i = auraIndex; i < this.auraSprites.length; i++) this.auraSprites[i].visible = false;
+    } else {
+      for (const s of this.auraSprites) s.visible = false;
     }
-    for (let i = auraIndex; i < this.auraSprites.length; i++) this.auraSprites[i].visible = false;
 
     const rangeMult = towerRangeMult(state);
     const hoveredTower = hover.onBoard ? towerAt(state, hover.col, hover.row) : undefined;
@@ -659,7 +704,7 @@ export class BoardView {
       // The shadow copies the body sprite exactly (same frame texture, size, rotation, knockback-
       // adjusted position) and is only cast when the body is sprite-backed; a procedural fallback
       // has no texture to copy.
-      if (drawShadows && body.visible && shadowVisibleFor(e.kind)) {
+      if (drawShadows && body.visible && shadowVisibleFor(e.kind) && shadowDrawnFor(e.kind, quality)) {
         const off = shadowOffsetFor(e.kind);
         const sh = this.shadowSprite(shadowIndex++);
         sh.texture = body.texture;
@@ -783,12 +828,6 @@ export class BoardView {
     board: { x: number; y: number; cell: number },
     cell: number,
   ): void {
-    const key = routes
-      .map((route, i) => `${routes.length}:${i}:${route.map((t) => `${t.col},${t.row}`).join('|')}`)
-      .join(';');
-    if (key === this.pathKey) return;
-    this.pathKey = key;
-
     const g = this.path;
     g.clear();
     routes.forEach((route, routeIndex) => {
@@ -1007,6 +1046,7 @@ function drawTower(
   clock: number,
   overlayA: Sprite | null = null,
   overlayB: Sprite | null = null,
+  quality: QualityLevel = 'full',
 ): void {
   const cx = board.x + (t.col + 0.5) * cell;
   const cy = board.y + (t.row + 0.5) * cell;
@@ -1034,7 +1074,7 @@ function drawTower(
     } else if (isOffline(t)) {
       // Broken-but-fixable, not gone: an empty health bar, a desaturating wash, and a red tag.
       drawBar(g, cx, cy, cell, 0, healthColor(0));
-      drawOfflineTag(g, wrenchSprite, cx, cy, cell);
+      drawOfflineTag(g, wrenchSprite, cx, cy, cell, quality === 'lean');
     } else if (t.maxHp > 0 && t.hp < t.maxHp) {
       drawBar(g, cx, cy, cell, t.hp / t.maxHp, healthColor(t.hp / t.maxHp));
     }
@@ -1993,7 +2033,7 @@ function drawEnemy(
     const by0 = ey - r - 8;
     fx.rect(ex - bw / 2, by0, bw, 3).fill({ color: PAL.dark });
     fx.rect(ex - bw / 2 + 1, by0 + 1, Math.max(0, (bw - 2) * ratio), 1).fill({ color: healthColor(ratio) });
-  } else if (ratio < 1) {
+  } else if (enemyHealthBarVisible(e)) {
     const arcR = r + 4;
     const a0 = -Math.PI / 2 - Math.PI * ratio;
     const a1 = -Math.PI / 2 + Math.PI * ratio;
@@ -2082,9 +2122,10 @@ function drawEmpTag(g: Graphics, cx: number, cy: number, cell: number): void {
 }
 
 /** An offline tower's marking: a desaturating wash over the body plus a small red crossed wrench. */
-function drawOfflineTag(g: Graphics, wrenchSprite: Sprite, cx: number, cy: number, cell: number): void {
+function drawOfflineTag(g: Graphics, wrenchSprite: Sprite, cx: number, cy: number, cell: number, skipWrench = false): void {
   const half = cell / 2;
   g.rect(cx - half, cy - half, cell, cell).fill({ color: 0x808080, alpha: 0.35 });
+  if (skipWrench) return;
   const s = Math.max(3, Math.round(cell * 0.16));
   const x0 = Math.round(cx - half + 3);
   const y0 = Math.round(cy - half + 3);
