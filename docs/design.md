@@ -1865,12 +1865,18 @@ pointer is precision, not bulk DPS.*
 | M9 | audio, polish, onboarding | done (0.6) — WebAudio sfx, pause, ×2/×3 speed, first-run hints |
 | M10 | controls, targeting, player docs | done (0.7) — keys 1-6/Esc/U/X/Enter, per-tower targeting, README |
 | M11 | every tower earns its slot | done (0.8) — retuned against the harness; a no-support control run dies at wave 40 |
+| M12 | ten towers, branches, real numbers | done (0.9) — every Help stat block generated from `TOWER_STATS`, `effectiveStats` and `upgradeCost`; Repeater tier 5 fixed (16 shots/s) |
+| M13 | main menu, map editor, `PD2.` code | done (0.10) — six maps, auto-saved editor draft, 50-map library, codec with a frozen fixture |
+| M14 | run saves, records, the daily | done (0.11) — `pd.run.v1` rebuilt from towers on load, a capped run history with a Records viewer, a thirty-wave seeded daily |
 
 ### What is not built
 
-- **Map authoring beyond the four shipped maps.** The Corridor, Dumbbell, Open Field and Turnstile
-  ship; more maps are content, and a new board should change the spawn geometry rather than the palette.
-- **Save mid-run.** The profile persists; a run in progress does not. Reloading restarts the wave you
-  are on.
 - **Touch input.** Mouse and keyboard only.
 - **Difficulty selection.** The curve is the curve; prestige is the difficulty knob.
+- **More authored maps.** Six ship (The Corridor, Dumbbell, Open Field, Turnstile, Fork, Ladder);
+  more are content, and a new board should change the spawn geometry rather than the palette.
+- **Steam packaging, deferred by request.** `electron/`, the preload bridge and the `pack:*` scripts
+  exist and degrade to the plain web build; there is no AppID, no achievement mapping in the partner
+  dashboard and no depot upload.
+- **Music, deferred by request.** `src/audio/sfx.ts` only.
+- **Co-op, or a leaderboard with a server.** The records table is local to the profile.
