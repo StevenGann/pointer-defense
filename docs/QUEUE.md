@@ -9,35 +9,11 @@ Work is taken from the top. An item that needs a decision goes back to Sydney ra
 
 ## Doing
 
-Nothing in flight.
+Nothing in flight — the two builds below merged; the map gallery is next to dispatch.
 
 ## Next
 
-### 1. Tower Synergies
-
-- **Spec:** `docs/SYNERGIES.md` (committed at spec revision "purely mechanical", flak/missile
-  rationale included).
-- **What ships:** `src/core/synergy.ts` (adjacency, edges, lead rule), held fire in `fireTowers`,
-  the `synergy` board layer with dashed amber edges and drift, View → Synergy lines, the Help page,
-  and the Synced line in the tower detail panel.
-- **Done when:** the seventeen smoke groups in §7 of the spec pass, `tsc` and `build` are clean, the
-  live build shows edges below the tower bases, and a mixed Flak + Missile pair visibly fires as one
-  volley while the missiles still chase beyond the tower's range.
-- **Not in scope:** any second synergy row. The table stays at one entry until this one is playtested.
-
-### 2. Ad tips, and localizing the ads
-
-- **Spec:** `docs/ADS-TIPS.md`.
-- **What ships:** the ad dialog grows to 220×92 with a tip block under the reward line, a pool of ten
-  verified tips, deterministic non-repeating selection, and — because the ads are currently English
-  strings in `src/core/ads.ts` — the six existing ad titles and messages move into the catalogue
-  along with the tips.
-- **Done when:** every tip wraps inside three lines in all seven locales, Blue Screen stays the only
-  kind without a tip, the seed and RNG stream are unmoved, and no ad prose is left in core.
-- **Why now:** it is small, it is player-visible, and it closes a localization hole that is already
-  shipping in six languages.
-
-### 3. Map selection gallery
+### 1. Map selection gallery
 
 - **Spec:** `docs/MAP-SELECT.md`.
 - **What ships:** Play opens a six-card gallery instead of starting `LEVELS[0]`; thumbnails are drawn
@@ -48,7 +24,7 @@ Nothing in flight.
   seven locales, `Enter` starts the focused map, and `Esc` returns to the menu.
 - **Why:** five of six authored maps are currently unreachable without the editor.
 
-### 4. Per-locale width assertions across the chrome
+### 2. Per-locale width assertions across the chrome
 
 - **Why:** the menu bar got per-locale fit tests when the CJK width bug was fixed; the HUD panels,
   dialogs, buttons and status bar still only assert that English fits. Russian runs ~130% of English
@@ -56,7 +32,7 @@ Nothing in flight.
 - **Done when:** a smoke group measures every fixed-width label in the HUD, the dialogs and the
   status bar under all seven locales and fails on overflow or collision.
 
-### 5. Native review of the six machine-draft catalogues
+### 3. Native review of the six machine-draft catalogues
 
 - **Why:** every non-English catalogue is `draft: true`. Machine translation is worst exactly where
   this UI lives — buttons, jargon, and short labels with no context.
@@ -67,7 +43,7 @@ Nothing in flight.
 
 ## Housekeeping
 
-### 6. Branch and worktree sweep
+### 4. Branch and worktree sweep
 
 - **Why:** the repo carries 100+ merged branches and roughly 50 worktrees; only `pd-upgate` holds
   `main`. It works, it is just noise when looking for something.
@@ -77,6 +53,10 @@ Nothing in flight.
 
 ## Shipped recently
 
+- **Tower Synergies** (`4e1703b`) — adjacent AAs hold their fire for a leader and land one volley;
+  amber dashed edges below the tower bases, View → Synergy lines, a Help page, all seven locales.
+- **Ad tips, ads localized** (`a891c44`) — the ad dialog carries a verified gameplay tip under the
+  reward line; the six ad titles and messages finally live in the catalogue instead of in core.
 Kept short on purpose — the last few things that landed, so "did we do that?" has an answer here
 instead of in chat. Older history is `git log`.
 
