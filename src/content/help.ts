@@ -1,3 +1,4 @@
+import { enemyName } from '../i18n/names.ts';
 import { BOSS_KINDS, ENEMY_KINDS, ENEMY_STATS, waveHpScale, type EnemyKind } from '../core/enemies.ts';
 import {
   TOWER_KINDS,
@@ -297,7 +298,7 @@ function enemyPage(kind: EnemyKind): HelpPage {
   const artName = artNameForEnemy(kind);
   return {
     id: `enemy-${kind}`,
-    title: ENEMY_STATS[kind].name,
+    title: enemyName(kind),
     category: 'enemies',
     gate: { kind: 'enemy', enemy: kind },
     body: [enemyStatsLine(kind), ...hpTable(kind), ENEMY_ANSWER[kind as keyof typeof ENEMY_ANSWER]],

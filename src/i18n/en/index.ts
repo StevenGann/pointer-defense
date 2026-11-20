@@ -4,6 +4,7 @@ import { dialogs } from './dialogs.ts';
 import { hud } from './hud.ts';
 import { levels } from './levels.ts';
 import { menu } from './menu.ts';
+import { names } from './names.ts';
 import { screen } from './screen.ts';
 import { shell } from './shell.ts';
 import { status } from './status.ts';
@@ -25,6 +26,7 @@ export const en = {
   ...achievements,
   ...upgrades,
   ...levels,
+  ...names,
   ...shell,
   ...screen,
 

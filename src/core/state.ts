@@ -1,3 +1,4 @@
+import { towerName } from '../i18n/names.ts';
 import {
   inBounds,
   tileAt,
@@ -3250,7 +3251,7 @@ export function cursorMaintenanceStatus(s: RunState, t: Tower): string | null {
   if (!target) target = cursorRepairAcquire(s, t);
   if (!target) return 'Idle — nothing to repair';
   const pct = Math.round((target.hp / target.maxHp) * 100);
-  return `Repairing ${TOWER_STATS[target.kind].name} ${pct}%`;
+  return `Repairing ${towerName(target.kind)} ${pct}%`;
 }
 
 function fireTowers(s: RunState): void {

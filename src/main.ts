@@ -1,3 +1,4 @@
+import { towerName } from './i18n/names.ts';
 import { Application, Container, Graphics, Sprite } from 'pixi.js';
 import './style.css';
 import {
@@ -64,7 +65,7 @@ import { sfx, type SoundName } from './audio/sfx.ts';
 import { CameraShake, shakeImpulseFor } from './view/shake.ts';
 import { backingStorePixelSize, cssViewportSize, liveDevicePixelRatio } from './view/screen.ts';
 import { getArtTexture, onArtInvalidate, preloadArt, setArtDpr } from './view/art.ts';
-import { repairHealingCount, TOWER_KINDS, TOWER_STATS, type Branch, type TowerKind } from './core/towers.ts';
+import { repairHealingCount, TOWER_KINDS, type Branch, type TowerKind } from './core/towers.ts';
 import { isBossVariant, type EnemyKind } from './core/enemies.ts';
 import { encodeLevel, decodeCode } from './core/codec.ts';
 import { nextQuality, qualityFrameMs, qualityPin, type QualityLevel } from './core/quality.ts';
@@ -1907,7 +1908,7 @@ function drainEvents(): void {
         sfx.play('cannon');
         break;
       case 'towerUnlocked':
-        hud.showNotice(ev.kinds.map((k) => t('shell.notice.towerUnlocked', { name: TOWER_STATS[k].name })).join(', '));
+        hud.showNotice(ev.kinds.map((k) => t('shell.notice.towerUnlocked', { name: towerName(k) })).join(', '));
         break;
       case 'enemySpawned':
         if (addSeenEnemies(profile, [ev.kind])) saveProfile(profile);
