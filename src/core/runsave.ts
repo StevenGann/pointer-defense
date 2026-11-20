@@ -18,7 +18,7 @@
 import { COLS, inBounds, type Tile } from './grid.ts';
 import { createGrid, levelRoutes, validateLevel, type Level, type LevelToggle, type Route } from './levels.ts';
 import { isEnemyKind, type Enemy, type EnemyKind } from './enemies.ts';
-import { isTowerKind, recomputeAuras, type Branch, type TargetMode, type Tier, type Tower, type TowerKind } from './towers.ts';
+import { isTowerKind, recomputeAuras, TIERS, type Branch, type TargetMode, type Tier, type Tower, type TowerKind } from './towers.ts';
 import type { Projectile } from './projectiles.ts';
 import { rebuildField, STARTING_INTEGRITY, type Mine, type Phase, type RunState, type WaveRun, type WaveSnapshot } from './state.ts';
 import type { Economy } from './economy.ts';
@@ -42,7 +42,6 @@ const BUFF_KINDS: readonly BuffKind[] = ['turbo', 'overdrive', 'windfall'];
 const PROJECTILE_KINDS: readonly Projectile['kind'][] = ['shell', 'missile'];
 const TARGET_MODES: readonly TargetMode[] = ['first', 'strong', 'close'];
 const BRANCHES: readonly Branch[] = ['A', 'B', 'C'];
-const TIERS: readonly Tier[] = [1, 2, 3, 4, 5];
 
 /** Absurd-count ceilings a valid board can never reach (docs/RUN-SAVE.md). */
 const MAX_TOWERS = 240;

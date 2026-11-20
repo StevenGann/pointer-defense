@@ -342,6 +342,14 @@ The Repair tower also stops at tier 3, but with no branch: tier 2 costs 140 and 
 5.0 tiles, tier 3 costs 260 and deepens the heal to 3 HP/s, and then it is done. It never branches, so
 the tier-3 choice is just another Upgrade button, not a branch pair.
 
+The six combat towers extend past tier 5 to **tier 20** (`MAX_TIER` in `src/core/towers.ts`; see
+docs/TIER-20.md). Beyond tier 5 the damage ladder grows ×1.09 per tier and range grows +1 % per tier
+(capped at +10 %), while branch depth caps at strength 4 from tier 9 and the interval branch plateaus
+at four steps. Walls, Repair and the Cursor are deliberately **not** on that ladder: a wall branches
+once at tier 3 and is finished, Repair is a three-tier support tower, and the Cursor is hand-priced to
+tier 5. Extending any of them means inventing mechanics, not extending a ladder, so they keep their
+caps here.
+
 ### 6.3 Branches
 
 | Tower | Branch A | Branch B |

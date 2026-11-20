@@ -4,7 +4,35 @@ export type TowerKind = 'gun' | 'cannon' | 'taser' | 'frost' | 'laser' | 'aa' | 
 
 export type Branch = 'A' | 'B' | 'C';
 
-export type Tier = 1 | 2 | 3 | 4 | 5;
+/**
+ * The combat ladder's ceiling. Every combat kind (gun, cannon, taser, frost, laser, aa, beacon) runs
+ * from tier 1 to MAX_TIER; the wall, repair and cursor towers keep their own shorter caps and are not
+ * on this ladder (see docs/design.md §6.10).
+ */
+export const MAX_TIER = 20;
+
+/** Builds the union 0..N-1; used once below to derive the tier union from MAX_TIER. */
+type Enumerate<N extends number, Acc extends number[] = []> = Acc['length'] extends N
+  ? Acc[number]
+  : Enumerate<N, [...Acc, Acc['length']]>;
+
+/** A tower tier: 1..MAX_TIER, derived from the single ceiling constant. */
+export type Tier = Exclude<Enumerate<typeof MAX_TIER>, 0> | typeof MAX_TIER;
+
+/** Every legal tier in order, used by the run-save validator and any tier sweep. */
+export const TIERS: readonly Tier[] = Array.from({ length: MAX_TIER }, (_, i) => (i + 1) as Tier);
+
+/** The combat kinds on the standard twenty-tier ladder. */
+export const COMBAT_KINDS: readonly TowerKind[] = ['gun', 'cannon', 'taser', 'frost', 'laser', 'aa', 'beacon'];
+
+/** The highest tier a kind can reach. Combat kinds go to MAX_TIER; wall and repair stop at 3 (a wall
+ *  branches once at tier 3 and is finished, repair is a three-tier support tower), and the cursor is
+ *  hand-priced up to tier 5. */
+export function kindMaxTier(kind: TowerKind): number {
+  if (kind === 'wall' || kind === 'repair') return 3;
+  if (kind === 'cursor') return 5;
+  return MAX_TIER;
+}
 
 export type TargetMode = 'first' | 'strong' | 'close';
 
@@ -271,10 +299,11 @@ export const CURSOR_CLICK_RANGE = 0.6;
 /** A Maintenance cursor only repairs towers below this fraction of their maximum hit points. */
 export const CURSOR_REPAIR_THRESHOLD = 0.8;
 
-/** Radius (tiles) at each tier, before the Wide Search branch multiplier. */
-const CURSOR_RADIUS_BY_TIER: Readonly<Record<Tier, number>> = { 1: 3.0, 2: 4.0, 3: 4.75, 4: 4.75, 5: 4.75 };
+/** Radius (tiles) at each tier, before the Wide Search branch multiplier. Only tiers 1..5 are
+ *  reachable — the cursor is hand-priced and capped at 5, so the table is keyed by that ladder. */
+const CURSOR_RADIUS_BY_TIER: Readonly<Record<number, number>> = { 1: 3.0, 2: 4.0, 3: 4.75, 4: 4.75, 5: 4.75 };
 /** Clicks per second at each tier, before any branch multiplier. */
-const CURSOR_RATE_BY_TIER: Readonly<Record<Tier, number>> = { 1: 1.5, 2: 2.0, 3: 2.75, 4: 2.75, 5: 2.75 };
+const CURSOR_RATE_BY_TIER: Readonly<Record<number, number>> = { 1: 1.5, 2: 2.0, 3: 2.75, 4: 2.75, 5: 2.75 };
 
 /** Branch depth: tiers 4 and 5 re-apply the branch multipliers at 1.5x and 2x strength. */
 function cursorBranchStrength(tier: Tier): number {
@@ -343,8 +372,9 @@ export function isMinesweeper(tower: Tower): boolean {
   return tower.kind === 'cannon' && tower.branch === 'B';
 }
 
-/** A wall's hit points at each tier, before the tier-3 branch doubling. */
-const WALL_HP_BY_TIER: Readonly<Record<Tier, number>> = { 1: 60, 2: 180, 3: 540, 4: 540, 5: 540 };
+/** A wall's hit points at each tier, before the tier-3 branch doubling. Walls stop at tier 3; the
+ *  higher entries mirror tier 3 defensively. */
+const WALL_HP_BY_TIER: Readonly<Record<number, number>> = { 1: 60, 2: 180, 3: 540, 4: 540, 5: 540 };
 
 /** The wall's hit points at its current tier and branch (Bulwark and Mesh double the tier-3 total). */
 export function wallMaxHp(tier: Tier, branch: Branch | null): number {
@@ -407,8 +437,8 @@ export function towerMaxHp(kind: TowerKind, tier: Tier, branch: Branch | null): 
  * A repair tower's heal rate (HP/s) and radius (tiles) at each tier. It is a three-tier tower that
  * stops at tier 3, so tiers 4 and 5 mirror tier 3 rather than being reachable.
  */
-const REPAIR_HEAL_BY_TIER: Readonly<Record<Tier, number>> = { 1: 2, 2: 2, 3: 3, 4: 3, 5: 3 };
-const REPAIR_RADIUS_BY_TIER: Readonly<Record<Tier, number>> = { 1: 4.5, 2: 5.0, 3: 5.0, 4: 5.0, 5: 5.0 };
+const REPAIR_HEAL_BY_TIER: Readonly<Record<number, number>> = { 1: 2, 2: 2, 3: 3, 4: 3, 5: 3 };
+const REPAIR_RADIUS_BY_TIER: Readonly<Record<number, number>> = { 1: 4.5, 2: 5.0, 3: 5.0, 4: 5.0, 5: 5.0 };
 
 /** The repair tower's live heal rate in HP per second. */
 export function repairHealRate(t: Tower): number {
@@ -665,14 +695,30 @@ export function createTower(id: number, kind: TowerKind, col: number, row: numbe
   };
 }
 
-/** Cost of the next upgrade step (base x factor), or null at tier 5. */
-const UPGRADE_COST_FACTOR: Readonly<Record<Tier, number | null>> = {
-  1: 0.9,
-  2: 1.6,
-  3: 2.9,
-  4: 5.2,
-  5: null,
-};
+/** Round a price to a readable figure: nearest 5 under $100, nearest 10 under $1,000, nearest 50 above. */
+function roundCost(n: number): number {
+  if (n < 100) return Math.round(n / 5) * 5;
+  if (n < 1000) return Math.round(n / 10) * 10;
+  return Math.round(n / 50) * 50;
+}
+
+/**
+ * The upgrade-cost factor for a combat kind, as a multiplier of its build cost. Tiers 1-4 keep their
+ * current prices (0.9x, 1.6x, 2.9x, 5.2x); from tier 5 the factor grows 1.18x per step. `factor(t)`
+ * is the price of the step out of tier `t`.
+ */
+function combatUpgradeFactor(tier: number): number {
+  if (tier <= 4) return [0.9, 1.6, 2.9, 5.2][tier - 1];
+  return 5.2 * Math.pow(1.18, tier - 4);
+}
+
+/** The cost to step a combat kind from `tier` to `tier + 1`. Tiers 1-4 keep their exact current
+ *  prices; tier 5+ round to a readable figure so the ladder reads as a sink, not a spike. */
+function combatUpgradeCost(kind: TowerKind, tier: number): number {
+  const base = TOWER_STATS[kind].cost;
+  if (tier <= 4) return Math.round(base * combatUpgradeFactor(tier));
+  return roundCost(base * combatUpgradeFactor(tier));
+}
 
 export function upgradeCost(tower: Tower): number | null {
   if (tower.kind === 'wall') {
@@ -697,8 +743,8 @@ export function upgradeCost(tower: Tower): number | null {
     if (tower.tier === 2) return 260;
     return null;
   }
-  const factor = UPGRADE_COST_FACTOR[tower.tier];
-  return factor === null ? null : Math.round(TOWER_STATS[tower.kind].cost * factor);
+  if (tower.tier >= kindMaxTier(tower.kind)) return null;
+  return combatUpgradeCost(tower.kind, tower.tier);
 }
 
 /** Salvage returned when a tower is sold: `refund` of everything spent, rounded down. Walls pay
@@ -709,10 +755,11 @@ export function sellValue(tower: Tower, refund = 0.7): number {
 }
 
 /**
- * True when the tower has nothing left to buy: a branched tower at its final tier. A standard tower
- * or cursor is finished at tier 5, a wall the moment its tier-3 branch is chosen (walls branch once),
- * and the repair tower at tier 3 (it never branches). A further upgrade that exists but is
- * unaffordable does not count — this is "nothing left to buy", not "you cannot afford the next thing".
+ * True when the tower has nothing left to buy: a branched tower at its kind's cap. A combat tower or
+ * cursor is finished at its cap (MAX_TIER for combat kinds, 5 for the cursor), a wall the moment its
+ * tier-3 branch is chosen (walls branch once), and the repair tower at tier 3 (it never branches). A
+ * further upgrade that exists but is unaffordable does not count — this is "nothing left to buy", not
+ * "you cannot afford the next thing".
  */
 export function isFullyUpgraded(tower: Tower): boolean {
   if (tower.kind === 'repair') return tower.tier >= 3;
@@ -887,8 +934,23 @@ export function effectiveStats(tower: Tower): EffectiveStats {
     range *= 1.02;
   }
 
+  // The damage ladder: ×1.09 per tier. A branchless tower follows the pure ladder from tier 3, so its
+  // tier-20 damage is 1.25 × 1.09^18 of base. A branched tower keeps branch depth for tiers 3-5 (the
+  // early ladder does not move) and joins the ladder at tier 6, earning its further power there.
+  if (tower.branch === null) {
+    if (tower.tier >= 3) damage *= Math.pow(1.09, tower.tier - 2);
+  } else if (tower.tier >= 6) {
+    damage *= Math.pow(1.09, tower.tier - 5);
+  }
+
+  // The range ladder: +1% per tier, capped at +10%, applied from tier 6 so tiers 1-5 keep today's
+  // range (the tier-2 +2% and the branch's own range multiplier).
+  if (tower.tier >= 6) {
+    range *= 1 + Math.min(0.1, 0.01 * (tower.tier - 5));
+  }
+
   if (tower.branch !== null && tower.tier >= 3) {
-    const strength = 1 + 0.5 * (tower.tier - 3);
+    const strength = Math.min(1 + 0.5 * (tower.tier - 3), 4);
     const e = BRANCH_EFFECTS[tower.kind][tower.branch];
     if (e !== undefined) {
       if (e.damageMul !== undefined) damage *= scaledMultiplier(e.damageMul, strength);
@@ -896,10 +958,12 @@ export function effectiveStats(tower: Tower): EffectiveStats {
       if (e.intervalMul !== undefined) {
         // A multiplier below 1 shrinks the interval and must decay geometrically — `intervalMul ^
         // (tier - 2)` is the "fires twice as fast" ladder a branch advertises. The linear rule would
-        // interpolate through zero (0.5 -> 0.25 -> 0.00) and turn the tower off at tier 5. At or
-        // above 1 the linear rule is correct, so Cannon's Mortar and AA's Flak keep it.
+        // interpolate through zero (0.5 -> 0.25 -> 0.00) and turn the tower off at tier 5. The
+        // geometric ladder plateaus at four steps (min(tier - 2, 4)); beyond that the damage ladder
+        // carries the tower. At or above 1 the linear rule is correct, so Cannon's Mortar and AA's
+        // Flak keep it.
         fireInterval *= e.intervalMul < 1
-          ? Math.pow(e.intervalMul, tower.tier - 2)
+          ? Math.pow(e.intervalMul, Math.min(tower.tier - 2, 4))
           : scaledMultiplier(e.intervalMul, strength);
       }
       if (e.splashAdd !== undefined) splash += e.splashAdd * strength;
@@ -924,10 +988,14 @@ export function effectiveStats(tower: Tower): EffectiveStats {
     }
   }
 
-  // A tower that deals damage must never report a non-positive fire interval: the sim reads a
-  // `fireInterval <= 0` as "beacon never fires" and would skip it forever. The geometric branch
-  // scaling above keeps intervals positive, so this is a backstop, not the fix.
-  if (damage > 0) fireInterval = Math.max(1, fireInterval);
+  // Backstops: a tower that deals damage must never report a non-positive stat. The sim reads a
+  // `fireInterval <= 0` as "never fires" and would skip it forever, and a negative damage (from a
+  // negative `damageAdd` at deep tiers) would heal instead of hurt. A beacon, wall, repair or cursor
+  // has base damage 0 and is exempt — its zero is a design choice, not a broken stat.
+  if (base.damage > 0) {
+    damage = Math.max(1, damage);
+    fireInterval = Math.max(1, fireInterval);
+  }
 
   return {
     range,
