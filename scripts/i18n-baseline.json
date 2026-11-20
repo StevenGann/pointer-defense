@@ -8,9 +8,7 @@
   "src/view/contexthelp.ts",
   "src/view/help.ts",
   "src/view/helpMarkdown.ts",
-  "src/view/hud.ts",
   "src/view/menuScreen.ts",
   "src/view/numbers.ts",
-  "src/view/tooltipText.ts",
   "src/view/wallAppearance.ts"
 ]
