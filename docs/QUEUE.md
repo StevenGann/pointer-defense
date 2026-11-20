@@ -25,7 +25,19 @@ Nothing in flight.
   volley while the missiles still chase beyond the tower's range.
 - **Not in scope:** any second synergy row. The table stays at one entry until this one is playtested.
 
-### 2. Per-locale width assertions across the chrome
+### 2. Ad tips, and localizing the ads
+
+- **Spec:** `docs/ADS-TIPS.md`.
+- **What ships:** the ad dialog grows to 220×92 with a tip block under the reward line, a pool of ten
+  verified tips, deterministic non-repeating selection, and — because the ads are currently English
+  strings in `src/core/ads.ts` — the six existing ad titles and messages move into the catalogue
+  along with the tips.
+- **Done when:** every tip wraps inside three lines in all seven locales, Blue Screen stays the only
+  kind without a tip, the seed and RNG stream are unmoved, and no ad prose is left in core.
+- **Why now:** it is small, it is player-visible, and it closes a localization hole that is already
+  shipping in six languages.
+
+### 3. Per-locale width assertions across the chrome
 
 - **Why:** the menu bar got per-locale fit tests when the CJK width bug was fixed; the HUD panels,
   dialogs, buttons and status bar still only assert that English fits. Russian runs ~130% of English
@@ -33,7 +45,7 @@ Nothing in flight.
 - **Done when:** a smoke group measures every fixed-width label in the HUD, the dialogs and the
   status bar under all seven locales and fails on overflow or collision.
 
-### 3. Native review of the six machine-draft catalogues
+### 4. Native review of the six machine-draft catalogues
 
 - **Why:** every non-English catalogue is `draft: true`. Machine translation is worst exactly where
   this UI lives — buttons, jargon, and short labels with no context.
@@ -44,7 +56,7 @@ Nothing in flight.
 
 ## Housekeeping
 
-### 4. Branch and worktree sweep
+### 5. Branch and worktree sweep
 
 - **Why:** the repo carries 100+ merged branches and roughly 50 worktrees; only `pd-upgate` holds
   `main`. It works, it is just noise when looking for something.
