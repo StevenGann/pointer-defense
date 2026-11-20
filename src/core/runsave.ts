@@ -1035,6 +1035,8 @@ export function restoreRun(save: unknown, profile: Profile = defaultProfile()): 
     clock,
     modifiers: modifiers as ModifierId[],
     endless,
+    waveLimit: WAVE_COUNT,
+    daily: null,
     tick,
     accumulator: 0,
     nextId,
@@ -1185,8 +1187,9 @@ export function loadRunSave(profile?: Profile, storage?: StorageLike | null): Ru
   }
 }
 
-/** Write the run save back, never throwing. */
+/** Write the run save back, never throwing. A daily is never written to `pd.run.v1`. */
 export function saveRun(state: RunState, storage?: StorageLike | null): void {
+  if (state.daily !== null) return;
   const store = storage === undefined ? browserStorage() : storage;
   try {
     store?.setItem(RUN_SAVE_KEY, JSON.stringify(captureRun(state)));

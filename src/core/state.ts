@@ -317,6 +317,22 @@ export interface WaveSnapshot {
   towerCount: number;
 }
 
+/** Identifies the active daily run, or null for a normal run. */
+export interface DailyInfo {
+  date: string;
+  seed: number;
+}
+
+/** Optional overrides passed to `createRunState`, used by the daily to shorten and seed the run. */
+export interface RunOptions {
+  /** The wave the run ends in victory at; defaults to `WAVE_COUNT`. */
+  waveLimit?: number;
+  /** The active daily's date and seed, or null for a normal run. */
+  daily?: DailyInfo | null;
+  /** The seeded PRNG state; defaults to the daily's seed, then the constant boot seed. */
+  seed?: number;
+}
+
 /** A Minesweeper's live mine, sitting on a path tile. */
 export interface Mine {
   readonly id: number;
@@ -381,6 +397,10 @@ export interface RunState {
   modifiers: readonly ModifierId[];
   /** True once the player chose Endless after clearing wave 100. */
   endless: boolean;
+  /** The wave the run ends in victory at (WAVE_COUNT for a normal run, 30 for a daily). */
+  waveLimit: number;
+  /** The active daily's date and seed, or null for a normal run. */
+  daily: DailyInfo | null;
   /** Total ticks simulated this run. */
   tick: number;
   /** Leftover real time not yet simulated (ms); see step(). */
@@ -610,9 +630,11 @@ export interface RunState {
   salvageSpent: number;
 }
 
-export function createRunState(profile: Profile = defaultProfile(), level: Level = DEFAULT_LEVEL): RunState {
+export function createRunState(profile: Profile = defaultProfile(), level: Level = DEFAULT_LEVEL, opts: RunOptions = {}): RunState {
   const reason = validateLevel(level);
   if (reason !== null) throw new Error(`Level ${level.id} rejected: ${reason}`);
+  const daily = opts.daily ?? null;
+  const waveLimit = opts.waveLimit ?? WAVE_COUNT;
   const grid = createGrid(level);
   const blocked = new Set<number>();
   const toggles = level.toggles ?? [];
@@ -658,6 +680,8 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     clock: 0,
     modifiers: [],
     endless: false,
+    waveLimit,
+    daily,
     tick: 0,
     accumulator: 0,
     nextId: 1,
@@ -667,7 +691,7 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     towerDamageBuffTicks: 0,
     enemySlowTicks: 0,
     towerDisabled: new Map(),
-    rng: 0x9e3779b9,
+    rng: opts.seed ?? daily?.seed ?? 0x9e3779b9,
     viewport: {
       width: 1280,
       height: 800,
@@ -833,8 +857,9 @@ export function exitTile(s: RunState): Tile {
   return s.level.exits[0];
 }
 
-/** Map selection is only offered before wave 1, with no towers placed. */
+/** Map selection is only offered before wave 1, with no towers placed (and never in a daily). */
 export function canCycleLevel(s: RunState): boolean {
+  if (s.daily !== null) return false;
   return s.phase === 'build' && s.wave === 0 && s.towers.length === 0;
 }
 
@@ -889,7 +914,7 @@ export function enemyAt(s: RunState, x: number, y: number, slack = CLICK_SLACK):
 }
 
 export function isFinalWave(s: RunState): boolean {
-  return !s.endless && s.wave >= WAVE_COUNT;
+  return !s.endless && s.wave >= s.waveLimit;
 }
 
 /** The status-bar message every blocked No-Build action surfaces (docs/design.md §8). */
@@ -1408,7 +1433,7 @@ export function cycleTargetMode(s: RunState, col: number, row: number): void {
 export function startWave(s: RunState): boolean {
   const early = s.phase === 'wave';
   if (s.phase !== 'build' && !early) return false;
-  if (s.wave >= WAVE_COUNT && !s.endless) return false;
+  if (s.wave >= s.waveLimit && !s.endless) return false;
   // The early-call bonus is measured from the wave that just started, before we reset waveTick,
   // and paid as a fraction of the wave being called (s.wave + 1 once incremented below).
   const elapsed = s.waveTick;
@@ -1456,6 +1481,7 @@ export function startWave(s: RunState): boolean {
 /** After clearing wave 100, the player may continue into endless instead of rebooting. */
 export function enterEndless(s: RunState): void {
   if (s.phase !== 'victory') return;
+  if (s.daily !== null) return; // endless is never offered at the end of a daily
   s.endless = true;
   s.phase = 'build';
   s.selected = null;
@@ -1859,6 +1885,7 @@ export const GOD_SALVAGE_CEILING = 1_000_000;
 /** God Mode: integrity is never reduced and salvage is topped up to the ceiling before it is spent. */
 export function toggleGodMode(s: RunState): void {
   if (!cheatsEnabled()) return;
+  if (s.daily !== null) return; // a daily forbids cheats
   s.godMode = !s.godMode;
   if (s.godMode) {
     s.cheatsUsed = true;
@@ -1874,6 +1901,7 @@ function cheatSpawnWave(s: RunState): number {
 /** Spawn one enemy of `kind` at the spawn tile, using the current wave's scaling. */
 export function spawnCheatEnemy(s: RunState, kind: EnemyKind): boolean {
   if (!cheatsEnabled()) return false;
+  if (s.daily !== null) return false; // a daily forbids cheats
   const enemy = createEnemy(s.nextId++, kind, cheatSpawnWave(s), spawnTile(s), exitTile(s));
   enemy.routeIndex = nextRouteIndex(s);
   enemy.spawnTick = s.tick;
@@ -1887,6 +1915,7 @@ export function spawnCheatEnemy(s: RunState, kind: EnemyKind): boolean {
 /** Kill every living enemy without salvage, achievement progress or a wave advance. */
 export function killAllEnemies(s: RunState): void {
   if (!cheatsEnabled()) return;
+  if (s.daily !== null) return; // a daily forbids cheats
   s.enemies = [];
   s.pointer.targetId = null;
   s.pointer.held = false;
@@ -3842,5 +3871,5 @@ function finishWavePhase(s: RunState): void {
   s.pointer.held = false;
   s.pointer.targetId = null;
   s.modifiers = [];
-  s.phase = s.wave >= WAVE_COUNT && !s.endless ? 'victory' : 'build';
+  s.phase = s.wave >= s.waveLimit && !s.endless ? 'victory' : 'build';
 }

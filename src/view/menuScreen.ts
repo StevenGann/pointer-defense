@@ -7,7 +7,7 @@ import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from
  * The load-code dialog lives here too: a text field plus OK / Cancel, with its own status line.
  */
 
-export type MenuButtonId = 'continue' | 'play' | 'editor' | 'load' | 'records';
+export type MenuButtonId = 'continue' | 'play' | 'daily' | 'editor' | 'records' | 'load';
 
 const BUTTON_W = 240;
 const BUTTON_H = 40;
@@ -17,6 +17,14 @@ export interface MenuButton {
   id: MenuButtonId;
   label: string;
   rect: Rect;
+  /** A disabled button is drawn flat and never hit-tested (the Daily once played). */
+  disabled?: boolean;
+}
+
+/** The Daily button's label and availability, computed by the caller from the profile. */
+export interface MenuDaily {
+  label: string;
+  disabled: boolean;
 }
 
 export interface MenuScreenLayout {
@@ -25,13 +33,13 @@ export interface MenuScreenLayout {
   buttons: MenuButton[];
 }
 
-export function computeMenuScreen(l: Layout, continueLabel: string | null = null): MenuScreenLayout {
+export function computeMenuScreen(l: Layout, continueLabel: string | null = null, daily: MenuDaily | null = null): MenuScreenLayout {
   const titleH = 40;
   const pad = 20;
   const panelW = BUTTON_W + pad * 2;
   const labels: [MenuButtonId, string][] = [];
   if (continueLabel !== null) labels.push(['continue', continueLabel]);
-  labels.push(['play', 'Play'], ['editor', 'Editor'], ['load', 'Load code'], ['records', 'Records']);
+  labels.push(['play', 'Play'], ['daily', daily?.label ?? 'Daily'], ['editor', 'Editor'], ['records', 'Records'], ['load', 'Load code']);
   const count = labels.length;
   const panelH = pad + titleH + count * BUTTON_H + (count - 1) * BUTTON_GAP + pad;
   const panel: Rect = {
@@ -50,12 +58,16 @@ export function computeMenuScreen(l: Layout, continueLabel: string | null = null
       w: BUTTON_W,
       h: BUTTON_H,
     },
+    ...(id === 'daily' && daily?.disabled ? { disabled: true } : {}),
   }));
   return { panel, title, buttons };
 }
 
-export function menuButtonAt(l: Layout, px: number, py: number, continueLabel: string | null = null): MenuButtonId | null {
-  for (const b of computeMenuScreen(l, continueLabel).buttons) if (pointInRect(b.rect, px, py)) return b.id;
+export function menuButtonAt(l: Layout, px: number, py: number, continueLabel: string | null = null, daily: MenuDaily | null = null): MenuButtonId | null {
+  for (const b of computeMenuScreen(l, continueLabel, daily).buttons) {
+    if (b.disabled) continue;
+    if (pointInRect(b.rect, px, py)) return b.id;
+  }
   return null;
 }
 
@@ -116,7 +128,7 @@ export class MenuScreenView {
     this.title = makeText('Pointer Defense', PAL.title, true, 20);
     this.title.anchor.set(0.5, 0.5);
     this.root.addChild(this.title);
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 6; i++) {
       const t = makeText('', PAL.text, true);
       t.anchor.set(0.5, 0.5);
       this.buttonTexts.push(t);
@@ -124,10 +136,10 @@ export class MenuScreenView {
     }
   }
 
-  draw(l: Layout, hover: MenuButtonId | null, continueLabel: string | null = null): void {
+  draw(l: Layout, hover: MenuButtonId | null, continueLabel: string | null = null, daily: MenuDaily | null = null): void {
     const g = this.g;
     g.clear();
-    const m = computeMenuScreen(l, continueLabel);
+    const m = computeMenuScreen(l, continueLabel, daily);
     bevel(g, m.panel, false, PAL.face);
 
     this.title.text = 'Pointer Defense';
@@ -140,9 +152,15 @@ export class MenuScreenView {
         t.text = '';
         continue;
       }
-      bevel(g, b.rect, true, hover === b.id ? PAL.highlight : PAL.face);
+      if (b.disabled) {
+        g.rect(b.rect.x, b.rect.y, b.rect.w, b.rect.h).fill(PAL.face);
+        g.rect(b.rect.x, b.rect.y, b.rect.w, b.rect.h).stroke({ width: 1, color: PAL.shadow });
+        t.style.fill = PAL.shadow;
+      } else {
+        bevel(g, b.rect, true, hover === b.id ? PAL.highlight : PAL.face);
+        t.style.fill = PAL.text;
+      }
       t.text = b.label;
-      t.style.fill = PAL.text;
       t.position.set(b.rect.x + b.rect.w / 2, b.rect.y + b.rect.h / 2);
     }
   }

@@ -40,6 +40,28 @@ export function appendRun(profile: Profile, record: RunRecord): void {
   if (profile.runs.length > MAX_RUNS) profile.runs.length = MAX_RUNS;
 }
 
+/**
+ * Record a finished daily (docs/DAILY.md): one record with `outcome: 'daily'` plus the date and
+ * seed, mirrored to `profile.daily`. Returns false — and records nothing — when the state is not a
+ * daily or that date's daily is already recorded, so it is idempotent.
+ */
+export function appendDailyRun(profile: Profile, state: RunState): boolean {
+  if (state.daily === null) return false;
+  if (profile.daily?.date === state.daily.date) return false;
+  const record = buildRunRecord(state, 'daily');
+  record.dailyDate = state.daily.date;
+  record.dailySeed = state.daily.seed;
+  appendRun(profile, record);
+  profile.daily = {
+    date: state.daily.date,
+    wave: state.wave,
+    clearedWaves: state.clearedWaves,
+    outcome: 'daily',
+    at: record.at,
+  };
+  return true;
+}
+
 export interface RunTotals {
   runs: number;
   wins: number;
@@ -58,7 +80,8 @@ export function runTotals(runs: readonly RunRecord[]): RunTotals {
   for (const r of runs) {
     if (r.outcome === 'victory') wins++;
     else if (r.outcome === 'defeat') defeats++;
-    else reboots++;
+    else if (r.outcome === 'reboot') reboots++;
+    // A daily counts toward the run total but not toward win/defeat/reboot.
     durationTicks += r.durationTicks;
   }
   return { runs: runs.length, wins, defeats, reboots, durationTicks };
