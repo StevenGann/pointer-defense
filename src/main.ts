@@ -26,6 +26,7 @@ import {
 import { SPAWN_KINDS, spawnKindLabel } from './core/cheats.ts';
 import { DEFAULT_LEVEL, type Level } from './core/levels.ts';
 import { addSeenEnemies, checkProfileAchievements, loadProfile, saveProfile, type Profile, type SpecKind } from './core/save.ts';
+import { clearRunSave, loadRunSave, saveRun } from './core/runsave.ts';
 import { buyNode, effectsFor, treeNodeById } from './core/tree.ts';
 import { achievementName } from './core/achievements.ts';
 import { unlockAchievement } from './steam.ts';
@@ -50,7 +51,7 @@ import { AdView, TrayView } from './view/ad.ts';
 import { FloatingNumbersView } from './view/numbers.ts';
 import { MenuView, type OpenMenu } from './view/menu.ts';
 import { AchievementGridView, AchievementSession, achievementGridHitAt, buildAchievementGrid, computeAchievementGrid, type AchievementGridModel } from './view/dialog.ts';
-import { DialogView, type DialogModel } from './view/dialog.ts';
+import { dialogButtonAt, DialogView, type DialogModel } from './view/dialog.ts';
 import { HelpSession, HelpView, computeHelpLayout, helpHitAt, helpRows, HELP_LINE_H, HELP_SCROLL_LINES } from './view/help.ts';
 import { RestoreView, computeRestoreLayout, restoreHitAt } from './view/restore.ts';
 import { MouseController, type Screen } from './input/mouse.ts';
@@ -146,6 +147,14 @@ let profile: Profile = loadProfile();
 let state: RunState = createRunState(profile);
 let layout: Layout = computeLayout(app.screen.width, app.screen.height);
 
+// A run-in-progress save (docs/RUN-SAVE.md). `?nosave` disables saving entirely, for the tests and
+// for debugging, and then no save is read either so a stale Continue never appears.
+const nosave = new URLSearchParams(window.location.search).has('nosave');
+/** The restored run shown by the menu's Continue button, or null when there is nothing to resume. */
+let continueState: RunState | null = nosave ? null : loadRunSave(profile);
+const SAVE_INTERVAL_TICKS = 120; // one write per two seconds of run time
+let lastRunSaveClock = -1;
+
 const shake = new CameraShake();
 shake.setEnabled(profile.shakeOn);
 
@@ -219,7 +228,10 @@ function buyGlobalUpgrade(id: UpgradeId): void {
 // The app is one of three screens: the main menu, a live run, or the map editor. `runOrigin` says
 // where a run came from, so Esc (or File > Exit) returns a Test run to the editor — drawing intact —
 // and any other run to the menu.
-let screen: Screen = profile.lastChoice === 'editor' ? 'editor' : profile.lastChoice === 'load' ? 'menu' : 'run';
+// A valid save lands on the menu so Continue is the primary action; otherwise boot follows the
+// remembered choice (Play resumes the normal flow straight into a run).
+let screen: Screen =
+  continueState !== null ? 'menu' : profile.lastChoice === 'editor' ? 'editor' : profile.lastChoice === 'load' ? 'menu' : 'run';
 let runOrigin: 'play' | 'load' | 'editor' = 'play';
 const editor: EditorModel = createEditor();
 let loadText = '';
@@ -390,14 +402,88 @@ function syncBestWave(): void {
   }
 }
 
+// --- Run save (docs/RUN-SAVE.md) ----------------------------------------------------------------
+
+/** The last observed values the save tracker diffs each frame to spot immediate-write events. */
+let prevSaveWave = state.wave;
+let prevSaveClearedWaves = state.clearedWaves;
+let prevSavePhase = state.phase;
+let prevSavePaused = state.paused;
+let prevTowersBuilt = state.towersBuilt;
+let prevUpgradesBought = state.upgradesBought;
+let prevBranches = state.branches;
+let prevTowersSold = state.towersSold;
+
+/** Re-baseline the tracker after the run object is replaced, so a swap is not read as a wave jump. */
+function resetSaveTrackers(): void {
+  prevSaveWave = state.wave;
+  prevSaveClearedWaves = state.clearedWaves;
+  prevSavePhase = state.phase;
+  prevSavePaused = state.paused;
+  prevTowersBuilt = state.towersBuilt;
+  prevUpgradesBought = state.upgradesBought;
+  prevBranches = state.branches;
+  prevTowersSold = state.towersSold;
+}
+
+/** The menu's Continue label: the saved wave and map (docs/RUN-SAVE.md). */
+function continueLabel(s: RunState): string {
+  return `Wave ${s.wave} — ${s.level.name}`;
+}
+
+/**
+ * Write the run save, guarded by `?nosave`, a Test run, and the not-yet-started wave. A forced write
+ * is the immediate one (wave start/clear, a build action, pause, Esc, pagehide); otherwise the write
+ * is throttled to one per two seconds of run time.
+ */
+function maybeSaveRun(force = false): void {
+  if (nosave || runOrigin === 'editor' || state.wave < 1) return;
+  if (state.phase === 'halted' || state.phase === 'victory') return;
+  if (!force && state.clock - lastRunSaveClock < SAVE_INTERVAL_TICKS) return;
+  saveRun(state);
+  lastRunSaveClock = state.clock;
+}
+
+/**
+ * Called once per run frame after stepping: immediate writes on wave start, wave clear, a build
+ * action and pause, the throttled background write otherwise, and the key clear on end-of-run.
+ */
+function syncRunSave(): void {
+  if (state.wave > prevSaveWave) maybeSaveRun(true);
+  else if (state.clearedWaves > prevSaveClearedWaves) maybeSaveRun(true);
+  else if (state.paused !== prevSavePaused) maybeSaveRun(true);
+  else if (
+    state.towersBuilt !== prevTowersBuilt ||
+    state.upgradesBought !== prevUpgradesBought ||
+    state.branches !== prevBranches ||
+    state.towersSold !== prevTowersSold
+  ) maybeSaveRun(true);
+  else maybeSaveRun(false);
+
+  if (state.phase !== prevSavePhase) {
+    if (state.phase === 'victory' || state.phase === 'halted') clearRunSave();
+  }
+
+  prevSaveWave = state.wave;
+  prevSaveClearedWaves = state.clearedWaves;
+  prevSavePhase = state.phase;
+  prevSavePaused = state.paused;
+  prevTowersBuilt = state.towersBuilt;
+  prevUpgradesBought = state.upgradesBought;
+  prevBranches = state.branches;
+  prevTowersSold = state.towersSold;
+}
+
 function doRestartWindows(): void {
   const { profile: next } = restartWindows(state, profile);
   const newly = next.achievements.filter((id) => !profile.achievements.includes(id));
   profile = next;
   const profileNewly = checkProfileAchievements(profile);
   saveProfile(profile);
+  clearRunSave();
   state = createRunState(profile);
   resetRunNotified();
+  resetSaveTrackers();
   syncViewport();
   dialog = null;
   menu = null;
@@ -410,6 +496,7 @@ function doRestartWindows(): void {
 function doNewRun(): void {
   state = createRunState(profile);
   resetRunNotified();
+  resetSaveTrackers();
   syncViewport();
   dialog = null;
   menu = null;
@@ -606,6 +693,7 @@ function achievementMove(dx: number, dy: number): void {
 function startRun(level: Level, origin: 'play' | 'load' | 'editor'): void {
   state = createRunState(profile, level);
   resetRunNotified();
+  resetSaveTrackers();
   if (batteryLow) notifyAchievement(state, 'shadow-flat-battery');
   syncViewport();
   runOrigin = origin;
@@ -621,6 +709,48 @@ function startPlay(): void {
   profile.lastChoice = 'play';
   saveProfile(profile);
   startRun(DEFAULT_LEVEL, 'play');
+}
+
+/** Resume the saved run from the main menu's Continue button. */
+function startContinue(): void {
+  if (continueState === null) return;
+  state = continueState;
+  continueState = null;
+  resetRunNotified();
+  resetSaveTrackers();
+  syncViewport();
+  runOrigin = 'play';
+  screen = 'run';
+  menu = null;
+  dialog = null;
+  closeRunModals();
+  loadOpen = false;
+  loadInput.blur();
+}
+
+/** Play asks once before discarding a save: show the confirm with No as the default button. */
+function askDiscardSave(): void {
+  if (continueState === null) return;
+  dialog = {
+    title: 'Start over',
+    rows: [{ text: `Start over? The saved run at wave ${continueState.wave} will be lost.` }],
+    buttons: [
+      { id: 'discard-run', label: 'Yes' },
+      { id: 'cancel-discard', label: 'No' },
+    ],
+  };
+}
+
+/** The Play-discard confirm's buttons: Yes discards and starts fresh, No keeps the save. */
+function menuDialogAction(id: string): void {
+  if (id === 'discard-run') {
+    clearRunSave();
+    continueState = null;
+    dialog = null;
+    startPlay();
+  } else if (id === 'cancel-discard') {
+    dialog = null;
+  }
 }
 
 function openEditorScreen(): void {
@@ -672,10 +802,13 @@ function copyCode(): void {
 
 /** Esc from a run: a Test run returns to the editor (drawing intact), anything else to the menu. */
 function exitRun(): void {
+  maybeSaveRun(true);
   if (runOrigin === 'editor') {
     screen = 'editor';
   } else {
     screen = 'menu';
+    // The menu's Continue button reflects the save just written (or the absence of one).
+    continueState = nosave ? null : loadRunSave(profile);
   }
   menu = null;
   dialog = null;
@@ -920,7 +1053,7 @@ loadInput.addEventListener('keydown', (e) => {
 app.canvas.addEventListener('pointermove', (e) => {
   const { x, y } = canvasPoint(e);
   if (screen === 'menu') {
-    menuHover = loadOpen ? null : menuButtonAt(layout, x, y);
+    menuHover = loadOpen ? null : menuButtonAt(layout, x, y, continueState !== null ? continueLabel(continueState) : null);
     loadHover = loadOpen ? loadDialogButtonAt(layout, x, y) : null;
     return;
   }
@@ -949,9 +1082,19 @@ app.canvas.addEventListener('pointerdown', (e) => {
       }
       return;
     }
-    const btn = menuButtonAt(layout, x, y);
-    if (btn === 'play') startPlay();
-    else if (btn === 'editor') openEditorScreen();
+    // The Play-discard confirm is a modal over the menu; it owns every click while it is open.
+    if (dialog) {
+      const id = dialogButtonAt(layout, dialog, x, y);
+      if (id) menuDialogAction(id);
+      return;
+    }
+    const label = continueState !== null ? continueLabel(continueState) : null;
+    const btn = menuButtonAt(layout, x, y, label);
+    if (btn === 'continue') startContinue();
+    else if (btn === 'play') {
+      if (continueState !== null) askDiscardSave();
+      else startPlay();
+    } else if (btn === 'editor') openEditorScreen();
     else if (btn === 'load') openLoadDialog();
     return;
   }
@@ -1027,8 +1170,19 @@ window.addEventListener('keydown', (e) => {
       }
       return;
     }
-    if (e.key === 'Enter' || e.key === 'p' || e.key === 'P') startPlay();
-    else if (e.key === 'e' || e.key === 'E') openEditorScreen();
+    // The Play-discard confirm: Enter (the default) keeps the save, Esc closes, Y discards.
+    if (dialog) {
+      if (e.key === 'Enter' || e.key === 'Escape') dialog = null;
+      else if (e.key === 'y' || e.key === 'Y') menuDialogAction('discard-run');
+      return;
+    }
+    if (e.key === 'Enter') {
+      if (continueState !== null) startContinue();
+      else startPlay();
+    } else if (e.key === 'p' || e.key === 'P') {
+      if (continueState !== null) askDiscardSave();
+      else startPlay();
+    } else if (e.key === 'e' || e.key === 'E') openEditorScreen();
     else if (e.key === 'l' || e.key === 'L') openLoadDialog();
     return;
   }
@@ -1187,6 +1341,7 @@ app.ticker.add((ticker) => {
       syncBestWave();
       syncProfileAchievements();
     }
+    syncRunSave();
     // Persist cross-run counters the sim just advanced (maps cleared, lifetime boss kills).
     if (state.profileDirty) {
       state.profileDirty = false;
@@ -1268,14 +1423,16 @@ app.ticker.add((ticker) => {
   achievementView.root.visible = running && achievementSession.open;
   ad.root.visible = running;
   menuView.root.visible = running;
-  dialogView.root.visible = running;
+  dialogView.root.visible = running || screen === 'menu';
   tooltip.root.visible = running;
   menuScreenView.root.visible = screen === 'menu';
   loadDialogView.root.visible = screen === 'menu' && loadOpen;
   editorView.root.visible = screen === 'editor';
 
   if (screen === 'menu') {
-    menuScreenView.draw(layout, menuHover);
+    const label = continueState !== null ? continueLabel(continueState) : null;
+    menuScreenView.draw(layout, menuHover, label);
+    dialogView.draw(dialog, layout);
     if (loadOpen) {
       loadDialogView.draw(layout, loadText, loadStatus, loadHover);
       const d = computeLoadDialog(layout);
@@ -1438,4 +1595,10 @@ app.renderer.on('resize', () => {
   if (screen === 'run' && Math.abs(app.screen.width - 800) <= 1 && Math.abs(app.screen.height - 600) <= 1) {
     notifyAchievement(state, 'shadow-resize');
   }
+});
+
+// A closing or backgrounded tab writes immediately (docs/RUN-SAVE.md), so the run survives.
+window.addEventListener('pagehide', () => maybeSaveRun(true));
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') maybeSaveRun(true);
 });

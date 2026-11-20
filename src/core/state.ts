@@ -1152,7 +1152,7 @@ function buildRouteFields(grid: Grid, blocked: ReadonlySet<number>, exit: Tile, 
   return routes.map((route) => buildRouteField(grid, blocked, exit, route));
 }
 
-function rebuildField(s: RunState): void {
+export function rebuildField(s: RunState): void {
   const exit = exitTile(s);
   s.field = buildField(s.grid, groundBlocked(s), exit);
   s.breacherField = buildField(s.grid, breacherBlocked(s), exit);

@@ -54,6 +54,7 @@ import { FLYER_OFF_KIND_DAMAGE,
   noBuildActive,
   NO_BUILD_MESSAGE,
   AUTO_WAVE_DELAY_TICKS,
+  rebuildField,
 } from '../src/core/state.ts';
 import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE, MINE_BLAST_RADIUS, CURSOR_CLICK_DAMAGE_FACTOR, repairHealRate, repairRadius } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
@@ -104,6 +105,8 @@ import {
   CLICK_SLACK,
 } from '../src/core/pointer.ts';
 import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies, allHelpUnlocked, checkProfileAchievements, rpGain, specLevelCost } from '../src/core/save.ts';
+import { captureRun, restoreRun, loadRunSave, saveRun, clearRunSave, hasRunSave, RUN_SAVE_KEY } from '../src/core/runsave.ts';
+import { computeMenuScreen, menuButtonAt } from '../src/view/menuScreen.ts';
 import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES } from '../src/core/tree.ts';
 import { ACHIEVEMENTS } from '../src/core/achievements.ts';
 import { restartWindows, checkAchievements, enterEndless, pointerDamageMult, towerCost, overclockCap, towerIntervalTicks } from '../src/core/state.ts';
@@ -9610,6 +9613,234 @@ function helpRecomputeBlock(kind) {
     check(Math.abs(effectiveStats(flak).fireInterval - TOWER_STATS.aa.fireInterval * linear(flakMul, strength)) < 1e-9,
       `aa Flak t${tier} interval unchanged (${effectiveStats(flak).fireInterval.toFixed(2)})`);
   }
+}
+
+// --- Run save (docs/RUN-SAVE.md) --------------------------------------------------------------
+
+function intArraysEqual(a, b) {
+  if (!a || !b || a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
+function numSetEquals(a, b) {
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
+}
+
+function strSetEquals(a, b) {
+  if (a.size !== b.size) return false;
+  for (const v of a) if (!b.has(v)) return false;
+  return true;
+}
+
+/** A fake localStorage-like store for exercising loadRunSave/saveRun/clearRunSave. */
+function runSaveStore(initial) {
+  let value = initial === undefined ? null : initial;
+  return {
+    getItem: () => value,
+    setItem: (_k, v) => { value = v; },
+    removeItem: () => { value = null; },
+    current: () => value,
+  };
+}
+
+/** A rich, mid-wave run exercising every saved shape: branches, a disabled tower, a mine, a
+ *  projectile, an ad, modifiers and wave history. */
+function richRun() {
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 3, 6);
+  placeTower(s, 'wall', 10, 5);
+  upgradeTower(s, 3, 6);
+  chooseBranch(s, 3, 6, 'A');
+  const gun = towerAt(s, 3, 6);
+  s.towerDisabled.set(gun.id, 42);
+  startWave(s);
+  for (let i = 0; i < 120; i++) tick(s);
+  s.modifiers = ['fog'];
+  s.mines.push({ id: s.nextId++, towerId: gun.id, x: 5.5, y: 6.5, placedTick: s.tick, armedAtTick: s.tick, expiresTick: s.tick + 600 });
+  s.projectiles.push({ id: s.nextId++, kind: 'shell', x: 6.5, y: 6.5, vx: 0, vy: 0, targetId: null, towerId: gun.id, damage: 10, lifetime: 30 });
+  spawnAd(s, 'defrag');
+  s.clearedWaves = 2;
+  s.waveSnapshots.set(2, { salvage: 200, salvageSpent: 50, integrity: 18, towersBuilt: 2, wallsBuilt: 1, towersSold: 0, upgradesBought: 1, branches: 0, bossesKilled: 0, towerCount: 2 });
+  return s;
+}
+
+// --- 1. Round trip -----------------------------------------------------------------------------
+{
+  const s = richRun();
+  const saved = JSON.stringify(captureRun(s));
+  const restored = restoreRun(JSON.parse(saved));
+  check(restored !== null, 'a rich run restores');
+  if (restored) {
+    check(JSON.stringify(captureRun(restored)) === saved, 'restored state deep-equals the original on every saved field');
+    check(intArraysEqual(restored.field, s.field), 'the field is identical');
+    check(intArraysEqual(restored.breacherField, s.breacherField), 'breacherField is identical');
+    check(intArraysEqual(restored.ramField, s.ramField), 'ramField is identical');
+    check(intArraysEqual(restored.flyerField, s.flyerField), 'flyerField is identical');
+    check(restored.routeFields.length === s.routeFields.length && restored.routeFields.every((f, i) => intArraysEqual(f, s.routeFields[i])), 'routeFields are identical');
+    check(numSetEquals(restored.blocked, s.blocked), 'blocked is identical');
+  }
+}
+
+// --- 2. Determinism ----------------------------------------------------------------------------
+{
+  const make = () => {
+    const s = stateOnLevel('open-field');
+    placeTower(s, 'gun', 3, 6);
+    placeTower(s, 'gun', 4, 6);
+    s.rng = 0x12345678;
+    s.wave = 5;
+    startWave(s); // wave 6: flyers draw from the seeded stream
+    for (let i = 0; i < 900; i++) tick(s);
+    s.events = [];
+    return s;
+  };
+  const a = make();
+  const saved = JSON.stringify(captureRun(a));
+
+  const hashRun = (s, n) => {
+    const h = createHash('sha256');
+    for (let i = 0; i < n; i++) {
+      tick(s);
+      if (s.events.length > 0) {
+        h.update(JSON.stringify(s.events));
+        s.events = [];
+      }
+    }
+    return h.digest('hex');
+  };
+
+  const hashA = hashRun(a, 600);
+  const rngA = a.rng;
+  const b = restoreRun(JSON.parse(saved));
+  check(b !== null, 'determinism: the save restores');
+  if (b) {
+    const hashB = hashRun(b, 600);
+    check(hashA === hashB, 'determinism: identical event-stream hash after 600 more ticks');
+    check(rngA === b.rng, 'determinism: identical RNG value at the end');
+  }
+}
+
+// --- 3. Rebuild, not restore -------------------------------------------------------------------
+{
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 3, 6);
+  placeTower(s, 'wall', 12, 5);
+  s.wave = 1; // a run at wave 1, so the save is accepted and the derived fields are rebuilt
+  const tampered = JSON.parse(JSON.stringify(captureRun(s)));
+  // A hand-edited save that lies about the derived fields is simply ignored.
+  tampered.blocked = ['not-a-set'];
+  tampered.field = [];
+  tampered.breacherField = [];
+  tampered.ramField = [];
+  tampered.flyerField = [];
+  tampered.routeFields = [];
+  const restored = restoreRun(tampered);
+  check(restored !== null, 'a save that lies about its derived fields still restores');
+  if (restored) {
+    const expected = new Set(restored.towers.map((t) => t.row * COLS + t.col));
+    check(numSetEquals(restored.blocked, expected), 'blocked is rebuilt from the towers, never trusted');
+    check(intArraysEqual(restored.field, s.field), 'field is recomputed from the restored towers');
+    check(intArraysEqual(restored.breacherField, s.breacherField), 'breacherField is recomputed');
+    check(intArraysEqual(restored.ramField, s.ramField), 'ramField is recomputed');
+    check(intArraysEqual(restored.flyerField, s.flyerField), 'flyerField is recomputed');
+    check(restored.routeFields.length === s.routeFields.length && restored.routeFields.every((f, i) => intArraysEqual(f, s.routeFields[i])), 'routeFields are recomputed');
+  }
+}
+
+// --- 4. Refusals -------------------------------------------------------------------------------
+{
+  const valid = captureRun(richRun());
+  const base = () => JSON.parse(JSON.stringify(valid));
+
+  const cases = [];
+  cases.push(['truncated JSON', '{"v":1,"levelId":']);
+  const v2 = base(); v2.v = 2; cases.push(['v: 2', JSON.stringify(v2)]);
+  const noRoute = base(); noRoute.level.starts = []; cases.push(['a level with no route', JSON.stringify(noRoute)]);
+  const int0 = base(); int0.integrity = 0; cases.push(['integrity 0', JSON.stringify(int0)]);
+  const badKind = base(); badKind.enemies = [{ kind: 'bogus' }]; cases.push(['an unknown enemy kind', JSON.stringify(badKind)]);
+  const overlap = base();
+  overlap.towers = [overlap.towers[0], { ...overlap.towers[1], col: overlap.towers[0].col, row: overlap.towers[0].row }];
+  cases.push(['a tower on another tower', JSON.stringify(overlap)]);
+
+  for (const [name, raw] of cases) {
+    const store = runSaveStore(raw);
+    const loaded = loadRunSave(defaultProfile(), store);
+    check(loaded === null, `refusal: ${name} returns null`);
+    check(store.current() === null, `refusal: ${name} deletes the key`);
+  }
+  check(loadRunSave(defaultProfile(), runSaveStore()) === null, 'a missing key loads null, so the game still boots');
+}
+
+// --- 5. No double counting ---------------------------------------------------------------------
+{
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 3, 6);
+  startWave(s);
+  for (let i = 0; i < 100; i++) tick(s);
+  s.events = [];
+  const earned = s.economy.earned;
+  const salvage = s.economy.salvage;
+  const restored = restoreRun(captureRun(s));
+  check(restored !== null, 'a mid-wave save restores');
+  if (restored) {
+    check(restored.economy.earned === earned, 'loading mid-wave grants no salvage');
+    check(restored.economy.salvage === salvage, 'loading mid-wave does not move the balance');
+    check(restored.events.length === 0, 'loading mid-wave fires no wave-start effects');
+    check(strSetEquals(restored.achievements, s.achievements), 'loading mid-wave re-grants no achievements');
+  }
+}
+
+// --- 6. Lifecycle ------------------------------------------------------------------------------
+{
+  const store = runSaveStore();
+  const s = stateOnLevel('open-field');
+  placeTower(s, 'gun', 3, 6);
+  startWave(s);
+  tick(s);
+  saveRun(s, store);
+  check(hasRunSave(store), 'saveRun writes the key');
+  check(loadRunSave(defaultProfile(), store) !== null, 'the written save loads');
+  clearRunSave(store);
+  check(!hasRunSave(store), 'clearRunSave deletes the key (victory / integrity zero / Restart Windows)');
+  check(loadRunSave(defaultProfile(), store) === null, 'after clearRunSave there is nothing to load');
+
+  // The simulation itself never writes: tick has no storage side effect, so a Test run (never
+  // saveRun'd) and `?nosave` (never saveRun'd) leave storage untouched.
+  const store2 = runSaveStore();
+  const s2 = stateOnLevel('open-field');
+  placeTower(s2, 'gun', 3, 6);
+  startWave(s2);
+  for (let i = 0; i < 300; i++) tick(s2);
+  check(store2.current() === null, 'the simulation never writes to storage on its own');
+}
+
+// --- 7. Menu -----------------------------------------------------------------------------------
+{
+  const layout = computeLayout(1280, 800);
+  const withSave = computeMenuScreen(layout, 'Wave 34 — The Corridor');
+  const without = computeMenuScreen(layout, null);
+  check(withSave.buttons[0].id === 'continue' && withSave.buttons[0].label === 'Wave 34 — The Corridor',
+    'with a save, Continue is the primary button and names the wave and map');
+  check(withSave.buttons[1].id === 'play', 'Continue sits ahead of Play');
+  check(without.buttons[0].id === 'play', 'without a save, Play is the primary button');
+  const hit = menuButtonAt(layout, withSave.buttons[0].rect.x + 5, withSave.buttons[0].rect.y + 5, 'Wave 34 — The Corridor');
+  check(hit === 'continue', 'the Continue button is hit-testable');
+
+  // Continue resumes at the saved wave on the saved map.
+  const s = stateOnLevel('fork');
+  s.wave = 34;
+  s.phase = 'build';
+  const store = runSaveStore();
+  saveRun(s, store);
+  const loaded = loadRunSave(defaultProfile(), store);
+  check(loaded !== null && loaded.wave === 34 && loaded.levelId === 'fork' && loaded.level.name === 'The Fork',
+    'Continue resumes at the saved wave on the saved map');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
