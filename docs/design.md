@@ -1742,6 +1742,34 @@ nothing is created per frame. A status that is off hides its sprite rather than 
 and scale come from the asset's animation and the view adds only position. Auras never take pointer
 events — tower selection, `enemyAt` and `hudButtonAt` keep working through them.
 
+## 26. Saving a run in progress
+
+The profile persists; the run never has — reload on wave 40 and the wave, towers, salvage and pointer
+upgrades are gone. A run save closes that gap (docs/RUN-SAVE.md is the contract).
+
+The rule is the same one the profile follows: **save only authoritative state, rebuild everything
+derived**. The save is a plain JSON object (`v: 1`) under `pd.run.v1`, holding the level (including
+custom codec/editor maps), toggles, routes, phase, wave, integrity, economy, pointer, towers, enemies,
+projectiles, mines, the live spawn queues, the clock and RNG, the ad/buff timers, and every achievement
+counter. `grid`, `blocked` and the distance fields are *never* written — they are rebuilt by
+`rebuildField` after the towers are in place, and auras by `recomputeAuras`, so a save can never
+disagree with itself. `events`, `selected`/`selectedTowerId` and the step `accumulator` are dropped:
+they are frame-scoped or UI choices and meaningless across a reload.
+
+Writes are throttled to one per two seconds of run time, with an immediate write on wave start, wave
+clear, any build action (place, upgrade, branch, sell), pause, Esc to the menu, and
+`pagehide`/`visibilitychange` to hidden. A paused run writes once and stops; an idle menu writes
+nothing. A `?nosave` URL flag disables saving entirely, and the editor's Test run never saves.
+
+On boot a valid save makes **Continue** the menu's primary button — `Wave 34 — The Corridor`, bound to
+`Enter`, ahead of Play. Play starts fresh and asks once before discarding a save. The key is deleted on
+victory, on integrity reaching zero, and on Restart Windows. Loading is defensive: a save that does not
+parse, is not `v: 1`, fails `validateLevel`, or carries an out-of-bounds or overlapping tower, an
+unknown enemy kind, a bad integrity/wave, or absurd counts returns `null` and deletes the key — it
+never throws, so a bad save can never stop the game booting. Restoring a save mid-wave grants no
+salvage, fires no wave-start effects and re-grants no achievements, and the seeded run continues
+byte-identically on the same tick boundary it was saved at.
+
 ---
 
 ## Appendix A — What four games got right

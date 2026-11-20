@@ -7,7 +7,7 @@ import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from
  * The load-code dialog lives here too: a text field plus OK / Cancel, with its own status line.
  */
 
-export type MenuButtonId = 'play' | 'editor' | 'load';
+export type MenuButtonId = 'continue' | 'play' | 'editor' | 'load';
 
 const BUTTON_W = 240;
 const BUTTON_H = 40;
@@ -25,11 +25,15 @@ export interface MenuScreenLayout {
   buttons: MenuButton[];
 }
 
-export function computeMenuScreen(l: Layout): MenuScreenLayout {
+export function computeMenuScreen(l: Layout, continueLabel: string | null = null): MenuScreenLayout {
   const titleH = 40;
   const pad = 20;
   const panelW = BUTTON_W + pad * 2;
-  const panelH = pad + titleH + 3 * BUTTON_H + 2 * BUTTON_GAP + pad;
+  const labels: [MenuButtonId, string][] = [];
+  if (continueLabel !== null) labels.push(['continue', continueLabel]);
+  labels.push(['play', 'Play'], ['editor', 'Editor'], ['load', 'Load code']);
+  const count = labels.length;
+  const panelH = pad + titleH + count * BUTTON_H + (count - 1) * BUTTON_GAP + pad;
   const panel: Rect = {
     x: l.client.x + Math.floor((l.client.w - panelW) / 2),
     y: l.client.y + Math.floor((l.client.h - panelH) / 2),
@@ -37,11 +41,6 @@ export function computeMenuScreen(l: Layout): MenuScreenLayout {
     h: panelH,
   };
   const title: Rect = { x: panel.x, y: panel.y + pad, w: panel.w, h: titleH };
-  const labels: readonly [MenuButtonId, string][] = [
-    ['play', 'Play'],
-    ['editor', 'Editor'],
-    ['load', 'Load code'],
-  ];
   const buttons: MenuButton[] = labels.map(([id, label], i) => ({
     id,
     label,
@@ -55,8 +54,8 @@ export function computeMenuScreen(l: Layout): MenuScreenLayout {
   return { panel, title, buttons };
 }
 
-export function menuButtonAt(l: Layout, px: number, py: number): MenuButtonId | null {
-  for (const b of computeMenuScreen(l).buttons) if (pointInRect(b.rect, px, py)) return b.id;
+export function menuButtonAt(l: Layout, px: number, py: number, continueLabel: string | null = null): MenuButtonId | null {
+  for (const b of computeMenuScreen(l, continueLabel).buttons) if (pointInRect(b.rect, px, py)) return b.id;
   return null;
 }
 
@@ -117,7 +116,7 @@ export class MenuScreenView {
     this.title = makeText('Pointer Defense', PAL.title, true, 20);
     this.title.anchor.set(0.5, 0.5);
     this.root.addChild(this.title);
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       const t = makeText('', PAL.text, true);
       t.anchor.set(0.5, 0.5);
       this.buttonTexts.push(t);
@@ -125,19 +124,23 @@ export class MenuScreenView {
     }
   }
 
-  draw(l: Layout, hover: MenuButtonId | null): void {
+  draw(l: Layout, hover: MenuButtonId | null, continueLabel: string | null = null): void {
     const g = this.g;
     g.clear();
-    const m = computeMenuScreen(l);
+    const m = computeMenuScreen(l, continueLabel);
     bevel(g, m.panel, false, PAL.face);
 
     this.title.text = 'Pointer Defense';
     this.title.position.set(m.title.x + m.title.w / 2, m.title.y + m.title.h / 2);
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < this.buttonTexts.length; i++) {
       const b = m.buttons[i];
-      bevel(g, b.rect, true, hover === b.id ? PAL.highlight : PAL.face);
       const t = this.buttonTexts[i];
+      if (!b) {
+        t.text = '';
+        continue;
+      }
+      bevel(g, b.rect, true, hover === b.id ? PAL.highlight : PAL.face);
       t.text = b.label;
       t.style.fill = PAL.text;
       t.position.set(b.rect.x + b.rect.w / 2, b.rect.y + b.rect.h / 2);
