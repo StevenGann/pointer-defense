@@ -2,6 +2,7 @@ import { spend } from './economy.ts';
 import { rngNext } from './rng.ts';
 import type { RunState } from './state.ts';
 import { secondsToTicks } from './time.ts';
+import { t } from '../i18n/index.ts';
 
 /**
  * Global upgrades: expensive, one-shot, per-run purchases paid in salvage (docs/GLOBAL-UPGRADES.md).
@@ -97,149 +98,149 @@ export const GLOBAL_UPGRADES: readonly UpgradeDef[] = [
   // Pointer
   {
     id: 'wide-reticle',
-    name: 'Wide Reticle',
+    name: t('upg.wideReticle.name'),
     group: 'pointer',
     wave: 25,
     cost: 2200,
-    line: 'Clicks land 0.2 tiles wider.',
+    line: t('upg.wideReticle.blurb'),
     detail:
-      'The click hit test gets 0.2 tiles of slack in every direction. Small flyers stop slipping out from under the pointer.',
+      t('upg.wideReticle.detail'),
   },
   {
     id: 'double-buffer',
-    name: 'Double-Buffered Click',
+    name: t('upg.doubleBuffer.name'),
     group: 'pointer',
     wave: 30,
     cost: 3000,
-    line: 'Click and hold damage ×2.',
+    line: t('upg.doubleBuffer.blurb'),
     detail:
-      'Every click and every tick of held-reticle damage is doubled. Multiplies with overclock and the crit, so it is worth most on a built pointer.',
+      t('upg.doubleBuffer.detail'),
   },
   {
     id: 'chain-reaction',
-    name: 'Chain Reaction',
+    name: t('upg.chainReaction.name'),
     group: 'pointer',
     wave: 50,
     cost: 12000,
-    line: 'Killing clicks splash 25% to two neighbours.',
+    line: t('upg.chainReaction.blurb'),
     detail:
-      'A click that kills deals a quarter of the killing blow to the two nearest enemies within 1.5 tiles. The splash cannot crit, cannot carry the mark bonus, and cannot chain again.',
+      t('upg.chainReaction.detail'),
   },
   {
     id: 'coolant',
-    name: 'Coolant Loop',
+    name: t('upg.coolant.name'),
     group: 'pointer',
     wave: 60,
     cost: 25000,
-    line: 'Overclock cap 12 → 16 this run.',
+    line: t('upg.coolant.blurb'),
     detail:
-      'Four extra overclock levels for the rest of the run. The milestone multipliers on the ladder still apply, so this is the most expensive damage in the game.',
+      t('upg.coolant.detail'),
   },
   // Towers
   {
     id: 'salvage-contract',
-    name: 'Salvage Contract',
+    name: t('upg.salvageContract.name'),
     group: 'towers',
     wave: 20,
     cost: 1200,
-    line: 'Tower kills pay +25% salvage.',
+    line: t('upg.salvageContract.blurb'),
     detail:
-      "The idle half starts paying. It does not touch the pointer's 1.5× bonus, so clicking is still the better rate — just no longer the only one.",
+      t('upg.salvageContract.detail'),
   },
   {
     id: 'autoloader',
-    name: 'Autoloader',
+    name: t('upg.autoloader.name'),
     group: 'towers',
     wave: 35,
     cost: 4000,
-    line: 'All towers fire 15% faster.',
+    line: t('upg.autoloader.blurb'),
     detail:
-      "Every tower's fire interval is multiplied by 0.87, to a floor of one tick. Applies to beams and projectiles alike.",
+      t('upg.autoloader.detail'),
   },
   {
     id: 'ballistic-telemetry',
-    name: 'Ballistic Telemetry',
+    name: t('upg.ballisticTelemetry.name'),
     group: 'towers',
     wave: 45,
     cost: 8000,
     // The spec's line ("…splash to a second flyer.") is 48 chars, over its own 46-char limit.
-    line: 'AA shells and missiles splash a second flyer.',
+    line: t('upg.ballisticTelemetry.blurb'),
     detail:
-      'Each shell or missile that connects deals half its damage again to the nearest other flyer within one tile. Anti-air stops being single-target.',
+      t('upg.ballisticTelemetry.detail'),
   },
   {
     id: 'structural-warranty',
-    name: 'Structural Warranty',
+    name: t('upg.structuralWarranty.name'),
     group: 'towers',
     wave: 45,
     cost: 8500,
     // The spec's line is 51 chars, over its own 46-char limit.
-    line: 'Towers take half damage, repair twice as fast.',
+    line: t('upg.structuralWarranty.blurb'),
     detail:
-      "Breachers and pop-ups do half damage to towers, and repair downtime halves. Stacks with Cooling Loop's 25 %, which lands at 37.5 % of the base time.",
+      t('upg.structuralWarranty.detail'),
   },
   // Economy
   {
     id: 'compound-interest',
-    name: 'Compound Interest',
+    name: t('upg.compoundInterest.name'),
     group: 'economy',
     wave: 30,
     cost: 3200,
-    line: '+1.5% of banked salvage at each wave clear.',
+    line: t('upg.compoundInterest.blurb'),
     detail:
-      'Every cleared wave pays 1.5 % of what you are holding. It rewards not spending, which is the only upgrade that argues with the others.',
+      t('upg.compoundInterest.detail'),
   },
   {
     id: 'bulk-requisition',
-    name: 'Bulk Requisition',
+    name: t('upg.bulkRequisition.name'),
     group: 'economy',
     wave: 40,
     cost: 6000,
-    line: 'Each copy of a tower costs 4% less, to −40%.',
+    line: t('upg.bulkRequisition.blurb'),
     detail:
-      'The discount counts the copies you already own of that kind, so going tall on one tower is cheaper than spreading out. Walls do not count.',
+      t('upg.bulkRequisition.detail'),
   },
   {
     id: 'bounty-board',
-    name: 'Bounty Board',
+    name: t('upg.bountyBoard.name'),
     group: 'economy',
     wave: 50,
     cost: 12500,
-    line: 'Bosses pay double, with 10% more HP.',
-    detail: 'Boss salvage doubles. They also arrive with a tenth more health, so the bonus is paid for in the fight.',
+    line: t('upg.bountyBoard.blurb'),
+    detail: t('upg.bountyBoard.detail'),
   },
   // Board
   {
     id: 'emergency-patch',
-    name: 'Emergency Patch',
+    name: t('upg.emergencyPatch.name'),
     group: 'board',
     wave: 25,
     cost: 2000,
-    line: 'Once per run, a killing leak leaves you at 1.',
+    line: t('upg.emergencyPatch.blurb'),
     detail:
-      'The first leak that would take integrity to zero leaves you at one instead. It is consumed whether or not you were already going to lose.',
+      t('upg.emergencyPatch.detail'),
   },
   {
     id: 'shutter-licence',
-    name: 'Shutter Licence',
+    name: t('upg.shutterLicence.name'),
     group: 'board',
     wave: 35,
     cost: 4200,
     // The spec's line is 57 chars, over its own 46-char limit, and it gives no detail text.
-    line: 'Walls toggle instantly and never block a wave.',
+    line: t('upg.shutterLicence.blurb'),
     detail:
-      'Toggle gates skip their three-second lock, so a shutter can be flipped as often as you can click it. A freshly toggled gate never holds up the next wave.',
+      t('upg.shutterLicence.detail'),
   },
   // System
   {
     id: 'system-tray',
-    name: 'System Tray',
+    name: t('upg.systemTray.name'),
     group: 'system',
     wave: 55,
     cost: 18000,
-    line: 'Rare System Update pop-ups grant 20 s buffs.',
+    line: t('upg.systemTray.blurb'),
     detail:
-      'Deep in a run the tray starts offering gifts: a pop-up that, clicked, doubles fire rate, doubles click damage, or adds 25 % kill salvage for twenty seconds. One at a time.',
+      t('upg.systemTray.detail'),
   },
 ];
 

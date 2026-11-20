@@ -8,6 +8,7 @@
  */
 
 import type { Profile } from './save.ts';
+import { t } from '../i18n/index.ts';
 
 export type TreeTier = 1 | 2 | 3 | 4 | 5;
 
@@ -71,35 +72,35 @@ export interface TreeNode {
 
 export const TREE_NODES: readonly TreeNode[] = [
   // Tier 1 — unlock at level 0
-  { id: 'loose-change', name: 'Loose Change', tier: 1, unlockLevel: 0, cost: 4, description: '+200 starting salvage', effect: { startSalvageFlat: 200 } },
-  { id: 'spare-slot', name: 'Spare Slot', tier: 1, unlockLevel: 0, cost: 5, description: '+2 starting integrity', effect: { integrity: 2 } },
-  { id: 'fast-boot-1', name: 'Fast Boot I', tier: 1, unlockLevel: 0, cost: 5, description: 'runs begin at wave 3', effect: { startingWave: 3 } },
-  { id: 'warm-cache', name: 'Warm Cache', tier: 1, unlockLevel: 0, cost: 6, description: '+10% tower damage', effect: { towerDamagePct: 0.1 } },
-  { id: 'steady-hand', name: 'Steady Hand', tier: 1, unlockLevel: 0, cost: 6, description: '+10% pointer damage', effect: { pointerDamagePct: 0.1 } },
+  { id: 'loose-change', name: t('tree.looseChange.name'), tier: 1, unlockLevel: 0, cost: 4, description: t('tree.looseChange.description'), effect: { startSalvageFlat: 200 } },
+  { id: 'spare-slot', name: t('tree.spareSlot.name'), tier: 1, unlockLevel: 0, cost: 5, description: t('tree.spareSlot.description'), effect: { integrity: 2 } },
+  { id: 'fast-boot-1', name: t('tree.fastBoot1.name'), tier: 1, unlockLevel: 0, cost: 5, description: t('tree.fastBoot1.description'), effect: { startingWave: 3 } },
+  { id: 'warm-cache', name: t('tree.warmCache.name'), tier: 1, unlockLevel: 0, cost: 6, description: t('tree.warmCache.description'), effect: { towerDamagePct: 0.1 } },
+  { id: 'steady-hand', name: t('tree.steadyHand.name'), tier: 1, unlockLevel: 0, cost: 6, description: t('tree.steadyHand.description'), effect: { pointerDamagePct: 0.1 } },
 
   // Tier 2 — unlock at level 8
-  { id: 'auto-login', name: 'Auto-login', tier: 2, unlockLevel: 8, cost: 6, description: 'auto-wave is on by default', effect: { autoWave: true } },
-  { id: 'preload', name: 'Preload', tier: 2, unlockLevel: 8, cost: 10, description: 'the run starts with two free Gun towers', effect: { preloadGuns: 2 } },
-  { id: 'fast-boot-2', name: 'Fast Boot II', tier: 2, unlockLevel: 8, cost: 12, description: 'runs begin at wave 8', effect: { startingWave: 8 } },
-  { id: 'cooling-loop', name: 'Cooling Loop', tier: 2, unlockLevel: 8, cost: 12, description: 'repairs are 25% faster', effect: { repairSpeedMult: 1.25 } },
-  { id: 'bulk-discount', name: 'Bulk Discount', tier: 2, unlockLevel: 8, cost: 14, description: 'towers cost 8% less', effect: { costMultiplier: 0.92 } },
+  { id: 'auto-login', name: t('tree.autoLogin.name'), tier: 2, unlockLevel: 8, cost: 6, description: t('tree.autoLogin.description'), effect: { autoWave: true } },
+  { id: 'preload', name: t('tree.preload.name'), tier: 2, unlockLevel: 8, cost: 10, description: t('tree.preload.description'), effect: { preloadGuns: 2 } },
+  { id: 'fast-boot-2', name: t('tree.fastBoot2.name'), tier: 2, unlockLevel: 8, cost: 12, description: t('tree.fastBoot2.description'), effect: { startingWave: 8 } },
+  { id: 'cooling-loop', name: t('tree.coolingLoop.name'), tier: 2, unlockLevel: 8, cost: 12, description: t('tree.coolingLoop.description'), effect: { repairSpeedMult: 1.25 } },
+  { id: 'bulk-discount', name: t('tree.bulkDiscount.name'), tier: 2, unlockLevel: 8, cost: 14, description: t('tree.bulkDiscount.description'), effect: { costMultiplier: 0.92 } },
 
   // Tier 3 — unlock at level 20
-  { id: 'safe-mode', name: 'Safe Mode', tier: 3, unlockLevel: 20, cost: 18, description: '+5 integrity, but -10% Restore Points earned', effect: { integrity: 5, rpGainMult: 0.9 } },
-  { id: 'blue-screen', name: 'Blue Screen', tier: 3, unlockLevel: 20, cost: 18, description: '+25% Restore Points earned, but -5 integrity', effect: { integrity: -5, rpGainMult: 1.25 } },
-  { id: 'bulk-discount-2', name: 'Bulk Discount II', tier: 3, unlockLevel: 20, cost: 22, description: 'a further 7% off (15% total)', effect: { costMultiplier: 0.93 } },
-  { id: 'fast-boot-3', name: 'Fast Boot III', tier: 3, unlockLevel: 20, cost: 25, description: 'runs begin at wave 15', effect: { startingWave: 15 } },
-  { id: 'early-access', name: 'Early Access', tier: 3, unlockLevel: 20, cost: 30, description: 'every tower is unlocked at wave 1', effect: { unlockAllTowers: true } },
+  { id: 'safe-mode', name: t('tree.safeMode.name'), tier: 3, unlockLevel: 20, cost: 18, description: t('tree.safeMode.description'), effect: { integrity: 5, rpGainMult: 0.9 } },
+  { id: 'blue-screen', name: t('tree.blueScreen.name'), tier: 3, unlockLevel: 20, cost: 18, description: t('tree.blueScreen.description'), effect: { integrity: -5, rpGainMult: 1.25 } },
+  { id: 'bulk-discount-2', name: t('tree.bulkDiscount2.name'), tier: 3, unlockLevel: 20, cost: 22, description: t('tree.bulkDiscount2.description'), effect: { costMultiplier: 0.93 } },
+  { id: 'fast-boot-3', name: t('tree.fastBoot3.name'), tier: 3, unlockLevel: 20, cost: 25, description: t('tree.fastBoot3.description'), effect: { startingWave: 15 } },
+  { id: 'early-access', name: t('tree.earlyAccess.name'), tier: 3, unlockLevel: 20, cost: 30, description: t('tree.earlyAccess.description'), effect: { unlockAllTowers: true } },
 
   // Tier 4 — unlock at level 40
-  { id: 'hot-swap', name: 'Hot Swap', tier: 4, unlockLevel: 40, cost: 30, description: 'selling refunds 90% instead of 70%', effect: { sellRefund: 0.9 } },
-  { id: 'windows-update', name: 'Windows Update', tier: 4, unlockLevel: 40, cost: 35, description: 'each reboot banks one extra spec point', effect: { extraSpecsPerReboot: 1 } },
-  { id: 'fast-boot-4', name: 'Fast Boot IV', tier: 4, unlockLevel: 40, cost: 45, description: 'runs begin at wave 25', effect: { startingWave: 25 } },
+  { id: 'hot-swap', name: t('tree.hotSwap.name'), tier: 4, unlockLevel: 40, cost: 30, description: t('tree.hotSwap.description'), effect: { sellRefund: 0.9 } },
+  { id: 'windows-update', name: t('tree.windowsUpdate.name'), tier: 4, unlockLevel: 40, cost: 35, description: t('tree.windowsUpdate.description'), effect: { extraSpecsPerReboot: 1 } },
+  { id: 'fast-boot-4', name: t('tree.fastBoot4.name'), tier: 4, unlockLevel: 40, cost: 45, description: t('tree.fastBoot4.description'), effect: { startingWave: 25 } },
 
   // Tier 5 — unlock at level 70
-  { id: 'restore-point', name: 'Restore Point', tier: 5, unlockLevel: 70, cost: 60, description: 'the run starts with 10% of the last run\'s salvage', effect: { startSalvagePct: 0.1 } },
-  { id: 'fast-boot-5', name: 'Fast Boot V', tier: 5, unlockLevel: 70, cost: 80, description: 'runs begin at wave 40', effect: { startingWave: 40 } },
-  { id: 'new-game-plus', name: 'New Game+', tier: 5, unlockLevel: 70, cost: 90, description: 'towers are placed at tier 2', effect: { startTier: 2 } },
+  { id: 'restore-point', name: t('tree.restorePoint.name'), tier: 5, unlockLevel: 70, cost: 60, description: t('tree.restorePoint.description'), effect: { startSalvagePct: 0.1 } },
+  { id: 'fast-boot-5', name: t('tree.fastBoot5.name'), tier: 5, unlockLevel: 70, cost: 80, description: t('tree.fastBoot5.description'), effect: { startingWave: 40 } },
+  { id: 'new-game-plus', name: t('tree.newGamePlus.name'), tier: 5, unlockLevel: 70, cost: 90, description: t('tree.newGamePlus.description'), effect: { startTier: 2 } },
 ];
 
 export const TREE_NODE_IDS: readonly string[] = TREE_NODES.map((n) => n.id);

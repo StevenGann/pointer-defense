@@ -1,6 +1,9 @@
 import type { Catalogue } from '../index.ts';
+import { achievements } from './achievements.ts';
+import { levels } from './levels.ts';
 import { menu } from './menu.ts';
 import { status } from './status.ts';
+import { upgrades } from './upgrades.ts';
 
 /**
  * The English catalogue — the source locale and the runtime fallback.
@@ -11,6 +14,9 @@ import { status } from './status.ts';
 export const en = {
   ...menu,
   ...status,
+  ...achievements,
+  ...upgrades,
+  ...levels,
 
   // Window title.
   'window.title': 'Pointer Defense',
