@@ -61,7 +61,7 @@ Mapping — and it must be this table, because these are the pages that exist:
 | salvage readout | `mechanics-salvage` |
 | wall button or a wall on the board | `mechanics-walls` |
 | wave / next-wave panel | `mechanics-early-call` |
-| upgrades panel | `tower-<kind>`? **No** — return `null`; global upgrades have no page yet |
+| upgrades panel | `null` — global upgrades have no page yet |
 | everything else | `null` |
 
 `null` means "nothing written about this", and the click closes the mode without opening Help.
