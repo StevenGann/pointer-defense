@@ -86,9 +86,9 @@ shape has not changed.
 ## The balance harness
 
 `scripts/balance.mjs` upgrades greedily. Give it `--maxTier N` (default **5**) so its existing
-comparisons stay comparable, and have it print the highest tier it reached per map. A run at
-`--maxTier 5` must produce the same waves-cleared and damage-share figures as before this change —
-that is the regression check that tiers 1–5 did not move.
+comparisons stay comparable, and have it print the highest tier it reached per map. The harness is not a gate for this change: human testers are authoritative for balance, and the
+harness is run only when Sydney asks. What matters here is the smoke suite's frozen tier 1–5
+expectations, which prove the lower ladder did not move.
 
 ## Tests
 
