@@ -17,6 +17,7 @@ import {
   TOWER_KINDS,
   TOWER_STATS,
   isTowerKind,
+  type Branch,
   type TowerKind,
 } from '../core/towers.ts';
 import { type SpecKind } from '../core/save.ts';
@@ -58,6 +59,7 @@ import {
 } from '../core/state.ts';
 import { cheatsEnabled } from '../core/cheats.ts';
 import { escapeAction } from './escape.ts';
+import { t } from '../i18n/index.ts';
 
 /**
  * Hit testing and gestures against the run state, the menus and the modal dialogs. Tracks the
@@ -148,12 +150,12 @@ const NO_BUILD_HUD_ACTIONS: ReadonlySet<HudAction> = new Set<HudAction>([
 
 function refusalReason(s: RunState, kind: TowerKind, col: number, row: number): string {
   if (noBuildActive(s)) return NO_BUILD_MESSAGE;
-  if (tileAt(s.grid, col, row) !== 'buildable') return 'That tile is blocked.';
-  if (toggleAtTile(s, col, row)) return 'That tile is a shutter and cannot be built on.';
-  if (towerAt(s, col, row)) return 'There is already a tower there.';
-  if (!canAfford(s.economy, towerCost(s, kind))) return 'Not enough salvage for that tower.';
-  if (placementSealsUnderToggles(s, col, row)) return 'That would seal the route when a shutter closes.';
-  return 'That would seal the route.';
+  if (tileAt(s.grid, col, row) !== 'buildable') return t('shell.refusal.blockedTile');
+  if (toggleAtTile(s, col, row)) return t('shell.refusal.shutterTile');
+  if (towerAt(s, col, row)) return t('shell.refusal.occupied');
+  if (!canAfford(s.economy, towerCost(s, kind))) return t('shell.refusal.noSalvage');
+  if (placementSealsUnderToggles(s, col, row)) return t('shell.refusal.sealShutter');
+  return t('shell.refusal.seal');
 }
 
 export class MouseController {
@@ -329,7 +331,7 @@ export class MouseController {
       }
       const kind = control.action as TowerKind;
       if (TOWER_KINDS.includes(kind) && !towerUnlocked(s, kind)) {
-        this.ctx.notice(`${TOWER_STATS[kind].name} unlocks at wave ${towerUnlockWave(kind)}`);
+        this.ctx.notice(t('shell.unlockAtWave', { name: TOWER_STATS[kind].name, wave: towerUnlockWave(kind) }));
         return;
       }
     }
@@ -358,9 +360,9 @@ export class MouseController {
         selectPlacedTower(s, tower);
         if (isToggleGate(tower)) {
           if (isGateLocked(tower, s.clock) && !hasUpgrade(s, 'shutter-licence')) {
-            this.ctx.notice(`Gate locked for ${gateLockRemainingSeconds(tower, s.clock).toFixed(1)} s`);
+            this.ctx.notice(t('shell.gateLocked', { seconds: gateLockRemainingSeconds(tower, s.clock).toFixed(1) }));
           } else if (!toggleGate(s, col, row)) {
-            this.ctx.notice('That would seal the route.');
+            this.ctx.notice(t('shell.refusal.seal'));
           }
         }
         return;
@@ -419,7 +421,7 @@ export class MouseController {
       case 'branchB':
       case 'branchC': {
         const tower = selectedTower(s);
-        if (tower) chooseBranch(s, tower.col, tower.row, hud === 'branchA' ? 'A' : hud === 'branchB' ? 'B' : 'C');
+        if (tower) chooseBranch(s, tower.col, tower.row, hud.slice('branch'.length) as Branch);
         break;
       }
       case 'sell': {
@@ -464,8 +466,9 @@ export class MouseController {
     if (e.repeat) return;
     if (this.isTypingTarget(e.target)) return;
     if (this.ctx.screen() !== 'run') return;
+    const key = e.key.toLowerCase();
 
-    if (e.key === 'Escape') {
+    if (key === 'escape') {
       // Esc cancels the context-help mode first (docs/CONTEXT-HELP.md).
       if (this.ctx.helpMode()) {
         this.ctx.helpCancel();
@@ -515,22 +518,22 @@ export class MouseController {
 
     const s = this.ctx.state();
     if (this.ctx.achievementOpen()) {
-      if (e.key === 'ArrowLeft') this.ctx.achievementMove(-1, 0);
-      else if (e.key === 'ArrowRight') this.ctx.achievementMove(1, 0);
-      else if (e.key === 'ArrowUp') this.ctx.achievementMove(0, -1);
-      else if (e.key === 'ArrowDown') this.ctx.achievementMove(0, 1);
+      if (key === 'arrowleft') this.ctx.achievementMove(-1, 0);
+      else if (key === 'arrowright') this.ctx.achievementMove(1, 0);
+      else if (key === 'arrowup') this.ctx.achievementMove(0, -1);
+      else if (key === 'arrowdown') this.ctx.achievementMove(0, 1);
       return;
     }
     if (this.ctx.menu() || this.ctx.dialog()) return;
 
     // The Help window owns Page Up / Page Down while it is open: a window of the page at a time.
     if (this.ctx.helpOpen()) {
-      if (e.key === 'PageUp') {
+      if (key === 'pageup') {
         e.preventDefault();
         this.ctx.helpPage(-1);
         return;
       }
-      if (e.key === 'PageDown') {
+      if (key === 'pagedown') {
         e.preventDefault();
         this.ctx.helpPage(1);
         return;
@@ -539,21 +542,21 @@ export class MouseController {
 
     // The Global Upgrades dialog owns Up / Down / Enter while it is open; U toggles it shut.
     if (this.ctx.upgradesOpen()) {
-      if (e.key === 'ArrowUp') {
+      if (key === 'arrowup') {
         e.preventDefault();
         this.ctx.upgradesKey('up');
         return;
       }
-      if (e.key === 'ArrowDown') {
+      if (key === 'arrowdown') {
         e.preventDefault();
         this.ctx.upgradesKey('down');
         return;
       }
-      if (e.key === 'Enter') {
+      if (key === 'enter') {
         this.ctx.upgradesKey('buy');
         return;
       }
-      if (e.key === 'u' || e.key === 'U') {
+      if (key === 'u') {
         this.ctx.closeUpgrades();
         return;
       }
@@ -562,28 +565,28 @@ export class MouseController {
     // Cheat shortcuts: Ctrl+Shift+G toggles God Mode, Ctrl+Shift+K kills all. They read the same
     // gate as the menu, so with cheats hidden they are inert.
     if (cheatsEnabled() && (e.ctrlKey || e.metaKey) && e.shiftKey) {
-      if (e.key === 'g' || e.key === 'G') {
+      if (key === 'g') {
         e.preventDefault();
         toggleGodMode(s);
         return;
       }
-      if (e.key === 'k' || e.key === 'K') {
+      if (key === 'k') {
         e.preventDefault();
         killAllEnemies(s);
         return;
       }
     }
 
-    if (e.key === 'p' || e.key === 'P') {
+    if (key === 'p') {
       togglePause(s);
       return;
     }
-    if (e.key === ' ') {
+    if (key === ' ') {
       e.preventDefault();
       toggleSpeed(s);
       return;
     }
-    if (e.key === 'u' || e.key === 'U') {
+    if (key === 'u') {
       // U upgrades the selected tower, as it always has; with nothing selected it opens the Global
       // Upgrades dialog (docs/GLOBAL-UPGRADES.md §6.2).
       const tower = selectedTower(s);
@@ -595,7 +598,7 @@ export class MouseController {
       }
       return;
     }
-    if (e.key === 'x' || e.key === 'X') {
+    if (key === 'x') {
       const tower = selectedTower(s);
       if (tower) {
         if (noBuildActive(s)) this.ctx.notice(NO_BUILD_MESSAGE);
@@ -603,15 +606,15 @@ export class MouseController {
       }
       return;
     }
-    if (e.key === 'Enter') {
+    if (key === 'enter') {
       if (s.phase === 'build') startWave(s);
       return;
     }
-    const n = Number(e.key);
+    const n = Number(key);
     if (Number.isInteger(n) && n >= 1 && n <= TOWER_KINDS.length) {
       const kind = TOWER_KINDS[n - 1];
       if (!towerUnlocked(s, kind)) {
-        this.ctx.notice(`${TOWER_STATS[kind].name} unlocks at wave ${towerUnlockWave(kind)}`);
+        this.ctx.notice(t('shell.unlockAtWave', { name: TOWER_STATS[kind].name, wave: towerUnlockWave(kind) }));
         return;
       }
       selectTower(s, kind);
@@ -622,9 +625,9 @@ export class MouseController {
     if (!(target instanceof HTMLElement)) return false;
     return (
       target.isContentEditable ||
-      target.tagName === 'INPUT' ||
-      target.tagName === 'TEXTAREA' ||
-      target.tagName === 'SELECT'
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement
     );
   }
 }

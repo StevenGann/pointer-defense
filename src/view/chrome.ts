@@ -47,6 +47,8 @@ export const PAL = {
 } as const;
 
 export const FONT = 'Tahoma, Verdana, Geneva, sans-serif';
+/** The monospace stack for code runs inside Help pages. */
+export const CODE_FONT = 'Courier New, monospace';
 
 /**
  * The type scale: body / list rows / tooltips at 13 px, section labels / small rows / stats at

@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite, Text } from 'pixi.js';
 import {
   bevel,
+  CODE_FONT,
   CONTROL_BOX_H,
   CONTROL_BOX_W,
   dottedLine,
@@ -26,6 +27,7 @@ import {
   type HelpPage,
 } from '../content/help.ts';
 import type { Profile } from '../core/save.ts';
+import { t } from '../i18n/index.ts';
 import { ENEMY_ART_BODY, HELP_REFERENCE_CELL } from './board.ts';
 import { artSpriteSize, frameTexture } from './art.ts';
 import { ENEMY_STATS, type EnemyKind } from '../core/enemies.ts';
@@ -190,7 +192,11 @@ export function computeHelpLayout(x: number, y: number, navW: number = HELP_NAV_
 }
 
 function computeHelpNavTabs(strip: Rect): { id: HelpNavTab; label: string; rect: Rect; active: boolean }[] {
-  const labels: [HelpNavTab, string][] = [['contents', 'Contents'], ['index', 'Index'], ['search', 'Search']];
+  const labels: [HelpNavTab, string][] = [
+    ['contents', t('screen.help.nav.contents')],
+    ['index', t('screen.help.nav.index')],
+    ['search', t('screen.help.nav.search')],
+  ];
   const w = Math.floor(strip.w / 3);
   return labels.map(([id, label], i) => ({ id, label, rect: { x: strip.x + i * w, y: strip.y, w, h: strip.h }, active: false }));
 }
@@ -352,7 +358,7 @@ export function helpRows(profile: Profile, expanded: number | null): HelpRow[] {
 /** The label a tree row renders: "Undiscovered" for a locked page, so the name is never revealed. */
 export function treeRowLabel(row: HelpRow): string {
   if (row.kind === 'chapter') return row.title;
-  return row.locked ? 'Undiscovered' : row.page.title;
+  return row.locked ? t('screen.help.undiscovered') : row.page.title;
 }
 
 /** The Index tab's scrollable A-Z list: every unlocked page title, sorted alphabetically. */
@@ -636,9 +642,9 @@ function chapterTitle(category: HelpCategory): string {
 
 /** The status-bar topic path: "Category › Page", or the title alone when the two coincide. */
 export function helpTopicPath(page: HelpPage | undefined): string {
-  if (!page) return 'Select a topic from the contents';
+  if (!page) return t('screen.help.selectTopic');
   const cat = chapterTitle(page.category);
-  return cat === page.title ? page.title : `${cat} › ${page.title}`;
+  return cat === page.title ? page.title : t('screen.help.topicPath', { category: cat, page: page.title });
 }
 
 export class HelpView {
@@ -662,7 +668,7 @@ export class HelpView {
   private readonly artTurret = new Sprite();
 
   constructor() {
-    this.titleText = makeText('Pointer Defense Help', FONT_SIZE.body, true, PAL.titleInverse);
+    this.titleText = makeText(t('screen.help.title'), FONT_SIZE.body, true, PAL.titleInverse);
     this.titleText.anchor.set(0, 0.5);
     this.statusText = makeText('', FONT_SIZE.small, false, PAL.text);
     this.statusText.anchor.set(0, 0.5);
@@ -750,7 +756,7 @@ export class HelpView {
 
     // Frame, title bar and close box.
     drawWindowChrome(g, hl.window, { close: true, minimize: false, maximize: false });
-    this.titleText.text = 'Pointer Defense Help';
+    this.titleText.text = t('screen.help.title');
     this.titleText.position.set(hl.title.x + 6, hl.title.y + Math.floor(TITLE_H / 2));
 
     // Toolbar: six flat 24 px buttons with drawn glyphs.
@@ -779,12 +785,13 @@ export class HelpView {
 
     // Nav tab strip at the foot.
     const activeIdx = session.navTab === 'contents' ? 0 : session.navTab === 'index' ? 1 : 2;
-    drawTabStrip(g, hl.navTabStrip, ['Contents', 'Index', 'Search'], activeIdx);
+    const tabLabels = [t('screen.help.nav.contents'), t('screen.help.nav.index'), t('screen.help.nav.search')];
+    drawTabStrip(g, hl.navTabStrip, tabLabels, activeIdx);
     let tabX = hl.navTabStrip.x;
     const tabW = Math.floor(hl.navTabStrip.w / 3);
     for (let i = 0; i < 3; i++) {
       const t = this.navTextAt(24 + i);
-      t.text = ['Contents', 'Index', 'Search'][i];
+      t.text = tabLabels[i];
       t.style.fontWeight = 'normal';
       t.style.fill = i === activeIdx ? PAL.text : PAL.text;
       t.anchor.set(0.5, 0.5);
@@ -810,7 +817,7 @@ export class HelpView {
     this.statusText.text = path;
     this.statusText.position.set(hl.statusPanels[0].x + 4, hl.status.y + Math.floor(HELP_STATUS_H / 2));
     const pageNo = this.navTextAt(30);
-    pageNo.text = `Page ${pageIndex} of ${HELP_PAGES.length}`;
+    pageNo.text = t('screen.help.page', { page: pageIndex, total: HELP_PAGES.length });
     pageNo.style.fontWeight = 'normal';
     pageNo.style.fill = PAL.text;
     pageNo.anchor.set(0, 0.5);
@@ -907,7 +914,7 @@ export class HelpView {
     this.searchFieldText.position.set(hl.searchField.x + 4, hl.searchField.y + Math.floor(hl.searchField.h / 2));
     bevel(g, hl.searchButton, true, PAL.face);
     const bt = this.navTextAt(20);
-    bt.text = 'Search';
+    bt.text = t('screen.help.nav.search');
     bt.style.fontWeight = 'normal';
     bt.style.fill = PAL.text;
     bt.anchor.set(0.5, 0.5);
@@ -959,7 +966,7 @@ export class HelpView {
       t.style.fill = PAL.text;
       t.style.fontWeight = run.bold ? 'bold' : 'normal';
       t.style.fontStyle = run.italic ? 'italic' : 'normal';
-      t.style.fontFamily = run.code ? 'Courier New, monospace' : FONT;
+      t.style.fontFamily = run.code ? CODE_FONT : FONT;
       t.style.fontSize = FONT_SIZE.body;
       t.position.set(hl.pageText.x + run.x, hl.pageText.y + run.y - scrollOffset);
     };

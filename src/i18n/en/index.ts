@@ -3,6 +3,8 @@ import { achievements } from './achievements.ts';
 import { dialogs } from './dialogs.ts';
 import { levels } from './levels.ts';
 import { menu } from './menu.ts';
+import { screen } from './screen.ts';
+import { shell } from './shell.ts';
 import { status } from './status.ts';
 import { upgrades } from './upgrades.ts';
 
@@ -19,6 +21,8 @@ export const en = {
   ...achievements,
   ...upgrades,
   ...levels,
+  ...shell,
+  ...screen,
 
   // Window title.
   'window.title': 'Pointer Defense',

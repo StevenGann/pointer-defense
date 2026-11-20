@@ -1,6 +1,7 @@
 import { Container, Text } from 'pixi.js';
 import { FONT, PAL, worldToPixel, type Layout } from './chrome.ts';
 import { SHIELD_COLOR } from './board.ts';
+import { t } from '../i18n/index.ts';
 import type { RunState } from '../core/state.ts';
 
 /**
@@ -66,15 +67,16 @@ export class FloatingNumbersView {
 
     for (let i = 0; i < this.active.length; i++) {
       const f = this.active[i];
-      const t = this.texts[i];
+      const text = this.texts[i];
       const age = now - f.bornTick;
       const p = worldToPixel(layout, f.x, f.y);
-      t.style.fill = f.shield ? SHIELD_COLOR : f.crit ? CRIT_COLOR : f.weak ? PAL.navy : PAL.text;
-      t.style.fontSize = f.shield ? 12 : damageFontSize(f.amount, f.weak, f.crit);
-      t.text = f.shield ? `SHD ${formatAmount(f.amount)}` : f.crit ? `CRIT ${formatAmount(f.amount)}` : formatAmount(f.amount);
-      t.alpha = age >= LIFE_TICKS - FADE_TICKS ? (LIFE_TICKS - age) / FADE_TICKS : 1;
-      t.position.set(p.x, p.y - (RISE_PX * age) / LIFE_TICKS);
-      t.visible = true;
+      text.style.fill = f.shield ? SHIELD_COLOR : f.crit ? CRIT_COLOR : f.weak ? PAL.navy : PAL.text;
+      text.style.fontSize = f.shield ? 12 : damageFontSize(f.amount, f.weak, f.crit);
+      const amount = formatAmount(f.amount);
+      text.text = f.shield ? t('screen.number.shield', { amount }) : f.crit ? t('screen.number.crit', { amount }) : amount;
+      text.alpha = age >= LIFE_TICKS - FADE_TICKS ? (LIFE_TICKS - age) / FADE_TICKS : 1;
+      text.position.set(p.x, p.y - (RISE_PX * age) / LIFE_TICKS);
+      text.visible = true;
     }
     for (let i = this.active.length; i < this.texts.length; i++) {
       this.texts[i].visible = false;

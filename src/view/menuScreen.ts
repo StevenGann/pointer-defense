@@ -111,8 +111,14 @@ export function marqueeMaskRect(l: Layout): Rect {
 export function computeMenuScreen(l: Layout, continueLabel: string | null = null, daily: MenuDaily | null = null): MenuScreenLayout {
   const win = computeMenuWindow(l);
   const labels: [MenuButtonId, string, string][] = [];
-  if (continueLabel !== null) labels.push(['continue', continueLabel, 'C']);
-  labels.push(['play', 'Play', 'Enter'], ['daily', daily?.label ?? 'Daily', 'D'], ['editor', 'Editor', 'E'], ['records', 'Records', 'R'], ['load', 'Load code', 'L']);
+  if (continueLabel !== null) labels.push(['continue', continueLabel, t('shell.menu.shortcut.continue')]);
+  labels.push(
+    ['play', t('shell.menu.play'), t('shell.menu.shortcut.play')],
+    ['daily', daily?.label ?? t('shell.menu.daily'), t('shell.menu.shortcut.daily')],
+    ['editor', t('shell.menu.editor'), t('shell.menu.shortcut.editor')],
+    ['records', t('shell.menu.records'), t('shell.menu.shortcut.records')],
+    ['load', t('shell.menu.load'), t('shell.menu.shortcut.load')],
+  );
   // The button block is centred in the space under the marquee, so five buttons (no save) and
   // six (Continue) both sit with room above and below instead of crowding the tip strip.
   const blockH = labels.length * BUTTON_H + (labels.length - 1) * BUTTON_GAP;
@@ -312,7 +318,7 @@ function makeText(text: string, fill: number, bold = false, size: number = FONT_
   });
 }
 
-const MARQUEE_TIPS = 'Tip: flyers ignore your maze  ·  Tip: Ctrl+click upgrades a whole row  ·  Tip: the pointer crits on weak points  ·  Tip: Restart Windows keeps your specs  ·  ';
+const MARQUEE_TIPS = t('shell.menu.tips');
 
 export class MenuScreenView {
   readonly root = new Container();
@@ -341,7 +347,7 @@ export class MenuScreenView {
     this.titleBarText = makeText(t('window.title'), PAL.titleInverse, true, FONT_SIZE.body);
     this.titleBarText.anchor.set(0, 0.5);
     this.root.addChild(this.titleBarText);
-    this.title = makeText('POINTER DEFENSE', PAL.title, true, 26);
+    this.title = makeText(t('shell.menu.wordmark'), PAL.title, true, 26);
     this.title.anchor.set(0, 0.5);
     this.root.addChild(this.title);
 
@@ -392,7 +398,13 @@ export class MenuScreenView {
   }
 
   private ensureRoute(route: readonly Tile[], client: Rect): void {
-    const key = route.map((t) => `${t.col},${t.row}`).join(';');
+    const key = route
+      .map((t) => {
+        const col = t.col;
+        const row = t.row;
+        return col + ',' + row;
+      })
+      .join(';');
     if (key === this.cachedRouteKey) return;
     this.cachedRouteKey = key;
     this.routePts = routePoints(route.length > 0 ? route : [{ col: 0, row: 0 }, { col: 1, row: 0 }]);
@@ -525,7 +537,7 @@ export class MenuScreenView {
     // --- The window.
     const chromeGeom = drawWindowChrome(g, win.window, { close: true, minimize: false, maximize: false, help: true });
     this.titleBarText.position.set(chromeGeom.titleX, chromeGeom.titleY);
-    this.title.text = 'POINTER DEFENSE';
+    this.title.text = t('shell.menu.wordmark');
     this.title.position.set(win.client.x + 30, win.wordmark.y + win.wordmark.h / 2);
     // pointer-arrow glyph to the left of the wordmark
     g.poly([win.client.x + 8, win.wordmark.y + 4, win.client.x + 8, win.wordmark.y + 26, win.client.x + 14, win.wordmark.y + 21, win.client.x + 18, win.wordmark.y + 29, win.client.x + 22, win.wordmark.y + 26, win.client.x + 20, win.wordmark.y + 20, win.client.x + 27, win.wordmark.y + 20]).fill(PAL.navy);
@@ -595,10 +607,10 @@ export class MenuScreenView {
     }
 
     // Status bar: Ready (120 px) · version (flex) · the run summary sized to its measured text.
-    const best = `Best ${state.bestWave} · ${state.runs} runs · ${state.achievements}/118`;
+    const best = t('shell.menu.summary', { bestWave: state.bestWave, runs: state.runs, achievements: state.achievements });
     const bestW = textWidth(best, FONT_SIZE.small) + 8;
     const panels = drawStatusBar(g, win.statusBar, [120, 0, bestW]);
-    this.statusTexts[0].text = 'Ready';
+    this.statusTexts[0].text = t('shell.menu.ready');
     this.statusTexts[0].position.set(panels[0].x + 4, panels[0].y + Math.floor(panels[0].h / 2));
     this.statusTexts[1].text = state.version;
     this.statusTexts[1].position.set(panels[1].x + 4, panels[1].y + Math.floor(panels[1].h / 2));
@@ -636,11 +648,11 @@ export class LoadDialogView {
   private readonly cancel: Text;
 
   constructor() {
-    this.title = makeText('Load code', PAL.titleInverse, true);
+    this.title = makeText(t('shell.load.title'), PAL.titleInverse, true);
     this.field = makeText('', PAL.text);
     this.status = makeText('', PAL.maroon);
-    this.ok = makeText('OK', PAL.text);
-    this.cancel = makeText('Cancel', PAL.text);
+    this.ok = makeText(t('shell.load.ok'), PAL.text);
+    this.cancel = makeText(t('shell.load.cancel'), PAL.text);
     this.title.anchor.set(0, 0.5);
     this.field.anchor.set(0, 0.5);
     this.status.anchor.set(0, 0.5);
@@ -658,7 +670,7 @@ export class LoadDialogView {
     bevel(g, d.rect, true, PAL.face);
     g.rect(d.rect.x + 2, d.rect.y + 2, d.rect.w - 4, DLG_TITLE_H).fill(PAL.title);
 
-    this.title.text = 'Load code';
+    this.title.text = t('shell.load.title');
     this.title.position.set(d.rect.x + 6, d.rect.y + 2 + DLG_TITLE_H / 2);
 
     bevel(g, d.field, false, PAL.highlight);
@@ -670,9 +682,9 @@ export class LoadDialogView {
 
     bevel(g, d.ok, true, hover === 'ok' ? PAL.highlight : PAL.face);
     bevel(g, d.cancel, true, hover === 'cancel' ? PAL.highlight : PAL.face);
-    this.ok.text = 'OK';
+    this.ok.text = t('shell.load.ok');
     this.ok.position.set(d.ok.x + d.ok.w / 2, d.ok.y + d.ok.h / 2);
-    this.cancel.text = 'Cancel';
+    this.cancel.text = t('shell.load.cancel');
     this.cancel.position.set(d.cancel.x + d.cancel.w / 2, d.cancel.y + d.cancel.h / 2);
   }
 }
