@@ -63,6 +63,30 @@ multiplier, no rate change, no range change. Targeting, turn rate, armour handli
 missile salvos are untouched, and a synchronized shot deals exactly the damage the tower's stats say
 it deals.
 
+### 3.2 Why the pair is worth building
+
+The payoff is already in the two branches, and it is a matter of coverage rather than arithmetic.
+
+- **Flak covers ground.** A Flak shell flies to the target's predicted position and bursts there
+  with 1.2 tiles of splash, full damage to flyers and half to ground. It is the only AA shot that
+  can hit more than the thing it was aimed at.
+- **Missiles cover distance.** A salvo launches four homing missiles that live for 2 s, accelerate
+  to 9 tiles/s, and retarget the nearest flyer within 6 tiles *of the missile*, not of the tower.
+  The tower aims to 3.4 tiles. A missile routinely kills something the tower could never have
+  reached: a runner that left range, a straggler the volley overshot, or a swarm that split.
+
+Those two effects are strongest on the same tick. A volley where the shell bursts into the middle of
+a cluster while the salvo is already out over the field ahead of it covers the group *and* the
+stragglers in one gesture; the same two shots a second apart cover neither well, because the cluster
+has moved and the runner has already been picked off or has escaped. Synchronization is what buys
+the pairing, and it does it without inventing a number.
+
+This also sets a constraint on the mechanism, stated in §4.2: **a follower must never sit on a
+missile launch waiting for a leader that cannot shoot.** Missiles are the part of the pair that
+reaches beyond the tower, so a held salvo is worth strictly less than a launched one — holding is a
+delay the missile half of the pair can least afford. The hold rules are written with that asymmetry
+in mind.
+
 Why holding instead of a shared clock: a shared clock hands every member the fastest member's rate,
 so a Flak tower beside a plain AA would fire 3.5× as often as it is allowed to — not a synergy, a
 stealth buff to the branch that deliberately trades rate for punch. Holding costs a follower at most
@@ -102,7 +126,11 @@ instead of only where the player built a pair.
    its leaders has already fired this tick.
 4. A ready follower with a target whose leader has not fired yet **holds** when the leader is live
    and its own cooldown is within `AA_HOLD_WINDOW`; it fires anyway when the leader is offline,
-   disabled, EMP'd, has no target in range, or is further away than that window.
+   disabled, EMP'd, has no target in range, or is further away than that window. The hold is
+   re-evaluated every tick against a live target: if the enemy it was waiting to shoot dies or
+   leaves its range, the hold ends there and the tower fires at whatever it can still see. A held
+   missile salvo is the most expensive thing to hold (see §3.2), so a follower never holds a shot
+   at a target it is losing.
 5. Any follower that has held for `AA_HOLD_CAP` consecutive ticks fires regardless. This is the
    backstop that stops a rule about waiting from becoming a tower that never shoots.
 
@@ -201,13 +229,18 @@ Smoke groups, in the existing harness:
    lone tower's shot on the same target, to the last decimal.
 9. No cooldown rewriting: a tower's cooldown sequence is identical with and without a neighbour,
    apart from the ticks it spends holding.
-10. Isolation: a lone AA's cooldown, aim and damage are unchanged; the non-flyer determinism hash
+10. Mixed branches: a Flak beside a Missile AA fires on one tick, and the missile fired in that
+    volley is observed damaging a flyer more than 3.4 tiles from the tower — the reach the pairing
+    is built on survives synchronization.
+11. Losing target: a follower whose held target dies or leaves range stops holding that tick and
+    fires at what it can still see, rather than completing the wait.
+12. Isolation: a lone AA's cooldown, aim and damage are unchanged; the non-flyer determinism hash
     does not move.
-11. Save round-trip mid-hold: the restored run resumes with no follower stuck holding.
-12. Role flip: upgrading a partner into a Flak flips the edge's direction on the next rebuild.
-13. Layer order: `synergy` sits below `towerSprites` and above `path`; the layer list stays frozen.
-14. Lean quality still draws flat lines; `full` pulses.
-15. RTL: edge positions are byte-identical under `he`.
+13. Save round-trip mid-hold: the restored run resumes with no follower stuck holding.
+14. Role flip: upgrading a partner into a Flak flips the edge's direction on the next rebuild.
+15. Layer order: `synergy` sits below `towerSprites` and above `path`; the layer list stays frozen.
+16. Lean quality still draws flat lines; `full` pulses.
+17. RTL: edge positions are byte-identical under `he`.
 
 ## 8. Balance note
 
@@ -216,7 +249,10 @@ alignment once — after that they share a 33-tick clock and lose nothing — so
 strong as two unpaired towers that happen to be in step.
 
 The case with a real cost is a Flak follower: 117 ticks against a 33-tick leader, so it can wait up
-to 33 ticks per cycle, which is up to 28% of that tower's rate. That is the price of the rhythm and
+to 33 ticks per cycle, which is up to 28% of that tower's rate. The missile half of the pair is not
+exposed to this: a Missile AA is 33 ticks, so it leads any Flak beside it and ties with a plain AA,
+where the north/west rule decides — its reach is only ever delayed when it is the south/east tower of
+an equal-rate pair, which is the cheapest possible wait. That is the price of the rhythm and
 it is worth watching in playtests. If it reads as a nerf rather than a choice, the fix is to scale
 `AA_HOLD_WINDOW` down to a fraction of the follower's own interval, which weakens alignment for
 mixed-rate pairs but bounds the tax.
