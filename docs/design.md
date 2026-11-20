@@ -1457,6 +1457,7 @@ Three raised buttons, with keyboard equivalents:
 | **Play** | `Enter` or `P` | the existing game, exactly as it is today — a fresh run, no behaviour change |
 | **Editor** | `E` | the map editor (§20.2) |
 | **Load code** | `L` | a text field: paste a `PD2.` code, validate it, play it immediately |
+| **Records** | — | a window listing every finished run (§20.4) |
 
 The load-code dialog has its own status line. Errors appear there in plain words — *"that code is from
 a newer version"*, *"no route from start to exit"*, *"that code is incomplete"* — never a stack trace
@@ -1547,6 +1548,26 @@ an empty 20 × 12 map codes to under 110 characters. `LEVELS` in `src/core/level
 maps untouched; the loader accepts a custom `Level` produced by the codec with the rest of the sim
 unchanged. A smoke test decodes a fixed, hand-written code string and asserts the exact level it
 produces, so the format has a frozen example.
+
+### 20.4 Run records
+
+The profile remembers `bestWave` and nothing else about what was played. A per-player run history
+closes that gap (docs/RUN-RECORDS.md is the contract): one record per finished run — **Victory**
+(wave 100 cleared), **Defeat** (integrity zero) or **Reboot** (Restart Windows) — written at the
+moment the run ends and carrying `id`, `at`, `mapId`, `mapName`, `wave`, `clearedWaves`, `integrity`,
+`pointerStage`, `salvage`, `durationTicks`, `outcome` and `victory`. Escaping to the menu is an
+abandonment and records nothing.
+
+The list lives on `profile.runs`, newest first, capped at 50; the schema version bumps with a
+migration so an older save loads with an empty list, and a corrupt entry is dropped on its own rather
+than failing the load. `bestWave` keeps its existing meaning as the all-time high. Every view over the
+history — best wave per map, totals, rankings — is computed from the records, never stored.
+
+The main menu gains a **Records** button under Load code, and the View menu a **Records** item that
+opens the same window from inside a run as a viewer (it does not pause the run, like the Help window).
+The window is a plain Windows 95 dialog: a totals header, a scrollable table (`# | Wave | Map | Outcome
+| Date`) whose top five rows are ranked by wave with a gold highlight on rank 1 and the rest in date
+order under an `Earlier` separator, a best-by-map footer, an empty state, a close box and Escape.
 
 ---
 

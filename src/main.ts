@@ -25,8 +25,9 @@ import {
 } from './core/state.ts';
 import { SPAWN_KINDS, spawnKindLabel } from './core/cheats.ts';
 import { DEFAULT_LEVEL, type Level } from './core/levels.ts';
-import { addSeenEnemies, checkProfileAchievements, loadProfile, saveProfile, type Profile, type SpecKind } from './core/save.ts';
+import { addSeenEnemies, checkProfileAchievements, loadProfile, saveProfile, type Profile, type RunOutcome, type SpecKind } from './core/save.ts';
 import { clearRunSave, loadRunSave, saveRun } from './core/runsave.ts';
+import { appendRun, buildRunRecord } from './core/runs.ts';
 import { buyNode, effectsFor, treeNodeById } from './core/tree.ts';
 import { achievementName } from './core/achievements.ts';
 import { unlockAchievement } from './steam.ts';
@@ -54,6 +55,7 @@ import { AchievementGridView, AchievementSession, achievementGridHitAt, buildAch
 import { dialogButtonAt, DialogView, type DialogModel } from './view/dialog.ts';
 import { HelpSession, HelpView, computeHelpLayout, helpHitAt, helpRows, HELP_LINE_H, HELP_SCROLL_LINES } from './view/help.ts';
 import { RestoreView, computeRestoreLayout, restoreHitAt } from './view/restore.ts';
+import { RecordsSession, RecordsView, computeRecordsLayout, recordsHitAt, RECORDS_ROW_H } from './view/records.ts';
 import { MouseController, type Screen } from './input/mouse.ts';
 import { EffectsView } from './view/effects.ts';
 import { BossBarView } from './view/bossBars.ts';
@@ -197,6 +199,8 @@ const mapLibraryView = new MapLibraryView();
 const nameDialogView = new NameDialogView();
 const helpSession = new HelpSession();
 const helpView = new HelpView();
+const recordsSession = new RecordsSession();
+const recordsView = new RecordsView();
 const restoreView = new RestoreView();
 const upgradesSession = new UpgradesSession();
 const upgradesView = new UpgradesView();
@@ -213,7 +217,29 @@ void preloadArt().then(() => drawCursorArrow());
 
 const root = new Container();
 app.stage.addChild(root);
-root.addChild(chrome.root, board.root, effects.root, numbers.root, bossBars.root, hud.root, helpView.root, restoreView.root, upgradesView.root, achievementView.root, ad.root, trayView.root, menuView.root, dialogView.root, tooltip.root, menuScreenView.root, loadDialogView.root, editorView.root, mapLibraryView.root, nameDialogView.root);
+root.addChild(
+  chrome.root,
+  board.root,
+  effects.root,
+  numbers.root,
+  bossBars.root,
+  hud.root,
+  helpView.root,
+  restoreView.root,
+  upgradesView.root,
+  achievementView.root,
+  ad.root,
+  trayView.root,
+  menuView.root,
+  menuScreenView.root,
+  loadDialogView.root,
+  editorView.root,
+  mapLibraryView.root,
+  nameDialogView.root,
+  recordsView.root,
+  tooltip.root,
+  dialogView.root,
+);
 
 sfx.setEnabled(profile.soundOn);
 sfx.setVolume(profile.volume);
@@ -428,6 +454,13 @@ function syncBestWave(): void {
   }
 }
 
+/** Append a finished-run record (docs/RUN-RECORDS.md); a cheated run records nothing. */
+function recordRun(outcome: RunOutcome): void {
+  if (state.cheatsUsed) return;
+  appendRun(profile, buildRunRecord(state, outcome));
+  saveProfile(profile);
+}
+
 // --- Run save (docs/RUN-SAVE.md) ----------------------------------------------------------------
 
 /** The last observed values the save tracker diffs each frame to spot immediate-write events. */
@@ -487,6 +520,8 @@ function syncRunSave(): void {
   else maybeSaveRun(false);
 
   if (state.phase !== prevSavePhase) {
+    if (state.phase === 'victory') recordRun('victory');
+    else if (state.phase === 'halted') recordRun('defeat');
     if (state.phase === 'victory' || state.phase === 'halted') clearRunSave();
   }
 
@@ -502,6 +537,11 @@ function syncRunSave(): void {
 
 function doRestartWindows(): void {
   const { profile: next } = restartWindows(state, profile);
+  // A reboot that ends a still-running (not yet victorious or defeated) run records it; the victory
+  // and defeat cases are already recorded on the phase transition.
+  if (!state.cheatsUsed && state.phase !== 'victory' && state.phase !== 'halted') {
+    appendRun(next, buildRunRecord(state, 'reboot'));
+  }
   const newly = next.achievements.filter((id) => !profile.achievements.includes(id));
   profile = next;
   const profileNewly = checkProfileAchievements(profile);
@@ -537,7 +577,11 @@ function buildMenu(name: MenuName): OpenMenu {
   if (name === 'view') {
     return {
       name,
-      entries: [{ id: 'shake', label: profile.shakeOn ? 'Screen shake: On' : 'Screen shake: Off' }],
+      entries: [
+        { id: 'records', label: 'Records' },
+        { id: 'separator', label: '', separator: true },
+        { id: 'shake', label: profile.shakeOn ? 'Screen shake: On' : 'Screen shake: Off' },
+      ],
     };
   }
   if (name === 'cheats') {
@@ -623,6 +667,9 @@ function menuAction(id: string): void {
       if (state.phase === 'wave' && state.enemies.some((e) => e.isBoss && !e.dead)) {
         notifyAchievement(state, 'shadow-help-clippy');
       }
+      break;
+    case 'records':
+      recordsSession.show();
       break;
     case 'sound':
       profile.soundOn = !profile.soundOn;
@@ -788,6 +835,7 @@ function openEditorScreen(): void {
   saveProfile(profile);
   loadOpen = false;
   loadInput.blur();
+  recordsSession.hide();
   screen = 'editor';
 }
 
@@ -797,6 +845,7 @@ function openLoadDialog(): void {
   loadText = '';
   loadStatus = '';
   loadOpen = true;
+  recordsSession.hide();
   screen = 'menu';
   loadInput.value = '';
   loadInput.focus();
@@ -851,6 +900,7 @@ function closeRunModals(): void {
   restoreOpen = false;
   upgradesSession.hide();
   achievementSession.hide();
+  recordsSession.hide();
 }
 
 let editorNotice = '';
@@ -1089,6 +1139,16 @@ const mouse = new MouseController(app, {
     helpSession.scrollPage(dir, hl);
   },
   closeHelp: () => helpSession.hide(),
+  recordsOpen: () => recordsSession.open,
+  recordsPointerDown: (x: number, y: number, button: number): boolean => {
+    const rl = computeRecordsLayout(layout, profile.runs, recordsSession.scroll);
+    const hit = recordsHitAt(rl, x, y);
+    if (hit === null) return false;
+    if (button !== 0) return true;
+    if (hit === 'close') recordsSession.hide();
+    return true;
+  },
+  closeRecords: () => recordsSession.hide(),
   achievementOpen: () => achievementSession.open,
   achievementPointerDown,
   achievementPointerMove,
@@ -1298,6 +1358,17 @@ app.canvas.addEventListener('pointermove', (e) => {
 app.canvas.addEventListener('pointerdown', (e) => {
   const { x, y } = canvasPoint(e);
   if (screen === 'menu') {
+    // The Records viewer, when open on the menu, owns clicks inside it (its close box, or the window
+    // swallowing a stray click); a click outside falls through to the menu buttons.
+    if (recordsSession.open) {
+      const rl = computeRecordsLayout(layout, profile.runs, recordsSession.scroll);
+      const hit = recordsHitAt(rl, x, y);
+      if (hit === 'close') {
+        recordsSession.hide();
+        return;
+      }
+      if (hit === 'window') return;
+    }
     if (loadOpen) {
       const btn = loadDialogButtonAt(layout, x, y);
       if (btn === 'ok') attemptLoad();
@@ -1323,6 +1394,7 @@ app.canvas.addEventListener('pointerdown', (e) => {
       else startPlay();
     } else if (btn === 'editor') openEditorScreen();
     else if (btn === 'load') openLoadDialog();
+    else if (btn === 'records') recordsSession.show();
     return;
   }
   if (screen === 'editor') {
@@ -1415,6 +1487,15 @@ app.canvas.addEventListener('wheel', (e) => {
       return;
     }
   }
+  // The Records viewer scrolls its table three rows per notch while the pointer is over the data panel.
+  if (recordsSession.open) {
+    const rl = computeRecordsLayout(layout, profile.runs, recordsSession.scroll);
+    if (pointInRect(rl.data, x, y)) {
+      e.preventDefault();
+      recordsSession.scrollBy(Math.sign(e.deltaY) * RECORDS_ROW_H * 3, rl);
+      return;
+    }
+  }
   if (!achievementSession.open) return;
   const { al } = achievementHit(x, y);
   if (!pointInRect(al.window, x, y)) return;
@@ -1430,6 +1511,10 @@ window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   if (typingTarget(e.target)) return;
   if (screen === 'menu') {
+    if (recordsSession.open && e.key === 'Escape') {
+      recordsSession.hide();
+      return;
+    }
     if (loadOpen) {
       if (e.key === 'Escape') {
         loadOpen = false;
@@ -1667,6 +1752,10 @@ app.ticker.add((ticker) => {
     if (upgradesSession.open && (state.phase === 'halted' || state.phase === 'victory' || upgradesState !== state)) {
       upgradesSession.hide();
     }
+    // The Records viewer is for a live run; once the run ends, it steps aside for the end-of-run modal.
+    if (recordsSession.open && (state.phase === 'halted' || state.phase === 'victory')) {
+      recordsSession.hide();
+    }
     upgradesState = state;
     upgradesView.draw(upgradesSession.open, state, layout, upgradesSession.selected);
     if (achievementSession.open) {
@@ -1688,6 +1777,7 @@ app.ticker.add((ticker) => {
 
   chrome.draw(layout, running ? mouse.hover.menuItem : -1);
   menuView.draw(layout.menu, running ? menu : null, running ? mouse.hover.menuHover : null);
+  recordsView.draw(recordsSession, profile, layout);
 
   // Per-screen content; run-only views are hidden on the menu and in the editor.
   board.root.visible = running;
@@ -1696,6 +1786,7 @@ app.ticker.add((ticker) => {
   bossBars.root.visible = running;
   hud.root.visible = running;
   helpView.root.visible = running && helpSession.open;
+  recordsView.root.visible = recordsSession.open;
   restoreView.root.visible = running && restoreOpen;
   upgradesView.root.visible = running && upgradesSession.open;
   achievementView.root.visible = running && achievementSession.open;
@@ -1754,6 +1845,13 @@ function overHelpWindow(x: number, y: number): boolean {
   return pointInRect(hl.window, x, y);
 }
 
+/** True when the pointer is over the Records viewer, so a tooltip never shows through it. */
+function overRecordsWindow(x: number, y: number): boolean {
+  if (!recordsSession.open) return false;
+  const rl = computeRecordsLayout(layout, profile.runs, recordsSession.scroll);
+  return pointInRect(rl.window, x, y);
+}
+
 /** The tooltip lines for a HUD spend control, computed from the same functions the click applies. */
 function hudTooltipLines(action: HudAction, s: RunState): TooltipLine[] {
   const tower = selectedTower(s);
@@ -1810,7 +1908,8 @@ function updateTooltip(): void {
     state.phase === 'halted' ||
     state.phase === 'victory' ||
     (state.ad !== null && pointInRect(state.ad, h.x, h.y)) || // over an ad
-    overHelpWindow(h.x, h.y); // over the help viewer
+    overHelpWindow(h.x, h.y) || // over the help viewer
+    overRecordsWindow(h.x, h.y); // over the Records viewer
 
   const viewportW = app.screen.width;
   const viewportH = app.screen.height;

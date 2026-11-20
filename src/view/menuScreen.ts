@@ -7,7 +7,7 @@ import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from
  * The load-code dialog lives here too: a text field plus OK / Cancel, with its own status line.
  */
 
-export type MenuButtonId = 'continue' | 'play' | 'editor' | 'load';
+export type MenuButtonId = 'continue' | 'play' | 'editor' | 'load' | 'records';
 
 const BUTTON_W = 240;
 const BUTTON_H = 40;
@@ -31,7 +31,7 @@ export function computeMenuScreen(l: Layout, continueLabel: string | null = null
   const panelW = BUTTON_W + pad * 2;
   const labels: [MenuButtonId, string][] = [];
   if (continueLabel !== null) labels.push(['continue', continueLabel]);
-  labels.push(['play', 'Play'], ['editor', 'Editor'], ['load', 'Load code']);
+  labels.push(['play', 'Play'], ['editor', 'Editor'], ['load', 'Load code'], ['records', 'Records']);
   const count = labels.length;
   const panelH = pad + titleH + count * BUTTON_H + (count - 1) * BUTTON_GAP + pad;
   const panel: Rect = {
@@ -116,7 +116,7 @@ export class MenuScreenView {
     this.title = makeText('Pointer Defense', PAL.title, true, 20);
     this.title.anchor.set(0.5, 0.5);
     this.root.addChild(this.title);
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 5; i++) {
       const t = makeText('', PAL.text, true);
       t.anchor.set(0.5, 0.5);
       this.buttonTexts.push(t);

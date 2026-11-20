@@ -14,9 +14,34 @@ import { isTreeNodeId } from './tree.ts';
 export const SAVE_KEY = 'pointer-defense/save';
 
 /** Bump this when the schema changes in a way an older build could not read. */
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
-/** The last schema version that is still readable and migrates up to the current one. */
+/** How many finished runs the profile remembers, newest first (docs/RUN-RECORDS.md). */
+export const MAX_RUNS = 50;
+
+/** How a run ended: cleared wave 100, integrity reached zero, or Restart Windows. */
+export type RunOutcome = 'victory' | 'defeat' | 'reboot';
+
+/** One finished run, appended at the moment it ends (docs/RUN-RECORDS.md). */
+export interface RunRecord {
+  id: string;
+  /** ISO date the run ended, stamped when the record is written. */
+  at: string;
+  mapId: string;
+  mapName: string;
+  /** The highest wave reached (the last wave started). */
+  wave: number;
+  clearedWaves: number;
+  integrity: number;
+  pointerStage: number;
+  /** Lifetime salvage earned over the run — the run's score. */
+  salvage: number;
+  durationTicks: number;
+  outcome: RunOutcome;
+  victory: boolean;
+}
+
+/** The oldest schema version still readable; any version from here up migrates to the current one. */
 const MIGRATABLE_VERSION = 1;
 
 export type SpecKind = 'cpu' | 'ram' | 'gpu' | 'disk';
@@ -54,6 +79,8 @@ export interface Profile {
   lifetimeBossKillsByPointer: number;
   bestWave: number;
   reboots: number;
+  /** Finished runs, newest first, capped at MAX_RUNS (docs/RUN-RECORDS.md). */
+  runs: RunRecord[];
   /** Whether sound effects play at all. */
   soundOn: boolean;
   /** Master volume step. */
@@ -129,6 +156,7 @@ export function defaultProfile(): Profile {
     lifetimeBossKillsByPointer: 0,
     bestWave: 0,
     reboots: 0,
+    runs: [],
     soundOn: true,
     volume: 'med',
     autoWave: false,
@@ -164,6 +192,7 @@ export function cloneProfile(p: Profile): Profile {
     lifetimeBossKillsByPointer: p.lifetimeBossKillsByPointer,
     bestWave: p.bestWave,
     reboots: p.reboots,
+    runs: p.runs.map((r) => ({ ...r })),
     soundOn: p.soundOn,
     volume: p.volume,
     autoWave: p.autoWave,
@@ -250,6 +279,62 @@ function sanitizeSpecLevel(value: unknown, cap: number): number {
   return Math.min(cap, Math.max(0, Math.floor(value)));
 }
 
+function nonNegInt(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value) && value >= 0
+    ? value
+    : null;
+}
+
+/**
+ * Parse one run record, or null when it is corrupt. A bad entry is dropped on its own — never the
+ * whole profile — so a single malformed row cannot stop the game loading (docs/RUN-RECORDS.md).
+ */
+function parseRunRecord(value: unknown): RunRecord | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const o = value as Record<string, unknown>;
+  if (typeof o.id !== 'string' || typeof o.at !== 'string') return null;
+  if (typeof o.mapId !== 'string' || typeof o.mapName !== 'string') return null;
+  const wave = nonNegInt(o.wave);
+  const clearedWaves = nonNegInt(o.clearedWaves);
+  const integrity = nonNegInt(o.integrity);
+  const pointerStage = nonNegInt(o.pointerStage);
+  const salvage = nonNegInt(o.salvage);
+  const durationTicks = nonNegInt(o.durationTicks);
+  if (wave === null || clearedWaves === null || integrity === null || pointerStage === null || salvage === null || durationTicks === null) {
+    return null;
+  }
+  const outcome: RunOutcome | null =
+    o.outcome === 'victory' || o.outcome === 'defeat' || o.outcome === 'reboot' ? o.outcome : null;
+  if (outcome === null) return null;
+  return {
+    id: o.id,
+    at: o.at,
+    mapId: o.mapId,
+    mapName: o.mapName,
+    wave,
+    clearedWaves,
+    integrity,
+    pointerStage,
+    salvage,
+    durationTicks,
+    outcome,
+    // Derived from the outcome, never trusted from storage, so the two can never disagree.
+    victory: outcome === 'victory',
+  };
+}
+
+/** Parse the run history, dropping corrupt entries individually and capping at MAX_RUNS. */
+function parseRuns(value: unknown): RunRecord[] {
+  if (!Array.isArray(value)) return [];
+  const out: RunRecord[] = [];
+  for (const entry of value) {
+    const record = parseRunRecord(entry);
+    if (record !== null) out.push(record);
+  }
+  if (out.length > MAX_RUNS) out.length = MAX_RUNS;
+  return out;
+}
+
 /** Parse a stored value into a valid profile, or null when it is not usable. */
 function parseProfile(raw: string): Profile | null {
   let data: unknown;
@@ -260,7 +345,9 @@ function parseProfile(raw: string): Profile | null {
   }
   if (typeof data !== 'object' || data === null) return null;
   const o = data as Record<string, unknown>;
-  if (o.version !== SAVE_VERSION && o.version !== MIGRATABLE_VERSION) return null;
+  // Any version from the migratable floor up to the current one loads (migrating as needed); a newer
+  // or older version than the code knows falls back to a fresh profile.
+  if (typeof o.version !== 'number' || o.version < MIGRATABLE_VERSION || o.version > SAVE_VERSION) return null;
 
   const specsRaw = (typeof o.specs === 'object' && o.specs !== null ? o.specs : {}) as Record<string, unknown>;
   const specs: SpecLevels = {
@@ -323,8 +410,11 @@ function parseProfile(raw: string): Profile | null {
     typeof o.lifetimeBossKillsByPointer === 'number' && Number.isFinite(o.lifetimeBossKillsByPointer)
       ? Math.max(0, Math.floor(o.lifetimeBossKillsByPointer))
       : 0;
+  // Run history (docs/RUN-RECORDS.md): an older save without the field loads an empty list, and
+  // corrupt entries are dropped one at a time rather than failing the load.
+  const runs = parseRuns(o.runs);
 
-  return { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, achievementDates, mapsCleared, lifetimeBossKillsByPointer, bestWave, reboots, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice };
+  return { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, achievementDates, mapsCleared, lifetimeBossKillsByPointer, bestWave, reboots, runs, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice };
 }
 
 /**
