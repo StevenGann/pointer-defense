@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
-  <!-- Placeholder for a global upgrade icon (docs/GLOBAL-UPGRADES.md §7.2): "not drawn yet". -->
-  <!-- Raised Win95 tile in the grey palette, the same frame the achievement icons bake in. -->
+  <!-- Placeholder icon for the compound-interest global upgrade (docs/GLOBAL-UPGRADES.md §7.2): the artist
+       replaces this file. Never drawn at more than 18 px in the list. -->
+  <!-- Raised Win95 tile in the grey palette, the same frame every upgrade icon uses. -->
   <rect x="0.5" y="0.5" width="43" height="43" fill="#c0c0c0"/>
   <rect x="0" y="0" width="44" height="1" fill="#ffffff"/>
   <rect x="0" y="0" width="1" height="44" fill="#ffffff"/>
@@ -10,15 +11,13 @@
   <rect x="43" y="0" width="1" height="44" fill="#000000"/>
   <rect x="0" y="42" width="44" height="1" fill="#808080"/>
   <rect x="42" y="0" width="1" height="44" fill="#808080"/>
-  <!-- Gear: eight teeth around a hub with a hole, dark grey with a 1 px black outline. -->
-  <g fill="#808080" stroke="#000000" stroke-width="1">
-    <path d="M20 6h4v2.6l2.1 0.9 1.9-1.9 2.8 2.8-1.9 1.9 0.9 2.1H32.4v4h-2.6l-0.9 2.1 1.9 1.9-2.8 2.8-1.9-1.9-2.1 0.9V27h-4v-2.6l-2.1-0.9-1.9 1.9-2.8-2.8 1.9-1.9-0.9-2.1H11.6v-4h2.6l0.9-2.1-1.9-1.9 2.8-2.8 1.9 1.9 2.1-0.9z"/>
+  <!-- Three rising bars with a coin on the tallest. -->
+  <g fill="#000080" stroke="#000000" stroke-width="1">
+    <rect x="9.5" y="25.5" width="6" height="10"/>
+    <rect x="18.5" y="19.5" width="6" height="16"/>
+    <rect x="27.5" y="12.5" width="6" height="23"/>
   </g>
-  <circle cx="22" cy="16.5" r="2.5" fill="#c0c0c0" stroke="#000000" stroke-width="1"/>
-  <!-- Three stacked horizontal bars under the gear. -->
-  <g fill="#808080" stroke="#000000" stroke-width="1">
-    <rect x="11.5" y="29.5" width="21" height="2"/>
-    <rect x="11.5" y="33.5" width="21" height="2"/>
-    <rect x="11.5" y="37.5" width="21" height="2"/>
-  </g>
+  <circle cx="30.5" cy="8.5" r="4.5" fill="#c0c0c0" stroke="#000000" stroke-width="1"/>
+  <path d="M31 5.5v6M29 7h3a1.5 1.5 0 0 1 0 3h-2a1.5 1.5 0 0 0 0 3h3" fill="none" stroke="#000000" stroke-width="0.8"/>
+  <rect x="6" y="35" width="32" height="2" fill="#000000"/>
 </svg>
