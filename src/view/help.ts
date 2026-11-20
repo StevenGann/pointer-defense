@@ -28,7 +28,7 @@ import {
 } from '../content/help.ts';
 import type { Profile } from '../core/save.ts';
 import { t } from '../i18n/index.ts';
-import { mirrorIfRtl, textX } from './direction.ts';
+import { isRtl, mirrorIfRtl, textX } from './direction.ts';
 import { ENEMY_ART_BODY, HELP_REFERENCE_CELL } from './board.ts';
 import { artSpriteSize, frameTexture } from './art.ts';
 import { ENEMY_STATS, type EnemyKind } from '../core/enemies.ts';
@@ -289,7 +289,7 @@ function enemyPreviewPx(kind: EnemyKind): number {
 function helpPageLayout(page: HelpPage, maxWidth: number): HelpPageLayout {
   const blocks = parseHelpMarkdown(page.body);
   const art = helpArtLayout(page, maxWidth);
-  return layoutHelpBlocks(blocks, maxWidth, art !== null ? art.box : null, helpMeasure);
+  return layoutHelpBlocks(blocks, maxWidth, art !== null ? art.box : null, helpMeasure, isRtl());
 }
 
 /** The pixel height a page needs at a given text width — exactly the height the layout produced. */

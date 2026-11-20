@@ -7,6 +7,9 @@
  * can drive the same layout the Pixi view draws with a deterministic ruler.
  */
 
+import { FONT_SIZE, CODE_FONT, FONT } from './chrome.ts';
+import { textWidth } from './metrics.ts';
+
 export type Align = 'left' | 'right' | 'centre';
 
 export interface InlineRun {
@@ -33,7 +36,12 @@ export interface HelpArtBox {
   readonly h: number;
 }
 
-export type Measure = (text: string, bold: boolean) => number;
+/**
+ * A ruler. `bold`, `italic` and `code` describe the run that will be drawn, because a measured word
+ * and a drawn word must agree to the pixel: the layout positions each word individually, so any
+ * disagreement shows up as a gap between words rather than as a slightly narrow line.
+ */
+export type Measure = (text: string, bold: boolean, code?: boolean, italic?: boolean) => number;
 
 // ---------------------------------------------------------------------------------------------
 // Layout metrics (shared with the view; the title band is HEADING_H, body starts below it).
@@ -50,12 +58,15 @@ export const INDENT = 14;
 export const TABLE_CELL_PAD = 4;
 
 /**
- * The deterministic text ruler the Pixi view and the Node tests share. It mirrors the original
- * `estimateTextWidth` heuristic (length × size × 0.6) with bold slightly wider, so `pageBodyHeight`
- * and the drawn lines always agree.
+ * The ruler the Pixi view lays out with. It asks the same measurer the rest of the UI uses, which
+ * answers with the real rasterised width in a browser and a per-glyph estimate in the Node harness.
+ *
+ * It used to be `length × 13 × 0.6`. That is a *guess*, and in the browser it guessed wide: Tahoma
+ * averages nearer half an em, so every word was placed further right than the word before it needed,
+ * and the accumulated error read as text stretched across the page with ragged gaps between words.
  */
-export function helpMeasure(text: string, bold: boolean): number {
-  return Math.ceil(text.length * 13 * (bold ? 0.62 : 0.6));
+export function helpMeasure(text: string, bold: boolean, code = false, italic = false): number {
+  return textWidth(text, FONT_SIZE.body, { bold, italic, family: code ? CODE_FONT : FONT });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -266,19 +277,34 @@ interface PlacedRun {
   readonly width: number;
 }
 
-/** Place a line's words left to right, one run per word, with a measured space between. */
-function lineRuns(words: readonly WordToken[], indent: number, measure: Measure): { runs: PlacedRun[]; width: number } {
+/**
+ * Place a line's words one run per word, with a measured space between.
+ *
+ * Left to right the first word starts at the indent. Right to left — Hebrew — the first word is the
+ * rightmost: the line is laid out from `maxWidth` leftwards, and the indent becomes a right margin,
+ * so a paragraph is flush right and a bullet's marker sits outside it on the right. Every word is
+ * still measured with the style it is drawn in; that is what keeps the spacing even.
+ */
+function lineRuns(
+  words: readonly WordToken[],
+  indent: number,
+  measure: Measure,
+  maxWidth: number,
+  rtl: boolean,
+): { runs: PlacedRun[]; width: number } {
   const runs: PlacedRun[] = [];
   const spaceW = measure(' ', false);
-  let x = indent;
+  const widths = words.map((w) => measure(w.text, w.bold, w.code, w.italic));
+  let cursor = rtl ? maxWidth - indent : indent;
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
-    const width = measure(w.text, w.bold);
+    const width = widths[i];
+    const x = rtl ? cursor - width : cursor;
     runs.push({ text: w.text, bold: w.bold, italic: w.italic, code: w.code, x, width });
-    x += width;
-    if (i < words.length - 1) x += spaceW;
+    cursor = rtl ? x - spaceW : x + width + spaceW;
   }
-  return { runs, width: x - indent };
+  const width = widths.reduce((sum, w) => sum + w, 0) + spaceW * Math.max(0, words.length - 1);
+  return { runs, width };
 }
 
 /** Whether a line's vertical band at `lineIndex` intersects the art box, narrowing its width. */
@@ -296,6 +322,7 @@ function layoutTextBlock(
   art: HelpArtBox | null,
   startY: number,
   measure: Measure,
+  rtl: boolean,
 ): LaidOutTextLine[] {
   const isBullet = block.kind === 'bullet';
   const isHeading = block.kind === 'heading';
@@ -310,14 +337,16 @@ function layoutTextBlock(
     if (cur.length === 0) return;
     const li = lines.length;
     const y = startY + li * lineH;
-    const { runs, width } = lineRuns(cur, indent, measure);
+    const { runs, width } = lineRuns(cur, indent, measure, maxWidth, rtl);
     const placed = runs.map((r) => ({ ...r, y, bold: isHeading ? true : r.bold }));
     if (isBullet && li === 0) {
-      const markerW = measure('• ', false);
-      const marker: LaidOutRun = { text: '• ', bold: false, italic: false, code: false, x: 0, y, width: markerW };
-      lines.push({ kind: 'text', x: indent, y, width, height: lineH, runs: [marker, ...placed] });
+      const markerText = rtl ? '•' : '• ';
+      const markerW = measure(markerText, false);
+      const markerX = rtl ? maxWidth - markerW : 0;
+      const marker: LaidOutRun = { text: markerText, bold: false, italic: false, code: false, x: markerX, y, width: markerW };
+      lines.push({ kind: 'text', x: rtl ? 0 : indent, y, width, height: lineH, runs: [marker, ...placed] });
     } else {
-      lines.push({ kind: 'text', x: indent, y, width, height: lineH, runs: placed });
+      lines.push({ kind: 'text', x: rtl ? maxWidth - width : indent, y, width, height: lineH, runs: placed });
     }
   };
 
@@ -432,6 +461,7 @@ export function layoutHelpBlocks(
   maxWidth: number,
   art: HelpArtBox | null,
   measure: Measure,
+  rtl = false,
 ): HelpLayout {
   const items: LaidOutItem[] = [];
   let y = HEADING_H;
@@ -450,7 +480,7 @@ export function layoutHelpBlocks(
       });
       y = ty + laid.height + ITEM_GAP;
     } else {
-      const laid = layoutTextBlock(block, maxWidth, art, y, measure);
+      const laid = layoutTextBlock(block, maxWidth, art, y, measure, rtl);
       items.push(...laid);
       y += laid.reduce((sum, l) => sum + l.height, 0) + ITEM_GAP;
     }

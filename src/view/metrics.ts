@@ -49,19 +49,34 @@ function estimateWidth(text: string, size: number): number {
   return Math.ceil(width);
 }
 
+export interface MeasureStyle {
+  readonly bold?: boolean;
+  readonly italic?: boolean;
+  /** Font family override, for the monospace runs inside Help pages. */
+  readonly family?: string;
+}
+
 /** Measure a string with the font the views draw with, without adding it to the scene. */
-export function textWidth(text: string, size: number): number {
-  const key = `${size}|${text}`;
+export function textWidth(text: string, size: number, style: MeasureStyle = {}): number {
+  const family = style.family ?? FONT;
+  const weight = style.bold ? 'bold' : 'normal';
+  const italic = style.italic ? 'italic' : 'normal';
+  const key = `${size}|${family}|${weight}|${italic}|${text}`;
   const cached = cache.get(key);
   if (cached !== undefined) return cached;
 
   let width: number;
   if (typeof document === 'undefined') {
+    // The headless estimate is per glyph; a bold face is a touch wider, and the monospace stack is
+    // fixed-advance, but neither difference is worth a second table in a harness with no renderer.
     width = estimateWidth(text, size);
   } else {
     if (!metricsText) {
-      metricsText = new Text({ text: '', style: { fontFamily: FONT, fontSize: size } });
+      metricsText = new Text({ text: '', style: { fontFamily: family, fontSize: size } });
     }
+    metricsText.style.fontFamily = family;
+    metricsText.style.fontWeight = weight;
+    metricsText.style.fontStyle = italic;
     metricsText.style.fontSize = size;
     metricsText.text = text;
     width = metricsText.width;

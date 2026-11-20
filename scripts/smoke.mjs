@@ -7840,6 +7840,49 @@ function helpFmtDps(damage, fireTicks) { return fireTicks <= 0 ? '—' : (damage
 {
   // 3 + 4. Layout (docs/HELP-MARKDOWN.md): monotonic height, the sum of line heights, the scroll
   // invariant, and no laid-out line overlaps the artwork box, for every page at two widths.
+  // The ruler must be the real one. A private estimate (`length * 13 * 0.6`) measures wide, so every
+  // word is placed further right than it needs to be and the line reads as if it were justified.
+  {
+    const src = readFileSync(new URL('../src/view/helpMarkdown.ts', import.meta.url), 'utf8');
+    check(
+      /export function helpMeasure\([\s\S]*?textWidth\(/.test(src),
+      'help markdown: helpMeasure delegates to the shared text measurer',
+    );
+  }
+
+  // RTL: prose is flush right, the first word is the rightmost, and a bullet's marker sits outside
+  // the text on the right rather than floating at the left edge.
+  {
+    const width = 320;
+    const rtlLayout = layoutHelpBlocks(parseHelpMarkdown(HELP_PAGES[0].body), width, null, helpMeasure, true);
+    let rightAligned = true;
+    let firstWordRightmost = true;
+    for (const item of rtlLayout.items) {
+      if (item.kind !== 'text' || item.runs.length === 0) continue;
+      const runs = item.runs;
+      const right = Math.max(...runs.map((r) => r.x + r.width));
+      if (right > width + 0.5) rightAligned = false;
+      if (!runs[0].text.startsWith('•') && runs.length > 1) {
+        const first = runs[0];
+        const second = runs[1];
+        if (first.x <= second.x) firstWordRightmost = false;
+      }
+    }
+    check(rtlLayout.items.length > 0, 'help markdown: the RTL layout produces lines');
+    check(firstWordRightmost, 'help markdown: RTL puts the first word on the right');
+    check(rightAligned, 'help markdown: RTL lines stay inside the text column');
+
+    // Every paragraph line ends flush against the right edge of the column it was given.
+    let flush = true;
+    for (const item of rtlLayout.items) {
+      if (item.kind !== 'text') continue;
+      const runs = item.runs.filter((r) => !r.text.startsWith('•'));
+      if (runs.length === 0) continue;
+      if (Math.abs(Math.max(...runs.map((r) => r.x + r.width)) - width) > 0.5) flush = false;
+    }
+    check(flush, 'help markdown: RTL paragraph lines are right-justified');
+  }
+
   const widths = [computeHelpLayout(0, 0, 200).pageText.w, computeHelpLayout(0, 0, 320).pageText.w];
   const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
   const layoutAt = (page, width) => {

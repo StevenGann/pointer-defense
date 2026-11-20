@@ -34,9 +34,16 @@ write prose around it.
   - `parseHelpMarkdown(blocks: readonly string[]): HelpBlock[]` where a block is
     `{ kind: 'paragraph' | 'heading' | 'bullet', runs: InlineRun[], level?: number }` or
     `{ kind: 'table', header: string[], align: ('left'|'right'|'centre')[], rows: InlineRun[][][] }`.
-  - `layoutHelpBlocks(blocks, maxWidth, art, measure): HelpLayout` — every line's y, every run's x and
-    width, every table's column widths, row heights and rule positions. `measure(text, bold)` is
-    injected so layout is testable in Node without Pixi.
+  - `layoutHelpBlocks(blocks, maxWidth, art, measure, rtl = false): HelpLayout` — every line's y,
+    every run's x and width, every table's column widths, row heights and rule positions.
+    `measure(text, bold, code, italic)` is injected so layout is testable in Node without Pixi; the
+    view passes `helpMeasure`, which asks the shared `textWidth` for the **real** width of the font
+    the run is drawn in. It must stay that way: the layout positions each word individually, so a
+    ruler that guesses (the old `length × 13 × 0.6`) pushes every word further right than it needs
+    to be and the page reads as stretched, which looks like bad justification and is not.
+  - `rtl = true` lays the prose out from the right edge: the first word is the rightmost, the indent
+    becomes a right margin, and a bullet marker sits outside the text on the right. Tables keep
+    their column order for now; numbers stay LTR by policy.
 - `src/view/help.ts` — draws the layout instead of wrapping strings. Text objects come from a pool
   keyed by line; table rules and the header fill are Graphics. Keep the existing invariant: the
   height `pageBodyHeight` reports is exactly the height the layout produced (same call, not a mirror).
