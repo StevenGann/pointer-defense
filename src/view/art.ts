@@ -119,6 +119,7 @@ const FX_NAMES = [
 /** UI glyphs: fixed chrome marks. `arrow-right` is reserved (its mirror ships first). */
 const UI_NAMES = [
   'cursor-arrow',
+  'cursor-help',
   'offline-wrench',
   'shutter-open',
   'shutter-closed',
@@ -126,6 +127,7 @@ const UI_NAMES = [
   'glyph-minimize',
   'glyph-maximize',
   'glyph-close',
+  'glyph-help',
   'arrow-left',
   'arrow-right',
 ] as const;
