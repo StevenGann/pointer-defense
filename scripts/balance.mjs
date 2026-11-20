@@ -49,6 +49,9 @@ function hasFlag(name) {
 }
 
 const to = Math.max(1, parseInt(flag('--to', '100'), 10) || 100);
+// --maxTier N: the bot upgrades greedily but stops at tier N. Default 5 keeps the pre-change
+// comparisons comparable now that combat towers run to 20 (docs/TIER-20.md §"The balance harness").
+const maxTier = Math.max(1, parseInt(flag('--maxTier', '5'), 10) || 5);
 const rebootAtRaw = parseInt(flag('--reboot-at', '60'), 10);
 const rebootAt = Number.isFinite(rebootAtRaw) ? rebootAtRaw : 60; // 0 disables rebooting
 const accuracy = Math.min(1, Math.max(0, parseFloat(flag('--accuracy', '0.35')) || 0));
@@ -513,6 +516,7 @@ function upgradePass(s) {
   for (let guard = 0; guard < 400; guard++) {
     let done = true;
     for (const t of s.towers) {
+      if (t.tier >= maxTier) continue;
       const cost = upgradeCost(t);
       if (cost === null || cost >= TOWER_STATS[t.kind].cost) continue;
       if (s.economy.salvage < cost) continue;
@@ -681,6 +685,7 @@ function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, 
       let acted = false;
       for (const t of s.towers) {
         if (t.kind !== 'wall') continue;
+        if (t.tier >= maxTier) continue;
         const cost = upgradeCost(t);
         if (cost === null || s.economy.salvage < cost) continue;
         if (t.tier === 2 && t.branch === null) {
@@ -706,6 +711,7 @@ function buildPhase(s, wave, wallIdx, counts, useSupport, spendSurplus = false, 
     for (let guard = 0; guard < 20000; guard++) {
       let acted = false;
       for (const t of s.towers) {
+        if (t.tier >= maxTier) continue;
         const cost = upgradeCost(t);
         if (cost === null || s.economy.salvage < cost) continue;
         if (t.tier === 2 && t.branch === null) {
@@ -1462,16 +1468,18 @@ if (wallMode) {
   silent = false;
 
   console.log('\n=== maps ===');
-  console.log('  map          waves cleared   integrity   salvage   closed   leaked   tower dmg%');
+  console.log('  map          waves cleared   integrity   salvage   closed   leaked   tower dmg%   max tier');
   for (const { level, std } of mapRows) {
     const p = std.final.popups;
     const tower = std.final.state.economy.damage.tower;
     const pointer = std.final.state.economy.damage.pointer;
     const towerPct = tower + pointer > 0 ? Math.round((tower / (tower + pointer)) * 100) : 0;
+    const highestTier = std.final.state.towers.reduce((m, t) => Math.max(m, t.tier), 0);
     console.log(
       `  ${level.id.padEnd(11)}  ${String(std.final.clearedWaves).padStart(13)}  ` +
         `${String(std.final.integrity).padStart(9)}  ${String(std.final.earned).padStart(7)}  ` +
-        `${String(p.closed).padStart(6)}  ${String(p.leaked).padStart(6)}  ${String(towerPct).padStart(10)}%`,
+        `${String(p.closed).padStart(6)}  ${String(p.leaked).padStart(6)}  ${String(towerPct).padStart(10)}%` +
+        `  ${String(highestTier).padStart(8)}`,
     );
   }
   // The standard run is a tower build that clicks; the towers must stay the primary damage source.

@@ -56,7 +56,7 @@ import { FLYER_OFF_KIND_DAMAGE,
   AUTO_WAVE_DELAY_TICKS,
   rebuildField,
 } from '../src/core/state.ts';
-import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE, MINE_BLAST_RADIUS, CURSOR_CLICK_DAMAGE_FACTOR, repairHealRate, repairRadius } from '../src/core/towers.ts';
+import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE, MINE_BLAST_RADIUS, CURSOR_CLICK_DAMAGE_FACTOR, repairHealRate, repairRadius, MAX_TIER, TIERS, kindMaxTier, COMBAT_KINDS } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { WAVE_COUNT, buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, FLYER_FLIGHT_MEMBER_TICKS, FLYER_FLIGHT_SIZE, flyerSwarmFactor, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers, WAVE_ENEMY_CAP } from '../src/core/waves.ts';
@@ -864,7 +864,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   placeTower(s, 'wall', 5, 5);
   const wall = towerAt(s, 5, 5);
   const line = upgradeTooltipLines(wall, s.economy.salvage)[0];
-  check(tooltipText(line) === 'Wall T2 — HP 60 → 180, $12',
+  check(tooltipText(line) === 'Wall T2 of 3 — HP 60 → 180, $12',
     `upgrade tooltip reads the tier-2 total and cost (${tooltipText(line)})`);
   upgradeTower(s, 5, 5);
   check(towerAt(s, 5, 5).maxHp === 180, 'the tooltip after-value matches the wall after buying');
@@ -1629,17 +1629,17 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   // maxed-branch (maxed out): a branched tower with nothing left to buy.
   const s = createRunState();
   const t = createTower(1, 'gun', 5, 5);
-  t.tier = 5;
+  t.tier = MAX_TIER;
   t.branch = 'A';
   s.towers.push(t);
-  check(checkAchievements(s).includes('maxed-branch'), 'maxed-branch fires on a tier-5 branched tower');
+  check(checkAchievements(s).includes('maxed-branch'), 'maxed-branch fires on a tier-20 branched tower');
   check(!checkAchievements(s).includes('maxed-branch'), 'maxed-branch fires once');
   const unbranched = createRunState();
   const u = createTower(1, 'gun', 5, 5);
-  u.tier = 5;
+  u.tier = MAX_TIER;
   u.branch = null;
   unbranched.towers.push(u);
-  check(!checkAchievements(unbranched).includes('maxed-branch'), 'an unbranched tier-5 does not count');
+  check(!checkAchievements(unbranched).includes('maxed-branch'), 'an unbranched tower does not count');
 }
 
 {
@@ -4347,8 +4347,10 @@ function cursorTower(tier, branch) {
   check(!isFullyUpgraded(gun), 'a tier-4 branched gun is not fully upgraded');
   check(!towerTooltipLines(gun, 0).map(tooltipText).includes('Fully upgraded'),
     'the tooltip does not name the pip while a further upgrade exists');
-  gun.tier = 5;
-  check(isFullyUpgraded(gun), 'a tier-5 branched gun is fully upgraded');
+  gun.tier = 19;
+  check(!isFullyUpgraded(gun), 'a tier-19 branched gun is not fully upgraded');
+  gun.tier = MAX_TIER;
+  check(isFullyUpgraded(gun), 'a tier-20 branched gun is fully upgraded');
   check(towerTooltipLines(gun, 0).map(tooltipText).includes('Fully upgraded'),
     'the tooltip names the pip at the maximum tier');
 
@@ -7685,7 +7687,7 @@ function helpRecomputeBlock(kind) {
       if (kind === 'aa' && branch === 'B') {
         lines.push(`${AA_SALVO_COUNT} homing missiles per salvo · each ${helpFmtPct(1 / AA_SALVO_COUNT)} of a hit`);
       }
-      for (const tier of [3, 4, 5]) {
+      for (let tier = 3; tier <= MAX_TIER; tier++) {
         const eff = effectiveStats(helpSynthTower(kind, tier, branch));
         const label = tier === 3 ? 'Tier 3:' : `Tier ${tier} — $${helpNextCost(kind, tier - 1, branch)}:`;
         lines.push(`${label} range ${helpFmt2(eff.range)} · damage ${helpFmt2(eff.damage)} · fire ${helpFmtFire(eff.fireInterval)} · DPS ${helpFmtDps(eff.damage, eff.fireInterval)}`);
@@ -7712,7 +7714,7 @@ function helpRecomputeBlock(kind) {
     const page = HELP_PAGES.find((p) => p.id === `tower-${kind}`);
     for (const branch of ['A', 'B']) {
       if (kind === 'cannon' && branch === 'B') continue; // Minesweeper replaces tier lines with its mine line
-      for (const tier of [3, 4, 5]) {
+      for (let tier = 3; tier <= MAX_TIER; tier++) {
         const eff = effectiveStats(helpSynthTower(kind, tier, branch));
         const label = tier === 3 ? 'Tier 3:' : `Tier ${tier} — $${helpNextCost(kind, tier - 1, branch)}:`;
         const line = `${label} range ${helpFmt2(eff.range)} · damage ${helpFmt2(eff.damage)} · fire ${helpFmtFire(eff.fireInterval)} · DPS ${helpFmtDps(eff.damage, eff.fireInterval)}`;
@@ -9633,6 +9635,160 @@ function helpRecomputeBlock(kind) {
     check(Math.abs(effectiveStats(flak).fireInterval - TOWER_STATS.aa.fireInterval * linear(flakMul, strength)) < 1e-9,
       `aa Flak t${tier} interval unchanged (${effectiveStats(flak).fireInterval.toFixed(2)})`);
   }
+}
+
+// --- Twenty-tier ladder (docs/TIER-20.md) -------------------------------------------------------
+
+// 1. The cost ladder is strictly increasing for every combat kind, and the tier-20 totals match the
+//    table (build cost + every step, summed with roundCost). The figures are the roundCost sums; the
+//    doc's "build × 385" is the same curve rounded once, quoted for readability.
+{
+  const tier20Total = (kind) => {
+    const t = createTower(1, kind, 0, 0);
+    let total = TOWER_STATS[kind].cost;
+    let prev = 0;
+    let increasing = true;
+    for (let tier = 1; tier < MAX_TIER; tier++) {
+      t.tier = tier;
+      const cost = upgradeCost(t);
+      if (cost === null || cost <= prev) increasing = false;
+      prev = cost;
+      total += cost;
+    }
+    return { total, increasing };
+  };
+  for (const kind of COMBAT_KINDS) {
+    const r = tier20Total(kind);
+    check(r.increasing, `cost ladder is strictly increasing for ${kind}`);
+  }
+  check(tier20Total('gun').total === 9591, `gun tier-20 total is 9591 (got ${tier20Total('gun').total})`);
+  check(tier20Total('laser').total === 26972, `laser tier-20 total is 26972 (got ${tier20Total('laser').total})`);
+  check(tier20Total('taser').total === 30888, `taser tier-20 total is 30888 (got ${tier20Total('taser').total})`);
+  check(tier20Total('cannon').total === 34674, `cannon tier-20 total is 34674 (got ${tier20Total('cannon').total})`);
+  check(kindMaxTier('gun') === MAX_TIER && kindMaxTier('cursor') === 5 && kindMaxTier('wall') === 3 && kindMaxTier('repair') === 3,
+    'combat kinds cap at 20; cursor caps at 5; wall and repair cap at 3');
+}
+
+// 2. effectiveStats at tiers 1-5 is unchanged: freeze the T5 damage and interval of the six named
+//    branches as literal expectations (the damage ladder only starts past tier 5).
+{
+  const atT5 = (kind, branch) => {
+    const t = createTower(1, kind, 0, 0);
+    t.tier = 5;
+    t.branch = branch;
+    return effectiveStats(t);
+  };
+  const close = (a, b) => Math.abs(a - b) < 1e-6;
+  const cases = [
+    ['gun', 'A', 9.75, 30],
+    ['gun', 'B', 1.75, 3.75],
+    ['cannon', 'A', 12.5, 159.36],
+    ['taser', 'B', 1.25, 7],
+    ['laser', 'A', 27.5, 48],
+    ['aa', 'A', 4.75, 75],
+  ];
+  for (const [kind, branch, dmg, interval] of cases) {
+    const st = atT5(kind, branch);
+    check(close(st.damage, dmg) && close(st.fireInterval, interval),
+      `${kind} ${branch} T5 damage ${dmg} / interval ${interval} unchanged (${st.damage}, ${st.fireInterval})`);
+  }
+}
+
+// 3. Tier 20 damage for a branchless kind is 1.25 × 1.09^18 of base, and range is capped at +10%.
+{
+  const t = createTower(1, 'gun', 0, 0);
+  t.tier = MAX_TIER;
+  t.branch = null;
+  const st = effectiveStats(t);
+  const expectedDmg = TOWER_STATS.gun.damage * 1.25 * Math.pow(1.09, 18);
+  check(Math.abs(st.damage - expectedDmg) < 1e-9, `branchless tier-20 damage is 1.25 × 1.09^18 (${st.damage})`);
+  const t15 = createTower(1, 'gun', 0, 0);
+  t15.tier = 15;
+  t15.branch = null;
+  const st15 = effectiveStats(t15);
+  check(Math.abs(st15.range - st.range) < 1e-9, 'range ladder caps at +10% (tier 15 == tier 20 range)');
+  check(Math.abs(st.range - TOWER_STATS.gun.range * 1.02 * 1.10) < 1e-9, 'branchless range is base × 1.02 × 1.10 at the cap');
+}
+
+// 4. Branch strength is 4 at tier 9 and still 4 at tier 20; interval never drops below one tick and
+//    damage never below 1 at any tier or branch.
+{
+  const branchMult = (tier) => {
+    const t = createTower(1, 'gun', 0, 0);
+    t.tier = tier;
+    t.branch = 'A';
+    const st = effectiveStats(t);
+    return st.damage / (TOWER_STATS.gun.damage * 1.25 * Math.pow(1.09, tier - 5));
+  };
+  const m9 = branchMult(9);
+  const m20 = branchMult(MAX_TIER);
+  check(Math.abs(m9 - 4.2) < 1e-6 && Math.abs(m20 - 4.2) < 1e-6,
+    `branch strength is capped at 4 (tier 9 = ${m9}, tier 20 = ${m20})`);
+
+  const bad = [];
+  for (const kind of COMBAT_KINDS) {
+    for (let tier = 1; tier <= MAX_TIER; tier++) {
+      for (const branch of [null, 'A', 'B']) {
+        const t = createTower(1, kind, 0, 0);
+        t.tier = tier;
+        t.branch = branch;
+        const st = effectiveStats(t);
+        if (TOWER_STATS[kind].damage > 0) {
+          if (st.damage < 1) bad.push(`${kind} t${tier} ${branch} damage ${st.damage}`);
+          if (st.fireInterval < 1) bad.push(`${kind} t${tier} ${branch} interval ${st.fireInterval}`);
+        }
+      }
+    }
+  }
+  check(bad.length === 0, `damage >= 1 and fireInterval >= 1 everywhere (bad: ${bad.join(', ') || 'none'})`);
+}
+
+// 5. A tower saved at tier 12 restores at tier 12; tier 21 is rejected.
+{
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 3, 6);
+  const gun = towerAt(s, 3, 6);
+  gun.tier = 12;
+  gun.branch = 'A';
+  s.wave = 1; // a run at wave 1, so the save is accepted
+  const saved = JSON.stringify(captureRun(s));
+  const restored = restoreRun(JSON.parse(saved));
+  check(restored !== null, 'a tier-12 tower save restores');
+  if (restored) {
+    check(restored.towers[0].tier === 12, 'the tier-12 tower round-trips at tier 12');
+  }
+  const tampered = JSON.parse(saved);
+  tampered.towers[0].tier = 21;
+  check(restoreRun(tampered) === null, 'a tier-21 tower is rejected');
+}
+
+// 6. The 900-tick determinism hash over a scripted run that upgrades to tier 8 is stable across two runs.
+{
+  const run = () => {
+    const s = stateOnLevel('open-field');
+    s.economy.salvage = 100000;
+    placeTower(s, 'gun', 3, 6);
+    upgradeTower(s, 3, 6); // 1 -> 2
+    chooseBranch(s, 3, 6, 'A'); // 2 -> 3
+    for (let i = 0; i < 5; i++) upgradeTower(s, 3, 6); // 3 -> 8
+    s.rng = 0x12345678;
+    startWave(s);
+    const h = createHash('sha256');
+    for (let i = 0; i < 900; i++) {
+      tick(s);
+      if (s.events.length > 0) {
+        h.update(JSON.stringify(s.events));
+        s.events = [];
+      }
+      h.update(`${s.rng}:${s.integrity}:${s.enemies.length}`);
+    }
+    return h.digest('hex');
+  };
+  const a = run();
+  const b = run();
+  check(a === b, '900-tick determinism hash is stable across two scripted runs');
+  check(a.length === 64, `the hash is a full sha256 (${a.length} hex chars)`);
 }
 
 // --- Run save (docs/RUN-SAVE.md) --------------------------------------------------------------

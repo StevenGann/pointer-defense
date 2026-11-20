@@ -11,6 +11,7 @@ import {
   isMinesweeper,
   isRepairing,
   isTowerUnlocked,
+  kindMaxTier,
   MINE_BLAST_RADIUS,
   MINE_DAMAGE,
   MINE_EXPIRE_TICKS,
@@ -365,7 +366,7 @@ export function cursorUpgradeTooltipLines(tower: Tower, salvage: number): Toolti
   const beforeRng = cursorRadius(tower);
   const afterRng = cursorRadius({ ...tower, tier: next });
   const segments: TooltipSegment[] = [
-    { text: `Cursor T${tower.tier} → T${next} — rate ${fmt1(beforeRate)} → ` },
+    { text: `Cursor ${tierOfMax('cursor', tower.tier)} → ${tierOfMax('cursor', next)} — rate ${fmt1(beforeRate)} → ` },
     good(`${fmt1(afterRate)}/s`),
   ];
   if (afterRng !== beforeRng) segments.push({ text: ` · rng ${fmt1(beforeRng)} → ` }, good(fmt1(afterRng)));
@@ -422,6 +423,11 @@ function good(n: string): TooltipSegment {
   return { text: n, color: TOOLTIP_GOOD };
 }
 
+/** "T{tier} of {max}" — the tier out of the kind's cap, so a combat tower reads T12 of 20. */
+function tierOfMax(kind: TowerKind, tier: number): string {
+  return `T${tier} of ${kindMaxTier(kind)}`;
+}
+
 /** Tooltip for a repair tower's Upgrade button: tier 2 widens the radius, tier 3 deepens the heal. */
 export function repairUpgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[] {
   const cost = upgradeCost(tower);
@@ -432,7 +438,7 @@ export function repairUpgradeTooltipLines(tower: Tower, salvage: number): Toolti
   const afterHeal = repairHealRate({ ...tower, tier: next });
   const beforeRng = repairRadius(tower);
   const afterRng = repairRadius({ ...tower, tier: next });
-  const segments: TooltipSegment[] = [{ text: `Repair T${tower.tier} → T${next} — ` }];
+  const segments: TooltipSegment[] = [{ text: `Repair ${tierOfMax('repair', tower.tier)} → ${tierOfMax('repair', next)} — ` }];
   if (afterRng !== beforeRng) segments.push({ text: `rng ${fmt1(beforeRng)} → ` }, good(fmt1(afterRng)));
   if (afterHeal !== beforeHeal) {
     if (segments.length > 1) segments.push({ text: ' · ' });
@@ -459,7 +465,7 @@ export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[
     const before = effectiveStats(tower);
     const after = effectiveStats({ ...tower, tier: next, branch: tower.branch });
     return [[
-      { text: `${TOWER_STATS.beacon.name} T${tower.tier} → T${next} — aura +${Math.round(before.auraDamage * 100)}% → ` },
+      { text: `${TOWER_STATS.beacon.name} ${tierOfMax('beacon', tower.tier)} → ${tierOfMax('beacon', next)} — aura +${Math.round(before.auraDamage * 100)}% → ` },
       good(`+${Math.round(after.auraDamage * 100)}%`),
       { text: `, $${formatNumber(cost)}` },
     ]];
@@ -469,7 +475,7 @@ export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[
     const before = wallMaxHp(tower.tier, tower.branch);
     const after = wallMaxHp(next, tower.branch);
     return [[
-      { text: `Wall T${next} — HP ${fmtHp(before)} → ` },
+      { text: `Wall ${tierOfMax('wall', next)} — HP ${fmtHp(before)} → ` },
       good(fmtHp(after)),
       { text: `, $${formatNumber(cost)}` },
     ]];
@@ -477,7 +483,7 @@ export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[
 
   if (isMinesweeper(tower)) {
     return [[
-      { text: `Minesweeper T${tower.tier} → T${next} — mines unchanged, ` },
+      { text: `Minesweeper ${tierOfMax('cannon', tower.tier)} → ${tierOfMax('cannon', next)} — mines unchanged, ` },
       { text: `$${formatNumber(cost)}` },
     ]];
   }
@@ -486,7 +492,7 @@ export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[
   const before = effectiveStats(tower);
   const after = effectiveStats({ ...tower, tier: next });
   return [[
-    { text: `${name} T${tower.tier} → T${next} — dmg ${fmt1(before.damage * tower.auraDamage)} → ` },
+    { text: `${name} ${tierOfMax(tower.kind, tower.tier)} → ${tierOfMax(tower.kind, next)} — dmg ${fmt1(before.damage * tower.auraDamage)} → ` },
     good(fmt1(after.damage * tower.auraDamage)),
     { text: ` · rng ${fmt1(before.range + tower.auraRange)} → ` },
     good(fmt1(after.range + tower.auraRange)),

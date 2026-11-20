@@ -20,6 +20,8 @@ import {
   MINE_LIVE_CAP,
   MINE_DAMAGE,
   MINE_BLAST_RADIUS,
+  MAX_TIER,
+  kindMaxTier,
   type Branch,
   type EffectiveStats,
   type Tier,
@@ -168,6 +170,7 @@ const gettingStartedPage: HelpPage = {
     'Waves: enemies cross from the entrance to the exit. Anything that gets through costs integrity.',
     'Integrity: you start with 20. When it reaches zero the run is over.',
     'The pointer: click enemies to shoot them. Aim for the leading notch to deal double damage.',
+    `Combat towers upgrade through ${MAX_TIER} tiers; walls, Repair and the Cursor stop earlier on their own ladders.`,
   ],
 };
 
@@ -438,8 +441,8 @@ function combatStatBlock(kind: TowerKind, lines: string[]): void {
     if (kind === 'aa' && branch === 'B') {
       lines.push(`${AA_SALVO_COUNT} homing missiles per salvo · each ${fmtPct(1 / AA_SALVO_COUNT)} of a hit`);
     }
-    for (const tier of [3, 4, 5] as const) {
-      const eff = effectiveStats(synthTower(kind, tier, branch));
+    for (let tier = 3; tier <= kindMaxTier(kind); tier++) {
+      const eff = effectiveStats(synthTower(kind, tier as Tier, branch));
       const label = tier === 3 ? 'Tier 3:' : `Tier ${tier} — $${nextUpgradeCost(kind, (tier - 1) as Tier, branch)}:`;
       lines.push(`${label} range ${fmt2(eff.range)} · damage ${fmt2(eff.damage)} · fire ${fmtFire(eff.fireInterval)} · DPS ${fmtDps(eff.damage, eff.fireInterval)}`);
     }

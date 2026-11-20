@@ -15,6 +15,7 @@ import {
   hasBranches,
   isOffline,
   isRepairing,
+  kindMaxTier,
   repairCost,
   repairHealRate,
   repairHealingCount,
@@ -964,7 +965,7 @@ export class HudView {
       for (const text of this.branchButtons) text.visible = true;
 
       const branch = tower.branch === null ? '' : ` - ${branchName(tower.kind, tower.branch)}`;
-      this.towerName.text = `${TOWER_STATS[tower.kind].name}  T${tower.tier}${branch}${isOffline(tower) ? ' — OFFLINE' : ''}`;
+      this.towerName.text = `${TOWER_STATS[tower.kind].name}  T${tower.tier} of ${kindMaxTier(tower.kind)}${branch}${isOffline(tower) ? ' — OFFLINE' : ''}`;
       this.towerName.position.set(d.name.x, d.name.y + Math.floor(d.name.h / 2));
 
       // The detail pane's close box: a raised Win95 box with the same X glyph the help window uses.
