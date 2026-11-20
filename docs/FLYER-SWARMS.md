@@ -16,14 +16,30 @@ Multiply the flyer count of every wave that has flyers by a band factor:
 
 - waves 1-20: **2x**
 - waves 21-50: **3x**
-- waves 51+: **4x**
+- waves 51-85: a **linear ramp from 3x down to 2x** (docs/FLYER-TAPER.md)
+- waves 85+: **2x**
+
+The top band used to be a flat 4x, which put 56 flyers in wave 85 — more than half a 110-enemy wave
+immune to the maze. It now ramps down instead, stepping 1/34 per wave from 51 to 85, so no wave's
+flyer volume jumps back up and wave 85 flies 28.
 
 This applies to the hand-written tutorial waves 6-10 as well, even though those are otherwise kept
 verbatim: wave 6 goes from 3 flyers to 6, wave 10 from 8 to 16.
 
+| wave | flyers before | after |
+|---|---|---|
+| 10 | 16 | 16 |
+| 25 | 21 | 21 |
+| 50 | 33 | 33 |
+| 60 | 40 | 27 |
+| 75 | 48 | 28 |
+| 85 | 56 | 28 |
+| 100 | 56 | 28 |
+
 The wave enemy cap (`WAVE_ENEMY_CAP`, 110) still holds for the whole wave. When the multiplied flyers
 would push a wave past it, the chaff group (grunt or runner) is trimmed, never the flyers. A wave is
-air-heavy or it is not; it does not lose the thing the change is for.
+air-heavy or it is not; it does not lose the thing the change is for. With the taper, waves 1..100 no
+longer reach the cap at all; only deep endless waves still trim chaff.
 
 ## Packing
 

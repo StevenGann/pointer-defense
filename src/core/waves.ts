@@ -427,11 +427,15 @@ export const FLYER_FLIGHT_MEMBER_TICKS = secondsToTicks(0.15);
 /** Ticks between the last member of one flight and the first member of the next (0.9 s). */
 export const FLYER_FLIGHT_GAP_TICKS = secondsToTicks(0.9);
 
-/** The flyer-count multiplier for a wave's band: 2x for 1-20, 3x for 21-50, 4x for 51+. */
+/**
+ * The flyer-count multiplier for a wave (docs/FLYER-SWARMS.md, docs/FLYER-TAPER.md): 2x for 1-20,
+ * 3x for 21-50, then a linear ramp from 3x at wave 51 down to 2x at wave 85, holding at 2x after.
+ */
 export function flyerSwarmFactor(wave: number): number {
   if (wave <= 20) return 2;
   if (wave <= 50) return 3;
-  return 4;
+  if (wave >= 85) return 2;
+  return 3 - (wave - 51) / 34;
 }
 
 /** Enemies a wave spawns outside its definition's groups: boss + escort, type boss, pop-ups. */
