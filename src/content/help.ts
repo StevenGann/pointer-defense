@@ -144,9 +144,9 @@ function fmtDps(damage: number, fireTicks: number): string {
   return fireTicks <= 0 ? '—' : fmt2((damage * TICK_HZ) / fireTicks);
 }
 
-/** Fire interval and shots-per-second as one phrase, or an em-dash when the tower never fires. */
+/** Fire interval and shots-per-second as one phrase, or "never fires" when the tower never fires. */
 function fmtFire(fireTicks: number): string {
-  return fireTicks <= 0 ? '—' : `${fmt2(fireTicks / TICK_HZ)} s (${fmt2(TICK_HZ / fireTicks)}/s)`;
+  return fireTicks <= 0 ? 'never fires' : `${fmt2(fireTicks / TICK_HZ)} s (${fmt2(TICK_HZ / fireTicks)}/s)`;
 }
 
 /** Turn rate as whole degrees per second, or "instant" for towers that need no aiming. */

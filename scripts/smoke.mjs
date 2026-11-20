@@ -9371,5 +9371,72 @@ function helpRecomputeBlock(kind) {
   check(errors.length === 0, `the aura assets pass the manifest checks (${errors.join(', ') || 'no errors'})`);
 }
 
+// --- Repeater tier-5 interval fix (docs/REPEATER-T5.md) --------------------------------------
+{
+  const repeater = (tier) => {
+    const t = createTower(1, 'gun', 0, 0);
+    t.tier = tier;
+    t.branch = 'B';
+    return effectiveStats(t);
+  };
+
+  // 1. A tier-3 and tier-4 Repeater keep today's intervals exactly.
+  const t3 = repeater(3);
+  const t4 = repeater(4);
+  check(Math.abs(t3.fireInterval / TICK_HZ - 0.25) < 1e-9,
+    `tier-3 Repeater interval is 0.25 s (${(t3.fireInterval / TICK_HZ).toFixed(4)})`);
+  check(Math.abs(t4.fireInterval / TICK_HZ - 0.125) < 1e-9,
+    `tier-4 Repeater interval is 0.125 s (${(t4.fireInterval / TICK_HZ).toFixed(4)})`);
+
+  // 2. A tier-5 Repeater fires every 0.0625 s, 16 shots/s, DPS 28.
+  const t5 = repeater(5);
+  const t5rate = TICK_HZ / t5.fireInterval;
+  check(Math.abs(t5.fireInterval / TICK_HZ - 0.0625) < 1e-9,
+    `tier-5 Repeater interval is 0.0625 s (${(t5.fireInterval / TICK_HZ).toFixed(4)})`);
+  check(Math.abs(t5rate - 16) < 1e-9, `tier-5 Repeater fires 16 shots/s (${t5rate.toFixed(2)})`);
+  check(Math.abs(t5.damage * t5rate - 28) < 1e-9, `tier-5 Repeater DPS is 28 (${(t5.damage * t5rate).toFixed(2)})`);
+
+  // 3. Every kind/tier/branch combination that deals damage yields fireInterval > 0.
+  const bad = [];
+  for (const kind of TOWER_KINDS) {
+    for (const tier of [1, 2, 3, 4, 5]) {
+      for (const branch of [null, 'A', 'B', 'C']) {
+        const t = createTower(1, kind, 0, 0);
+        t.tier = tier;
+        t.branch = branch;
+        const st = effectiveStats(t);
+        if (st.damage > 0 && st.fireInterval <= 0) bad.push(`${kind} t${tier} ${branch}`);
+      }
+    }
+  }
+  check(bad.length === 0,
+    `every damage-dealing kind/tier/branch has fireInterval > 0 (bad: ${bad.join(', ') || 'none'})`);
+
+  // 4. The Gun's Help page prints the tier-5 line with a real rate and DPS.
+  const gunPage = pageById('tower-gun');
+  check(gunPage !== undefined, 'the Gun has a Help page');
+  const t5line = gunPage?.body.find((l) => l.startsWith('Tier 5') && l.includes('16.00/s'));
+  check(t5line !== undefined && t5line.includes('28.00') && !t5line.includes('never fires') && !t5line.includes('DPS —'),
+    `the Gun Help page tier-5 line reads a real rate and DPS (${t5line})`);
+
+  // 5. Cannon Mortar and AA Flak intervals are unchanged: the linear rule stays for multipliers >= 1.
+  const linear = (mul, strength) => 1 + (mul - 1) * strength;
+  const mortarMul = 1.33;
+  const flakMul = 0.9 / 0.55;
+  for (const tier of [3, 4, 5]) {
+    const strength = 1 + 0.5 * (tier - 3);
+    const mortar = createTower(1, 'cannon', 0, 0);
+    mortar.tier = tier;
+    mortar.branch = 'A';
+    check(Math.abs(effectiveStats(mortar).fireInterval - TOWER_STATS.cannon.fireInterval * linear(mortarMul, strength)) < 1e-9,
+      `cannon Mortar t${tier} interval unchanged (${effectiveStats(mortar).fireInterval.toFixed(2)})`);
+    const flak = createTower(1, 'aa', 0, 0);
+    flak.tier = tier;
+    flak.branch = 'A';
+    check(Math.abs(effectiveStats(flak).fireInterval - TOWER_STATS.aa.fireInterval * linear(flakMul, strength)) < 1e-9,
+      `aa Flak t${tier} interval unchanged (${effectiveStats(flak).fireInterval.toFixed(2)})`);
+  }
+}
+
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
 process.exit(failures === 0 ? 0 : 1);
