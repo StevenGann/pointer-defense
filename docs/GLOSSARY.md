@@ -68,3 +68,10 @@ term rather than per language.
 - Numbers, `$` and units are formatted by `Intl`, never translated or reordered. Hebrew keeps digits in
   a left-to-right run inside right-to-left text.
 - Chinese needs no spaces around numbers; French needs a non-breaking space before `:` `;` `?` `!`.
+
+## Locale-specific traps
+
+- **Hebrew `Cursor` vs `Pointer`.** Both are `סמן` in ordinary Hebrew, which makes the Cursor tower and
+  the pointer panel read as the same thing. The pointer keeps `סמן`; the Cursor tower is `מצביע`
+  ("pointer"), which is distinct and still reads as a device. A native reviewer may prefer a different
+  split — flag it, don't silently collapse them again.

@@ -693,7 +693,7 @@ export const he: Catalogue = {
   'name.tower.beacon': 'משואה',
   'name.tower.repair': 'מתקן',
   'name.tower.wall': 'חומה',
-  'name.tower.cursor': 'סמן',
+  'name.tower.cursor': 'מצביע',
   'name.enemy.grunt': 'חייל',
   'name.enemy.runner': 'רץ',
   'name.enemy.shielded': 'ממוגן',
