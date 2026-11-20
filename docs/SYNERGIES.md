@@ -15,58 +15,71 @@ breaking determinism or saves, how it is drawn, and what proves it works.
 
 **Edge** — one adjacency between two towers that satisfies a synergy rule. Edges are what get drawn.
 
-**Cluster** — a connected set of towers joined by edges of the same synergy, i.e. one connected
-component of that synergy's graph. Four AAs in a row are one cluster; two separate pairs are two
-clusters with the same rules applied to each.
+**Dominant / submissive** — of an edge, the tower whose firing the other one waits for, and the one
+that waits. These words belong in this document and in code comments only. The game never says
+them: player-facing text says *leads* and *follows*, and the code names the pair `lead` / `follow`
+with a `leads()` predicate, so nobody has to ship the vocabulary of a design note to a player.
 
-Adjacency is **orthogonal only** (shares an edge, not a corner). Diagonal clustering makes the
-board read as a blob and makes the connecting lines cross cells the player did not think of as
-joined. If a later synergy wants diagonals it opts in per rule.
+Adjacency is **orthogonal only** — north, south, east, west. No diagonals. Diagonal clustering makes
+the board read as a blob, makes the connecting lines cross cells the player did not think of as
+joined, and turns a two-tower rule into a four-tower rule at every corner.
 
 ## 2. What this is not
 
-No new tower, no new currency, no new upgrade tier, no cost. A synergy is a property of a layout,
-so it also cannot be bought — it is earned by where you put things, and lost when you sell or lose
-one of the pair.
+No new tower, no new currency, no new upgrade tier, no cost. A synergy is a property of a layout, so
+it cannot be bought — it is earned by where you put things, and lost when you sell or lose one of
+the pair.
 
 Synergies are **derived state**. Nothing about them is stored in a save, an editor map, a record or
 a daily seed. They are recomputed from tower positions, so an old save loads into the current rules.
 
 ## 3. The catalogue
 
-Each entry is a pair of kinds (the same kind with itself is allowed), a colour, a dash pattern, and
-an effect. The table is data (`SYNERGIES` in `src/core/synergy.ts`) so a second synergy is a row
-plus its effect function, not a fork of the mechanism.
+Each entry is a pair of kinds (the same kind with itself is allowed), a colour, a dash pattern, and a
+rule for which tower of an edge leads. The table is data (`SYNERGIES` in `src/core/synergy.ts`) so a
+second synergy is a row plus its effect, not a fork of the mechanism.
 
 - `aa-sync` — **AA ↔ AA** — *Synchronized Fire* — amber `0xffe14d`, dashed 4 on / 3 off
 
 ### 3.1 `aa-sync` — Synchronized Fire
 
-Two or more adjacent AA towers form a cluster that fires as one gun.
+Adjacent AAs fire as one.
 
-1. **Phase, not rate.** Every tower in a cluster keeps its own fire interval and its own cooldown.
-   What the cluster shares is *when in the cycle it fires*: when a cluster forms, its members'
-   cooldowns are aligned to the most-ready member, so equal-interval towers pull the trigger on the
-   same tick from then on. No tower is made faster than the game already lets it be.
-2. **One moment.** A tick on which two or more cluster members fire is a volley.
-3. **Concentrated.** Each additional member firing in the same volley adds 6% damage to every shot
-   in that volley, capped at +24% from four or more shooters. A pair hits 6% harder; a long line
-   hits 24% harder.
+1. **The faster tower leads.** On an edge, the tower with the shorter fire interval leads and the
+   other one follows. A plain AA and a Missile AA are both 33 ticks; Flak is slower at every tier, so
+   a branch choice decides the direction of an edge as well as the damage.
+2. **Ties break north, then west.** Equal intervals — the common case, two plain AAs — are settled by
+   position: the tower in the smaller row leads; in the same row, the smaller column leads. That
+   tie-break is universal: any future synergy that cannot separate two towers by its own condition
+   falls back to it.
+3. **A follower holds its fire.** A follower that is ready, aimed and has a target does not shoot
+   until its leader fires in that same tick. Then it fires with it.
+4. **Concentrated.** Every additional tower firing in the same tick adds 6% damage to every shot in
+   that tick, capped at +24% from four or more shooters. A pair hits 6% harder; a line of five hits
+   24% harder.
 
 Targeting, range, turn rate, armour handling, flak shells and missile salvos are all untouched.
-Synchronized Fire changes *when* AA fires and *how hard* a volley lands, never *at what*.
+Synchronized Fire changes *when* AA fires and *how hard* the simultaneous shots land, never *at
+what*.
 
-Why phase alignment instead of a shared clock: a shared clock hands every member the fastest
-member's rate, and AA does not work that way — a plain AA fires every 33 ticks and a tier-20 Flak
-AA every 117, for 5.7× the damage per shell. Running both at 33 ticks would not be a synergy, it
-would be a free 3.5× rate on the branch that already trades rate for punch. Aligning phase gives the player the volley
-fantasy with no hidden rate multiplier, and it never has to be re-tuned when a branch changes.
+Why holding instead of a shared clock: a shared clock hands every member the fastest member's rate,
+so a Flak tower beside a plain AA would fire 3.5× as often as it is allowed to — not a synergy, a
+stealth buff to the branch that deliberately trades rate for punch. Holding costs a follower at most
+one leader cycle and never grants anyone a faster weapon. It also means a synergy **never rewrites a
+cooldown**, so it cannot be used to pull a shot forward by rebuilding a tower.
+
+Why dominance per edge instead of searching a cluster: an edge is a local fact, and its direction is
+decided by comparing its own two ends. No cluster walk, no ordering ambiguity, no dependence on which
+tower happens to be first in the array. A chain of five AAs resolves in one pass because the lead
+relation is transitive by construction — see §4.3.
 
 Tuning constants, all in `src/core/synergy.ts`:
 
 - `AA_VOLLEY_BONUS = 0.06` per extra simultaneous shooter
 - `AA_VOLLEY_BONUS_CAP = 0.24`
 - `AA_MIN_CLUSTER = 2`
+- `AA_HOLD_WINDOW = 33` ticks — how far ahead a follower will wait for a leader's shot
+- `AA_HOLD_CAP = 66` ticks — the backstop: longest a follower may hold, ever
 
 Reference numbers today: plain AA is 2.6 damage, 33-tick interval (0.55 s), 3.4 range, 40 salvage,
 ×2 against flyers — 5.2 per shot, about 9.4 DPS. At tier 20, Flak (branch A) is 117 ticks at 14.8
@@ -77,77 +90,84 @@ damage and Missile (branch B) is 33 ticks at 11.8.
 ### 4.1 Where it hooks
 
 `fireTowers(s)` in `src/core/state.ts` already walks every tower, ticks its cooldown, aims it and
-fires. Clustered AAs are removed from that per-tower walk and handled once per cluster; an AA with
-no synergetic neighbour keeps the existing path byte for byte. That split matters: every tower that
-is not in a cluster must behave exactly as it does today, or the change reaches into balance
-everywhere instead of only where the player built a pair.
+fires. Clustered AAs are removed from that per-tower walk and handled once per cluster; an AA with no
+synergetic neighbour keeps the existing path byte for byte. That split matters: every tower that is
+not in a cluster must behave exactly as it does today, or the change reaches into balance everywhere
+instead of only where the player built a pair.
 
-Per tick, for each AA cluster of size ≥ 2:
+### 4.2 One tick, one cluster
 
-1. Decrement each member's cooldown once — same arithmetic as today, no shared clock.
-2. Collect the members whose cooldown has reached zero, that have a target in range, and that can
-   aim at it this tick. Members still turning or without a target are skipped, exactly as a lone
-   tower is skipped today.
-3. If the collection is empty, nothing happens.
-4. Otherwise every collected member fires. The damage multiplier for all of them is
-   `1 + min(AA_VOLLEY_BONUS_CAP, AA_VOLLEY_BONUS × (n − 1))`, where `n` is how many fired on this
-   tick. Each then resets its own cooldown to its own interval minus one.
+1. Tick every member's cooldown once, exactly as today. No cooldown is ever written by the synergy.
+2. Process the members in lead order (§4.3) — a single pass, leaders before followers.
+3. A member fires if it is ready, aimed, has a target, **and** either it has no live leader or one of
+   its leaders has already fired this tick.
+4. A ready follower with a target whose leader has not fired yet **holds** when the leader is live
+   and its own cooldown is within `AA_HOLD_WINDOW`; it fires anyway when the leader is offline,
+   disabled, EMP'd, has no target in range, or is further away than that window.
+5. Any follower that has held for `AA_HOLD_CAP` consecutive ticks fires regardless. This is the
+   backstop that stops a rule about waiting from becoming a tower that never shoots.
+6. Count the shots that landed this tick in the cluster; every one of them gets
+   `1 + min(AA_VOLLEY_BONUS_CAP, AA_VOLLEY_BONUS × (n − 1))`.
 
-The multiplier is computed once per volley from the count, so a 3-tower volley applies +12% to all
-three shots rather than compounding tower by tower.
+Holding is a runtime fact, not a saved one: `holdSince` is a per-tower-id map cleared whenever
+clusters are rebuilt. A save taken mid-hold resumes with nobody holding, which costs at most one
+extra shot and cannot be farmed, because loading a save is not something a player can repeat inside
+a wave.
 
-### 4.2 Alignment, and where it lives
+### 4.3 Lead order, and why it cannot loop
 
-Alignment is applied when a cluster is (re)built: every member's `cooldown` is set to the smallest
-cooldown in the cluster. `cooldown` is already a saved field (`runsave.ts`), so a mid-run save
-carries each tower's phase with no format change and no new field to forget; a loaded save rebuilds
-its clusters and re-aligns them.
+The comparison used to decide an edge is: shorter interval first; then smaller row; then smaller
+column. That is a lexicographic comparison over a total order, so it is itself a strict total order
+on towers. Sorting a cluster by it puts every leader before every one of its followers, which makes
+the single pass in §4.2 correct with no cycle detection.
 
-One consequence to state plainly: because alignment snaps to the *most-ready* member, forming a
-cluster can bring a volley forward by up to one interval. That is a one-off, it cannot be repeated
-without selling and rebuilding a tower, and it is the same class of generosity as the first shot of
-a fresh tower. If it ever matters in play, the fix is to align to the *least*-ready member instead;
-the mechanism does not change.
+A total order cannot contain a cycle, so a chain, a ring, or a branch of AAs always has a tower that
+leads and one that follows, and a ring still fires in one pass. This is worth stating because the
+obvious alternative — "the partner with the higher rate leads", with no positional tie-break —
+divides by zero on the common case of two identical towers, and a ring of equal-rate towers would
+have no consistent direction at all.
 
-No `SAVE_VERSION` bump. No editor, record or daily change.
+Roles are recomputed whenever towers change: place, sell, destroy, upgrade, branch change, or save
+load. Upgrading a plain AA into a Flak slows it, which can flip its role in a pair mid-wave. That is
+intended and safe, because nothing about the role is stored.
 
-### 4.3 Determinism
+### 4.4 Determinism
 
-- Clusters are built by iterating `s.towers` in array order; no Map iteration, no object key order,
-  no sorting by anything but tower id where a tie-break is needed.
+- Clusters are built by iterating `s.towers` in array order; within a cluster, members are sorted by
+  the §4.3 comparison. No Map iteration order, no object key order.
 - No RNG is consumed. A seeded run replays identically, and the existing non-flyer regression hash
   must not move for towers that are not clustered.
-- Cluster sets are memoised on a revision counter bumped by place, sell, destroy, upgrade-kind and
-  save-load, so the O(n²) adjacency scan does not run sixty times a second.
+- Cluster sets are memoised on a revision counter bumped by every mutation listed in §4.3, so the
+  O(n²) adjacency scan does not run sixty times a second.
 
-### 4.4 Edge cases, decided
+### 4.5 Edge cases, decided
 
-- **Building or selling mid-wave.** Clusters are rebuilt on the revision bump and re-aligned. The
-  survivors keep the clock they had, minus the alignment snap described above.
-- **A member destroyed.** Same as selling.
-- **Offline, EMP'd or disabled members.** They stay in the cluster for connectivity but cannot join
-  a volley while down. The line dims for that member.
-- **Mixed branches and tiers.** Legal, and the alignment does the visible work: two plain AAs volley
-  together every 33 ticks; a Flak AA beside them joins on the beats where its own 117-tick cycle
-  lands, and counts toward `n` when it does.
+- **Building or selling mid-wave.** Clusters rebuild on the revision bump; roles and holds are
+  recomputed. No cooldown is touched, so nothing can be reset by rebuilding.
+- **A member destroyed mid-hold.** Its followers see no live leader on the next tick and fire.
+- **Offline, EMP'd or disabled members.** They still form edges — the line stays drawn, dimmed — but
+  they cannot fire or act as a live leader.
+- **Mixed branches and tiers.** Legal: two plain AAs volley every 33 ticks; a Flak AA beside a plain
+  one fires on the first plain-AA beat after it is ready, and counts toward `n` when it does.
 - **Walls and other kinds between.** They simply do not form edges, and a chain cannot pass through
   them because the chain only follows AA-to-AA adjacency.
 - **Population limits.** Clusters are bounded by the tower cap; no special case.
 
 ## 5. Rendering
 
-- **Layer.** New `synergy` layer in `BOARD_LAYER_ORDER`, inserted immediately before
-  `towerSprites` — below every tower base, above the tiles, the path and the enemy shadows. The
-  line belongs to the ground, not to the towers.
-- **Geometry.** One line per edge, never per cluster: the line joins the two cell centres, trimmed
-  by `0.28 × cell` at each end so it emerges from under the tower art instead of crossing it. A
-  chain of five AAs draws four lines; a ring draws its ring.
-- **Look.** `0xffe14d` at alpha `0.38`, width 2, dashed 4 on / 3 off. A slow pulse of ±0.10 alpha
-  at about 1.1 Hz, driven by `state.clock` so it is deterministic and needs no new timer.
+- **Layer.** New `synergy` layer in `BOARD_LAYER_ORDER`, inserted immediately before `towerSprites`
+  — below every tower base, above the tiles, the path and the enemy shadows. The line belongs to the
+  ground, not to the towers.
+- **Geometry.** One line per edge, never per cluster: the line joins the two cell centres, trimmed by
+  `0.28 × cell` at each end so it emerges from under the tower art instead of crossing it. A chain of
+  five AAs draws four lines; a ring draws its ring.
+- **Look.** `0xffe14d` at alpha `0.38`, width 2, dashed 4 on / 3 off, with a slow ±0.10 alpha pulse
+  at about 1.1 Hz driven by `state.clock`, so no new timer exists to fall out of step.
+- **Direction.** The dash offset drifts from leader to follower. This is the only place a pair's
+  direction is visible, and it costs one animated offset per line rather than any new glyph.
 - **Quality.** `full` and `no-shadows` draw the pulse. `lean` draws the same lines flat at alpha
-  `0.30`, no pulse — the governor may simplify the presentation, never the information.
-- **Toggle.** View → **Synergy lines**, default on, session-only. It exists because eight edges on a
-  crowded board is visual noise to some players, not because the lines are expensive.
+  `0.30`, no drift — the governor may simplify presentation, never the information.
+- **Toggle.** View → **Synergy lines**, default on, session-only.
 - **Colour is never the only signal.** The dash pattern differs per synergy, so the amber dashed AA
   line stays distinguishable under deuteranopia. Greyscale screenshot check is part of review.
 - **RTL.** The board never mirrors; these lines live in world space and ignore `isRtl()` entirely.
@@ -155,8 +175,8 @@ No `SAVE_VERSION` bump. No editor, record or daily change.
 ## 6. Player-facing text
 
 - Help → a new **Synergies** page: the rule in one paragraph, the AA row, and the tuning in plain
-  words ("adjacent AA towers fire as one; a bigger volley hits harder").
-- Tower detail panel for an AA in a cluster: one extra line, `Synced · 3 towers · +12% volley`.
+  words ("adjacent AA towers fire as one — the faster one leads, and a bigger volley hits harder").
+- Tower detail panel for an AA in a cluster: one line, `Synced · 3 towers · +12% volley`.
 - Tooltip for a lone AA: `No adjacent AA — not synchronized`. It states the opportunity once and
   does not nag.
 - All new strings go through the catalogue under `help.synergy.*` and `hud.synergy.*`, with numbers
@@ -166,41 +186,48 @@ No `SAVE_VERSION` bump. No editor, record or daily change.
 
 Smoke groups, in the existing harness:
 
-1. Adjacency: orthogonal pairs cluster, diagonal pairs do not.
-2. Chains and rings: five in a row is one cluster of five; two pairs are two clusters of two.
-3. Split: sell the middle of a chain, the cluster becomes two, and both halves stay aligned.
-4. Rate is preserved: a clustered plain AA fires every 33 ticks, a clustered Flak AA every 117 —
-   never the fastest member's rate.
-5. Alignment: a freshly clustered pair fires its first volley on one tick, not two.
-6. Volley maths: 2 shooters +6%, 3 +12%, 5 +24% and no further, checked against the constants.
-7. Isolated member: a tower that cannot aim this tick fires on its next ready tick, uncapped and
-   alone.
-8. Isolation: a lone AA's cooldown, aim and damage are unchanged; the non-flyer determinism hash
-   does not move.
-9. Save round-trip mid-volley: the restored run resumes in phase.
-10. Layer order: `synergy` sits below `towerSprites` and above `path`; the layer list stays frozen.
-11. Lean quality still draws flat lines; `full` pulses.
-12. RTL: edge positions are byte-identical under `he`.
+1. Adjacency: orthogonal pairs form edges; diagonal pairs do not.
+2. Direction: the shorter interval leads; equal intervals resolve north, then west.
+3. Order: sorting a ring and a chain by the §4.3 comparison puts every leader before its followers,
+   and the comparison is total — no two distinct towers compare equal.
+4. Propagation: a chain of five fires all five on one tick, in one pass.
+5. Holding: a ready follower with a live, in-window leader does not fire.
+6. Abandonment: a follower fires anyway when its leader is offline, has no target, is outside the
+   window, or has held past `AA_HOLD_CAP`.
+7. Rate preservation: a clustered Flak AA still fires on its own interval, never the leader's.
+8. Volley maths: 2 shooters +6%, 3 +12%, 5 +24% and no further, checked against the constants.
+9. No cooldown rewriting: a tower's cooldown sequence is identical with and without a neighbour,
+   apart from the ticks it spends holding.
+10. Isolation: a lone AA's cooldown, aim and damage are unchanged; the non-flyer determinism hash
+    does not move.
+11. Save round-trip mid-hold: the restored run resumes with no follower stuck holding.
+12. Role flip: upgrading a partner into a Flak flips the edge's direction on the next rebuild.
+13. Layer order: `synergy` sits below `towerSprites` and above `path`; the layer list stays frozen.
+14. Lean quality still draws flat lines; `full` pulses.
+15. RTL: edge positions are byte-identical under `he`.
 
 ## 8. Balance note
 
-A base pair goes from about 18.9 DPS spread across two towers to the same 18.9 landing in volleys
-at +6%, so roughly 20 DPS and a distinct thump. The real payoff is the cap: a line of five AAs
-lands +24% while keeping every tower's own rate. If testers report AA trivialising flyer waves, cut
-`AA_VOLLEY_BONUS_CAP` first, then the per-member bonus; do not touch the base AA stats, which are
-load-bearing for the existing flyer-wave tuning.
+A base pair goes from about 18.9 DPS across two towers to the same shots landing together at +6%, so
+roughly 20 DPS. The follower's wait costs at most one leader cycle per volley and nothing at all once
+two towers share an interval, which is the common case. If testers report AA trivialising flyer
+waves, cut `AA_VOLLEY_BONUS_CAP` first, then the per-member bonus; do not touch the base AA stats,
+which are load-bearing for the existing flyer-wave tuning.
 
 Records set before this ships are not comparable with records set after; that was already true of
 every balance change and is not worth a migration.
 
 ## 9. Future rows, not built
 
-Written down so the mechanism is checked against more than one case before it is built:
+Written down so the mechanism is checked against more than one case before it is built. Each note
+says what its lead rule would be, because that is the part this document is really about:
 
-- **Frost ↔ Frost** — overlapping slow fields merge into one larger field.
-- **Beacon ↔ Laser** — a beacon's aura ignores the beam tower's range penalty.
-- **Repair ↔ Wall** — a repairing wall repairs its neighbours too.
-- **Cursor ↔ Gun** — the cursor's kill credit pays the gun a small cut.
+- **Frost ↔ Frost** — overlapping slow fields merge into one larger field. Lead: the larger field
+  radius; ties north/west.
+- **Beacon ↔ Laser** — a beacon's aura ignores the beam tower's range penalty. Lead: the beacon,
+  because the aura is the thing being extended; ties are irrelevant.
+- **Repair ↔ Wall** — a repairing wall repairs its neighbours too. Lead: whichever is repairing.
+- **Cursor ↔ Gun** — the cursor's kill credit pays the gun a small cut. Lead: the cursor, always.
 
 None of these are in the table. `SYNERGIES` starts with one row on purpose: build the mechanism
 against the one case we can playtest, then add rows without touching the mechanism.
