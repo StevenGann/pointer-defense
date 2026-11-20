@@ -1,3 +1,4 @@
+import { towerName, enemyName } from '../i18n/names.ts';
 import {
   BRANCHES,
   CURSOR_REPAIR_THRESHOLD,
@@ -45,7 +46,7 @@ import {
   type PointerStage,
 } from '../core/pointer.ts';
 import { TICK_HZ } from '../core/time.ts';
-import { ENEMY_STATS, type Enemy } from '../core/enemies.ts';
+import type { Enemy } from '../core/enemies.ts';
 import { t } from '../i18n/index.ts';
 
 /**
@@ -214,7 +215,7 @@ export function towerTooltipLines(
     return lines;
   }
   const branch = tower.branch === null ? '' : t('tooltip.branchSuffix', { branch: branchName(tower.kind, tower.branch) });
-  const name = t('tooltip.towerName', { name: TOWER_STATS[tower.kind].name, tier: tower.tier }) + branch;
+  const name = t('tooltip.towerName', { name: towerName(tower.kind), tier: tower.tier }) + branch;
 
   if (tower.kind === 'repair') {
     const heal = repairHealRate(tower);
@@ -467,7 +468,7 @@ export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[
     const before = effectiveStats(tower);
     const after = effectiveStats({ ...tower, tier: next, branch: tower.branch });
     return [[
-      { text: t('tooltip.beaconUpgrade', { name: TOWER_STATS.beacon.name, tier: tierOfMax('beacon', tower.tier), next: tierOfMax('beacon', next), pct: Math.round(before.auraDamage * 100) }) },
+      { text: t('tooltip.beaconUpgrade', { name: towerName('beacon'), tier: tierOfMax('beacon', tower.tier), next: tierOfMax('beacon', next), pct: Math.round(before.auraDamage * 100) }) },
       good('+' + Math.round(after.auraDamage * 100) + '%'),
       { text: t('tooltip.cost', { cost: formatNumber(cost) }) },
     ]];
@@ -490,7 +491,7 @@ export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[
     ]];
   }
 
-  const name = TOWER_STATS[tower.kind].name;
+  const name = towerName(tower.kind);
   const before = effectiveStats(tower);
   const after = effectiveStats({ ...tower, tier: next });
   return [[
@@ -595,7 +596,7 @@ export function branchTooltipLines(tower: Tower, branch: Branch, salvage: number
  * Bastion — how many shield layers remain. Boss variants are the only enemies with a tooltip so far.
  */
 export function enemyTooltipLines(e: Enemy): TooltipLine[] {
-  const name = ENEMY_STATS[e.kind].name;
+  const name = enemyName(e.kind);
   const hp = t('tooltip.enemyHp', { hp: Math.ceil(e.hp), max: e.maxHp });
   if (e.kind === 'shielded-boss') return [name, hp, t('tooltip.shieldLayers', { layers: e.shieldsRemaining })];
   return [name, hp];

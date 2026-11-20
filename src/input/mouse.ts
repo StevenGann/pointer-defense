@@ -1,3 +1,4 @@
+import { towerName } from '../i18n/names.ts';
 import type { Application } from 'pixi.js';
 import { claimTray, hasUpgrade } from '../core/upgrades.ts';
 import { computeTitleControls, menuItemAt, menuNameAt, pixelToWorld, pointInRect, type Layout, type MenuName } from '../view/chrome.ts';
@@ -15,7 +16,6 @@ import {
   isToggleGate,
   towerUnlockWave,
   TOWER_KINDS,
-  TOWER_STATS,
   isTowerKind,
   type Branch,
   type TowerKind,
@@ -331,7 +331,7 @@ export class MouseController {
       }
       const kind = control.action as TowerKind;
       if (TOWER_KINDS.includes(kind) && !towerUnlocked(s, kind)) {
-        this.ctx.notice(t('shell.unlockAtWave', { name: TOWER_STATS[kind].name, wave: towerUnlockWave(kind) }));
+        this.ctx.notice(t('shell.unlockAtWave', { name: towerName(kind), wave: towerUnlockWave(kind) }));
         return;
       }
     }
@@ -614,7 +614,7 @@ export class MouseController {
     if (Number.isInteger(n) && n >= 1 && n <= TOWER_KINDS.length) {
       const kind = TOWER_KINDS[n - 1];
       if (!towerUnlocked(s, kind)) {
-        this.ctx.notice(t('shell.unlockAtWave', { name: TOWER_STATS[kind].name, wave: towerUnlockWave(kind) }));
+        this.ctx.notice(t('shell.unlockAtWave', { name: towerName(kind), wave: towerUnlockWave(kind) }));
         return;
       }
       selectTower(s, kind);
