@@ -441,7 +441,7 @@ export const ru = {
 
   'hud.gameOver': 'Игра окончена',
   'hud.gameOverMessage': 'Оборона прорвана на волне {wave}.',
-  'hud.restart': 'Заново',
+  'hud.mainMenu': 'Главное меню',
   'hud.victory': 'Победа',
   'hud.victoryDaily': 'Ежедневный вызов пройден — пройдены все тридцать волн.',
   'hud.victoryAll': 'Пройдены все сто волн.',

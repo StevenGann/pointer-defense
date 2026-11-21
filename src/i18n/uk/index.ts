@@ -123,7 +123,7 @@ export const uk: Catalogue = {
 
   'hud.gameOver': 'Гру закінчено',
   'hud.gameOverMessage': 'Лінію прорвано на хвилі {wave}.',
-  'hud.restart': 'Заново',
+  'hud.mainMenu': 'Головне меню',
   'hud.victory': 'Перемога',
   'hud.victoryDaily': 'Щоденний виклик завершено — усі тридцять хвиль зачищено.',
   'hud.victoryAll': 'Усі сто хвиль зачищено.',

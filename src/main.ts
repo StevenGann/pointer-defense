@@ -1313,12 +1313,6 @@ const mouse = new MouseController(app, {
   menu: () => menu,
   dialog: () => dialog,
   screen: () => screen,
-  restart: () => {
-    state = createRunState(profile);
-    resetRunNotified();
-    syncViewport();
-    closeRunModals();
-  },
   restartWindows: doRestartWindows,
   startEndless: () => {
     enterEndless(state);

@@ -605,12 +605,12 @@ export function modalRect(l: Layout): Rect {
 }
 
 function restartRect(m: Rect): Rect {
-  const w = 96;
+  const w = 128;
   const h = 26;
   return { x: m.x + Math.floor((m.w - w) / 2), y: m.y + m.h - h - 10, w, h };
 }
 
-export function modalRestartAt(l: Layout, s: RunState, px: number, py: number): boolean {
+export function modalMenuAt(l: Layout, s: RunState, px: number, py: number): boolean {
   if (s.phase !== 'halted') return false;
   return pointInRect(restartRect(modalRect(l)), px, py);
 }
@@ -727,7 +727,7 @@ export class HudView {
   private readonly mapNext = makeText('');
   private readonly modalTitle = makeText('', true);
   private readonly modalMessage = makeText('');
-  private readonly modalRestart = makeText(t('hud.restart'));
+  private readonly modalMenu = makeText(t('hud.mainMenu'));
   private readonly modalButton2 = makeText('');
   private readonly nextWaveTitle = makeText(t('hud.nextWaveTitle'), true);
   private readonly nextWaveRows: Text[] = [makeText(''), makeText(''), makeText(''), makeText(''), makeText('')];
@@ -790,7 +790,7 @@ export class HudView {
     this.salvage.style.fontSize = READOUT_FONT_SIZE;
     this.mapNext.anchor.set(0.5, 0.5);
     this.root.addChild(this.modalG);
-    for (const t of [this.modalTitle, this.modalRestart, this.modalButton2]) {
+    for (const t of [this.modalTitle, this.modalMenu, this.modalButton2]) {
       t.anchor.set(0, 0.5);
       this.root.addChild(t);
     }
@@ -799,7 +799,7 @@ export class HudView {
     this.modalMessage.anchor.set(0, 0);
     this.root.addChild(this.modalMessage);
     this.modalTitle.style.fill = PAL.titleInverse;
-    this.modalRestart.anchor.set(0.5, 0.5);
+    this.modalMenu.anchor.set(0.5, 0.5);
     this.modalButton2.anchor.set(0.5, 0.5);
     this.comboText.style.fill = PAL.title;
     this.statusPaused.style.fill = PAL.title;
@@ -983,7 +983,7 @@ export class HudView {
     } else {
       this.modalTitle.text = '';
       this.modalMessage.text = '';
-      this.modalRestart.text = '';
+      this.modalMenu.text = '';
       this.modalButton2.text = '';
     }
 
@@ -1305,8 +1305,8 @@ export class HudView {
 
     const r = restartRect(m);
     bevel(g, r, true, PAL.face);
-    this.modalRestart.text = t('hud.restart');
-    this.modalRestart.position.set(r.x + r.w / 2, r.y + r.h / 2);
+    this.modalMenu.text = t('hud.mainMenu');
+    this.modalMenu.position.set(r.x + r.w / 2, r.y + r.h / 2);
   }
 
   private drawVictoryModal(s: RunState, l: Layout): void {
@@ -1339,8 +1339,8 @@ export class HudView {
     }
 
     bevel(g, b.restart, true, PAL.face);
-    this.modalRestart.text = t('hud.restartWindows');
-    this.modalRestart.position.set(b.restart.x + b.restart.w / 2, b.restart.y + b.restart.h / 2);
+    this.modalMenu.text = t('hud.restartWindows');
+    this.modalMenu.position.set(b.restart.x + b.restart.w / 2, b.restart.y + b.restart.h / 2);
   }
 }
 

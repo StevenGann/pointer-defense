@@ -113,7 +113,7 @@ export const fr: Catalogue = {
   'hud.paused': 'EN PAUSE',
   'hud.gameOver': 'Partie terminée',
   'hud.gameOverMessage': 'La voie a cédé à la vague {wave}.',
-  'hud.restart': 'Redémarrer',
+  'hud.mainMenu': 'Menu principal',
   'hud.victory': 'Victoire',
   'hud.victoryDaily': 'Défi quotidien terminé — les trente vagues ont été franchies.',
   'hud.victoryAll': 'Les cent vagues ont été franchies.',

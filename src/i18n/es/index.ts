@@ -113,7 +113,7 @@ export const es: Catalogue = {
   'hud.paused': 'EN PAUSA',
   'hud.gameOver': 'Partida terminada',
   'hud.gameOverMessage': 'La ruta se rompió en la oleada {wave}.',
-  'hud.restart': 'Reiniciar',
+  'hud.mainMenu': 'Menú principal',
   'hud.victory': 'Victoria',
   'hud.victoryDaily': 'Diario completado — las treinta oleadas superadas.',
   'hud.victoryAll': 'Las cien oleadas superadas.',

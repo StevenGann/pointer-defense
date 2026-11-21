@@ -112,7 +112,7 @@ export const zh: Catalogue = {
   'hud.paused': '已暂停',
   'hud.gameOver': '游戏结束',
   'hud.gameOverMessage': '防线在第 {wave} 波被攻破。',
-  'hud.restart': '重新开始',
+  'hud.mainMenu': '主菜单',
   'hud.victory': '胜利',
   'hud.victoryDaily': '每日完成——全部三十波已清空。',
   'hud.victoryAll': '全部一百波已清空。',

@@ -117,7 +117,7 @@ export const he: Catalogue = {
   'hud.paused': 'מושהה',
   'hud.gameOver': 'סוף המשחק',
   'hud.gameOverMessage': 'הנתיב נפרץ בגל {wave}.',
-  'hud.restart': 'הפעל מחדש',
+  'hud.mainMenu': 'תפריט ראשי',
   'hud.victory': 'ניצחון',
   'hud.victoryDaily': 'האתגר היומי הושלם — כל שלושים הגלים נוקו.',
   'hud.victoryAll': 'כל מאה הגלים נוקו.',
