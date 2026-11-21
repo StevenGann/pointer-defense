@@ -1,5 +1,6 @@
 import { COLS, ROWS, type Tile } from './grid.ts';
 import { levelFingerprint, levelProblemMessage, MAX_TOGGLES, validateLevel, type Level, type LevelToggle } from './levels.ts';
+import { t } from '../i18n/index.ts';
 
 /**
  * The map editor's model: the board being drawn, kept side-effect free of any rendering so the smoke
@@ -10,16 +11,17 @@ import { levelFingerprint, levelProblemMessage, MAX_TOGGLES, validateLevel, type
  * carries a `LevelToggle` with its own period/open/phase timing.
  */
 
-export type EditorTileKind = 'floor' | 'wall' | 'shutter';
+export type EditorTileKind = 'floor' | 'wall' | 'shutter' | 'no-build';
 
-export type EditorTool = 'floor' | 'wall' | 'shutter' | 'start' | 'exit' | 'eraser';
+export type EditorTool = 'floor' | 'wall' | 'shutter' | 'no-build' | 'start' | 'exit' | 'eraser';
 
-export const EDITOR_TOOLS: readonly EditorTool[] = ['floor', 'wall', 'shutter', 'start', 'exit', 'eraser'];
+export const EDITOR_TOOLS: readonly EditorTool[] = ['floor', 'wall', 'shutter', 'no-build', 'start', 'exit', 'eraser'];
 
 export const TOOL_NAMES: Readonly<Record<EditorTool, string>> = {
   floor: 'Floor',
   wall: 'Wall',
   shutter: 'Shutter',
+  'no-build': t('shell.editor.tool.noBuild'),
   start: 'Start',
   exit: 'Exit',
   eraser: 'Eraser',
@@ -224,6 +226,14 @@ export function paintEditor(model: EditorModel, col: number, row: number): strin
     model.selectedShutter = { col, row };
     return null;
   }
+  if (tool === 'no-build') {
+    // Walkable floor the player cannot build on: painted and erased exactly like floor.
+    if (tile === 'no-build' && !hasToggle) return null;
+    pushUndo(model);
+    model.tiles[idx] = 'no-build';
+    setShutter(model, col, row, true);
+    return null;
+  }
   // floor / eraser: buildable floor.
   if (tile === 'floor' && !hasToggle) return null;
   pushUndo(model);
@@ -279,15 +289,18 @@ export function editorValidation(model: EditorModel): string | null {
 /** The level the drawing describes. Call only once a start and exit exist. */
 export function editorLevel(model: EditorModel): Level {
   const walls: (readonly [number, number])[] = [];
+  const noBuild: (readonly [number, number])[] = [];
   for (let row = 0; row < model.rows; row++) {
     for (let col = 0; col < model.cols; col++) {
-      if (model.tiles[editorIndex(model, col, row)] === 'wall') walls.push([col, row]);
+      const kind = model.tiles[editorIndex(model, col, row)];
+      if (kind === 'wall') walls.push([col, row]);
+      else if (kind === 'no-build') noBuild.push([col, row]);
     }
   }
   const toggles = model.toggles.map((t) => ({ ...t }));
   const starts: Tile[] = model.start ? [model.start] : [];
   const exits: Tile[] = model.exit ? [model.exit] : [];
-  const level: Level = { id: '', name: model.name, walls, starts, exits, toggles };
+  const level: Level = { id: '', name: model.name, walls, noBuild, starts, exits, toggles };
   return { ...level, id: levelFingerprint(level) };
 }
 

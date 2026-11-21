@@ -69,9 +69,12 @@ export const shell = {
   'shell.editor.cannotSave': 'Cannot save: {reason}',
   'shell.editor.untitled': 'Untitled',
   'shell.editor.newMap': 'New map',
+  'shell.editor.tool.noBuild': 'No-Build',
+  'shell.editor.tool.noBuildHint': 'Walkable floor you cannot build on.',
 
   // Placement refusal reasons.
   'shell.refusal.blockedTile': 'That tile is blocked.',
+  'shell.refusal.noBuildTile': 'No towers on a No-Build tile.',
   'shell.refusal.shutterTile': 'That tile is a shutter and cannot be built on.',
   'shell.refusal.occupied': 'There is already a tower there.',
   'shell.refusal.noSalvage': 'Not enough salvage for that tower.',

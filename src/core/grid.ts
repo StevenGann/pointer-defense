@@ -10,7 +10,7 @@
 export const COLS = 20;
 export const ROWS = 12;
 
-export type TileKind = 'buildable' | 'blocked';
+export type TileKind = 'buildable' | 'blocked' | 'no-build';
 
 export interface Point {
   x: number;

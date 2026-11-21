@@ -37,12 +37,25 @@ function css(color: number): string {
   return '#' + color.toString(16).padStart(6, '0');
 }
 
-function thumbBase(cell: ThumbCell): string {
+/** A colour darkened by 8 % (each channel scaled by 0.92), for the no-build thumbnail tile. */
+function darken8(color: number): number {
+  const r = Math.round(((color >> 16) & 0xff) * 0.92);
+  const g = Math.round(((color >> 8) & 0xff) * 0.92);
+  const b = Math.round((color & 0xff) * 0.92);
+  return (r << 16) | (g << 8) | b;
+}
+
+const NO_BUILD_FLOOR = darken8(PAL.face);
+
+/** The fill colour for a thumbnail cell: the floor colour, darkened 8 % for a no-build tile. */
+export function thumbBase(cell: ThumbCell): string {
   switch (cell) {
     case 'wall':
       return css(PAL.dark);
     case 'route':
       return css(PAL.shadow);
+    case 'no-build':
+      return css(NO_BUILD_FLOOR);
     case 'spawn':
     case 'exit':
       // The spawn and exit sit on the route; the marker colour is drawn over this mid tone.

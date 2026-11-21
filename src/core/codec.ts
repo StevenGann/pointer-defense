@@ -11,7 +11,7 @@ import { levelFingerprint, levelProblemMessage, MAX_TOGGLES, validateLevel, type
  *   1          cols    (uint8)
  *   2          rows    (uint8)
  *   3..        bitfield: 2 bits per tile, 4 tiles per byte, row-major, low bits first
- *              (0 floor, 1 wall, 2 shutter, 3 reserved)
+ *              (0 floor, 1 wall, 2 shutter, 3 no-build)
  *   then       start col, row (uint16 each, LE)
  *   then       exit  col, row (uint16 each, LE)
  *   then       shutter count (uint8), then per shutter:
@@ -38,6 +38,8 @@ function tileValueAt(level: Level, idx: number): EncodedTile {
   const row = (idx - col) / COLS;
   const wall = level.walls.some(([c, r]) => c === col && r === row);
   if (wall) return 1;
+  const noBuild = (level.noBuild ?? []).some(([c, r]) => c === col && r === row);
+  if (noBuild) return 3;
   const toggle = (level.toggles ?? []).some((t) => t.col === col && t.row === row);
   return toggle ? 2 : 0;
 }
@@ -160,7 +162,6 @@ export function decodeCode(code: string): DecodeResult {
   for (let i = 0; i < n; i++) {
     const b = body[3 + (i >> 2)];
     const v = (b >> ((i & 3) * 2)) & 3;
-    if (v === 3) return fail('that code is from a newer version');
     tiles[i] = v as EncodedTile;
   }
 
@@ -213,14 +214,17 @@ export function decodeCode(code: string): DecodeResult {
   name = sanitizeName(name);
 
   const walls: (readonly [number, number])[] = [];
+  const noBuild: (readonly [number, number])[] = [];
   for (let i = 0; i < n; i++) {
     if (tiles[i] === 1) walls.push([i % cols, (i - (i % cols)) / cols]);
+    else if (tiles[i] === 3) noBuild.push([i % cols, (i - (i % cols)) / cols]);
   }
 
   const level: Level = {
-    id: levelFingerprint({ id: '', name, walls, starts: [start], exits: [exit], toggles }),
+    id: levelFingerprint({ id: '', name, walls, starts: [start], exits: [exit], toggles, noBuild }),
     name,
     walls,
+    noBuild,
     starts: [start],
     exits: [exit],
     toggles,

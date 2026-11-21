@@ -154,7 +154,9 @@ const NO_BUILD_HUD_ACTIONS: ReadonlySet<HudAction> = new Set<HudAction>([
 
 function refusalReason(s: RunState, kind: TowerKind, col: number, row: number): string {
   if (noBuildActive(s)) return NO_BUILD_MESSAGE;
-  if (tileAt(s.grid, col, row) !== 'buildable') return t('shell.refusal.blockedTile');
+  const tile = tileAt(s.grid, col, row);
+  if (tile === 'no-build') return t('shell.refusal.noBuildTile');
+  if (tile !== 'buildable') return t('shell.refusal.blockedTile');
   if (toggleAtTile(s, col, row)) return t('shell.refusal.shutterTile');
   if (towerAt(s, col, row)) return t('shell.refusal.occupied');
   if (!canAfford(s.economy, towerCost(s, kind))) return t('shell.refusal.noSalvage');

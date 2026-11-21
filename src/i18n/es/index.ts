@@ -850,8 +850,11 @@ export const es: Catalogue = {
   'shell.editor.cannotSave': 'No se puede guardar: {reason}',
   'shell.editor.untitled': 'Sin título',
   'shell.editor.newMap': 'Nuevo mapa',
+  'shell.editor.tool.noBuild': 'No-Build',
+  'shell.editor.tool.noBuildHint': 'Walkable floor you cannot build on.',
 
   'shell.refusal.blockedTile': 'Esa casilla está bloqueada.',
+  'shell.refusal.noBuildTile': 'No towers on a No-Build tile.',
   'shell.refusal.shutterTile': 'Esa casilla es una compuerta y no se puede construir sobre ella.',
   'shell.refusal.occupied': 'Ya hay una torre ahí.',
   'shell.refusal.noSalvage': 'No hay suficiente chatarra para esa torre.',
