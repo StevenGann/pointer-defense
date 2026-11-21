@@ -28,11 +28,12 @@ import {
   type RunState,
 } from './core/state.ts';
 import { SPAWN_KINDS, spawnKindLabel } from './core/cheats.ts';
-import { DEFAULT_LEVEL, type Level } from './core/levels.ts';
+import { LEVELS, type Level } from './core/levels.ts';
 import { dailyAvailable, dailyDate, dailyFor, dailyMenuLabel, DAILY_WAVES } from './core/daily.ts';
 import { addSeenEnemies, checkProfileAchievements, loadProfile, saveProfile, SPEC_KINDS, type Profile, type RunOutcome, type SpecKind } from './core/save.ts';
 import { clearRunSave, loadRunSave, saveRun } from './core/runsave.ts';
-import { appendDailyRun, appendRun, buildRunRecord, runTotals } from './core/runs.ts';
+import { appendDailyRun, appendRun, bestByMap, buildRunRecord, runTotals } from './core/runs.ts';
+import { readRememberedMap, rememberMap } from './core/mapSave.ts';
 import { buyNode, effectsFor, treeNodeById } from './core/tree.ts';
 import { achievementName } from './core/achievements.ts';
 import { unlockAchievement } from './steam.ts';
@@ -106,6 +107,8 @@ import { contextHelpHitAt, contextHelpPage, nextHelpMode } from './view/contexth
 import { HELP_PAGES, pageUnlocked } from './content/help.ts';
 import { EditorView, editorPaletteAt, editorToggleNudgeAt, editorToolbarAt, type EditorAction, type ToggleNudge } from './view/editor.ts';
 import { MapLibraryView, NameDialogView, computeMapLibrary, computeNameDialog, mapLibraryHitAt, nameDialogButtonAt, type MapLibraryHit, type MapLibraryMode } from './view/mapLibrary.ts';
+import { MapsScreenView } from './view/mapsScreen.ts';
+import { mapCardAt, mapFocusForId, mapGalleryKey, mapLevelAt } from './view/mapSelect.ts';
 import { t, currentLocaleName } from './i18n/index.ts';
 import { switchLocale } from './i18n/activate.ts';
 import { LOCALES } from './i18n/locales.ts';
@@ -211,6 +214,7 @@ const helpSession = new HelpSession();
 const helpView = new HelpView();
 const recordsSession = new RecordsSession();
 const recordsView = new RecordsView();
+const mapsScreenView = new MapsScreenView();
 const restoreView = new RestoreView();
 const restoreSession = new RestoreSession();
 const upgradesSession = new UpgradesSession();
@@ -243,6 +247,7 @@ root.addChild(
   trayView.root,
   menuView.root,
   menuScreenView.root,
+  mapsScreenView.root,
   loadDialogView.root,
   editorView.root,
   mapLibraryView.root,
@@ -288,8 +293,12 @@ function buyGlobalUpgrade(id: UpgradeId): void {
 // A valid save lands on the menu so Continue is the primary action; otherwise boot follows the
 // remembered choice (Play resumes the normal flow straight into a run).
 let screen: Screen =
-  continueState !== null ? 'menu' : profile.lastChoice === 'editor' ? 'editor' : profile.lastChoice === 'load' ? 'menu' : 'run';
+  continueState !== null ? 'menu' : profile.lastChoice === 'editor' ? 'editor' : profile.lastChoice === 'load' ? 'menu' : 'maps';
 let runOrigin: 'play' | 'load' | 'editor' = 'play';
+// The map-selection gallery (docs/MAP-SELECT.md): focus is a LEVELS index, remembered by map id.
+let mapsFocus: number = mapFocusForId(readRememberedMap());
+let mapsBest: ReadonlyMap<string, number> = bestByMapMap(profile.runs);
+let mapsHover: number | null = null;
 const editor: EditorModel = createEditor();
 /** The saved maps (docs/EDITOR-LIBRARY.md), newest first, loaded once at boot. */
 let editorLib: EditorMapEntry[] = loadLibrary();
@@ -892,10 +901,35 @@ function startRun(level: Level, origin: 'play' | 'load' | 'editor'): void {
   loadInput.blur();
 }
 
-function startPlay(): void {
+/** The best wave per map, from the run history, as a quick map-id -> wave lookup for the gallery. */
+function bestByMapMap(runs: Profile['runs']): ReadonlyMap<string, number> {
+  const out = new Map<string, number>();
+  for (const b of bestByMap(runs)) out.set(b.mapId, b.wave);
+  return out;
+}
+
+/** Play opens the gallery (docs/MAP-SELECT.md): pick a map, then start it. */
+function openMaps(): void {
   profile.lastChoice = 'play';
   saveProfile(profile);
-  startRun(DEFAULT_LEVEL, 'play');
+  recordsSession.hide();
+  mapsFocus = mapFocusForId(readRememberedMap());
+  mapsBest = bestByMapMap(profile.runs);
+  mapsHover = null;
+  screen = 'maps';
+}
+
+/** Start the focused gallery card's map and remember the choice for the next launch. */
+function startSelectedMap(): void {
+  const level = mapLevelAt(mapsFocus);
+  rememberMap(level.id);
+  startRun(level, 'play');
+}
+
+/** Esc from the gallery returns to the menu (docs/MAP-SELECT.md). */
+function closeMaps(): void {
+  mapsHover = null;
+  screen = 'menu';
 }
 
 /** The Daily button's label and disabled state, computed from the profile and the local date. */
@@ -963,7 +997,7 @@ function menuDialogAction(id: string): void {
     clearRunSave();
     continueState = null;
     dialog = null;
-    startPlay();
+    openMaps();
   } else if (id === 'cancel-discard') {
     dialog = null;
   }
@@ -1566,10 +1600,23 @@ app.canvas.addEventListener('pointermove', (e) => {
     }
     return;
   }
+  if (screen === 'maps') {
+    mapsHover = mapCardAt(layout.client, x, y, LEVELS.length);
+    return;
+  }
 });
 
 app.canvas.addEventListener('pointerdown', (e) => {
   const { x, y } = canvasPoint(e);
+  if (screen === 'maps') {
+    if (e.button !== 0) return;
+    const idx = mapCardAt(layout.client, x, y, LEVELS.length);
+    if (idx !== null) {
+      mapsFocus = idx;
+      startSelectedMap();
+    }
+    return;
+  }
   if (screen === 'menu') {
     // The context-help box toggles the mode; while on, any click (left or right) clears it.
     if (!loadOpen && menuWindowHelpAt(layout, x, y)) {
@@ -1618,7 +1665,7 @@ app.canvas.addEventListener('pointerdown', (e) => {
     if (btn === 'continue') startContinue();
     else if (btn === 'play') {
       if (continueState !== null) askDiscardSave();
-      else startPlay();
+      else openMaps();
     } else if (btn === 'daily') startDaily();
     else if (btn === 'editor') openEditorScreen();
     else if (btn === 'load') openLoadDialog();
@@ -1773,13 +1820,20 @@ window.addEventListener('keydown', (e) => {
     }
     if (key === 'enter') {
       if (continueState !== null) startContinue();
-      else startPlay();
+      else openMaps();
     } else if (key === 'p') {
       if (continueState !== null) askDiscardSave();
-      else startPlay();
+      else openMaps();
     } else if (key === 'e') openEditorScreen();
     else if (key === 'l') openLoadDialog();
     else if (key === 'd') startDaily();
+    return;
+  }
+  if (screen === 'maps') {
+    const r = mapGalleryKey(mapsFocus, key);
+    mapsFocus = r.focus;
+    if (r.action === 'start') startSelectedMap();
+    else if (r.action === 'back') closeMaps();
     return;
   }
   if (screen === 'editor') {
@@ -2110,6 +2164,7 @@ app.ticker.add((ticker) => {
   dialogView.root.visible = running || screen === 'menu' || screen === 'editor';
   tooltip.root.visible = running;
   menuScreenView.root.visible = screen === 'menu';
+  mapsScreenView.root.visible = screen === 'maps';
   loadDialogView.root.visible = screen === 'menu' && loadOpen;
   editorView.root.visible = screen === 'editor';
   mapLibraryView.root.visible = screen === 'editor' && libOpen;
@@ -2160,6 +2215,10 @@ app.ticker.add((ticker) => {
       nameInput.style.display = 'none';
     }
     if (dialog) dialogView.draw(dialog, layout);
+  } else if (screen === 'maps') {
+    loadInput.style.display = 'none';
+    nameInput.style.display = 'none';
+    mapsScreenView.draw(layout, mapsFocus, mapsHover, mapsBest);
   }
 
   cursor.position.set(mouse.hover.x, mouse.hover.y);

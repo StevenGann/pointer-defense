@@ -541,6 +541,9 @@ export const ru = {
 
   'shell.continue': 'Волна {wave} — {map}',
   'shell.daily': 'Ежедневный — {date}',
+  'shell.maps.title': 'Выбор карты',
+  'shell.maps.best': 'Лучшая волна: {n}',
+  'shell.maps.best.none': 'Не сыграно',
   'shell.achievement': 'Достижение: {name}',
   'shell.notice.popupEscaped': 'Всплывающее окно ушло — урона нет',
   'shell.notice.shutterOpen': 'Затвор {index} открыт',

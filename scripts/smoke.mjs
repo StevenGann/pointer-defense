@@ -126,6 +126,10 @@ import { appendRun, appendDailyRun, buildRunRecord, runTotals, bestByMap } from 
 import { buildRecordsRows, totalsLine, bestByMapLine, computeRecordsLayout, recordsHitAt, formatRecordDate, outcomeLabel } from '../src/view/records.ts';
 import { captureRun, restoreRun, loadRunSave, saveRun, clearRunSave, hasRunSave, RUN_SAVE_KEY } from '../src/core/runsave.ts';
 import { computeMenuScreen, menuButtonAt, computeMenuWindow, computeMenuAnim, marqueeMaskRect } from '../src/view/menuScreen.ts';
+import { computeMapCards, mapCardAt, moveMapFocus, mapGalleryKey, mapFocusForId, mapLevelAt, MAP_CARD_W, MAP_CARD_H, MAP_CARD_GAP, MAP_GRID_COLS, MAP_GRID_ROWS, MAP_NAME_SIZE, MAP_HISTORY_SIZE } from '../src/view/mapSelect.ts';
+import { thumbnailTexture, thumbCacheSize } from '../src/view/mapsScreen.ts';
+import { levelThumbnail } from '../src/core/thumb.ts';
+import { MAP_SAVE_KEY, rememberMap, readRememberedMap } from '../src/core/mapSave.ts';
 import { computeUpgradesLayout, UpgradesSession, upgradesStatusText, upgradesEmptyLines } from '../src/view/upgrades.ts';
 import { computeRestoreLayout, RestoreSession, restoreProgress, restoreDirty } from '../src/view/restore.ts';
 import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES } from '../src/core/tree.ts';
@@ -253,6 +257,7 @@ import {
   SHAKE_LEAK_FREEZE_MS,
 } from '../src/view/shake.ts';
 import { t, plural, formatInt, formatMoney, setLocale } from '../src/i18n/index.ts';
+import { levelName } from '../src/i18n/names.ts';
 import { clearTextWidthCache } from '../src/view/metrics.ts';
 import { setDirection, isRtl, mirrorX } from '../src/view/direction.ts';
 import { en } from '../src/i18n/en/index.ts';
@@ -12112,6 +12117,126 @@ function dailyState(date) {
   const sprites = [fakeSprite(), fakeSprite(), fakeSprite()];
   clearTowerSprites(sprites);
   check(sprites.every((sp) => sp.visible === false), 'phantom turret: clearTowerSprites hides every pooled sprite');
+}
+
+// --- Map selection (docs/MAP-SELECT.md) ---------------------------------------------------------
+{
+  // 1. Every level produces a thumbnail description derived from its own Level, stable and distinct.
+  const cells = LEVELS.map((l) => levelThumbnail(l));
+  check(cells.length === LEVELS.length && cells.every((c) => c.length === COLS * ROWS),
+    `every level produces a ${COLS}x${ROWS} thumbnail description`);
+  let derived = true;
+  for (let i = 0; i < LEVELS.length; i++) {
+    const level = LEVELS[i];
+    const desc = cells[i];
+    for (const [c, r] of level.walls) if (desc[r * COLS + c] !== 'wall') derived = false;
+    for (const t of level.starts) if (desc[t.row * COLS + t.col] !== 'spawn') derived = false;
+    for (const t of level.exits) if (desc[t.row * COLS + t.col] !== 'exit') derived = false;
+  }
+  check(derived, 'walls, spawn and exit markers derive from each level');
+  check(JSON.stringify(levelThumbnail(LEVELS[0])) === JSON.stringify(levelThumbnail(LEVELS[0])),
+    'the thumbnail description is stable across calls');
+  const sigs = cells.map((c) => JSON.stringify(c));
+  check(new Set(sigs).size === LEVELS.length, 'two different levels never share a thumbnail description');
+
+  // 2. The view caches one texture per level id, so a second lookup reuses the first.
+  const a = thumbnailTexture(LEVELS[0]);
+  check(a === thumbnailTexture(LEVELS[0]), 'the thumbnail texture is cached by level id');
+  check(thumbnailTexture(LEVELS[1]) !== a, 'each level rasterises its own texture');
+  check(thumbCacheSize() === 2, `the cache holds one entry per level (${thumbCacheSize()})`);
+}
+
+{
+  // 3. Selecting a card starts that exact level (the argument `startRun` receives).
+  for (let i = 0; i < LEVELS.length; i++) {
+    check(mapLevelAt(i) === LEVELS[i], `selecting card ${i} starts ${LEVELS[i].id}`);
+  }
+  check(mapFocusForId(null) === 0, 'a missing remembered id focuses the first card');
+  check(mapFocusForId('fork') === LEVELS.findIndex((l) => l.id === 'fork'), 'a remembered id focuses its own card');
+  check(mapFocusForId('bogus') === 0, 'a stale remembered id clamps to the first card');
+
+  // 4. Enter starts the focused card, Esc returns to the menu.
+  check(mapGalleryKey(2, 'enter').action === 'start' && mapGalleryKey(2, 'enter').focus === 2,
+    'Enter starts the focused card');
+  check(mapGalleryKey(2, 'escape').action === 'back', 'Esc returns to the menu');
+  check(mapGalleryKey(2, 'home').focus === 0 && mapGalleryKey(2, 'end').focus === LEVELS.length - 1,
+    'Home/End jump to the first and last card');
+
+  // 5. Arrow focus follows visual order in both directions.
+  setDirection('ltr');
+  check(moveMapFocus(0, 'right', LEVELS.length) === 1, 'LTR: right moves to the next card');
+  check(moveMapFocus(2, 'right', LEVELS.length) === 2, 'LTR: right is clamped at the right edge');
+  check(moveMapFocus(0, 'down', LEVELS.length) === 3, 'LTR: down moves a row');
+  setDirection('rtl');
+  check(moveMapFocus(0, 'left', LEVELS.length) === 1, 'RTL: left moves toward the visual next card');
+  check(moveMapFocus(0, 'right', LEVELS.length) === 0, 'RTL: right is clamped at the visual right edge');
+  setDirection('ltr');
+}
+
+{
+  // 6. The gallery grid fits the client area at 1280x720 in all seven locales: no card leaves the
+  // client, no two cards overlap, and no name or history line overflows its 196 px card.
+  const l = computeLayout(1280, 720);
+  const codes = ['en', 'es', 'fr', 'ru', 'uk', 'zh-Hans', 'he'];
+  const budget = MAP_CARD_W - 16; // 8 px padding each side of the card
+  let allFit = true;
+  for (const code of codes) {
+    const mod = await import(`../src/i18n/${code}/index.ts`);
+    setLocale(mod[Object.keys(mod)[0]], code);
+    clearTextWidthCache();
+    setDirection(code === 'he' ? 'rtl' : 'ltr');
+    const cards = computeMapCards(l.client, LEVELS.length);
+    check(cards.length === LEVELS.length, `gallery fit: ${code} lays out every card`);
+    for (const card of cards) {
+      if (card.rect.x < l.client.x || card.rect.y < l.client.y ||
+        card.rect.x + card.rect.w > l.client.x + l.client.w || card.rect.y + card.rect.h > l.client.y + l.client.h) {
+        allFit = false;
+        console.log(`  gallery fit miss: ${code} card ${card.index} leaves the client area`);
+      }
+    }
+    let overlaps = 0;
+    for (let i = 0; i < cards.length; i++) {
+      for (let j = i + 1; j < cards.length; j++) {
+        const a = cards[i].rect;
+        const b = cards[j].rect;
+        if (Math.min(a.x + a.w, b.x + b.w) > Math.max(a.x, b.x) && Math.min(a.y + a.h, b.y + b.h) > Math.max(a.y, b.y)) overlaps++;
+      }
+    }
+    if (overlaps > 0) {
+      allFit = false;
+      console.log(`  gallery fit miss: ${code} has ${overlaps} overlapping cards`);
+    }
+    for (const level of LEVELS) {
+      const name = levelName(level.id);
+      if (textWidth(name, MAP_NAME_SIZE) > budget) {
+        allFit = false;
+        console.log(`  gallery fit miss: ${code} name "${name}" is ${textWidth(name, MAP_NAME_SIZE)} px`);
+      }
+    }
+    for (const hist of [t('shell.maps.best', { n: 123 }), t('shell.maps.best.none')]) {
+      if (textWidth(hist, MAP_HISTORY_SIZE) > budget) {
+        allFit = false;
+        console.log(`  gallery fit miss: ${code} history "${hist}" is ${textWidth(hist, MAP_HISTORY_SIZE)} px`);
+      }
+    }
+  }
+  setLocale(en, 'en');
+  clearTextWidthCache();
+  setDirection('ltr');
+  check(allFit, 'the gallery fits the client area at 1280x720 in all seven locales');
+}
+
+{
+  // 7. The remembered map id round-trips under `pd.map.v1`.
+  check(MAP_SAVE_KEY === 'pd.map.v1', 'the remembered map lives under the spec key pd.map.v1');
+  const store = runSaveStore();
+  check(readRememberedMap(store) === null, 'pd.map.v1: an empty store reads null');
+  rememberMap('turnstile', store);
+  check(readRememberedMap(store) === 'turnstile', 'pd.map.v1: the chosen id round-trips');
+  rememberMap('fork', store);
+  check(readRememberedMap(store) === 'fork', 'pd.map.v1: a new choice overwrites the old one');
+  check(mapFocusForId(readRememberedMap(store)) === LEVELS.findIndex((l) => l.id === 'fork'),
+    'pd.map.v1: the remembered id selects its card on reopen');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

@@ -24,3 +24,18 @@ export function pointerName(stage: number): string {
 export function modifierName(id: string): string {
   return t(`name.modifier.${id}`);
 }
+
+/** The catalogue key a shipped map id resolves to (the ids are kebab-case, the keys camelCase). */
+const LEVEL_NAME_KEY: Readonly<Record<string, string>> = {
+  corridor: 'level.corridor.name',
+  dumbbell: 'level.dumbbell.name',
+  'open-field': 'level.openField.name',
+  turnstile: 'level.turnstile.name',
+  fork: 'level.fork.name',
+  ladder: 'level.ladder.name',
+};
+
+/** The display name for a shipped map id (docs/MAP-SELECT.md). */
+export function levelName(id: string): string {
+  return t(LEVEL_NAME_KEY[id] ?? id);
+}

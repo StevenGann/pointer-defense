@@ -753,6 +753,9 @@ export const zh: Catalogue = {
 
   'shell.continue': '第 {wave} 波 — {map}',
   'shell.daily': '每日 — {date}',
+  'shell.maps.title': '选择地图',
+  'shell.maps.best': '最佳：第 {n} 波',
+  'shell.maps.best.none': '尚未游玩',
   'shell.achievement': '成就：{name}',
   'shell.notice.popupEscaped': '弹出窗口已离开——无伤害',
   'shell.notice.shutterOpen': '挡板 {index} 已开启',
