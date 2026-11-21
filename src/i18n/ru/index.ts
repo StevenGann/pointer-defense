@@ -892,5 +892,14 @@ export const ru = {
   'name.modifier.rush': 'Натиск',
 
   // ── Window title ──────────────────────────────────────────────────────────────────────────
+  'synergy.chill.name': 'Chill',
+  'synergy.chill.description': 'Соседний Мороз позволяет этой AA замедлять каждого летуна, которого она поражает.',
+  'synergy.interlock.name': 'Interlock',
+  'synergy.interlock.description': 'Соседний Лазер позволяет этому Тазеру стрелять по тому, на что нацелен Лазер.',
+  'synergy.shatter.name': 'Shatter',
+  'synergy.shatter.description': 'Пушка рядом с Морозом оставляет второй, меньший разлёт там, где снаряд поражает замедленного врага.',
+  'synergy.buttress.name': 'Buttress',
+  'synergy.buttress.description': 'Соседние стены Бастион делят входящий урон, чтобы вся группа падала вместе.',
+
   'window.title': 'Pointer Defense',
 } as const satisfies Catalogue;

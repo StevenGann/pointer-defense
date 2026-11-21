@@ -894,5 +894,14 @@ export const uk: Catalogue = {
   'name.modifier.rush': 'Натиск',
 
   // Window title.
+  'synergy.chill.name': 'Chill',
+  'synergy.chill.description': 'Сусідній Мороз дозволяє цій AA сповільнювати кожного летуна, якого вона вражає.',
+  'synergy.interlock.name': 'Interlock',
+  'synergy.interlock.description': 'Сусідній Лазер дозволяє цьому Тазеру стріляти по тому, на що націлений Лазер.',
+  'synergy.shatter.name': 'Shatter',
+  'synergy.shatter.description': 'Гармата поруч із Морозом лишає другий, менший вибух там, де снаряд вражає сповільненого ворога.',
+  'synergy.buttress.name': 'Buttress',
+  'synergy.buttress.description': 'Сусідні стіни Бастіон ділять вхідну шкоду, щоб уся група падала разом.',
+
   'window.title': 'Pointer Defense',
 };

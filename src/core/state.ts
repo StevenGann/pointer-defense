@@ -206,7 +206,14 @@ import { effectsFor, TREE_NODES, type TreeEffects } from './tree.ts';
 import {
   AA_HOLD_CAP,
   AA_HOLD_WINDOW,
+  BUTTRESS_GROUP_CAP,
   buildSynergyLayout,
+  CHILL_SLOW_FACTOR,
+  CHILL_SLOW_TICKS,
+  isBulwark,
+  SHATTER_BURST_DAMAGE_MULT,
+  SHATTER_BURST_DELAY_TICKS,
+  SHATTER_BURST_SPLASH,
   spotterGrant,
   type SynergyCluster,
   type SynergyLayout,
@@ -354,6 +361,17 @@ export interface Mine {
   readonly expiresTick: number;
 }
 
+/** A Shatter's pending second burst, resolved in tick order (docs/SYNERGIES-BATCH-2.md §3). */
+interface ShatterBurst {
+  /** The sim tick at which the burst lands. */
+  readonly tick: number;
+  readonly x: number;
+  readonly y: number;
+  /** Damage the burst carries (already the 40 % shell share). */
+  readonly damage: number;
+  readonly towerId: number;
+}
+
 export interface RunState {
   grid: Grid;
   /** Authored map id (see levels.ts); carried in state so a cycle rebuilds the board. */
@@ -435,6 +453,8 @@ export interface RunState {
   synergyHoldSince: Map<number, number>;
   /** Tower id -> the enemy a held shot is waiting to fire at; cleared with `synergyHoldSince`. */
   synergyHoldTarget: Map<number, number>;
+  /** Pending Shatter bursts, resolved in tick order. Derived state, never serialized (§3). */
+  shatterBursts: ShatterBurst[];
   /** Seeded PRNG state (see rng.ts). */
   rng: number;
   /** Desktop geometry for ad placement, updated by the view on resize. */
@@ -712,6 +732,7 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     synergyRev: 0,
     synergyHoldSince: new Map(),
     synergyHoldTarget: new Map(),
+    shatterBursts: [],
     rng: opts.seed ?? daily?.seed ?? 0x9e3779b9,
     viewport: {
       width: 1280,
@@ -2039,6 +2060,7 @@ export function tick(s: RunState): void {
     tickProjectiles(s); // move in-flight shells/missiles, resolve hits and expiries
     tickMines(s); // drop, arm and detonate Minesweeper mines
     fireTowers(s);
+    resolveShatterBursts(s); // land any Shatter burst whose delay elapsed (§3)
     updateMaxSlowCount(s);
     applyReticle(s);
     s.enemies = s.enemies.filter((e) => !e.dead);
@@ -2601,7 +2623,7 @@ function moveEnemies(s: RunState): void {
 }
 
 /** Deal damage to a wall, destroying (and removing) it the moment its hit points run out. */
-function damageWall(s: RunState, wall: Tower, amount: number): void {
+function applyWallDamage(s: RunState, wall: Tower, amount: number): void {
   if (amount <= 0 || wall.hp <= 0) return;
   const dealt = Math.min(wall.hp, amount);
   wall.hp -= dealt;
@@ -2613,11 +2635,57 @@ function damageWall(s: RunState, wall: Tower, amount: number): void {
   }
 }
 
+/**
+ * The connected component of Bulwark walls around `wall`, ordered hit wall first then by row, then
+ * column (docs/SYNERGIES-BATCH-2.md §4). Pure over the current roster; a member that has already
+ * fallen is still returned and filtered out by the caller, since it can absorb no share.
+ */
+function bulwarkGroup(s: RunState, wall: Tower): Tower[] {
+  const members: Tower[] = [wall];
+  const seen = new Set<number>([wall.id]);
+  const stack: Tower[] = [wall];
+  while (stack.length > 0) {
+    const cur = stack.pop()!;
+    for (const t of s.towers) {
+      if (seen.has(t.id)) continue;
+      if (!isBulwark(t)) continue;
+      if (Math.abs(t.col - cur.col) + Math.abs(t.row - cur.row) !== 1) continue;
+      seen.add(t.id);
+      members.push(t);
+      stack.push(t);
+    }
+  }
+  const rest = members.slice(1).sort((a, b) => (a.row !== b.row ? a.row - b.row : a.col - b.col));
+  return [wall, ...rest];
+}
+
+/**
+ * Deal damage to a wall. A Bulwark wall shares the hit across its connected Buttress group, capped at
+ * four members (docs/SYNERGIES-BATCH-2.md §4): `floor(damage / n)` per wall, remainder to the hit
+ * wall. Hit points stay per wall; non-Bulwark walls keep the old behaviour exactly.
+ */
+export function damageWall(s: RunState, wall: Tower, amount: number): void {
+  if (amount <= 0 || wall.hp <= 0) return;
+  if (!isBulwark(wall)) {
+    applyWallDamage(s, wall, amount);
+    return;
+  }
+  const group = bulwarkGroup(s, wall).slice(0, BUTTRESS_GROUP_CAP);
+  const living = group.filter((w) => w.hp > 0);
+  const n = living.length;
+  const share = Math.floor(amount / n);
+  const remainder = amount - share * n;
+  for (const member of living) {
+    applyWallDamage(s, member, share + (member.id === wall.id ? remainder : 0));
+  }
+}
+
 /** Remove a destroyed wall, unblocking its tile and recomputing the route in the same tick. */
 function destroyWall(s: RunState, wall: Tower): void {
   s.towers = s.towers.filter((t) => t.id !== wall.id);
   s.blocked.delete(wall.row * s.grid.cols + wall.col);
   s.mines = s.mines.filter((m) => m.towerId !== wall.id);
+  s.synergyRev++; // a destroyed Bulwark wall drops out of its Buttress edges
   if (s.selectedTowerId === wall.id) s.selectedTowerId = null;
   for (const e of s.enemies) {
     if (e.attackTowerId === wall.id) {
@@ -2869,6 +2937,38 @@ function acquireTarget(s: RunState, t: Tower, st: EffectiveStats, range: number)
   return pickTarget(t, towerCandidates(s, t, st, range));
 }
 
+/** Neighbour direction of `other` relative to `t`: 0 north, 1 south, 2 east, 3 west. */
+function neighbourOrder(t: Tower, other: Tower): number {
+  if (other.row < t.row) return 0;
+  if (other.row > t.row) return 1;
+  if (other.col > t.col) return 2;
+  return 3;
+}
+
+/**
+ * Interlock (docs/SYNERGIES-BATCH-2.md §2): the target a Taser's adjacent Laser is currently firing
+ * at, borrowed even when that target sits outside the Taser's own range. The first Laser in neighbour
+ * order (north, south, east, west) that has a live target wins. The Taser's interval, damage, armour
+ * piercing and chain rule are untouched — only the acquisition changes.
+ */
+function interlockedTarget(s: RunState, t: Tower): Enemy | undefined {
+  const sources = synergyLayout(s).interlockSources.get(t.id);
+  if (sources === undefined || sources.length === 0) return undefined;
+  const ordered = [...sources].sort((a, b) => neighbourOrder(t, a) - neighbourOrder(t, b));
+  for (const laser of ordered) {
+    if ((s.towerDisabled.get(laser.id) ?? 0) > 0) continue;
+    if (isDown(laser, s.clock)) continue;
+    const lst = effectiveStats(laser);
+    if (lst.damage <= 0 || lst.fireInterval <= 0) continue;
+    const lrange = effectiveRange(s, laser, lst);
+    const target = acquireTarget(s, laser, lst, lrange);
+    if (target === undefined) continue;
+    if (!towerCanHurt(s, target)) continue;
+    return target;
+  }
+  return undefined;
+}
+
 /** Up to `limit` targets, ordered by the tower's targeting mode. */
 function acquireTargets(s: RunState, t: Tower, st: EffectiveStats, range: number, limit: number): Enemy[] {
   const out = towerCandidates(s, t, st, range);
@@ -2910,6 +3010,18 @@ function applySlow(s: RunState, e: Enemy, factor: number, ticks: number): void {
 function hitEnemy(s: RunState, t: Tower, st: EffectiveStats, e: Enemy, dmg: number): boolean {
   damageEnemy(s, e, perEnemyDamage(st, e, dmg, t.kind), 'tower', st.ignoresArmour, t);
   if (st.slowFactor < 1 && st.slowTicks > 0 && !e.dead) applySlow(s, e, st.slowFactor, st.slowTicks);
+  // Chill (docs/SYNERGIES-BATCH-2.md §1): an AA beside a Frost slows every flyer it hits. The slow
+  // is fixed (0.6 for 60 ticks), applied through the existing `applySlow` so two Frosts never stack.
+  if (t.kind === 'aa' && baseEnemyKind(e.kind) === 'flyer' && !e.dead) {
+    const sources = synergyLayout(s).chillSources.get(t.id);
+    if (sources !== undefined) {
+      for (const frost of sources) {
+        if (isDown(frost, s.clock)) continue;
+        applySlow(s, e, CHILL_SLOW_FACTOR, CHILL_SLOW_TICKS);
+        break;
+      }
+    }
+  }
   return e.dead;
 }
 
@@ -2917,13 +3029,22 @@ function fireSplash(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dm
   const cx = target.x;
   const cy = target.y;
   let kills = 0;
+  let hitSlowed = false;
   for (const e of s.enemies) {
     if (!towerCanHurt(s, e)) continue;
     if (st.targetsFlyersOnly && baseEnemyKind(e.kind) !== 'flyer') continue;
     const r = st.splash + radiusOf(e);
-    if ((e.x - cx) ** 2 + (e.y - cy) ** 2 <= r * r && hitEnemy(s, t, st, e, dmg)) kills++;
+    if ((e.x - cx) ** 2 + (e.y - cy) ** 2 > r * r) continue;
+    // Shatter (docs/SYNERGIES-BATCH-2.md §3): the trigger is the enemy's slow state at impact,
+    // whatever applied it — and only for an enemy the shell actually hit.
+    if (t.kind === 'cannon' && s.tick < e.slowUntilTick) hitSlowed = true;
+    if (hitEnemy(s, t, st, e, dmg)) kills++;
   }
   if (t.kind === 'cannon' && kills > s.maxSplashKills) s.maxSplashKills = kills;
+  // One shell, at most one burst, only when the cannon has an adjacent Frost.
+  if (t.kind === 'cannon' && hitSlowed && synergyLayout(s).shatterCannons.has(t.id)) {
+    s.shatterBursts.push({ tick: s.tick + SHATTER_BURST_DELAY_TICKS, x: cx, y: cy, damage: dmg * SHATTER_BURST_DAMAGE_MULT, towerId: t.id });
+  }
 }
 
 function fireChain(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg: number): void {
@@ -3344,6 +3465,11 @@ function fireTowers(s: RunState): void {
         : st.beams > 1
           ? acquireTargets(s, t, st, range, st.beams)
           : ((): Enemy[] => {
+              // Interlock: a Taser borrows its adjacent Laser's target when it has one (§2).
+              if (t.kind === 'taser') {
+                const borrowed = interlockedTarget(s, t);
+                if (borrowed !== undefined) return [borrowed];
+              }
               const tg = acquireTarget(s, t, st, range);
               return tg ? [tg] : [];
             })();
@@ -3803,6 +3929,32 @@ function telemetrySplash(s: RunState, tower: Tower, st: EffectiveStats, hit: Ene
     }
   }
   if (best) hitEnemy(s, tower, st, best, damage * TELEMETRY_SPLASH_MULT);
+}
+
+/**
+ * Resolve every Shatter burst whose scheduled tick has arrived, in the order they were scheduled.
+ * A burst is a plain splash at the impact point — no pierce, no armour change, and it never schedules
+ * another Shatter (docs/SYNERGIES-BATCH-2.md §3). It is derived, unsaved state, so a save taken inside
+ * the delay window simply drops the pending burst.
+ */
+function resolveShatterBursts(s: RunState): void {
+  if (s.shatterBursts.length === 0) return;
+  const pending: ShatterBurst[] = [];
+  for (const b of s.shatterBursts) {
+    if (b.tick > s.tick) {
+      pending.push(b);
+      continue;
+    }
+    const tower = s.towers.find((t) => t.id === b.towerId);
+    if (!tower) continue; // the cannon was sold mid-delay: the burst fizzles
+    const st = effectiveStats(tower);
+    for (const e of s.enemies) {
+      if (!towerCanHurt(s, e)) continue;
+      const r = SHATTER_BURST_SPLASH + radiusOf(e);
+      if ((e.x - b.x) ** 2 + (e.y - b.y) ** 2 <= r * r) hitEnemy(s, tower, st, e, b.damage);
+    }
+  }
+  s.shatterBursts = pending;
 }
 
 /** Advance every projectile one tick: shells fly and burst, missiles home and detonate. */

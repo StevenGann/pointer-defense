@@ -884,5 +884,14 @@ export const es: Catalogue = {
   'screen.number.crit': 'CRIT {amount}',
 
   // Window title.
+  'synergy.chill.name': 'Chill',
+  'synergy.chill.description': 'Una Escarcha adyacente permite que esta AA ralentice a todo volador que golpea.',
+  'synergy.interlock.name': 'Interlock',
+  'synergy.interlock.description': 'Un Láser adyacente permite que esta Táser dispare a lo que el Láser está apuntando.',
+  'synergy.shatter.name': 'Shatter',
+  'synergy.shatter.description': 'Un Cañón junto a una Escarcha deja una segunda ráfaga, más pequeña, donde un proyectil golpea a un enemigo ralentizado.',
+  'synergy.buttress.name': 'Buttress',
+  'synergy.buttress.description': 'Los muros Baluarte adyacentes comparten el daño recibido para que todo el grupo caiga a la vez.',
+
   'window.title': 'Pointer Defense',
 };

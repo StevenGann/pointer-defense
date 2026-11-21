@@ -10,6 +10,7 @@ import { names } from './names.ts';
 import { screen } from './screen.ts';
 import { shell } from './shell.ts';
 import { status } from './status.ts';
+import { synergy } from './synergy.ts';
 import { tooltip } from './tooltip.ts';
 import { upgrades } from './upgrades.ts';
 
@@ -33,6 +34,7 @@ export const en = {
   ...names,
   ...shell,
   ...screen,
+  ...synergy,
 
   // Window title.
   'window.title': 'Pointer Defense',

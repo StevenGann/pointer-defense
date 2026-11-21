@@ -304,6 +304,10 @@ const synergyPage: HelpPage = {
     t('help.synergy.2', { interval: Math.round(TOWER_STATS.aa.fireInterval) }),
     t('help.synergy.3', { window: AA_HOLD_WINDOW, cap: AA_HOLD_CAP }),
     t('help.synergy.4'),
+    t('synergy.chill.name') + ' — ' + t('synergy.chill.description'),
+    t('synergy.interlock.name') + ' — ' + t('synergy.interlock.description'),
+    t('synergy.shatter.name') + ' — ' + t('synergy.shatter.description'),
+    t('synergy.buttress.name') + ' — ' + t('synergy.buttress.description'),
   ],
 };
 

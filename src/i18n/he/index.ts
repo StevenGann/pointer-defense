@@ -857,5 +857,14 @@ export const he: Catalogue = {
   'screen.number.crit': 'קריט {amount}',
 
   // Window title.
+  'synergy.chill.name': 'Chill',
+  'synergy.chill.description': 'כפור סמוך מאפשר ל-AA הזו להאט כל מעופף שהיא פוגעת בו.',
+  'synergy.interlock.name': 'Interlock',
+  'synergy.interlock.description': 'לייזר סמוך מאפשר לטייזר הזה לירות על מה שהלייזר מכוון אליו.',
+  'synergy.shatter.name': 'Shatter',
+  'synergy.shatter.description': 'תותח ליד כפור משאיר התפרצות שנייה, קטנה יותר, היכן שפגז פוגע באויב מואט.',
+  'synergy.buttress.name': 'Buttress',
+  'synergy.buttress.description': 'חומות ביצור סמוכות חולקות את הנזק הנכנס כך שכל הקבוצה נופלת יחד.',
+
   'window.title': 'Pointer Defense',
 };

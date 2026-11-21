@@ -853,5 +853,14 @@ export const fr: Catalogue = {
   'name.modifier.rush': 'Ruée',
 
   // Window title.
+  'synergy.chill.name': 'Chill',
+  'synergy.chill.description': 'Un Givre adjacent permet à cette AA de ralentir chaque volant qu\'elle touche.',
+  'synergy.interlock.name': 'Interlock',
+  'synergy.interlock.description': 'Un Laser adjacent permet à cette Taser de tirer sur ce que le Laser vise.',
+  'synergy.shatter.name': 'Shatter',
+  'synergy.shatter.description': 'Un Canon à côté d\'un Givre laisse une seconde déflagration, plus petite, là où un obus frappe un ennemi ralenti.',
+  'synergy.buttress.name': 'Buttress',
+  'synergy.buttress.description': 'Les murs Rempart adjacents partagent les dégâts reçus pour que tout le groupe tombe ensemble.',
+
   'window.title': 'Pointer Defense',
 };

@@ -676,22 +676,28 @@ export class BoardView {
         if (linkTex === null) {
           // Before this row's SVG lands (or if the artist removes it) the procedural dash still draws.
           drawSynergyEdge(this.synergy, edge, board, cell, state.clock, quality);
-          continue;
+        } else {
+          const { x0, y0, x1, y1 } = synergyEdgeEndpoints(edge, board, cell);
+          const spr = this.synergyLinkSprite(linkIndex++);
+          spr.texture = linkTex;
+          spr.tint = edge.color;
+          spr.width = Math.hypot(x1 - x0, y1 - y0) + cell * SYNERGY_LINK_OVERLAP;
+          spr.height = cell * SYNERGY_LINK_HEIGHT;
+          // Adjacency is orthogonal, so the link is only ever horizontal or vertical.
+          spr.rotation = edge.lead.col === edge.follow.col ? Math.PI / 2 : 0;
+          // The spotter's chevron points +x in its art; mirror it when the lead sits east or south
+          // so the gift always points from lead to follow, never the other way.
+          if (edge.follow.col < edge.lead.col || edge.follow.row < edge.lead.row) spr.scale.x *= -1;
+          spr.position.set((x0 + x1) / 2, (y0 + y1) / 2);
+          spr.alpha = alpha * SYNERGY_LINK_ALPHA;
+          spr.visible = true;
         }
-        const { x0, y0, x1, y1 } = synergyEdgeEndpoints(edge, board, cell);
-        const spr = this.synergyLinkSprite(linkIndex++);
-        spr.texture = linkTex;
-        spr.tint = edge.color;
-        spr.width = Math.hypot(x1 - x0, y1 - y0) + cell * SYNERGY_LINK_OVERLAP;
-        spr.height = cell * SYNERGY_LINK_HEIGHT;
-        // Adjacency is orthogonal, so the link is only ever horizontal or vertical.
-        spr.rotation = edge.lead.col === edge.follow.col ? Math.PI / 2 : 0;
-        // The spotter's chevron points +x in its art; mirror it when the lead sits east or south
-        // so the gift always points from lead to follow, never the other way.
-        if (edge.follow.col < edge.lead.col || edge.follow.row < edge.lead.row) spr.scale.x *= -1;
-        spr.position.set((x0 + x1) / 2, (y0 + y1) / 2);
-        spr.alpha = alpha * SYNERGY_LINK_ALPHA;
-        spr.visible = true;
+        // A row with a mark draws it at the link midpoint with the same pooled Graphics object, so
+        // four more rows are told apart without four more SVGs (docs/SYNERGIES-BATCH-2.md §0).
+        if (edge.mark !== undefined) {
+          const { x0, y0, x1, y1 } = synergyEdgeEndpoints(edge, board, cell);
+          drawSynergyMark(this.synergy, edge.mark, (x0 + x1) / 2, (y0 + y1) / 2, edge.color, alpha, cell);
+        }
       }
     }
     for (let i = haloIndex; i < this.synergyHalos.length; i++) this.synergyHalos[i].visible = false;
@@ -1205,6 +1211,54 @@ function drawSynergyEdge(
       const y = Math.round(sy);
       g.rect(x, y - half, end - start, SYNERGY_WIDTH).fill({ color: edge.color, alpha });
     }
+  }
+}
+
+/** The mark's half-size in cells — small enough to sit inside the gap between adjacent bases. */
+const SYNERGY_MARK_R = 0.3;
+const SYNERGY_MARK_WIDTH = 1.5;
+
+/**
+ * Draw a synergy's mark at the link midpoint with `Graphics` (docs/SYNERGIES-BATCH-2.md §0). The
+ * marks carry the shape signal that lets four more rows read without four more SVGs: `snow` is three
+ * crossed strokes, `bolt` a zigzag, `crack` two angled strokes, and `brace` a double chevron.
+ */
+function drawSynergyMark(
+  g: Graphics,
+  mark: 'snow' | 'bolt' | 'crack' | 'brace',
+  cx: number,
+  cy: number,
+  color: number,
+  alpha: number,
+  cell: number,
+): void {
+  const r = cell * SYNERGY_MARK_R;
+  const stroke = (x0: number, y0: number, x1: number, y1: number): void => {
+    g.moveTo(cx + x0, cy + y0).lineTo(cx + x1, cy + y1).stroke({ width: SYNERGY_MARK_WIDTH, color, alpha });
+  };
+  switch (mark) {
+    case 'snow':
+      for (let i = 0; i < 3; i++) {
+        const a = (i * Math.PI) / 3;
+        stroke(Math.cos(a) * r, Math.sin(a) * r, -Math.cos(a) * r, -Math.sin(a) * r);
+      }
+      break;
+    case 'bolt': {
+      const pts = [-0.45 * r, -r, 0.35 * r, -0.1 * r, -0.35 * r, 0.1 * r, 0.45 * r, r];
+      g.moveTo(cx + pts[0], cy + pts[1]);
+      for (let i = 2; i < pts.length; i += 2) g.lineTo(cx + pts[i], cy + pts[i + 1]);
+      g.stroke({ width: SYNERGY_MARK_WIDTH, color, alpha });
+      break;
+    }
+    case 'crack':
+      stroke(-r, -0.6 * r, 0.2 * r, 0.3 * r);
+      stroke(0.2 * r, 0.3 * r, -0.4 * r, 0.9 * r);
+      break;
+    case 'brace':
+      for (const dx of [-0.4 * r, 0.1 * r]) {
+        g.moveTo(cx + dx, cy - r).lineTo(cx + dx + 0.5 * r, cy).lineTo(cx + dx, cy + r).stroke({ width: SYNERGY_MARK_WIDTH, color, alpha });
+      }
+      break;
   }
 }
 

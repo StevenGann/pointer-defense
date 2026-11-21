@@ -57,11 +57,12 @@ import { FLYER_OFF_KIND_DAMAGE,
   STARTING_INTEGRITY,
   synergyLayout,
   synergyRange,
+  damageWall,
   rebuildField,
 } from '../src/core/state.ts';
 import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE, MINE_BLAST_RADIUS, CURSOR_CLICK_DAMAGE_FACTOR, repairHealRate, repairRadius, MAX_TIER, TIERS, kindMaxTier, COMBAT_KINDS } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
-import { AA_HOLD_CAP, AA_HOLD_WINDOW, AA_MIN_CLUSTER, buildSynergyLayout, leads, spotterGrant, SPOTTER_CAP, SYNERGIES } from '../src/core/synergy.ts';
+import { AA_HOLD_CAP, AA_HOLD_WINDOW, AA_MIN_CLUSTER, buildSynergyLayout, leads, spotterGrant, SPOTTER_CAP, SYNERGIES, CHILL_SLOW_FACTOR, CHILL_SLOW_TICKS, SHATTER_BURST_DELAY_TICKS, SHATTER_BURST_SPLASH, SHATTER_BURST_DAMAGE_MULT, BUTTRESS_GROUP_CAP, isBulwark } from '../src/core/synergy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { WAVE_COUNT, buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, FLYER_FLIGHT_MEMBER_TICKS, FLYER_FLIGHT_SIZE, flyerSwarmFactor, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers, WAVE_ENEMY_CAP } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
@@ -11679,7 +11680,7 @@ function dailyState(date) {
   check(buildSynergyLayout(ortho.towers).edges.length === 1, 'an orthogonal AA pair forms one edge');
 
   check(
-    SYNERGIES.length === 2 && SYNERGIES[0].id === 'aa-sync' && SYNERGIES[0].color === 0xffe14d && SYNERGIES[0].dash === 4 && SYNERGIES[0].gap === 3 && SYNERGIES[0].link === 'synergy-link',
+    SYNERGIES.length === 6 && SYNERGIES[0].id === 'aa-sync' && SYNERGIES[0].color === 0xffe14d && SYNERGIES[0].dash === 4 && SYNERGIES[0].gap === 3 && SYNERGIES[0].link === 'synergy-link',
     'the catalogue keeps the amber aa-sync row, dash 4 on / 3 off',
   );
   const spot = SYNERGIES[1];
@@ -11694,6 +11695,39 @@ function dailyState(date) {
   check(
     spot.sourceBranch === 'A' && spot.targets.includes('aa') && spot.targets.includes('cannon'),
     'spotter: a Marksman gift to AA and Cannon',
+  );
+
+  // Batch-2 catalogue (docs/SYNERGIES-BATCH-2.md §0): four rows, each with a colour, a shape, a mark
+  // and a lead rule; no two share a colour and the four marks are distinct.
+  const batch = SYNERGIES.slice(2);
+  check(
+    batch.length === 4 && batch.every((r) => typeof r.color === 'number' && typeof r.link === 'string' && typeof r.mark === 'string'),
+    'the batch-2 catalogue holds four rows, each with a colour, a shape and a mark',
+  );
+  check(
+    new Set(SYNERGIES.map((r) => r.color)).size === SYNERGIES.length,
+    'no two catalogue rows share a colour',
+  );
+  check(
+    new Set(batch.map((r) => r.mark)).size === 4,
+    'the four batch-2 marks are distinct',
+  );
+  const byId = Object.fromEntries(SYNERGIES.map((r) => [r.id, r]));
+  check(
+    byId.chill.kinds[0] === 'frost' && byId.chill.kinds[1] === 'aa' && byId.chill.mode === 'gift' && byId.chill.mark === 'snow',
+    'chill: Frost → AA gift, snow mark',
+  );
+  check(
+    byId.interlock.kinds[0] === 'laser' && byId.interlock.kinds[1] === 'taser' && byId.interlock.mode === 'gift' && byId.interlock.mark === 'bolt',
+    'interlock: Laser → Taser gift, bolt mark',
+  );
+  check(
+    byId.shatter.kinds[0] === 'cannon' && byId.shatter.kinds[1] === 'frost' && byId.shatter.mode === 'peer' && byId.shatter.mark === 'crack' && byId.shatter.peerLead === 'first',
+    'shatter: Cannon ↔ Frost peer, crack mark, Cannon leads',
+  );
+  check(
+    byId.buttress.kinds[0] === 'wall' && byId.buttress.kinds[1] === 'wall' && byId.buttress.mode === 'peer' && byId.buttress.mark === 'brace' && byId.buttress.peerBranch === 'A' && byId.buttress.peerLead === 'northwest',
+    'buttress: Bulwark ↔ Bulwark peer, brace mark, north/west leads',
   );
 }
 
@@ -12203,6 +12237,303 @@ function dailyState(date) {
   const rtl = line();
   setDirection('ltr');
   check(ltr === rtl, 'edge positions are byte-identical under RTL');
+}
+
+// --- Chill (docs/SYNERGIES-BATCH-2.md §1) ------------------------------------------------------
+{
+  const flyerHit = (withFrost, extraFrost) => {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    placeTower(s, 'aa', 5, 5);
+    if (withFrost) {
+      placeTower(s, 'frost', 5, 6);
+      if (extraFrost) placeTower(s, 'frost', 5, 4);
+    }
+    const aa = towerAt(s, 5, 5);
+    aa.angle = 0;
+    s.phase = 'wave';
+    const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+    flyer.hp = flyer.maxHp = 1e9;
+    s.enemies.push(flyer);
+    for (let i = 0; i < 60 && aa.damageDealt === 0; i++) tick(s);
+    return { s, aa, flyer };
+  };
+
+  const withFrost = flyerHit(true, false);
+  check(withFrost.aa.damageDealt > 0, 'an AA with an adjacent Frost fires at a flyer');
+  check(withFrost.flyer.slowFactor === CHILL_SLOW_FACTOR, `chill applies slow factor ${CHILL_SLOW_FACTOR}`);
+  check(withFrost.s.tick < withFrost.flyer.slowUntilTick, 'the flyer is slowed by the AA hit');
+
+  const alone = flyerHit(false, false);
+  check(alone.aa.damageDealt > 0, 'a lone AA still fires at a flyer');
+  check(!(alone.s.tick < alone.flyer.slowUntilTick), 'without a Frost the AA applies no slow');
+
+  const twoFrosts = flyerHit(true, true);
+  check(twoFrosts.flyer.slowFactor === CHILL_SLOW_FACTOR, 'two Frosts do not produce a stronger slow than one');
+
+  // Ground enemies are never slowed: a Flak shell splashes a ground unit at half damage, and the
+  // chill must not reach it. The adjacent Frost is kept on cooldown so it cannot slow the ground unit
+  // itself — only the AA's splash touches it.
+  {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    placeTower(s, 'aa', 5, 5);
+    placeTower(s, 'frost', 5, 6);
+    const aa = towerAt(s, 5, 5);
+    const frost = towerAt(s, 5, 6);
+    frost.cooldown = 100000;
+    aa.angle = 0;
+    s.phase = 'wave';
+    const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+    const grunt = stationary(2, 'grunt', 1, 5.5, 4.6);
+    flyer.hp = flyer.maxHp = 1e9;
+    grunt.hp = grunt.maxHp = 1e9;
+    s.enemies.push(flyer, grunt);
+    // Flak: the shell bursts near the flyer and its splash reaches the ground unit.
+    upgradeTower(s, 5, 5);
+    chooseBranch(s, 5, 5, 'A');
+    aa.angle = 0;
+    for (let i = 0; i < 90 && aa.damageDealt === 0; i++) tick(s);
+    check(aa.damageDealt > 0, 'the Flak shell splashes a ground unit');
+    check(grunt.hp < grunt.maxHp, 'the ground unit took the Flak splash');
+    check(!(s.tick < grunt.slowUntilTick), 'ground damage never applies the chill slow');
+  }
+}
+
+// --- Interlock (docs/SYNERGIES-BATCH-2.md §2) ---------------------------------------------------
+{
+  const fireTaser = (withLaser) => {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    placeTower(s, 'taser', 5, 5);
+    if (withLaser) placeTower(s, 'laser', 5, 4);
+    const taser = towerAt(s, 5, 5);
+    const laser = withLaser ? towerAt(s, 5, 4) : null;
+    if (laser) laser.cooldown = 100000; // the Laser lends targeting, never damage, in this fixture
+    s.phase = 'wave';
+    const grunt = stationary(1, 'grunt', 1, 5.5, 3.0); // 2.5 tiles from the Taser, in the Laser's range
+    grunt.hp = grunt.maxHp = 1e9;
+    s.enemies.push(grunt);
+    for (let i = 0; i < 60 && taser.damageDealt === 0; i++) tick(s);
+    return { s, taser, grunt };
+  };
+
+  const interlocked = fireTaser(true);
+  check(interlocked.taser.damageDealt > 0, 'a Taser beside a Laser fires at a target 2.5 tiles away');
+  check(interlocked.grunt.hp < interlocked.grunt.maxHp, 'the borrowed target took the Taser hit');
+
+  const lone = fireTaser(false);
+  check(lone.taser.damageDealt === 0, 'the same Taser without a Laser does not reach the target');
+  check(lone.grunt.hp === lone.grunt.maxHp, 'the target is untouched without an adjacent Laser');
+
+  // The borrowed target follows the Laser to its next live target.
+  {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    placeTower(s, 'taser', 5, 5);
+    placeTower(s, 'laser', 5, 4);
+    const taser = towerAt(s, 5, 5);
+    const laser = towerAt(s, 5, 4);
+    laser.cooldown = 100000;
+    s.phase = 'wave';
+    const a = stationary(1, 'grunt', 1, 5.5, 3.0);
+    const b = stationary(2, 'grunt', 1, 5.5, 3.5);
+    a.hp = a.maxHp = 1e9;
+    b.hp = b.maxHp = 1e9;
+    a.dist = 100;
+    b.dist = 50;
+    s.enemies.push(a, b);
+    tick(s);
+    check(a.hp < a.maxHp && b.hp === b.maxHp, 'the Taser borrows the Laser\'s deepest target, not its own nearest');
+    a.dead = true; // the Laser retargets
+    for (let i = 0; i < 20 && b.hp === b.maxHp; i++) tick(s);
+    check(b.hp < b.maxHp, 'the Taser follows the Laser to its next target');
+  }
+
+  // Byte-identical baseline: a Taser with no adjacent Laser behaves exactly as before.
+  const loneTaserHash = () => {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    placeTower(s, 'taser', 5, 5);
+    const taser = towerAt(s, 5, 5);
+    s.phase = 'wave';
+    const e = stationary(1, 'grunt', 1, 5.5, 4.0);
+    e.hp = e.maxHp = 1e9;
+    s.enemies.push(e);
+    const buf = [];
+    for (let i = 0; i < 600; i++) {
+      tick(s);
+      for (const ev of s.events) {
+        if (ev.type === 'shot') buf.push(`S${ev.towerId}`);
+        else if (ev.type === 'damage') buf.push(`D${ev.id}:${ev.amount}`);
+      }
+      s.events.length = 0;
+      buf.push(`c${taser.cooldown}`);
+    }
+    return createHash('sha1').update(buf.join(';')).digest('hex');
+  };
+  const baseline = loneTaserHash();
+  check(baseline === '6b494dd2028982b3d917bec33fb037c5c702451c', `a Taser with no adjacent Laser is byte-identical to the baseline (${baseline.slice(0, 10)})`);
+}
+
+// --- Shatter (docs/SYNERGIES-BATCH-2.md §3) -----------------------------------------------------
+{
+  const shellInto = (slowed) => {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    placeTower(s, 'cannon', 5, 5);
+    placeTower(s, 'frost', 5, 6);
+    const cannon = towerAt(s, 5, 5);
+    cannon.angle = 0;
+    s.phase = 'wave';
+    const grunt = stationary(1, 'grunt', 1, 5.5, 4.0);
+    grunt.hp = grunt.maxHp = 1e9;
+    if (slowed) {
+      grunt.slowUntilTick = 999999;
+      grunt.slowFactor = 0.5;
+    }
+    s.enemies.push(grunt);
+    tick(s);
+    return { s, cannon, grunt };
+  };
+
+  const slowed = shellInto(true);
+  check(slowed.s.shatterBursts.length === 1, 'a shell into a slowed enemy schedules exactly one burst');
+  const burst = slowed.s.shatterBursts[0];
+  check(burst.tick === slowed.s.tick + SHATTER_BURST_DELAY_TICKS, `the burst lands ${SHATTER_BURST_DELAY_TICKS} ticks later`);
+  check(Math.abs(burst.damage - slowed.cannon.damageDealt * SHATTER_BURST_DAMAGE_MULT) < 1e-9, 'the burst carries 40% of the shell damage');
+  check(burst.x === 5.5 && burst.y === 4.0, 'the burst is scheduled at the impact point');
+
+  const unslowed = shellInto(false);
+  check(unslowed.s.shatterBursts.length === 0, 'a shell into an unslowed enemy schedules no burst');
+
+  // The burst resolves 24 ticks later and never schedules another.
+  const hpAfterShell = slowed.grunt.maxHp - slowed.grunt.hp;
+  for (let i = 0; i < SHATTER_BURST_DELAY_TICKS; i++) tick(slowed.s);
+  check(slowed.s.shatterBursts.length === 0, 'a burst never schedules another Shatter');
+  const hpAfterBurst = slowed.grunt.maxHp - slowed.grunt.hp;
+  check(Math.abs(hpAfterBurst - hpAfterShell - burst.damage) < 1e-6, 'the burst deals its damage at the impact point');
+}
+
+// --- Buttress (docs/SYNERGIES-BATCH-2.md §4) ----------------------------------------------------
+{
+  const makeBulwark = (s, col, row) => {
+    check(placeTower(s, 'wall', col, row), `place a wall at ${col},${row}`);
+    check(upgradeTower(s, col, row), `upgrade the wall at ${col},${row} to tier 2`);
+    check(chooseBranch(s, col, row, 'A'), `branch the wall at ${col},${row} to Bulwark`);
+    return towerAt(s, col, row);
+  };
+
+  // Two walls split evenly; the remainder is deterministic.
+  {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    const a = makeBulwark(s, 5, 4);
+    const b = makeBulwark(s, 6, 4);
+    const aHp = a.hp;
+    const bHp = b.hp;
+    damageWall(s, a, 10);
+    check(aHp - a.hp === 5 && bHp - b.hp === 5, 'a hit on one of two Bulwark walls splits evenly (5 and 5)');
+    damageWall(s, a, 7);
+    check(aHp - a.hp === 9 && bHp - b.hp === 8, 'the remainder goes to the hit wall deterministically (4 then 3)');
+  }
+
+  // A group of five splits across four.
+  {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    const walls = [makeBulwark(s, 5, 5), makeBulwark(s, 6, 5), makeBulwark(s, 7, 5), makeBulwark(s, 8, 5), makeBulwark(s, 9, 5)];
+    const hit = walls[2];
+    const before = walls.map((w) => w.hp);
+    damageWall(s, hit, 10);
+    check(before[0] - walls[0].hp === 2, 'the first neighbour takes a 2 share');
+    check(before[1] - walls[1].hp === 2, 'the second neighbour takes a 2 share');
+    check(before[2] - walls[2].hp === 4, 'the hit wall takes the 2 share plus the remainder');
+    check(before[3] - walls[3].hp === 2, 'the third neighbour takes a 2 share');
+    check(before[4] - walls[4].hp === 0, 'the fifth wall in the component takes nothing (capped at four)');
+  }
+
+  // A Mesh wall beside a Bulwark wall is never split.
+  {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    const a = makeBulwark(s, 5, 4);
+    placeTower(s, 'wall', 6, 4);
+    upgradeTower(s, 6, 4);
+    chooseBranch(s, 6, 4, 'B');
+    const mesh = towerAt(s, 6, 4);
+    const aHp = a.hp;
+    const meshHp = mesh.hp;
+    damageWall(s, a, 10);
+    check(aHp - a.hp === 10, 'a Bulwark wall beside a Mesh wall takes the full hit');
+    check(mesh.hp === meshHp, 'a Mesh wall is not split into');
+  }
+
+  // A lone Bulwark wall takes the full hit.
+  {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    const a = makeBulwark(s, 5, 4);
+    const aHp = a.hp;
+    damageWall(s, a, 10);
+    check(aHp - a.hp === 10, 'a lone Bulwark wall takes the full hit');
+  }
+
+  // A dead member redistributes within the same hit.
+  {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    const a = makeBulwark(s, 5, 4);
+    const b = makeBulwark(s, 6, 4);
+    b.hp = 0; // fallen, but still on the board
+    const aHp = a.hp;
+    damageWall(s, a, 10);
+    check(aHp - a.hp === 10, 'the survivor takes the dead member\'s share within the same hit');
+    check(b.hp === 0, 'the dead member absorbs nothing');
+  }
+}
+
+// --- Determinism: all four pairs replay to the same hash (docs/SYNERGIES-BATCH-2.md §7) ---------
+{
+  const synergyHash = () => {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    s.rng = 0x51ed2701;
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    placeTower(s, 'aa', 3, 4);
+    placeTower(s, 'frost', 3, 5); // chill
+    placeTower(s, 'taser', 6, 4);
+    placeTower(s, 'laser', 6, 5); // interlock
+    placeTower(s, 'cannon', 9, 4);
+    placeTower(s, 'frost', 9, 5); // shatter
+    for (const [c, r] of [[12, 4], [12, 5]]) { // buttress
+      placeTower(s, 'wall', c, r);
+      upgradeTower(s, c, r);
+      chooseBranch(s, c, r, 'A');
+    }
+    s.phase = 'wave';
+    const flyer = stationary(1, 'flyer', 20, 3.5, 2.0);
+    const g1 = stationary(2, 'grunt', 1, 6.5, 2.5);
+    const g2 = stationary(3, 'grunt', 1, 9.5, 2.0);
+    flyer.hp = flyer.maxHp = 1e9;
+    g1.hp = g1.maxHp = 1e9;
+    g2.hp = g2.maxHp = 1e9;
+    g2.slowUntilTick = 999999;
+    g2.slowFactor = 0.5;
+    s.enemies.push(flyer, g1, g2);
+    for (const t of s.towers) t.angle = 0;
+    for (let i = 0; i < 600; i++) tick(s);
+    return createHash('sha1').update(JSON.stringify([
+      s.rng,
+      s.tick,
+      s.enemies.map((e) => [e.id, e.kind, e.hp, e.x, e.y, e.dist]),
+      s.towers.map((t) => [t.id, t.kind, t.hp, t.cooldown, t.damageDealt, t.kills]),
+      s.economy.salvage,
+    ])).digest('hex');
+  };
+  const first = synergyHash();
+  check(first === synergyHash(), `a seeded run with all four pairs replays to the same hash (${first.slice(0, 10)})`);
 }
 
 // --- RTL (docs/RTL.md) -------------------------------------------------------------------------

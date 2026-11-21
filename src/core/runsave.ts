@@ -1070,6 +1070,7 @@ export function restoreRun(save: unknown, profile: Profile = defaultProfile()): 
     synergyRev: 0,
     synergyHoldSince: new Map(),
     synergyHoldTarget: new Map(),
+    shatterBursts: [],
     rng,
     viewport: {
       width: 1280,

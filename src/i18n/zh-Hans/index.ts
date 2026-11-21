@@ -881,5 +881,14 @@ export const zh: Catalogue = {
   ...help,
 
   // Window title.
+  'synergy.chill.name': 'Chill',
+  'synergy.chill.description': '相邻的冰霜让这座 AA 能减速它命中的每个飞行敌人。',
+  'synergy.interlock.name': 'Interlock',
+  'synergy.interlock.description': '相邻的激光让这座电击能攻击激光正在瞄准的目标。',
+  'synergy.shatter.name': 'Shatter',
+  'synergy.shatter.description': '炮旁的冰霜会在炮弹命中被减速的敌人处留下第二波更小的爆发。',
+  'synergy.buttress.name': 'Buttress',
+  'synergy.buttress.description': '相邻的壁垒墙分摊受到的伤害，让整个小组一同倒下。',
+
   'window.title': 'Pointer Defense',
 };
