@@ -28,16 +28,12 @@ Nothing in flight.
 
 ## Housekeeping
 
-### 2. Branch and worktree sweep
-
-- **Why:** the repo carries 100+ merged branches and roughly 50 worktrees; only `pd-upgate` holds
-  `main`. It works, it is just noise when looking for something.
-- **Done when:** merged branches are deleted, stale worktrees are removed, and `pd-upgate` is the
-  only long-lived one besides whatever is currently in flight.
-- **Note:** offered twice, never answered. Safe to ignore.
+Nothing outstanding. The branch and worktree sweep ran on 2026-11-21: 59 stale worktrees removed, 141
+merged branches deleted, leaving `main` plus one spare detached checkout.
 
 ## Shipped recently
 
+- **Branch and worktree sweep** — 65 worktrees down to 2, 142 branches down to 1.
 - **Per-locale chrome fit** (`3abbb26`) — 771 fit checks over seven locales, plus real overflow fixes in
   the catalogues. Restart Windows, Endless and the Global Upgrades title keep their meaning.
 - **Tower licences** (`241fd58`) — eight RP-priced prestige unlocks; Early Access removed and its
