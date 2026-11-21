@@ -73,7 +73,7 @@ export interface RestoreSpecRow {
   canInc: boolean;
   canDec: boolean;
   rect: Rect;
-  stepper: { minus: Rect; value: Rect; plus: Rect } | null;
+  stepper: { minus: Rect; value: Rect; plus: Rect };
 }
 
 export interface RestoreButton {
@@ -183,7 +183,7 @@ export function computeRestoreLayout(l: Layout, profile: Profile, s: RunState, s
     const minus: Rect = { x: specColX[1] + 4, y: rect.y + 2, w: 18, h: 20 };
     const value: Rect = { x: minus.x + 20, y: rect.y + 2, w: 40, h: 20 };
     const plus: Rect = { x: value.x + value.w + 2, y: rect.y + 2, w: 18, h: 20 };
-    const stepper = canInc || canDec ? { minus, value, plus } : null;
+    const stepper = { minus, value, plus };
     return { kind, level, cap, baseLevel, canInc, canDec, rect, stepper };
   });
 
@@ -246,8 +246,8 @@ export function restoreHitAt(rl: RestoreLayout, x: number, y: number): RestoreHi
   }
   if (rl.tabs[1].active) {
     for (const row of rl.specRows) {
-      if (row.stepper && pointInRect(row.stepper.minus, x, y)) return { type: 'spec-minus', kind: row.kind };
-      if (row.stepper && pointInRect(row.stepper.plus, x, y)) return { type: 'spec-plus', kind: row.kind };
+      if (pointInRect(row.stepper.minus, x, y)) return { type: 'spec-minus', kind: row.kind };
+      if (pointInRect(row.stepper.plus, x, y)) return { type: 'spec-plus', kind: row.kind };
     }
   }
   if (rl.tabs[2].active) {
@@ -436,9 +436,16 @@ export class RestoreView {
     }
     for (let i = rl.tabs.length; i < this.tabTexts.length; i++) this.tabTexts[i].text = '';
 
-    if (session.tab === 'restore') this.drawRestoreTab(g, rl, profile, s);
-    else if (session.tab === 'specs') this.drawSpecsTab(g, rl);
-    else this.drawTreeTab(g, rl);
+    if (session.tab === 'restore') {
+      for (const t of this.rows) t.text = '';
+      this.drawRestoreTab(g, rl, profile, s);
+    } else if (session.tab === 'specs') {
+      this.clearRestoreTabTexts();
+      this.drawSpecsTab(g, rl);
+    } else {
+      this.clearRestoreTabTexts();
+      this.drawTreeTab(g, rl);
+    }
 
     // Apply / Close.
     const dirty = restoreDirty(session, profile);
@@ -464,6 +471,12 @@ export class RestoreView {
     this.statusTexts[0].position.set(panels[0].x + 4, panels[0].y + Math.floor(panels[0].h / 2));
     this.statusTexts[1].text = t('dlg.restore.statusSpecs', { total: totalSpecs, cap: totalCap });
     this.statusTexts[1].position.set(panels[1].x + 4, panels[1].y + Math.floor(panels[1].h / 2));
+  }
+
+  private clearRestoreTabTexts(): void {
+    this.payoutText.text = '';
+    this.restartText.text = '';
+    this.progressText.text = '';
   }
 
   private drawRestoreTab(g: Graphics, rl: RestoreLayout, profile: Profile, s: RunState): void {
@@ -512,8 +525,7 @@ export class RestoreView {
       levelText.style.fontWeight = 'normal';
       levelText.style.fill = PAL.text;
       levelText.anchor.set(0.5, 0.5);
-      levelText.position.set(row.stepper ? row.stepper.value.x + row.stepper.value.w / 2 : colX[1] + 40, midY);
-      levelText.anchor.set(0, 0.5);
+      levelText.position.set(row.stepper.value.x + row.stepper.value.w / 2, midY);
 
       const effect = this.rowTextAt(ti++);
       effect.text = specEffectText(row.kind, row.level);
@@ -522,10 +534,8 @@ export class RestoreView {
       effect.anchor.x = 0;
       effect.position.set(colX[2] + 4, midY);
 
-      if (row.stepper) {
-        drawStepper(g, row.stepper.minus, row.canDec);
-        drawStepper(g, row.stepper.plus, row.canInc);
-      }
+      drawStepper(g, row.stepper.minus, 'minus', row.canDec);
+      drawStepper(g, row.stepper.plus, 'plus', row.canInc);
     }
     for (let i = ti; i < this.rows.length; i++) this.rows[i].text = '';
   }
@@ -581,12 +591,14 @@ export class RestoreView {
   }
 }
 
-function drawStepper(g: Graphics, r: Rect, enabled: boolean): void {
+function drawStepper(g: Graphics, r: Rect, kind: 'minus' | 'plus', enabled: boolean): void {
   if (enabled) bevel(g, r, true, PAL.face);
-  else {
-    g.rect(r.x, r.y, r.w, r.h).fill(PAL.face);
-    g.rect(r.x, r.y, r.w, r.h).stroke({ width: 1, color: PAL.shadow });
-  }
+  else bevel(g, r, false, PAL.face);
+  const cx = r.x + r.w / 2;
+  const cy = r.y + r.h / 2;
+  const color = enabled ? PAL.text : PAL.shadow;
+  g.moveTo(cx - 4, cy).lineTo(cx + 4, cy).stroke({ width: 1, color });
+  if (kind === 'plus') g.moveTo(cx, cy - 4).lineTo(cx, cy + 4).stroke({ width: 1, color });
 }
 
 /** A Win95 segmented progress bar: 8 px blocks with 2 px gaps, navy fill. */
