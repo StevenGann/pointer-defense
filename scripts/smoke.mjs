@@ -133,7 +133,7 @@ import { thumbnailTexture, thumbCacheSize, thumbBase } from '../src/view/mapsScr
 import { levelThumbnail } from '../src/core/thumb.ts';
 import { MAP_SAVE_KEY, rememberMap, readRememberedMap } from '../src/core/mapSave.ts';
 import { computeUpgradesLayout, UpgradesSession, upgradesStatusText, upgradesEmptyLines, upgradesHitAt, pressUpgradesOk, UPGRADE_ROW_H } from '../src/view/upgrades.ts';
-import { computeRestoreLayout, RestoreSession, restoreProgress, restoreDirty } from '../src/view/restore.ts';
+import { computeRestoreLayout, RestoreSession, restoreProgress, restoreDirty, RestoreView } from '../src/view/restore.ts';
 import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES, LICENCE_IDS } from '../src/core/tree.ts';
 import { ACHIEVEMENTS } from '../src/core/achievements.ts';
 import { restartWindows, checkAchievements, enterEndless, pointerDamageMult, towerCost, overclockCap, towerIntervalTicks } from '../src/core/state.ts';
@@ -11935,6 +11935,64 @@ function dailyState(date) {
   const blocks = Math.max(1, Math.floor(((rl.progress.rect.w - 4) + gap) / (blockW + gap)));
   const filled = Math.round(rl.progress.fill * blocks);
   check(Math.abs(filled / blocks - rl.progress.fill) <= 1 / blocks, 'the segmented bar fill matches points/pointsNeeded within one block');
+}
+
+// --- Visual pass 4b: the Restore tab leak, zero-RP steppers and the centred level digit ---------
+// (docs/RESTORE-TAB-LEAK.md §4)
+{
+  const layout = computeLayout(1280, 720);
+  const profile = defaultProfile(); // 0 RP, 0 specs, nothing banked
+  const s = createRunState(profile);
+  const session = new RestoreSession();
+  session.show(profile);
+
+  // 1. A fresh profile builds a stepper on every spec row, with minus and plus disabled.
+  session.setTab('specs');
+  const rl = computeRestoreLayout(layout, profile, s, session);
+  check(rl.specRows.length === 4, 'the Specs tab lists all four specs');
+  for (const row of rl.specRows) {
+    check(row.stepper !== null && row.stepper !== undefined, `the ${row.kind} stepper exists at 0 RP`);
+    check(!row.canDec, `the ${row.kind} minus is disabled at 0 RP (base level)`);
+    check(!row.canInc, `the ${row.kind} plus is disabled at 0 RP (no points)`);
+    check(row.stepper.value.w === 40, `the ${row.kind} value box is 40 px wide`);
+  }
+
+  // 2. The value box keeps its 40 px width, and the digit is centred in it, at every level 0-10.
+  const view = new RestoreView();
+  for (let level = 0; level <= 10; level++) {
+    session.draftSpecs = { cpu: level, ram: level, gpu: level, disk: level };
+    const layoutAt = computeRestoreLayout(layout, profile, s, session);
+    view.draw(true, profile, s, layout, session);
+    const digits = view.root.children.filter((c) => typeof c.text === 'string' && /^\d+$/.test(c.text));
+    check(digits.length === 4, `four level digits draw at level ${level}`);
+    for (const row of layoutAt.specRows) {
+      check(row.stepper.value.w === 40, `the value box is 40 px wide at level ${level} (${row.kind})`);
+    }
+    for (const d of digits) {
+      check(d.anchor.x === 0.5 && d.anchor.y === 0.5, `the level digit is centre-anchored at level ${level}`);
+      const owner = layoutAt.specRows.find((row) => Math.abs(d.position.x - (row.stepper.value.x + row.stepper.value.w / 2)) < 0.5 && Math.abs(d.position.y - (row.rect.y + row.rect.h / 2)) < 0.5);
+      check(owner !== undefined, `the level digit sits at the centre of its value box at level ${level}`);
+    }
+  }
+
+  // 3. Each tab draws only its own text (the draw-order leak, §1-§2).
+  const drawn = () => view.root.children.filter((c) => typeof c.text === 'string' && c.text !== '').map((c) => c.text);
+  const restoreCopy = (texts) => texts.some((t) => t.startsWith('Restart Windows converts') || t === 'Progress to the next point' || t === 'Restart Windows');
+
+  session.setTab('specs');
+  view.draw(true, profile, s, layout, session);
+  check(!restoreCopy(drawn()), 'the Specs tab shows no Restore Point copy');
+
+  session.setTab('tree');
+  view.draw(true, profile, s, layout, session);
+  check(!restoreCopy(drawn()), 'the Tree tab shows no Restore Point copy');
+
+  session.setTab('restore');
+  view.draw(true, profile, s, layout, session);
+  const restoreTexts = drawn();
+  check(restoreCopy(restoreTexts), 'the Restore Point tab still draws its own copy');
+  check(!['Name', 'Level', 'Effect', 'CPU', 'RAM', 'GPU', 'Disk'].some((w) => restoreTexts.includes(w)),
+    'the Restore Point tab shows no Specs list copy');
 }
 
 // --- Visual pass 5: Help Contents/Index/Search, splitter clamp and Back/Forward ---------------
