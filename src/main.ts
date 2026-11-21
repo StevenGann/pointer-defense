@@ -751,6 +751,7 @@ function buildMenu(name: MenuName): OpenMenu {
         // Each language is named in its own script, so the list is readable whichever one is active.
         ...LOCALES.map((l) => ({ id: l.code, label: l.label, checked: l.code === currentLocaleName() })),
       ],
+      submenuParentId: null,
     };
   }
   if (name === 'cheats') {
@@ -759,11 +760,14 @@ function buildMenu(name: MenuName): OpenMenu {
       entries: [
         { id: 'god-mode', label: t('menu.cheats.godMode'), checked: state.godMode },
         { id: 'kill-all', label: t('menu.cheats.killAll') },
+        { id: 'separator', label: '', separator: true },
+        {
+          id: 'spawn',
+          label: t('menu.cheats.spawn'),
+          submenu: SPAWN_KINDS.map((kind) => ({ id: SPAWN_PREFIX + kind, label: spawnKindLabel(kind) })),
+        },
       ],
-      secondColumn: [
-        { id: 'spawn-header', label: t('menu.cheats.spawn'), disabled: true },
-        ...SPAWN_KINDS.map((kind) => ({ id: SPAWN_PREFIX + kind, label: spawnKindLabel(kind) })),
-      ],
+      submenuParentId: null,
     };
   }
   if (name === 'help') {
@@ -780,6 +784,7 @@ function buildMenu(name: MenuName): OpenMenu {
         { id: 'achievements', label: t('menu.help.achievements') },
         { id: 'about', label: t('menu.help.about') },
       ],
+      submenuParentId: null,
     };
   }
   const ready = state.wave >= 50;
@@ -791,6 +796,7 @@ function buildMenu(name: MenuName): OpenMenu {
       { id: 'separator', label: '', separator: true },
       { id: 'exit', label: t('menu.file.exit') },
     ],
+    submenuParentId: null,
   };
 }
 
@@ -2286,7 +2292,7 @@ app.ticker.add((ticker) => {
   }
 
   chrome.draw(layout, running ? mouse.hover.menuItem : -1);
-  menuView.draw(layout.menu, running ? menu : null, running ? mouse.hover.menuHover : null);
+  menuView.draw(layout, running ? menu : null, running ? mouse.hover.menuHover : null, running ? mouse.hover.menuKeyboard : null);
   recordsView.draw(recordsSession, profile, layout);
 
   // Per-screen content; run-only views are hidden on the menu and in the editor.

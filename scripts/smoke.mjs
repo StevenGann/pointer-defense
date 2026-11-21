@@ -137,7 +137,7 @@ import { computeRestoreLayout, RestoreSession, restoreProgress, restoreDirty } f
 import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES, LICENCE_IDS } from '../src/core/tree.ts';
 import { ACHIEVEMENTS } from '../src/core/achievements.ts';
 import { restartWindows, checkAchievements, enterEndless, pointerDamageMult, towerCost, overclockCap, towerIntervalTicks } from '../src/core/state.ts';
-import { cheatsEnabled, setCheatsVisibleForTests, SPAWN_KINDS } from '../src/core/cheats.ts';
+import { cheatsEnabled, setCheatsVisibleForTests, SPAWN_KINDS, spawnKindLabel } from '../src/core/cheats.ts';
 import { dashRects, offsetSegment, routeOffset } from '../src/view/route.ts';
 import { enemyDrawOrder, popupCloseHit, popupCloseRect, popupWindowRect, POPUP_TITLE_H, POPUP_CLOSE_W, POPUP_CLOSE_H } from '../src/view/popupEnemy.ts';
 import { adCloseRect, wrapAdTip, adRewardLineY, adTipMaxWidth } from '../src/view/ad.ts';
@@ -182,6 +182,7 @@ import { parseHelpMarkdown, layoutHelpBlocks, helpMeasure, ITEM_GAP } from '../s
 import { nextHelpMode, contextHelpPage, contextHelpHitAt } from '../src/view/contexthelp.ts';
 import { buildAchievementGrid, gridRowCount, gridCellRect, ACH_COLUMNS, ACH_CELL, ACH_GUTTER, computeAchievementGrid, achievementGridHitAt, AchievementSession, computeDialog } from '../src/view/dialog.ts';
 import { computeNameDialog } from '../src/view/mapLibrary.ts';
+import { computeMenu, menuEntryAt, advanceSubmenu, SUBMENU_OPEN_MS, CHEVRON_W } from '../src/view/menu.ts';
 import {
   ART_MANIFEST,
   ART_VIEWBOX,
@@ -8244,6 +8245,145 @@ function helpFmtDps(damage, fireTicks) { return fireTicks <= 0 ? '—' : (damage
   const withCheats = menuItems().map((m) => m.name);
   check(withCheats.indexOf('view') + 1 === withCheats.indexOf('cheats'), 'Cheats sits after View');
   check(withCheats.indexOf('cheats') + 1 === withCheats.indexOf('help'), 'Cheats sits before Help');
+}
+
+// --- 46a. Menu submenus (docs/MENU-SUBMENUS.md §6) ----------------------------------------------
+{
+  const SPAWN_PREFIX = 'spawn:';
+  const spawnSubmenu = () => SPAWN_KINDS.map((kind) => ({ id: SPAWN_PREFIX + kind, label: spawnKindLabel(kind) }));
+  const cheatsMenu = (submenuParentId) => ({
+    name: 'cheats',
+    entries: [
+      { id: 'god-mode', label: t('menu.cheats.godMode'), checked: true },
+      { id: 'kill-all', label: t('menu.cheats.killAll') },
+      { id: 'separator', label: '', separator: true },
+      { id: 'spawn', label: t('menu.cheats.spawn'), submenu: spawnSubmenu() },
+    ],
+    submenuParentId,
+  });
+  // computeMenu reads only menu/window/client, so a minimal layout suffices here.
+  const fakeLayout = (vw, vh) => ({
+    window: { x: 0, y: 0, w: vw, h: vh },
+    menu: { x: 0, y: 24, w: vw, h: 22 },
+    client: { x: 0, y: 46, w: vw, h: vh - 72 },
+  });
+
+  // 1. The Cheats menu is a single column, and no menu carries a second column.
+  const closed = computeMenu(fakeLayout(1280, 800), cheatsMenu(null));
+  check(closed.items.length === 4, 'submenu: the Cheats menu is one column of four rows');
+  check(closed.submenu === null, 'submenu: a closed menu has no flyout');
+  check(!('second' in closed) && !('secondColumn' in cheatsMenu(null)), 'submenu: no menu has a secondColumn (or a second layout column)');
+
+  // 2. A row with a submenu reserves the chevron column; a row without one does not.
+  const longLabel = 'A_LONG_MENU_LABEL';
+  const plainW = computeMenu(fakeLayout(1280, 800), { name: 'file', entries: [{ id: 'a', label: longLabel }], submenuParentId: null }).rect.w;
+  const parentW = computeMenu(fakeLayout(1280, 800), { name: 'file', entries: [{ id: 'a', label: longLabel, submenu: [{ id: 'c', label: 'Child' }] }], submenuParentId: null }).rect.w;
+  check(parentW === plainW + CHEVRON_W, `submenu: a submenu row reserves the ${CHEVRON_W} px chevron column`);
+
+  // 3. The flyout opens to the right in LTR and to the left in RTL, aligned to the parent row.
+  const openLtr = computeMenu(fakeLayout(1280, 800), cheatsMenu('spawn'));
+  const parentRowLtr = openLtr.items.find((it) => it.id === 'spawn');
+  check(openLtr.submenu !== null && openLtr.submenu.parentId === 'spawn', 'submenu: opening Spawn produces the flyout');
+  check(openLtr.submenu.rect.x === openLtr.rect.x + openLtr.rect.w, 'submenu LTR: the flyout opens on the parent menu right edge');
+  check(openLtr.submenu.rect.y === parentRowLtr.rect.y, 'submenu LTR: the flyout top aligns to the parent row');
+  setDirection('rtl');
+  try {
+    const openRtl = computeMenu(fakeLayout(1280, 800), cheatsMenu('spawn'));
+    const parentRowRtl = openRtl.items.find((it) => it.id === 'spawn');
+    check(openRtl.submenu !== null && openRtl.submenu.rect.x + openRtl.submenu.rect.w === openRtl.rect.x, 'submenu RTL: the flyout opens on the parent menu left edge');
+    check(openRtl.submenu.rect.y === parentRowRtl.rect.y, 'submenu RTL: the flyout top aligns to the parent row');
+  } finally {
+    setDirection('ltr');
+  }
+
+  // 4. It flips to the other side at the window edge, on both sides.
+  {
+    const helpMenu = { name: 'help', entries: [{ id: 'p', label: 'Parent', submenu: [{ id: 'c', label: 'Child' }] }], submenuParentId: 'p' };
+    const narrowLtr = computeMenu(fakeLayout(320, 800), helpMenu);
+    check(narrowLtr.submenu !== null && narrowLtr.submenu.rect.x + narrowLtr.submenu.rect.w === narrowLtr.rect.x,
+      'submenu LTR: the flyout flips to the left at the right window edge');
+    setDirection('rtl');
+    try {
+      const narrowRtl = computeMenu(fakeLayout(320, 800), helpMenu);
+      check(narrowRtl.submenu !== null && narrowRtl.submenu.rect.x === narrowRtl.rect.x + narrowRtl.rect.w,
+        'submenu RTL: the flyout flips to the right at the left window edge');
+    } finally {
+      setDirection('ltr');
+    }
+  }
+
+  // 5. The flyout's bottom clamps inside the window, never above the menu bar.
+  {
+    const short = {
+      name: 'cheats',
+      entries: [
+        { id: 'god-mode', label: 'God mode' },
+        { id: 'kill-all', label: 'Kill all' },
+        { id: 'separator', label: '', separator: true },
+        { id: 'spawn', label: 'Spawn', submenu: [1, 2, 3, 4, 5].map((n) => ({ id: 'c' + n, label: 'Child ' + n })) },
+      ],
+      submenuParentId: 'spawn',
+    };
+    const m = computeMenu(fakeLayout(1280, 200), short);
+    check(m.submenu !== null, 'submenu: the short flyout is present');
+    check(m.submenu.rect.y + m.submenu.rect.h === 200, 'submenu: the flyout bottom clamps inside the window');
+    check(m.submenu.rect.y >= 24, 'submenu: the flyout never rises above the menu bar');
+  }
+
+  // 6. A list too tall for the client area splits into two balanced columns.
+  {
+    const m = computeMenu(fakeLayout(1280, 300), cheatsMenu('spawn'));
+    check(m.submenu !== null, 'submenu: the tall flyout is present');
+    check(m.submenu.items.length === 15, 'submenu: the split flyout still holds all 15 spawn items');
+    check(m.submenu.rect.w > m.rect.w, 'submenu: a split flyout is wider than one column');
+    const leftIds = m.submenu.items.filter((it) => it.rect.x === m.submenu.rect.x).map((it) => it.id);
+    const rightIds = m.submenu.items.filter((it) => it.rect.x === m.submenu.rect.x + m.submenu.rect.w / 2).map((it) => it.id);
+    check(leftIds.length === 8 && rightIds.length === 7, `submenu: the split flyout balances the columns (${leftIds.length} left / ${rightIds.length} right)`);
+    check(leftIds.join(',') === SPAWN_KINDS.slice(0, 8).map((k) => SPAWN_PREFIX + k).join(','), 'submenu: the left column is filled first, top to bottom');
+  }
+
+  // 7. Hover: 250 ms opens, leaving before then does not, the flyout stays open on the way in, and
+  //    hovering another row closes it (the controller drives this with the same pure state machine).
+  {
+    const empty = { parentId: null, startedAt: 0 };
+    const armed = advanceSubmenu(null, empty, 'spawn', false, 0);
+    check(armed.submenuParentId === null && armed.timer.parentId === 'spawn', 'submenu: hovering the parent arms the timer');
+    const before = advanceSubmenu(null, armed.timer, 'spawn', false, SUBMENU_OPEN_MS - 1);
+    check(before.submenuParentId === null, 'submenu: leaving before 250 ms does not open the flyout');
+    const opened = advanceSubmenu(null, armed.timer, 'spawn', false, SUBMENU_OPEN_MS);
+    check(opened.submenuParentId === 'spawn', 'submenu: hovering for 250 ms opens the flyout');
+
+    const inFlyout = advanceSubmenu('spawn', { parentId: null, startedAt: 0 }, null, true, SUBMENU_OPEN_MS + 50);
+    check(inFlyout.submenuParentId === 'spawn', 'submenu: moving from the parent into the flyout keeps it open');
+
+    const otherRow = advanceSubmenu('spawn', { parentId: null, startedAt: 0 }, null, false, SUBMENU_OPEN_MS + 50);
+    check(otherRow.submenuParentId === null, 'submenu: hovering another row closes the flyout');
+  }
+
+  // 8. Escape closes the flyout first, then the menu: the flyout is a separable piece of the open menu.
+  {
+    const open = cheatsMenu('spawn');
+    check(computeMenu(fakeLayout(1280, 800), open).submenu !== null, 'submenu: the flyout is open before Escape');
+    open.submenuParentId = null; // the controller's first Esc
+    const afterFirstEsc = computeMenu(fakeLayout(1280, 800), open);
+    check(afterFirstEsc.submenu === null && afterFirstEsc.items.length === 4,
+      'submenu: the first Escape closes the flyout and keeps the menu open');
+  }
+
+  // 9. A spawn item's id still resolves to a spawn action with the id unchanged.
+  {
+    const m = computeMenu(fakeLayout(1280, 800), cheatsMenu('spawn'));
+    const firstKind = SPAWN_KINDS[0];
+    const firstItem = m.submenu.items.find((it) => it.id === SPAWN_PREFIX + firstKind);
+    check(firstItem !== undefined, 'submenu: the flyout carries the spawn items');
+    const hit = menuEntryAt(fakeLayout(1280, 800), cheatsMenu('spawn'), firstItem.rect.x + 2, firstItem.rect.y + 2);
+    check(hit === SPAWN_PREFIX + firstKind, 'submenu: menuEntryAt resolves the flyout item id unchanged');
+    const s = allUnlocked();
+    const before = s.enemies.length;
+    check(spawnCheatEnemy(s, firstKind), 'submenu: a spawn id still resolves to a spawn action');
+    check(s.enemies.length === before + 1 && s.enemies[s.enemies.length - 1].kind === firstKind,
+      'submenu: the spawned enemy matches the spawn id');
+  }
 }
 
 {

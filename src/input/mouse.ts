@@ -4,7 +4,7 @@ import { claimTray, hasUpgrade } from '../core/upgrades.ts';
 import { computeTitleControls, menuItemAt, menuNameAt, pixelToWorld, pointInRect, type Layout, type MenuName } from '../view/chrome.ts';
 import { hudButtonAt, hudControlAt, modalRestartAt, victoryButtonAt, type HudAction } from '../view/hud.ts';
 import { adCloseRect, trayHit } from '../view/ad.ts';
-import { menuEntryAt, type OpenMenu } from '../view/menu.ts';
+import { advanceSubmenu, computeMenu, menuItemIdAt, SUBMENU_OPEN_MS, type OpenMenu, type SubmenuTimerState } from '../view/menu.ts';
 import { dialogButtonAt, type DialogModel } from '../view/dialog.ts';
 import { dismissAd } from '../core/ads.ts';
 import { popupCloseHit } from '../view/popupEnemy.ts';
@@ -77,6 +77,7 @@ export interface HoverState {
   y: number;
   menuItem: number;
   menuHover: string | null;
+  menuKeyboard: string | null;
   dialogButton: string | null;
   hud: HudAction | null;
   onBoard: boolean;
@@ -168,6 +169,7 @@ export class MouseController {
     y: 0,
     menuItem: -1,
     menuHover: null,
+    menuKeyboard: null,
     dialogButton: null,
     hud: null,
     onBoard: false,
@@ -180,6 +182,8 @@ export class MouseController {
 
   private readonly ctx: MouseContext;
   private readonly canvas: HTMLCanvasElement;
+  private submenuTimer: ReturnType<typeof setTimeout> | null = null;
+  private submenuTimerState: SubmenuTimerState = { parentId: null, startedAt: 0 };
 
   constructor(app: Application, ctx: MouseContext) {
     this.ctx = ctx;
@@ -220,7 +224,13 @@ export class MouseController {
     if (this.ctx.achievementOpen()) this.ctx.achievementPointerMove(x, y);
 
     const open = this.ctx.menu();
-    this.hover.menuHover = open ? menuEntryAt(l.menu, open, x, y) : null;
+    if (open) this.updateMenuHover(open, l);
+    else {
+      this.hover.menuHover = null;
+      this.hover.menuKeyboard = null;
+      this.clearSubmenuTimer();
+      this.submenuTimerState = { parentId: null, startedAt: 0 };
+    }
     const dialog = this.ctx.dialog();
     this.hover.dialogButton = dialog ? dialogButtonAt(l, dialog, x, y) : null;
     this.hover.hud = hudButtonAt(l, s, x, y);
@@ -283,12 +293,25 @@ export class MouseController {
       return;
     }
 
-    // An open dropdown menu: an item fires, a click elsewhere closes it.
+    // An open dropdown menu: an item fires, a parent opens its flyout, a click elsewhere closes it.
     const open = this.ctx.menu();
     if (open) {
-      const id = menuEntryAt(l.menu, open, x, y);
-      if (id) this.ctx.menuAction(id);
-      else this.ctx.openMenu(null);
+      const id = menuItemIdAt(computeMenu(l, open), x, y);
+      if (id) {
+        const entry = open.entries.find((e) => e.id === id);
+        if (entry && entry.submenu && entry.submenu.length > 0 && !entry.disabled) {
+          open.submenuParentId = id;
+          this.clearSubmenuTimer();
+          this.submenuTimerState = { parentId: null, startedAt: 0 };
+          this.hover.menuKeyboard = null;
+        } else {
+          this.clearSubmenuTimer();
+          this.ctx.menuAction(id);
+        }
+      } else {
+        this.clearSubmenuTimer();
+        this.ctx.openMenu(null);
+      }
       return;
     }
 
@@ -307,6 +330,9 @@ export class MouseController {
     // Menu words open their dropdowns.
     const name = menuNameAt(l.menu, x, y);
     if (name) {
+      this.clearSubmenuTimer();
+      this.submenuTimerState = { parentId: null, startedAt: 0 };
+      this.hover.menuKeyboard = null;
       this.ctx.openMenu(name);
       return;
     }
@@ -466,6 +492,81 @@ export class MouseController {
     e.preventDefault();
   };
 
+  private clearSubmenuTimer(): void {
+    if (this.submenuTimer !== null) {
+      clearTimeout(this.submenuTimer);
+      this.submenuTimer = null;
+    }
+  }
+
+  /** Drive the submenu flyout from the pointer position and the 250 ms hover timer. */
+  private updateMenuHover(open: OpenMenu, l: Layout): void {
+    const x = this.hover.x;
+    const y = this.hover.y;
+    this.hover.menuKeyboard = null; // moving the mouse hands the highlight back to the pointer
+    const m = computeMenu(l, open);
+    this.hover.menuHover = menuItemIdAt(m, x, y);
+
+    const parentRow = m.items.find((it) => !it.separator && it.hasSubmenu && !it.disabled && pointInRect(it.rect, x, y));
+    const parentRowId = parentRow?.id ?? null;
+    const inFlyout = m.submenu !== null && pointInRect(m.submenu.rect, x, y);
+
+    const next = advanceSubmenu(open.submenuParentId, this.submenuTimerState, parentRowId, inFlyout, performance.now());
+    open.submenuParentId = next.submenuParentId;
+    this.submenuTimerState = next.timer;
+
+    this.clearSubmenuTimer();
+    if (next.timer.parentId !== null) {
+      const remaining = SUBMENU_OPEN_MS - (performance.now() - next.timer.startedAt);
+      this.submenuTimer = setTimeout(() => {
+        this.submenuTimer = null;
+        const o = this.ctx.menu();
+        if (o) this.updateMenuHover(o, this.ctx.layout());
+      }, Math.max(0, remaining));
+    }
+  }
+
+  /** The enabled (non-separator) ids of the parent menu and, when open, of its flyout. */
+  private menuNavLists(open: OpenMenu): { parent: string[]; flyout: string[] } {
+    const parent = open.entries.filter((e) => !e.separator && !e.disabled).map((e) => e.id);
+    const subEntry = open.submenuParentId !== null ? open.entries.find((e) => e.id === open.submenuParentId) : undefined;
+    const flyout = subEntry?.submenu ? subEntry.submenu.filter((e) => !e.separator && !e.disabled).map((e) => e.id) : [];
+    return { parent, flyout };
+  }
+
+  private menuMoveHighlight(open: OpenMenu, dir: -1 | 1): void {
+    const { parent, flyout } = this.menuNavLists(open);
+    const inFlyout = this.hover.menuKeyboard !== null && flyout.includes(this.hover.menuKeyboard);
+    const list = inFlyout ? flyout : parent;
+    if (list.length === 0) {
+      this.hover.menuKeyboard = null;
+      return;
+    }
+    const idx = this.hover.menuKeyboard === null ? -1 : list.indexOf(this.hover.menuKeyboard);
+    const next = idx === -1 ? (dir < 0 ? list.length - 1 : 0) : idx + dir;
+    this.hover.menuKeyboard = list[((next % list.length) + list.length) % list.length];
+  }
+
+  private menuOpenSubmenu(open: OpenMenu, parentId: string): void {
+    open.submenuParentId = parentId;
+    this.clearSubmenuTimer();
+    this.submenuTimerState = { parentId: null, startedAt: 0 };
+    const sub = open.entries.find((e) => e.id === parentId)?.submenu;
+    const ids = (sub ?? []).filter((e) => !e.separator && !e.disabled).map((e) => e.id);
+    this.hover.menuKeyboard = ids.length > 0 ? ids[0] : null;
+  }
+
+  private menuActivate(open: OpenMenu): void {
+    const id = this.hover.menuKeyboard;
+    if (id === null) return;
+    const entry = open.entries.find((e) => e.id === id);
+    if (entry && entry.submenu && entry.submenu.length > 0 && !entry.disabled) {
+      this.menuOpenSubmenu(open, id);
+    } else {
+      this.ctx.menuAction(id);
+    }
+  }
+
   private onKey = (e: KeyboardEvent): void => {
     if (e.repeat) return;
     if (this.isTypingTarget(e.target)) return;
@@ -481,6 +582,15 @@ export class MouseController {
       // A Help floating menu (Options or the context menu) closes before the window itself.
       if (this.ctx.helpOpen() && this.ctx.helpMenuOpen()) {
         this.ctx.helpCloseMenu();
+        return;
+      }
+      // An open submenu flyout closes first; a second Esc then closes the menu (docs/MENU-SUBMENUS.md).
+      const openMenu = this.ctx.menu();
+      if (openMenu !== null && openMenu.submenuParentId !== null) {
+        openMenu.submenuParentId = null;
+        this.clearSubmenuTimer();
+        this.submenuTimerState = { parentId: null, startedAt: 0 };
+        this.hover.menuKeyboard = null;
         return;
       }
       const s = this.ctx.state();
@@ -533,7 +643,38 @@ export class MouseController {
       else if (key === 'arrowdown') this.ctx.achievementMove(0, 1);
       return;
     }
-    if (this.ctx.menu() || this.ctx.dialog()) return;
+    const openMenu = this.ctx.menu();
+    if (openMenu !== null) {
+      // The menu owns its keys while open, so none reach the game (docs/MENU-SUBMENUS.md §3).
+      if (key === 'arrowup') {
+        e.preventDefault();
+        this.menuMoveHighlight(openMenu, -1);
+      } else if (key === 'arrowdown') {
+        e.preventDefault();
+        this.menuMoveHighlight(openMenu, 1);
+      } else if (key === 'arrowright') {
+        e.preventDefault();
+        const hl = this.hover.menuKeyboard;
+        if (hl !== null) {
+          const entry = openMenu.entries.find((en) => en.id === hl);
+          if (entry && entry.submenu && entry.submenu.length > 0 && !entry.disabled) this.menuOpenSubmenu(openMenu, hl);
+        }
+      } else if (key === 'arrowleft') {
+        e.preventDefault();
+        if (openMenu.submenuParentId !== null) {
+          const parentId = openMenu.submenuParentId;
+          openMenu.submenuParentId = null;
+          this.clearSubmenuTimer();
+          this.submenuTimerState = { parentId: null, startedAt: 0 };
+          this.hover.menuKeyboard = parentId;
+        }
+      } else if (key === 'enter') {
+        e.preventDefault();
+        this.menuActivate(openMenu);
+      }
+      return;
+    }
+    if (this.ctx.dialog()) return;
 
     // The Help window owns Page Up / Page Down while it is open: a window of the page at a time.
     if (this.ctx.helpOpen()) {
