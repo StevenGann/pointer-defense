@@ -192,14 +192,18 @@ export class EffectsView {
       color: TOWER_COLOR[tower.kind],
       born: 0,
     });
-    pushCap(this.tracers, CAP_TRACER, {
-      x0: ox,
-      y0: oy,
-      x1: x,
-      y1: y,
-      color: TOWER_COLOR[tower.kind],
-      born: 0,
-    });
+    // A Cannon fires a shell that leads its target, so the tracer (a line to where the enemy was at
+    // fire time) is redundant and wrong. It keeps the muzzle flash and sound; the shell is the shot.
+    if (tower.kind !== 'cannon') {
+      pushCap(this.tracers, CAP_TRACER, {
+        x0: ox,
+        y0: oy,
+        x1: x,
+        y1: y,
+        color: TOWER_COLOR[tower.kind],
+        born: 0,
+      });
+    }
   }
 
   addHitSpark(x: number, y: number): void {

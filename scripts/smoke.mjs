@@ -6562,6 +6562,36 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   resetArt();
 }
 
+// --- 37i.1 No tracer for a Cannon shot (docs/CANNON-NO-TRACER.md) --------------------------------
+{
+  const fx = new EffectsView();
+
+  // A Cannon shot keeps its muzzle flash and drops the tracer: the shell is the shot.
+  fx.addShot(createTower(1, 'cannon', 3, 6), 8, 6);
+  check(fx.muzzles.length === 1, 'effects: a Cannon shot adds a muzzle flash');
+  check(fx.tracers.length === 0, 'effects: a Cannon shot adds no tracer');
+
+  // Every other tower keeps both.
+  fx.addShot(createTower(2, 'gun', 3, 6), 8, 6);
+  check(fx.muzzles.length === 2, 'effects: a Gun shot adds a muzzle flash');
+  check(fx.tracers.length === 1, 'effects: a Gun shot adds a tracer');
+
+  // A Beacon fires nothing: no muzzle and no tracer.
+  fx.addShot(createTower(3, 'beacon', 3, 6), 8, 6);
+  check(fx.muzzles.length === 2, 'effects: a Beacon shot adds no muzzle');
+  check(fx.tracers.length === 1, 'effects: a Beacon shot adds no tracer');
+
+  // The tracer pool still compacts to empty once every tracer's life has elapsed.
+  const s = createRunState();
+  s.tick = 10;
+  const layout = computeLayout(1280, 800);
+  fx.draw(s, layout);
+  check(fx.tracers.length === 1, 'effects: a live tracer survives its first draw');
+  s.tick = 10 + 6;
+  fx.draw(s, layout);
+  check(fx.tracers.length === 0, 'effects: the tracer pool compacts to empty');
+}
+
 {
   // 39h. A boss variant death shakes like a boss (4 px), and a boss variant leak costs its integrity.
   check(shakeImpulseFor({ type: 'kill', kind: 'grunt-boss' }).amplitude === SHAKE_AMPLITUDE.bossDeath,
