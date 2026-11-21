@@ -7,9 +7,14 @@ its scope, and links the spec that governs it.
 Work is taken from the top. An item that needs a decision goes back to Sydney rather than sitting in
 `doing` for a week.
 
+**The list is never idle.** While `Next` has an unblocked item, something is in flight: when one merges,
+the next is dispatched the same day rather than waiting to be asked. An item blocked on a person does
+not count, and the one after it is taken instead.
+
 ## Doing
 
-Nothing in flight.
+- **1. Four more stock maps** — dispatched to OpenCode on `feat/maps-batch-2` from `e8d94fb`.
+- **2. Per-locale width assertions** — dispatched to OpenCode on `feat/i18n-widths` from `e8d94fb`.
 
 ## Next
 
@@ -90,6 +95,7 @@ Kept here so these do not get re-proposed as new work:
 - **Steam packaging.** `electron/`, the preload bridge and the `pack:*` scripts exist and degrade to
   the plain web build; no AppID, no depot upload.
 - **Music.** `src/audio/sfx.ts` only.
-- **Art.** The artist fills in quality animations later; the SVGs are placeholders by design.
+- **Art.** The artist fills in quality animations later; the SVGs are placeholders by design. The
+  files whose current drawing is still mine are listed in `docs/ART-TODO.md`.
 - **Touch input, difficulty selection, co-op.** See `docs/design.md`,
   "What is not built".
