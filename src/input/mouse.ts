@@ -2,7 +2,7 @@ import { towerName } from '../i18n/names.ts';
 import type { Application } from 'pixi.js';
 import { claimTray, hasUpgrade } from '../core/upgrades.ts';
 import { computeTitleControls, menuItemAt, menuNameAt, pixelToWorld, pointInRect, type Layout, type MenuName } from '../view/chrome.ts';
-import { hudButtonAt, hudControlAt, modalRestartAt, victoryButtonAt, type HudAction } from '../view/hud.ts';
+import { hudButtonAt, hudControlAt, modalMenuAt, victoryButtonAt, type HudAction } from '../view/hud.ts';
 import { adCloseRect, trayHit } from '../view/ad.ts';
 import { advanceSubmenu, computeMenu, menuItemIdAt, SUBMENU_OPEN_MS, type OpenMenu, type SubmenuTimerState } from '../view/menu.ts';
 import { dialogButtonAt, type DialogModel } from '../view/dialog.ts';
@@ -85,7 +85,7 @@ export interface HoverState {
   row: number;
   worldX: number;
   worldY: number;
-  overRestart: boolean;
+  overModalMenu: boolean;
 }
 
 export interface MouseContext {
@@ -94,7 +94,6 @@ export interface MouseContext {
   menu: () => OpenMenu | null;
   dialog: () => DialogModel | null;
   screen: () => Screen;
-  restart: () => void;
   restartWindows: () => void;
   startEndless: () => void;
   newRun: () => void;
@@ -177,7 +176,7 @@ export class MouseController {
     row: -1,
     worldX: 0,
     worldY: 0,
-    overRestart: false,
+    overModalMenu: false,
   };
 
   private readonly ctx: MouseContext;
@@ -217,7 +216,7 @@ export class MouseController {
       this.hover.onBoard = false;
       this.hover.col = -1;
       this.hover.row = -1;
-      this.hover.overRestart = false;
+      this.hover.overModalMenu = false;
       return;
     }
     if (this.ctx.helpOpen()) this.ctx.helpPointerMove(x, y);
@@ -238,7 +237,7 @@ export class MouseController {
       x >= l.board.x && x < l.board.x + l.boardW && y >= l.board.y && y < l.board.y + l.boardH;
     this.hover.col = this.hover.onBoard ? Math.floor(w.x) : -1;
     this.hover.row = this.hover.onBoard ? Math.floor(w.y) : -1;
-    this.hover.overRestart = modalRestartAt(l, s, x, y);
+    this.hover.overModalMenu = modalMenuAt(l, s, x, y);
     pointerMove(s, w.x, w.y);
   };
 
@@ -344,7 +343,7 @@ export class MouseController {
       return;
     }
     if (s.phase === 'halted') {
-      if (modalRestartAt(l, s, x, y)) this.ctx.restart();
+      if (modalMenuAt(l, s, x, y)) this.ctx.exitRun();
       return;
     }
 

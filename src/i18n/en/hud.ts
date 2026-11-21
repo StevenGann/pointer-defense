@@ -80,7 +80,7 @@ export const hud = {
   // End-of-run modals.
   'hud.gameOver': 'Game Over',
   'hud.gameOverMessage': 'The lane broke at wave {wave}.',
-  'hud.restart': 'Restart',
+  'hud.mainMenu': 'Main Menu',
   'hud.victory': 'Victory',
   'hud.victoryDaily': 'Daily complete — all thirty waves cleared.',
   'hud.victoryAll': 'All one hundred waves cleared.',

@@ -158,7 +158,7 @@ import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText
 import { drawTower, clearTowerSprites, BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre, synergyEdgeEndpoints, synergyEdgeStyle } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, computeWindowChromeGeom, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
-import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, statusPerfText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect, modalRect, modalMessageTop } from '../src/view/hud.ts';
+import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, statusPerfText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect, modalRect, modalMenuAt, modalMessageTop } from '../src/view/hud.ts';
 import { FloatingNumbersView } from '../src/view/numbers.ts';
 import { nextQuality } from '../src/core/quality.ts';
 import { dailyFor, dailyLevel, dailySeed, dailyMenuLabel, dailyAvailable, DAILY_WAVES, hashDaily } from '../src/core/daily.ts';
@@ -10975,6 +10975,40 @@ function levelFixture(name) {
   check(escRecords.target === 'records' && !escRecords.exitRun, 'Esc closes the Records viewer without exiting the run');
 }
 
+// --- Losing returns to the main menu (docs/LOSS-TO-MENU.md) -------------------------------------
+{
+  const layout = computeLayout(1280, 800);
+  const s = createRunState();
+  s.phase = 'halted';
+
+  // 1. The loss button's hit rect is the drawn rect: 128x26 at the bottom centre of modalRect, and it
+  //    only hits while the run is halted, so the button that lights up is the button that is drawn.
+  const m = modalRect(layout);
+  const btn = { x: m.x + Math.floor((m.w - 128) / 2), y: m.y + m.h - 26 - 10, w: 128, h: 26 };
+  check(modalMenuAt(layout, s, btn.x + btn.w / 2, btn.y + btn.h / 2), 'loss: the menu button hit rect covers its drawn centre');
+  check(modalMenuAt(layout, s, btn.x + 1, btn.y + 1), 'loss: the menu button hit rect covers its drawn top-left corner');
+  check(!modalMenuAt(layout, s, btn.x - 1, btn.y + btn.h / 2), 'loss: a point just left of the button is not a hit');
+  check(!modalMenuAt(layout, s, m.x + m.w / 2, m.y + 4), 'loss: the modal title bar is not a hit');
+  check(!modalMenuAt(layout, createRunState(), btn.x + btn.w / 2, btn.y + btn.h / 2), 'loss: the button only hits while the run is halted');
+
+  // 2. The button and Escape share exitRun, and no fresh-run restart path survives.
+  const mouseSrc = readFileSync(new URL('../src/input/mouse.ts', import.meta.url), 'utf8');
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(mouseSrc.includes('if (modalMenuAt(l, s, x, y)) this.ctx.exitRun();'), 'loss: the button routes to exitRun, not a fresh run');
+  check(mouseSrc.includes('if (action.exitRun) this.ctx.exitRun();'), 'loss: Escape routes through the same exitRun');
+  check(!mouseSrc.includes('ctx.restart('), 'loss: no restart callback remains in the input controller');
+  check(!mainSrc.includes('restart: () =>'), 'loss: the fresh-run restart callback is gone');
+  check(mainSrc.includes("runOrigin === 'editor'") && mainSrc.includes("screen = 'editor'"), 'loss: exitRun returns a Test run to the editor');
+
+  // 3. Every catalogue carries hud.mainMenu and none still carries hud.restart.
+  for (const code of ['en', 'es', 'fr', 'ru', 'uk', 'zh-Hans', 'he']) {
+    const mod = await import(`../src/i18n/${code}/index.ts`);
+    const cat = mod[Object.keys(mod)[0]];
+    check(cat['hud.mainMenu'] !== undefined, `loss: ${code} carries hud.mainMenu`);
+    check(cat['hud.restart'] === undefined, `loss: ${code} no longer carries hud.restart`);
+  }
+}
+
 // --- Run records 3: the list is newest first and never exceeds 50 (the 51st drops the oldest).
 {
   const p = defaultProfile();
@@ -13286,10 +13320,10 @@ function dailyState(date) {
     const vm = victoryModalRect(l);
     const vb = victoryButtons(vm);
     const defeat = modalRect(l);
-    const defeatRestart = { x: defeat.x + Math.floor((defeat.w - 96) / 2), y: defeat.y + defeat.h - 26 - 10, w: 96, h: 26 };
+    const defeatRestart = { x: defeat.x + Math.floor((defeat.w - 128) / 2), y: defeat.y + defeat.h - 26 - 10, w: 128, h: 26 };
     startFit(code, 'hud.gameOver', t('hud.gameOver'), defeat, BODY);
     startFit(code, 'hud.victory', t('hud.victory'), vm, BODY);
-    centerFit(code, 'hud.restart', t('hud.restart'), defeatRestart, BODY);
+    centerFit(code, 'hud.mainMenu', t('hud.mainMenu'), defeatRestart, BODY);
     centerFit(code, 'hud.restartWindows', t('hud.restartWindows'), vb.restart, BODY);
     centerFit(code, 'hud.endless', t('hud.endless'), vb.endless, BODY);
 
