@@ -12809,6 +12809,120 @@ function dailyState(date) {
   check(first === synergyHash(), `a seeded run with all four pairs replays to the same hash (${first.slice(0, 10)})`);
 }
 
+// --- Synergy in the tower tooltip (docs/TOWER-SYNERGY-TOOLTIP.md) ------------------------------
+{
+  // rowsOf: a lone Frost is in no synergy.
+  const lone = allUnlocked();
+  lone.economy.salvage = 1e9;
+  placeTower(lone, 'frost', 5, 5);
+  const loneFrost = towerAt(lone, 5, 5);
+  check((buildSynergyLayout(lone.towers).rowsOf.get(loneFrost.id) ?? []).length === 0,
+    'rowsOf: a lone Frost has no rows');
+
+  // A Frost beside an AA (chill) and a Cannon (shatter) belongs to both, in catalogue order.
+  const trio = allUnlocked();
+  trio.economy.salvage = 1e9;
+  placeTower(trio, 'frost', 5, 5);
+  placeTower(trio, 'aa', 5, 6);
+  placeTower(trio, 'cannon', 6, 5);
+  const frost = towerAt(trio, 5, 5);
+  const frostRows = buildSynergyLayout(trio.towers).rowsOf.get(frost.id) ?? [];
+  check(JSON.stringify(frostRows) === JSON.stringify(['chill', 'shatter']),
+    `rowsOf: a Frost beside an AA and a Cannon has ${frostRows.join(', ') || 'nothing'}`);
+
+  // A two-AA cluster credits aa-sync on both members.
+  const pair = allUnlocked();
+  pair.economy.salvage = 1e9;
+  placeTower(pair, 'aa', 5, 5);
+  placeTower(pair, 'aa', 5, 6);
+  const aaA = towerAt(pair, 5, 5);
+  const aaB = towerAt(pair, 5, 6);
+  const pairRows = buildSynergyLayout(pair.towers).rowsOf;
+  check(pairRows.get(aaA.id)?.includes('aa-sync') && pairRows.get(aaB.id)?.includes('aa-sync'),
+    'rowsOf: a two-AA cluster has aa-sync on both members');
+
+  // A Marksman gun beside an AA credits spotter on both ends, though only the AA benefits.
+  const spot = allUnlocked();
+  spot.economy.salvage = 1e9;
+  placeTower(spot, 'gun', 5, 5);
+  upgradeTower(spot, 5, 5);
+  chooseBranch(spot, 5, 5, 'A');
+  placeTower(spot, 'aa', 5, 6);
+  const gun = towerAt(spot, 5, 5);
+  const spotted = towerAt(spot, 5, 6);
+  const spotRows = buildSynergyLayout(spot.towers).rowsOf;
+  check(spotRows.get(gun.id)?.includes('spotter') && spotRows.get(spotted.id)?.includes('spotter'),
+    'rowsOf: a Marksman gun beside an AA credits spotter on both ends');
+}
+{
+  // The tooltip names one line per row, in catalogue order, and none outside every synergy.
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'frost', 5, 5);
+  placeTower(s, 'aa', 5, 6);
+  placeTower(s, 'cannon', 6, 5);
+  const frost = towerAt(s, 5, 5);
+  const rows = buildSynergyLayout(s.towers).rowsOf.get(frost.id) ?? [];
+  const lines = towerTooltipLines(frost, 0, undefined, undefined, 0, null, rows);
+  const synergyLines = lines.filter((l) => l.startsWith('Synergy:'));
+  check(JSON.stringify(synergyLines) === JSON.stringify(['Synergy: Chill', 'Synergy: Shatter']),
+    `tooltip: one line per row, in order (${synergyLines.join(' | ')})`);
+
+  const lone = allUnlocked();
+  lone.economy.salvage = 1e9;
+  placeTower(lone, 'frost', 5, 5);
+  const loneFrost = towerAt(lone, 5, 5);
+  check(!towerTooltipLines(loneFrost, 0).some((l) => l.startsWith('Synergy:')),
+    'tooltip: no synergy line for a tower outside every synergy');
+
+  // The synergy line sits after the stat lines and before Fully upgraded.
+  const w = allUnlocked();
+  w.economy.salvage = 1e9;
+  for (const [c, r] of [[5, 5], [5, 6]]) {
+    placeTower(w, 'wall', c, r);
+    upgradeTower(w, c, r);
+    chooseBranch(w, c, r, 'A');
+  }
+  const wall = towerAt(w, 5, 5);
+  const wallRows = buildSynergyLayout(w.towers).rowsOf.get(wall.id) ?? [];
+  const wallLines = towerTooltipLines(wall, 0, undefined, undefined, 0, null, wallRows);
+  const synIdx = wallLines.indexOf('Synergy: Buttress');
+  const fullIdx = wallLines.indexOf('Fully upgraded');
+  check(synIdx >= 0 && fullIdx >= 0 && synIdx < fullIdx,
+    'tooltip: the synergy line precedes Fully upgraded');
+}
+{
+  // Membership survives a tier upgrade and a branch change (the row is membership, not stats).
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'frost', 5, 5);
+  placeTower(s, 'aa', 5, 6);
+  const frostId = towerAt(s, 5, 5).id;
+  const rows = () => buildSynergyLayout(s.towers).rowsOf.get(frostId) ?? [];
+  check(rows().includes('chill'), 'membership: a Frost beside an AA is chill before upgrading');
+  upgradeTower(s, 5, 5);
+  check(rows().includes('chill'), 'membership: chill survives a tier upgrade');
+  chooseBranch(s, 5, 5, 'B');
+  check(rows().includes('chill'), 'membership: chill survives a branch change');
+}
+{
+  // fit: the synergy line fits the smallest window in every locale, even with the longest shipped
+  // synergy name (Synchronized Fire). The tooltip adds 6px padding per side.
+  const codes = ['en', 'es', 'fr', 'ru', 'uk', 'zh-Hans', 'he'];
+  for (const code of codes) {
+    const mod = await import(`../src/i18n/${code}/index.ts`);
+    setLocale(mod[Object.keys(mod)[0]], code);
+    clearTextWidthCache();
+    setDirection(code === 'he' ? 'rtl' : 'ltr');
+    const line = t('tooltip.synergy', { name: t('synergy.aaSync.name') });
+    const w = Math.ceil(textWidth(line, FONT_SIZE.body));
+    check(w + 12 <= 640, `fit: ${code} · tooltip.synergy (${w}px + 12px padding > 640)`);
+  }
+  setLocale(en, 'en');
+  clearTextWidthCache();
+  setDirection('ltr');
+}
+
 // --- RTL (docs/RTL.md) -------------------------------------------------------------------------
 {
   // 1. isRtl() is false by default and true only while a dir:'rtl' locale is installed.

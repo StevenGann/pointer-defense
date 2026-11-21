@@ -185,6 +185,7 @@ export const fr: Catalogue = {
   'tooltip.palette.traitsNone': 'Traits\u00A0: aucun',
   'tooltip.cursorName': 'Curseur T{tier}',
   'tooltip.fullyUpgraded': 'Entièrement amélioré',
+  'tooltip.synergy': 'Synergy: {name}',
   'tooltip.branchSuffix': ' — {branch}',
   'tooltip.towerName': '{name} T{tier}',
   'tooltip.repairHeals': 'Soigne {heal} PV/s · Rayon {radius}',
@@ -865,6 +866,7 @@ export const fr: Catalogue = {
   'name.modifier.rush': 'Ruée',
 
   // Window title.
+  'synergy.aaSync.name': 'Synchronized Fire',
   'synergy.spotter.name': 'Spotter',
   'synergy.spotter.description': "Un Fusil sur sa branche Tireur d'élite prête sa portée aux tours AA et Canon adjacentes.",
   'synergy.chill.name': 'Chill',

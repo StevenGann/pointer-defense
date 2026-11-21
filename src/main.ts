@@ -22,6 +22,7 @@ import {
   selectedTower,
   spawnCheatEnemy,
   step,
+  synergyLayout,
   toggleAutoWave,
   toggleGodMode,
   towerAt,
@@ -2493,7 +2494,7 @@ function updateTooltip(): void {
       const healed = tower.kind === 'repair' ? repairHealingCount(state.towers, tower, state.clock) : 0;
       const maintenance = tower.kind === 'cursor' ? cursorMaintenanceStatus(state, tower) : null;
       tooltip.update(
-        { key: 'tower' + ':' + tower.id, lines: towerTooltipLines(tower, state.clock, state.pointer, pointerDamageMult(state), healed, maintenance) },
+        { key: 'tower' + ':' + tower.id, lines: towerTooltipLines(tower, state.clock, state.pointer, pointerDamageMult(state), healed, maintenance, synergyLayout(state).rowsOf.get(tower.id) ?? []) },
         h.x,
         h.y,
         viewportW,

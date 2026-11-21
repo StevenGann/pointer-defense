@@ -97,6 +97,8 @@ export const SYNERGIES: readonly SynergyRow[] = [
 export interface SynergyEdge {
   readonly lead: Tower;
   readonly follow: Tower;
+  /** The synergy row this edge satisfies, so a tooltip can name the edge it draws. */
+  readonly rowId: string;
   readonly color: number;
   readonly dash: number;
   readonly gap: number;
@@ -133,6 +135,8 @@ export interface SynergyLayout {
   readonly interlockSources: ReadonlyMap<number, readonly Tower[]>;
   /** Cannon tower ids with an adjacent Frost, whose shells may Shatter (§3). */
   readonly shatterCannons: ReadonlySet<number>;
+  /** Tower id -> the synergy rows it is a member of, in catalogue order, deduped. */
+  readonly rowsOf: ReadonlyMap<number, readonly string[]>;
 }
 
 /**
@@ -170,6 +174,12 @@ export function buildSynergyLayout(towers: readonly Tower[]): SynergyLayout {
   const chillSources = new Map<number, Tower[]>();
   const interlockSources = new Map<number, Tower[]>();
   const shatterCannons = new Set<number>();
+  const rowsOf = new Map<number, string[]>();
+  const credit = (towerId: number, rowId: string): void => {
+    const list = rowsOf.get(towerId);
+    if (list === undefined) rowsOf.set(towerId, [rowId]);
+    else if (!list.includes(rowId)) list.push(rowId);
+  };
 
   for (const row of SYNERGIES) {
     if (row.mode !== 'sync') continue;
@@ -185,7 +195,9 @@ export function buildSynergyLayout(towers: readonly Tower[]): SynergyLayout {
         if (!orthogonal(a, b)) continue;
         const lead = leads(a, b) ? a : b;
         const follow = lead === a ? b : a;
-        edges.push({ lead, follow, color: row.color, dash: row.dash, gap: row.gap, link: row.link, mark: row.mark });
+        edges.push({ lead, follow, rowId: row.id, color: row.color, dash: row.dash, gap: row.gap, link: row.link, mark: row.mark });
+        credit(lead.id, row.id);
+        credit(follow.id, row.id);
         adj[i].push(j);
         adj[j].push(i);
       }
@@ -227,7 +239,10 @@ export function buildSynergyLayout(towers: readonly Tower[]): SynergyLayout {
 
       const cluster: SynergyCluster = { members, leaders, color: row.color };
       clusters.push(cluster);
-      for (const t of members) clusterOf.set(t.id, cluster);
+      for (const t of members) {
+        clusterOf.set(t.id, cluster);
+        credit(t.id, row.id);
+      }
     }
   }
 
@@ -253,7 +268,9 @@ export function buildSynergyLayout(towers: readonly Tower[]): SynergyLayout {
         if (!orthogonal(source, target)) continue;
         // A Minesweeper lays mines instead of firing; a range gift to it would be a lie.
         if (target.kind === 'cannon' && target.branch === 'B') continue;
-        edges.push({ lead: source, follow: target, color: row.color, dash: row.dash, gap: row.gap, link: row.link, mark: row.mark });
+        edges.push({ lead: source, follow: target, rowId: row.id, color: row.color, dash: row.dash, gap: row.gap, link: row.link, mark: row.mark });
+        credit(source.id, row.id);
+        credit(target.id, row.id);
         record(target.id, source);
       }
     }
@@ -291,13 +308,15 @@ export function buildSynergyLayout(towers: readonly Tower[]): SynergyLayout {
           lead = a.kind === aKind ? a : b;
           follow = lead === a ? b : a;
         }
-        edges.push({ lead, follow, color: row.color, dash: row.dash, gap: row.gap, link: row.link, mark: row.mark });
+        edges.push({ lead, follow, rowId: row.id, color: row.color, dash: row.dash, gap: row.gap, link: row.link, mark: row.mark });
+        credit(lead.id, row.id);
+        credit(follow.id, row.id);
         if (row.id === 'shatter') shatterCannons.add(lead.id);
       }
     }
   }
 
-  return { edges, clusters, clusterOf, spotterSources, chillSources, interlockSources, shatterCannons };
+  return { edges, clusters, clusterOf, spotterSources, chillSources, interlockSources, shatterCannons, rowsOf };
 }
 
 /**
