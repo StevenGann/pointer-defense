@@ -42,7 +42,7 @@ import { ChromeView, computeLayout, FONT, PAL, pixelToWorld, pointInRect, type L
 import { BoardView } from './view/board.ts';
 import { HudView, hudControlAt, paletteTowerAt, type HudAction } from './view/hud.ts';
 import { paletteTooltipLines, TooltipView, towerTooltipLines } from './view/tooltip.ts';
-import { computeUpgradesLayout, upgradeRowBuyable, upgradesHitAt, UpgradesSession, globalUpgradeTooltipLines, UpgradesView } from './view/upgrades.ts';import { BUFF_LINES, buyUpgrade, GLOBAL_UPGRADES, type UpgradeId } from './core/upgrades.ts';
+import { computeUpgradesLayout, upgradeRowBuyable, upgradesHitAt, pressUpgradesOk, UpgradesSession, globalUpgradeTooltipLines, UpgradesView } from './view/upgrades.ts';import { BUFF_LINES, buyUpgrade, GLOBAL_UPGRADES, type UpgradeId } from './core/upgrades.ts';
 import {
   branchTooltipLines,
   enemyTooltipLines,
@@ -1500,7 +1500,9 @@ const mouse = new MouseController(app, {
     } else if (hit.type === 'row') {
       const index = ul.rows.findIndex((r) => r.def.id === hit.id);
       if (index >= 0) upgradesSession.selected = index;
-    } else if (hit.type === 'ok' || hit.type === 'cancel') {
+    } else if (hit.type === 'ok') {
+      if (pressUpgradesOk(state, upgradesSession, ul)) sfx.play('adClose');
+    } else if (hit.type === 'cancel') {
       upgradesSession.hide();
     }
     return true;

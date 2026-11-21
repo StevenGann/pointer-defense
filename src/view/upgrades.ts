@@ -30,6 +30,7 @@ import { mirrorIfRtl, textX } from './direction.ts';
 import { formatNumber } from '../core/format.ts';
 import type { RunState } from '../core/state.ts';
 import {
+  buyUpgrade,
   GLOBAL_UPGRADES,
   hasUpgrade,
   revealedUpgrades,
@@ -180,6 +181,18 @@ export function upgradeRowBuyable(row: Pick<UpgradeRow, 'owned' | 'affordable'>)
   return !row.owned && row.affordable;
 }
 
+/**
+ * Resolve an OK press on the dialog: on the Available tab with a buyable selected row it buys the
+ * upgrade, then it closes the dialog. Owned, unaffordable, missing, or the Owned tab just close
+ * without buying. Returns true when a purchase was made (so the caller can play the blip).
+ */
+export function pressUpgradesOk(s: RunState, session: UpgradesSession, ul: UpgradesLayout): boolean {
+  const row = ul.rows[session.selected];
+  const bought = session.tab === 'available' && row !== undefined && upgradeRowBuyable(row) && buyUpgrade(s, row.def.id);
+  session.hide();
+  return bought;
+}
+
 /** The cart's caption: `Buy 1,200`, or `OWNED`. */
 export function upgradeButtonText(row: Pick<UpgradeRow, 'def' | 'owned'>): string {
   return row.owned ? t('dlg.upgrades.owned') : t('dlg.upgrades.buy', { cost: formatNumber(row.def.cost) });
@@ -230,11 +243,12 @@ export function upgradesHitAt(ul: UpgradesLayout, x: number, y: number): Upgrade
   for (const t of ul.tabs) {
     if (pointInRect(t.rect, x, y)) return { type: 'tab', tab: t.id };
   }
-  for (const row of ul.rows) {
-    if (pointInRect(row.rect, x, y)) return { type: 'row', id: row.def.id };
-  }
   for (const b of ul.buttons) {
     if (pointInRect(b.rect, x, y)) return { type: b.id };
+  }
+  for (let i = ul.list.firstRow; i < ul.list.firstRow + ul.list.rowsVisible && i < ul.rows.length; i++) {
+    const row = ul.rows[i];
+    if (pointInRect(row.rect, x, y)) return { type: 'row', id: row.def.id };
   }
   return { type: 'window' };
 }

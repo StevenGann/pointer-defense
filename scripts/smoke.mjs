@@ -132,7 +132,7 @@ import { computeMapGrid, clampMapScroll, scrollForFocus, mapCardAt, moveMapFocus
 import { thumbnailTexture, thumbCacheSize, thumbBase } from '../src/view/mapsScreen.ts';
 import { levelThumbnail } from '../src/core/thumb.ts';
 import { MAP_SAVE_KEY, rememberMap, readRememberedMap } from '../src/core/mapSave.ts';
-import { computeUpgradesLayout, UpgradesSession, upgradesStatusText, upgradesEmptyLines, upgradesHitAt, UPGRADE_ROW_H } from '../src/view/upgrades.ts';
+import { computeUpgradesLayout, UpgradesSession, upgradesStatusText, upgradesEmptyLines, upgradesHitAt, pressUpgradesOk, UPGRADE_ROW_H } from '../src/view/upgrades.ts';
 import { computeRestoreLayout, RestoreSession, restoreProgress, restoreDirty } from '../src/view/restore.ts';
 import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES, LICENCE_IDS } from '../src/core/tree.ts';
 import { ACHIEVEMENTS } from '../src/core/achievements.ts';
@@ -11709,6 +11709,109 @@ function dailyState(date) {
   check(lastRow.rect.y + lastRow.rect.h <= atMax.list.body.y + atMax.list.body.h,
     'the last row stays inside the body at scrollMax');
   check(lastRow.icon.y === lastRow.rect.y + 1, 'the last row icon aligns with its row at scrollMax');
+}
+
+// --- Visual pass 3b: OK commits, and off-screen rows never shadow the controls -----------------
+{
+  const layout = computeLayout(1280, 720);
+  const s = createRunState();
+  s.wave = 60; // reveal all 14 upgrades
+  s.economy.salvage = 100000;
+
+  const at0 = computeUpgradesLayout(layout, s, 'available', 0);
+  const atMax = computeUpgradesLayout(layout, s, 'available', at0.list.scrollMax);
+  check(at0.rows.length === 14, 'all 14 upgrades are revealed on the Available tab');
+
+  const centre = (r) => ({ x: r.x + Math.floor(r.w / 2), y: r.y + Math.floor(r.h / 2) });
+  const okRect = at0.buttons.find((b) => b.id === 'ok').rect;
+  const cancelRect = at0.buttons.find((b) => b.id === 'cancel').rect;
+
+  for (const ul of [at0, atMax]) {
+    const okHit = upgradesHitAt(ul, centre(okRect).x, centre(okRect).y);
+    const cancelHit = upgradesHitAt(ul, centre(cancelRect).x, centre(cancelRect).y);
+    check(okHit?.type === 'ok', `the OK centre resolves to ok at firstRow ${ul.list.firstRow}`);
+    check(cancelHit?.type === 'cancel', `the Cancel centre resolves to cancel at firstRow ${ul.list.firstRow}`);
+  }
+
+  // A visible row still hits its row.
+  const visible = at0.rows[at0.list.firstRow];
+  const rowHit = upgradesHitAt(at0, at0.list.body.x + Math.floor(at0.list.body.w / 2), visible.rect.y + Math.floor(UPGRADE_ROW_H / 2));
+  check(rowHit?.type === 'row' && rowHit.id === visible.def.id, 'a click on a visible row still resolves to that row');
+
+  // Below the last visible row but still inside the body: window, never a hidden row.
+  const lastVisibleIdx = at0.list.firstRow + at0.list.rowsVisible - 1;
+  const lastVisibleBottom = at0.rows[lastVisibleIdx].rect.y + UPGRADE_ROW_H;
+  const bodyBottom = at0.list.body.y + at0.list.body.h;
+  const belowHit = upgradesHitAt(at0, at0.list.body.x + Math.floor(at0.list.body.w / 2), lastVisibleBottom + 1);
+  check(lastVisibleBottom + 1 < bodyBottom, 'the body has room below the last visible row');
+  check(belowHit?.type === 'window', 'a click below the last visible row resolves to window, never a hidden row');
+
+  // OK commits a buyable selected row: deduct, add, close.
+  {
+    const buy = createRunState();
+    buy.wave = 60;
+    buy.economy.salvage = 100000;
+    const session = new UpgradesSession();
+    session.show();
+    const ul = computeUpgradesLayout(layout, buy, 'available', 0);
+    const row = ul.rows[session.selected];
+    const beforeSalvage = buy.economy.salvage;
+    const beforeCount = buy.upgrades.length;
+    const bought = pressUpgradesOk(buy, session, ul);
+    check(bought === true, 'OK on a buyable row returns true');
+    check(buy.economy.salvage === beforeSalvage - row.def.cost, 'OK on a buyable row deducts the cost');
+    check(buy.upgrades.length === beforeCount + 1 && buy.upgrades.includes(row.def.id), 'OK on a buyable row adds the upgrade');
+    check(!session.open, 'OK closes the dialog');
+  }
+
+  // OK on an unaffordable row: nothing changes, closes.
+  {
+    const poor = createRunState();
+    poor.wave = 60;
+    poor.economy.salvage = 0;
+    const session = new UpgradesSession();
+    session.show();
+    const ul = computeUpgradesLayout(layout, poor, 'available', 0);
+    const beforeSalvage = poor.economy.salvage;
+    const beforeCount = poor.upgrades.length;
+    const bought = pressUpgradesOk(poor, session, ul);
+    check(bought === false, 'OK on an unaffordable row returns false');
+    check(poor.economy.salvage === beforeSalvage && poor.upgrades.length === beforeCount, 'OK on an unaffordable row changes nothing');
+    check(!session.open, 'OK still closes the dialog when nothing is bought');
+  }
+
+  // OK on the Owned tab never buys.
+  {
+    const owned = createRunState();
+    owned.wave = 60;
+    owned.economy.salvage = 100000;
+    buyUpgrade(owned, 'wide-reticle');
+    const session = new UpgradesSession();
+    session.show();
+    session.setTab('owned');
+    const ul = computeUpgradesLayout(layout, owned, 'owned', 0);
+    const beforeSalvage = owned.economy.salvage;
+    const beforeCount = owned.upgrades.length;
+    const bought = pressUpgradesOk(owned, session, ul);
+    check(bought === false && owned.economy.salvage === beforeSalvage && owned.upgrades.length === beforeCount,
+      'OK on the Owned tab never buys');
+    check(!session.open, 'OK closes the dialog on the Owned tab');
+  }
+
+  // Cancel never changes salvage: it only closes.
+  {
+    const s2 = createRunState();
+    s2.wave = 60;
+    s2.economy.salvage = 500;
+    const session = new UpgradesSession();
+    session.show();
+    const ul = computeUpgradesLayout(layout, s2, 'available', 0);
+    const cancelHit = upgradesHitAt(ul, centre(cancelRect).x, centre(cancelRect).y);
+    check(cancelHit?.type === 'cancel', 'the Cancel centre resolves to cancel');
+    session.hide();
+    check(s2.economy.salvage === 500 && s2.upgrades.length === 0, 'Cancel never changes salvage');
+    check(!session.open, 'Cancel closes the dialog');
+  }
 }
 
 // --- Visual pass 4: Restore tabs, Apply dirty state and the progress bar ----------------------
