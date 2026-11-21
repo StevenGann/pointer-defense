@@ -67,7 +67,7 @@ export const he: Catalogue = {
   'hud.upgradesNone': 'שדרוגים — עדיין אין',
   'hud.upgradesAllOwned': 'שדרוגים — כולם בבעלותך',
   'hud.upgradesNew': 'שדרוגים — {count} חדשים',
-  'hud.restoreRow': 'שחזור — {rp} נקודות שחזור',
+  'hud.restoreRow': 'שחזור — {rp} RP',
   'hud.compositionEntry': '{count} x {kind}',
   'hud.compositionMods': 'שינוי: {modifiers}',
   'hud.compositionBoss': 'בוס: {name}',
@@ -125,7 +125,7 @@ export const he: Catalogue = {
   'hud.victorySalvage': 'גרוטאות שנצברו: ${earned}',
   'hud.victoryIntegrity': 'שלמות נותרה: {integrity}',
   'hud.endless': 'אינסופי',
-  'hud.restartWindows': 'הפעל מחדש את Windows',
+  'hud.restartWindows': 'הפעל מחדש',
 
   // Tooltip prose.
   'tooltip.branch.gunA': 'צלף',
