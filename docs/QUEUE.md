@@ -36,6 +36,11 @@ topics (`docs/HELP-REVIEW.md` §1-3). Running on `feat/help-content`.
 - **Done when:** es, fr, ru, uk, zh-Hans and he have each been read by a speaker, the `draft` flag is
   dropped per locale as it is signed off, and the glossary traps (Hebrew Pointer/Cursor, Russian
   апгрейд on a button) are confirmed or overruled.
+- **Known traps to settle first:** Hebrew has the pointer and the Cursor tower sharing a word in
+  opposite directions — the clicking pointer is `סמן` while the Cursor tower is `מצביע` in
+  `name.tower.cursor` and `tree.cursorLicence.name` but `סמן` in `tooltip.palette.cursor`,
+  `tooltip.cursorName` and `ach.cursorFirst`. Pick one word for each concept before reading the rest.
+  Ukrainian renders Endless as "Без меж"; confirm that is the name a player expects.
 - **Blocked on:** people, not code. Nothing here can be closed by me.
 
 ## Housekeeping
