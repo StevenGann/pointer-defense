@@ -2052,6 +2052,8 @@ function drainEvents(): void {
           sfx.play(towerSound(tower.kind));
           // A Mortar (Cannon branch A) kicks its turret; the shake is presentation-only (docs/MORTAR-RECOIL.md).
           if (isMortar(tower)) board.noteRecoil(tower.id, state.tick);
+          // A Frost fires a radial pulse: the ring expands from the tower to its radius (docs/FROST-PULSE.md).
+          if (tower.kind === 'frost') board.noteFrostPulse(tower, state);
         }
         break;
       }

@@ -194,7 +194,9 @@ export class EffectsView {
     });
     // A Cannon fires a shell that leads its target, so the tracer (a line to where the enemy was at
     // fire time) is redundant and wrong. It keeps the muzzle flash and sound; the shell is the shot.
-    if (tower.kind !== 'cannon') {
+    // A Frost pulses its whole radius, so the view draws the pulse ring (docs/FROST-PULSE.md) in
+    // place of a straight line.
+    if (tower.kind !== 'cannon' && tower.kind !== 'frost') {
       pushCap(this.tracers, CAP_TRACER, {
         x0: ox,
         y0: oy,

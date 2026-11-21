@@ -1049,6 +1049,7 @@ export function towerAuraSources(s: RunState): Map<number, Set<'beacon' | 'overr
         if ((s.towerDisabled.get(t.id) ?? 0) > 0) continue; // disabled by Blue Screen
         if (isDown(t, s.clock)) continue;
         if (isMinesweeper(t)) continue;
+        if (t.kind === 'frost') continue; // a Frost pulses its whole radius and never targets the mark
         const st = effectiveStats(t);
         if (st.damage <= 0 || st.fireInterval <= 0) continue;
         const range = effectiveRange(s, t, st);
@@ -3033,6 +3034,20 @@ function hitEnemy(s: RunState, t: Tower, st: EffectiveStats, e: Enemy, dmg: numb
   return e.dead;
 }
 
+/**
+ * A Frost's pulse (docs/FROST-PULSE.md): everything in radius gets the same effect the single target
+ * used to. Tier 1-2 and branch A slow every enemy in radius through `applySlow` (so two Frosts never
+ * stack, exactly as before); branch B deals its damage to every enemy in radius in place of the old
+ * single target plus splash.
+ */
+function fireFrostPulse(s: RunState, t: Tower, st: EffectiveStats, targets: Enemy[], dmg: number): void {
+  if (st.slowFactor < 1 && st.slowTicks > 0) {
+    for (const e of targets) applySlow(s, e, st.slowFactor, st.slowTicks);
+    return;
+  }
+  for (const e of targets) hitEnemy(s, t, st, e, dmg);
+}
+
 /** Deal one tower's splash at a world point: full damage to every enemy in radius. */
 function fireSplashAt(s: RunState, t: Tower, st: EffectiveStats, cx: number, cy: number, dmg: number): void {
   let kills = 0;
@@ -3453,6 +3468,23 @@ function fireTowers(s: RunState): void {
     if (st.damage <= 0 || st.fireInterval <= 0) continue; // beacon never fires
     const range = effectiveRange(s, t, st);
     const dmg = st.damage * t.auraDamage * buff * towerDamageMult(s);
+
+    // Frost is a radial pulse, not a single-target shot: no target selection. On each fire interval
+    // it slows every living enemy inside its radius (or, on branch B, damages every one of them in
+    // place of the single target plus splash it used to have). It fires when at least one enemy is
+    // in range, on the same interval, and still pushes the shot event so the sound and muzzle fire.
+    if (t.kind === 'frost') {
+      if (t.cooldown > 0) {
+        t.cooldown--;
+        continue;
+      }
+      const inRadius = towerCandidates(s, t, st, range);
+      if (inRadius.length === 0) continue;
+      t.cooldown = towerIntervalTicks(s, st.fireInterval) - 1;
+      s.events.push({ type: 'shot', towerId: t.id, x: t.col + 0.5, y: t.row + 0.5, splash: st.splash });
+      fireFrostPulse(s, t, st, inRadius, dmg);
+      continue;
+    }
 
     // Manual Override: while it is on, the marked enemy is this tower's target whenever it is in
     // range, overriding every targeting mode and lock. Pop-up shields are never pierced.
