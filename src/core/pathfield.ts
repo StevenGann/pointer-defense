@@ -163,15 +163,22 @@ export function isSealed(grid: Grid, blocked: ReadonlySet<number>, spawn: Tile, 
   return true;
 }
 
-/** The route from spawn to exit by repeatedly stepping downhill, capped so a bad field cannot loop. */
+/**
+ * The route from spawn to exit by repeatedly stepping downhill, capped so a bad field cannot loop.
+ * The walker keeps its own momentum: the direction index of the step just taken (0 up, 1 left, 2
+ * right, 3 down, from the delta to the previous tile) is passed as `lastDir` on the next step, so the
+ * drawn route and the map thumbnail show the same smooth route a single enemy walks from the spawn.
+ */
 export function pathTiles(field: Int32Array, spawn: Tile): Tile[] {
   const out: Tile[] = [];
   let cur: Tile = { col: spawn.col, row: spawn.row };
+  let lastDir = -1;
   out.push(cur);
   for (let i = 0; i < COLS * ROWS; i++) {
     if (field[cur.row * COLS + cur.col] === 0) break;
-    const next = stepToward(field, cur.col, cur.row);
+    const next = stepToward(field, cur.col, cur.row, lastDir);
     if (!next) break;
+    lastDir = next.col !== cur.col ? (next.col > cur.col ? 2 : 1) : (next.row < cur.row ? 0 : 3);
     out.push(next);
     cur = next;
   }

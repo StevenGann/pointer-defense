@@ -39,9 +39,10 @@ rule this spec ships.
 - `Enemy` gains `lastDir`, set to `-1` at spawn and to the chosen index when a target is committed.
   Persisted in the run save with a default of `-1`, so an old save resumes with parity-only decisions
   for one step.
-- Drawing callers (`pathTiles`, `currentPath`, the thumbnail) pass `-1` and get the parity route. They
-  no longer match an individual enemy every step, which is honest: the drawn route is the canonical
-  one, the enemies are individuals.
+- Drawing callers (`pathTiles`, `currentPath`, the thumbnail) keep their own momentum: `pathTiles`
+  tracks the direction index of the step just taken and passes it as `lastDir` on the next step,
+  starting at `-1`. The drawn route is therefore the same smooth route a single enemy walks from the
+  spawn, rather than the sawtooth parity-only route.
 
 ## 4. Re-baselining
 

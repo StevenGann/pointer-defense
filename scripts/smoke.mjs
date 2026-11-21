@@ -725,24 +725,11 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
       `pathing tie-break: the Corridor route splits ${above}/${below} above/below centre (within 10 of even)`);
   }
 
-  // Direction changes across the ten shipped maps stay under 45 when walked with momentum.
+  // Direction changes across the ten shipped maps stay under 45 when walked by the canonical
+  // walker (pathTiles), which keeps its own momentum. The drawn route is pathTiles, so this is the
+  // same route currentPath and every thumbnail show.
   {
     const dirIndex = (a, b) => (b.col !== a.col ? (b.col > a.col ? 2 : 1) : (b.row < a.row ? 0 : 3));
-    const walkMomentum = (field, spawn) => {
-      const tiles = [];
-      let cur = { col: spawn.col, row: spawn.row };
-      let lastDir = -1;
-      tiles.push(cur);
-      for (let i = 0; i < COLS * ROWS; i++) {
-        if (field[cur.row * COLS + cur.col] === 0) break;
-        const next = stepToward(field, cur.col, cur.row, lastDir);
-        if (!next) break;
-        lastDir = dirIndex(cur, next);
-        tiles.push(next);
-        cur = next;
-      }
-      return tiles;
-    };
     let changes = 0;
     for (const level of LEVELS.slice(0, 10)) {
       const grid = createGrid(level);
@@ -750,8 +737,8 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
       const exit = level.exits[0];
       const routes = levelRoutes(level);
       const walks = routes.length === 0
-        ? [walkMomentum(buildField(grid, new Set(), exit), spawn)]
-        : routes.map((r) => walkMomentum(buildRouteField(grid, new Set(), exit, r), spawn));
+        ? [pathTiles(buildField(grid, new Set(), exit), spawn)]
+        : routes.map((r) => pathTiles(buildRouteField(grid, new Set(), exit, r), spawn));
       for (const tiles of walks) {
         for (let i = 2; i < tiles.length; i++) {
           if (dirIndex(tiles[i - 2], tiles[i - 1]) !== dirIndex(tiles[i - 1], tiles[i])) changes++;
