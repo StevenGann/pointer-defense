@@ -203,7 +203,14 @@ import {
   type SpecLevels,
 } from './save.ts';
 import { effectsFor, TREE_NODES, type TreeEffects } from './tree.ts';
-import { AA_HOLD_CAP, AA_HOLD_WINDOW, buildSynergyLayout, type SynergyCluster, type SynergyLayout } from './synergy.ts';
+import {
+  AA_HOLD_CAP,
+  AA_HOLD_WINDOW,
+  buildSynergyLayout,
+  spotterGrant,
+  type SynergyCluster,
+  type SynergyLayout,
+} from './synergy.ts';
 
 /**
  * The run state and the functions that change it.
@@ -944,6 +951,34 @@ export function towerRangeMult(s: RunState): number {
   return s.modifiers.includes('fog') ? 0.8 : 1;
 }
 
+/**
+ * A tower's range in tiles before the run's range multiplier: its own range, its aura padding, and
+ * whatever a `spotter` row hands over. The gift is an absolute range rather than a bonus, and it is
+ * resolved here instead of in the layout because whether a Marksman is offline or EMP'd changes with
+ * the clock while the layout is memoised on the roster.
+ */
+export function synergyRange(s: RunState, t: Tower, st: EffectiveStats = effectiveStats(t)): number {
+  const own = st.range + t.auraRange;
+  const sources = synergyLayout(s).spotterSources.get(t.id);
+  if (sources === undefined) return own;
+  let granted = 0;
+  for (const source of sources) {
+    if (isDown(source, s.clock)) continue; // an offline or EMP'd Marksman spots nothing
+    const g = spotterGrant(source);
+    if (g > granted) granted = g;
+  }
+  return granted === 0 ? own : Math.max(own, granted);
+}
+
+/**
+ * The range a shot, a range ring or a tooltip must use: {@link synergyRange} with the run's range
+ * modifier applied. Every consumer goes through this pair, so a spotted tower cannot shoot further
+ * than it draws, or hold a target it cannot reach.
+ */
+export function effectiveRange(s: RunState, t: Tower, st: EffectiveStats = effectiveStats(t)): number {
+  return synergyRange(s, t, st) * towerRangeMult(s);
+}
+
 // ---------------------------------------------------------------------------------------------
 // Tower status helpers (docs/TOWER-AURAS.md)
 
@@ -994,7 +1029,7 @@ export function towerAuraSources(s: RunState): Map<number, Set<'beacon' | 'overr
         if (isMinesweeper(t)) continue;
         const st = effectiveStats(t);
         if (st.damage <= 0 || st.fireInterval <= 0) continue;
-        const range = (st.range + t.auraRange) * towerRangeMult(s);
+        const range = effectiveRange(s, t, st);
         if (
           towerCanHurt(s, marked) &&
           (!st.targetsFlyersOnly || baseEnemyKind(marked.kind) === 'flyer') &&
@@ -3284,7 +3319,7 @@ function fireTowers(s: RunState): void {
     if (isMinesweeper(t)) continue; // a Minesweeper lays mines instead of firing
     const st = effectiveStats(t);
     if (st.damage <= 0 || st.fireInterval <= 0) continue; // beacon never fires
-    const range = (st.range + t.auraRange) * towerRangeMult(s);
+    const range = effectiveRange(s, t, st);
     const dmg = st.damage * t.auraDamage * buff * towerDamageMult(s);
 
     // Manual Override: while it is on, the marked enemy is this tower's target whenever it is in
@@ -3433,7 +3468,7 @@ function processSynergyCluster(s: RunState, cluster: SynergyCluster, buff: numbe
       clearSynergyHold(s, t.id);
       continue;
     }
-    const range = (st.range + t.auraRange) * towerRangeMult(s);
+    const range = effectiveRange(s, t, st);
     const dmg = st.damage * t.auraDamage * buff * towerDamageMult(s);
 
     // Manual Override: identical to the per-tower walk, so a marked enemy still wins the target.

@@ -96,6 +96,8 @@ export const he: Catalogue = {
   'hud.combatStats': 'נזק {damage}  טווח {range}',
   'hud.route': 'מסלול: {count} משבצות',
   'hud.synergy.synced': 'מסונכרן · {count} מגדלים',
+  'hud.synergy.spotted': 'מסומנת · טווח {range}',
+  'hud.synergy.syncedSpotted': 'מסונכרן · {count} · טווח {range}',
   'hud.target': 'מטרה',
   'hud.upgrade': 'שדרג ${cost}',
   'hud.repairing': 'בתיקון — {seconds} שניות',

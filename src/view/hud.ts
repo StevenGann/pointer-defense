@@ -6,7 +6,7 @@ import { canAfford, POINTER_KILL_BONUS } from '../core/economy.ts';
 import { formatNumber } from '../core/format.ts';
 import { BUFF_NAMES, buffSecondsLeft, hasUpgrade, revealedUpgrades, upgradeBuff } from '../core/upgrades.ts';
 import { clickDamage, comboMultiplier, critChance, overclockCeiling, pointerUpgradeState } from '../core/pointer.ts';
-import { autoWaveStatus, canCycleLevel, currentPath, cursorMaintenanceStatus, isFinalWave, noBuildActive, NO_BUILD_MESSAGE, overclockCap, pointerDamageMult, selectedTower, STARTING_INTEGRITY, synergyLayout, towerCost, towerUnlocked, type RunState } from '../core/state.ts';
+import { autoWaveStatus, canCycleLevel, currentPath, cursorMaintenanceStatus, isFinalWave, noBuildActive, NO_BUILD_MESSAGE, overclockCap, pointerDamageMult, selectedTower, STARTING_INTEGRITY, synergyLayout, synergyRange, towerCost, towerUnlocked, type RunState } from '../core/state.ts';
 import { AA_MIN_CLUSTER } from '../core/synergy.ts';
 
 import {
@@ -159,7 +159,7 @@ interface TowerDetailLayout {
   stats: Rect;
   route: Rect;
   /** The Synced line for an AA in a cluster: its rect plus the cluster size, or null. */
-  synced: { rect: Rect; count: number } | null;
+  synced: { rect: Rect; count: number; range: number | null } | null;
   target: Rect | null;
   upgrade: Rect | null;
   branches: BranchButton[];
@@ -291,8 +291,17 @@ export function computeHud(l: Layout, s: RunState): HudLayout {
 
     // An AA standing in a cluster states the connection, not a number (docs/SYNERGIES.md §6).
     const cluster = tower.kind === 'aa' ? synergyLayout(s).clusterOf.get(tower.id) : undefined;
-    const synced = cluster !== undefined && cluster.members.length >= AA_MIN_CLUSTER
-      ? { rect: { x: x + 6, y: cy, w: w - 12, h: 18 }, count: cluster.members.length }
+    const inCluster = cluster !== undefined && cluster.members.length >= AA_MIN_CLUSTER;
+    // A spotted tower states the range it gained; an AA in a cluster states the connection. A tower
+    // that is both gets one line, not two (docs/SYNERGIES.md §9).
+    const spotted = synergyLayout(s).spotterSources.get(tower.id);
+    const spottedRange = spotted !== undefined && spotted.length > 0 ? synergyRange(s, tower) : null;
+    const synced = inCluster || spottedRange !== null
+      ? {
+          rect: { x: x + 6, y: cy, w: w - 12, h: 18 },
+          count: inCluster ? cluster.members.length : 0,
+          range: spottedRange,
+        }
       : null;
     if (synced) cy += 18;
 
@@ -1035,7 +1044,7 @@ export class HudView {
       } else {
         const st = effectiveStats(tower);
         const damage = st.damage * tower.auraDamage;
-        const range = st.range + tower.auraRange;
+        const range = synergyRange(s, tower, st);
         this.towerStats.text = t('hud.combatStats', { damage: damage.toFixed(1), range: range.toFixed(1) });
       }
       const ts = textX(d.stats, 'start');
@@ -1049,7 +1058,12 @@ export class HudView {
 
       if (d.synced) {
         this.towerSynced.visible = true;
-        this.towerSynced.text = t('hud.synergy.synced', { count: d.synced.count });
+        this.towerSynced.text =
+          d.synced.count > 0 && d.synced.range !== null
+            ? t('hud.synergy.syncedSpotted', { count: d.synced.count, range: d.synced.range.toFixed(1) })
+            : d.synced.count > 0
+              ? t('hud.synergy.synced', { count: d.synced.count })
+              : t('hud.synergy.spotted', { range: (d.synced.range ?? 0).toFixed(1) });
         const sc = textX(d.synced.rect, 'start');
         this.towerSynced.anchor.x = sc.anchor;
         this.towerSynced.position.set(sc.x, d.synced.rect.y + Math.floor(d.synced.rect.h / 2));

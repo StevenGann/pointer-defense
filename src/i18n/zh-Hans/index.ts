@@ -91,6 +91,8 @@ export const zh: Catalogue = {
   'hud.combatStats': '伤害 {damage}  射程 {range}',
   'hud.route': '路径：{count} 格',
   'hud.synergy.synced': '已同步 · {count} 座塔',
+  'hud.synergy.spotted': '已标记 · 射程 {range}',
+  'hud.synergy.syncedSpotted': '已同步 · {count} · 射程 {range}',
   'hud.target': '目标',
   'hud.upgrade': '升级 ${cost}',
   'hud.repairing': '修理中 — {seconds} 秒',

@@ -99,6 +99,8 @@ export const uk: Catalogue = {
   'hud.combatStats': 'шкода {damage}  радіус {range}',
   'hud.route': 'Маршрут: {count} клітинок',
   'hud.synergy.synced': 'Синхрон · {count} веж',
+  'hud.synergy.spotted': 'Підсвічена · радіус {range}',
+  'hud.synergy.syncedSpotted': 'Синхрон · {count} · радіус {range}',
   'hud.target': 'Ціль',
   'hud.upgrade': 'Покращити ${cost}',
   'hud.repairing': 'Ремонт — {seconds} с',

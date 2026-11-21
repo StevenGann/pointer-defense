@@ -56,11 +56,12 @@ import { FLYER_OFF_KIND_DAMAGE,
   AUTO_WAVE_DELAY_TICKS,
   STARTING_INTEGRITY,
   synergyLayout,
+  synergyRange,
   rebuildField,
 } from '../src/core/state.ts';
 import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE, MINE_BLAST_RADIUS, CURSOR_CLICK_DAMAGE_FACTOR, repairHealRate, repairRadius, MAX_TIER, TIERS, kindMaxTier, COMBAT_KINDS } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
-import { AA_HOLD_CAP, AA_HOLD_WINDOW, AA_MIN_CLUSTER, buildSynergyLayout, leads, SYNERGIES } from '../src/core/synergy.ts';
+import { AA_HOLD_CAP, AA_HOLD_WINDOW, AA_MIN_CLUSTER, buildSynergyLayout, leads, spotterGrant, SPOTTER_CAP, SYNERGIES } from '../src/core/synergy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { WAVE_COUNT, buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, FLYER_FLIGHT_MEMBER_TICKS, FLYER_FLIGHT_SIZE, flyerSwarmFactor, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers, WAVE_ENEMY_CAP } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
@@ -11509,8 +11510,17 @@ function dailyState(date) {
   check(buildSynergyLayout(ortho.towers).edges.length === 1, 'an orthogonal AA pair forms one edge');
 
   check(
-    SYNERGIES.length === 1 && SYNERGIES[0].id === 'aa-sync' && SYNERGIES[0].color === 0xffe14d && SYNERGIES[0].dash === 4 && SYNERGIES[0].gap === 3,
-    'the catalogue is one amber aa-sync row, dash 4 on / 3 off',
+    SYNERGIES.length === 2 && SYNERGIES[0].id === 'aa-sync' && SYNERGIES[0].color === 0xffe14d && SYNERGIES[0].dash === 4 && SYNERGIES[0].gap === 3,
+    'the catalogue keeps the amber aa-sync row, dash 4 on / 3 off',
+  );
+  const spot = SYNERGIES[1];
+  check(
+    spot.id === 'spotter' && spot.mode === 'gift' && spot.color === 0x64d8ff && spot.dash === 9 && spot.gap === 4,
+    'the second row is the cyan spotter gift, dash 9 on / 4 off',
+  );
+  check(
+    spot.sourceBranch === 'A' && spot.targets.includes('aa') && spot.targets.includes('cannon'),
+    'spotter: a Marksman gift to AA and Cannon',
   );
 }
 
@@ -11857,6 +11867,109 @@ function dailyState(date) {
   check(leads(east, north), 'upgrading the partner into a Flak flips the edge direction');
   const edge = synergyLayout(s).edges[0];
   check(edge.lead.id === east.id && edge.follow.id === north.id, 'the rebuilt edge points the new way');
+}
+
+// 14b. Spotter (docs/SYNERGIES.md §9): a Marksman lends its range, one way, to adjacent AA and Cannon.
+{
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  check(placeTower(s, 'gun', 4, 5) && placeTower(s, 'aa', 5, 5), 'spotter: place a Gun beside an AA');
+  const gun = towerAt(s, 4, 5);
+  const aa = towerAt(s, 5, 5);
+  check(buildSynergyLayout(s.towers).spotterSources.size === 0, 'an unbranched Gun spots nothing');
+  gun.tier = 3;
+  gun.branch = 'A';
+  const layout = buildSynergyLayout(s.towers);
+  check(layout.spotterSources.get(aa.id)?.length === 1, 'a tier-3 Marksman spots its orthogonal neighbour');
+  check(layout.edges.some((e) => e.lead.id === gun.id && e.follow.id === aa.id), 'the gift draws one edge from source to beneficiary');
+  check(layout.clusters.length === 0, 'a gift makes no cluster');
+  check(Math.abs(synergyRange(s, aa) - 4.24) < 0.01, `the AA takes the Marksman's range (${synergyRange(s, aa).toFixed(2)} vs 4.24)`);
+}
+{
+  const d = allUnlocked();
+  d.economy.salvage = 1e9;
+  placeTower(d, 'gun', 4, 4);
+  placeTower(d, 'aa', 5, 5);
+  const gun = towerAt(d, 4, 4);
+  gun.tier = 20;
+  gun.branch = 'A';
+  check(buildSynergyLayout(d.towers).spotterSources.size === 0, 'a diagonal neighbour is never spotted');
+}
+{
+  // Beneficiary kinds: Cannon yes, Laser no, and a Minesweeper is skipped.
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'gun', 5, 5);
+  placeTower(s, 'cannon', 5, 6);
+  placeTower(s, 'laser', 6, 5);
+  const gun = towerAt(s, 5, 5);
+  const cannon = towerAt(s, 5, 6);
+  const laser = towerAt(s, 6, 5);
+  gun.tier = 3;
+  gun.branch = 'A';
+  check(synergyRange(s, cannon) > 3.0 + 1e-9, 'a Cannon is spotted');
+  check(Math.abs(synergyRange(s, laser) - 3.4) < 1e-9, 'a Laser is not spotted');
+  cannon.tier = 3;
+  cannon.branch = 'B'; // Minesweeper: it lays mines and never fires
+  check(!buildSynergyLayout(s.towers).spotterSources.has(cannon.id), 'a Minesweeper takes no range gift');
+}
+{
+  // The cap, and max-never-sum when two Marksmen share a beneficiary.
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'gun', 4, 5);
+  placeTower(s, 'gun', 6, 5);
+  placeTower(s, 'aa', 5, 5);
+  const west = towerAt(s, 4, 5);
+  const east = towerAt(s, 6, 5);
+  const aa = towerAt(s, 5, 5);
+  west.tier = 20;
+  west.branch = 'A';
+  east.tier = 20;
+  east.branch = 'A';
+  check(Math.abs(spotterGrant(west) - SPOTTER_CAP) < 1e-9, `a tier-20 Marksman hands over the cap (${SPOTTER_CAP})`);
+  check(Math.abs(synergyRange(s, aa) - SPOTTER_CAP) < 1e-9, 'two spotters give one gift, never a sum');
+  west.tier = 3;
+  check(Math.abs(synergyRange(s, aa) - SPOTTER_CAP) < 1e-9, 'the larger gift wins whichever side it comes from');
+}
+{
+  // A downed Marksman spots nothing.
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'gun', 4, 5);
+  placeTower(s, 'aa', 5, 5);
+  const gun = towerAt(s, 4, 5);
+  const aa = towerAt(s, 5, 5);
+  gun.tier = 20;
+  gun.branch = 'A';
+  check(synergyRange(s, aa) > 3.4, 'spotted while the Marksman is up');
+  gun.hp = 0;
+  check(Math.abs(synergyRange(s, aa) - 3.4) < 1e-9, 'a downed Marksman spots nothing');
+}
+{
+  // Behaviour: the gift reaches the sim, not just the helper. A flyer four tiles away is out of an
+  // AA's 3.4-tile reach and inside a spotted 5.5.
+  const base = allUnlocked();
+  base.economy.salvage = 1e9;
+  placeTower(base, 'aa', 5, 5);
+  const lone = towerAt(base, 5, 5);
+  base.phase = 'wave';
+  base.enemies.push(stationary(1, 'flyer', 20, 5.5, 9.0));
+  for (let i = 0; i < 90 && lone.damageDealt === 0; i++) tick(base);
+  check(lone.damageDealt === 0, 'an unspotted AA cannot reach a flyer four tiles away');
+
+  const s = allUnlocked();
+  s.economy.salvage = 1e9;
+  placeTower(s, 'aa', 5, 5);
+  placeTower(s, 'gun', 4, 5);
+  const aa = towerAt(s, 5, 5);
+  const gun = towerAt(s, 4, 5);
+  gun.tier = 20;
+  gun.branch = 'A';
+  s.phase = 'wave';
+  s.enemies.push(stationary(1, 'flyer', 20, 5.5, 9.0));
+  for (let i = 0; i < 90 && aa.damageDealt === 0; i++) tick(s);
+  check(aa.damageDealt > 0, 'a spotted AA fires past its own range');
 }
 
 // 15. Layer order: synergy sits below towerSprites and above path/shadows; the list stays frozen.

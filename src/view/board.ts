@@ -13,6 +13,7 @@ import {
   selectedTower,
   synergyLayout,
   towerRangeMult,
+  effectiveRange,
   type Mine,
   type RunState,
 } from '../core/state.ts';
@@ -756,13 +757,12 @@ export class BoardView {
       for (const s of this.auraSprites) s.visible = false;
     }
 
-    const rangeMult = towerRangeMult(state);
     const hoveredTower = hover.onBoard ? towerAt(state, hover.col, hover.row) : undefined;
-    if (hoveredTower) drawTowerRange(this.overlay, hoveredTower, board, cell, rangeMult);
+    if (hoveredTower) drawTowerRange(this.overlay, hoveredTower, board, cell, state);
 
     const inspected = selectedTower(state);
     if (inspected) {
-      if (inspected !== hoveredTower) drawTowerRange(this.overlay, inspected, board, cell, rangeMult);
+      if (inspected !== hoveredTower) drawTowerRange(this.overlay, inspected, board, cell, state);
       const sx = board.x + inspected.col * cell + 0.5;
       const sy = board.y + inspected.row * cell + 0.5;
       if (inspected.kind === 'wall') {
@@ -1582,7 +1582,7 @@ function drawTowerRange(
   t: Tower,
   board: { x: number; y: number; cell: number },
   cell: number,
-  rangeMult: number,
+  state: RunState,
 ): void {
   const cx = board.x + (t.col + 0.5) * cell;
   const cy = board.y + (t.row + 0.5) * cell;
@@ -1600,8 +1600,8 @@ function drawTowerRange(
     return;
   }
   const st = effectiveStats(t);
-  dashedCircle(g, cx, cy, (st.range + t.auraRange) * rangeMult * cell, PAL.navy, 1);
-  if (t.kind === 'beacon') dashedCircle(g, cx, cy, st.range * rangeMult * cell, AURA_COLOR, 1);
+  dashedCircle(g, cx, cy, effectiveRange(state, t, st) * cell, PAL.navy, 1);
+  if (t.kind === 'beacon') dashedCircle(g, cx, cy, st.range * towerRangeMult(state) * cell, AURA_COLOR, 1);
 }
 
 interface BarrelFill {

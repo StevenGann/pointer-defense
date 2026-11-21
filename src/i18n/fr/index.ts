@@ -92,6 +92,8 @@ export const fr: Catalogue = {
   'hud.combatStats': 'dégâts {damage}  portée {range}',
   'hud.route': 'Route\u00A0: {count} cases',
   'hud.synergy.synced': 'Synchronisée · {count} tours',
+  'hud.synergy.spotted': 'Repérée · portée {range}',
+  'hud.synergy.syncedSpotted': 'Synchronisée · {count} · portée {range}',
   'hud.target': 'Cible',
   'hud.upgrade': 'Améliorer ${cost}',
   'hud.repairing': 'Réparation — {seconds} s',

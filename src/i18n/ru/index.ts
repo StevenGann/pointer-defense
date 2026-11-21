@@ -417,6 +417,8 @@ export const ru = {
   'hud.combatStats': 'урон {damage}  радиус {range}',
   'hud.route': 'Маршрут: {count} клеток',
   'hud.synergy.synced': 'Синхрон · {count} башен',
+  'hud.synergy.spotted': 'Подсвечена · радиус {range}',
+  'hud.synergy.syncedSpotted': 'Синхрон · {count} · радиус {range}',
   'hud.target': 'Цель',
   'hud.upgrade': 'Улучшить ${cost}',
   'hud.repairing': 'Ремонт — {seconds} с',

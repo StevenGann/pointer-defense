@@ -273,7 +273,36 @@ for it.
 Records set before this ships are not comparable with records set after; that was already true of
 every balance change and is not worth a migration.
 
-## 9. Future rows, not built
+## 9. `spotter` — Marksman optics
+
+A Gun upgraded to branch A (Marksman) lends its range to the AA and Cannon towers orthogonally
+adjacent to it. This is the first row that is not symmetric: it is a gift from one tower to several,
+not a beat between peers, so it does not create clusters and its edge runs one way.
+
+- **Source.** A tower of kind `gun` with `branch === 'A'` at tier ≥ 3 (the branch is the gate, so an
+  unbranched Gun never spots).
+- **Beneficiaries.** Kinds `aa` and `cannon`, orthogonally adjacent to the source, one cell away.
+  Beneficiaries never relay to each other, and a Marksman does not spot another Marksman.
+- **Gift.** `range = max(own, min(source range, SPOTTER_CAP))` with `SPOTTER_CAP = 5.5`. The source's
+  live range is read through `effectiveStats`, so upgrading the Marksman pays until the cap bites at
+  about tier 5 (its range is 4.24 at tier 3, 5.83 at tier 5, 9.92 at tier 15+).
+- **Why the cap.** Uncapped, a tier-15 Marksman hands a Cannon 9.92 tiles: 3.3× its range and 10.9×
+  its covered area. That is a second tower, not a synergy. With the cap, AA goes 3.4 → 5.5 and Cannon
+  3.0 → 5.5.
+- **Max, never sum.** Two Marksmen touching the same Cannon give one gift, the larger.
+- **Minesweeper excluded.** Cannon branch B lays mines and does not fire; a range gift to it is a lie.
+- **Fog applies after.** The gift is multiplied by `towerRangeMult` exactly like an owned range, so a
+  range-reduction wave still bites a spotted tower.
+- **Everything that asks for range uses the spotted value**: target acquisition, the AA cluster's
+  held-fire re-check, manual-override reach, the range ring, and the detail panel's Range number. A
+  spotted AA that held for a target it could not reach would be a bug with a five-second fuse.
+- **No halo.** Halos mean "these two are peers"; a one-way gift must not read as a pair. The row
+  draws its own colour and dash on the link, drifting from the Marksman outward, so the direction of
+  the gift is visible.
+- **Determinism.** Targeting only: no RNG, no save field, no movement. A run with no Marksman beside
+  an AA or Cannon is byte-identical to today.
+
+## 10. Future rows, not built
 
 Written down so the mechanism is checked against more than one case before it is built. Each note
 says what its lead rule would be, because that is the part this document is really about:
