@@ -71,7 +71,7 @@ export const AD_LIFETIME_TICKS = secondsToTicks(8);
 
 /** An ad's chrome is the main window's scale: it is a small dialog, not a shrunken one. */
 export const AD_W = 220;
-export const AD_H = 92;
+export const AD_H = 98;
 
 /** Defrag pays this fraction of current salvage on close (the reward line reads it back as +8 %). */
 export const AD_DEFRAG_SALVAGE_PCT = 0.08;
