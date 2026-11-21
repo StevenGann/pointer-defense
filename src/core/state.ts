@@ -2574,8 +2574,9 @@ function moveEnemies(s: RunState): void {
 
     while (remaining > 0 && !e.dead) {
       if (e.targetCol < 0) {
-        const next = stepToward(field, e.col, e.row);
+        const next = stepToward(field, e.col, e.row, e.lastDir);
         if (!next) break;
+        e.lastDir = next.col !== e.col ? (next.col > e.col ? 2 : 1) : (next.row < e.row ? 0 : 3);
         // A breacher stops at a wall in its path instead of walking through it; the Ram stops at any
         // tower. An open gate is walkable, so it is never attacked.
         if (e.kind === 'breacher' || e.kind === 'breacher-boss') {

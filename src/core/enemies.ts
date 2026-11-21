@@ -237,6 +237,8 @@ export interface Enemy {
   /** The tile centre it is walking toward; -1 means "recompute with the field" (flyers never do). */
   targetCol: number;
   targetRow: number;
+  /** Direction index (0 up, 1 left, 2 right, 3 down) last moved in; -1 until the first step. */
+  lastDir: number;
   /** Salvage paid on death before the pointer bonus. */
   readonly value: number;
   /** Movement multiplier while slowed (1 = normal). */
@@ -347,6 +349,7 @@ export function createEnemy(id: number, kind: EnemyKind, wave: number, spawn: Ti
     row: spawn.row,
     targetCol: -1,
     targetRow: -1,
+    lastDir: -1,
     value: enemyKillValue(kind, wave),
     slowFactor: 1,
     slowUntilTick: 0,

@@ -595,6 +595,7 @@ function parseEnemy(v: unknown): Enemy | null {
   const row = int(v.row);
   const targetCol = int(v.targetCol);
   const targetRow = int(v.targetRow);
+  const lastDir = v.lastDir === undefined || v.lastDir === null ? -1 : int(v.lastDir);
   const value = num(v.value);
   const slowFactor = num(v.slowFactor);
   const slowUntilTick = int(v.slowUntilTick);
@@ -614,10 +615,10 @@ function parseEnemy(v: unknown): Enemy | null {
   const flightDirX = num(v.flightDirX);
   const flightDirY = num(v.flightDirY);
   const dead = bool(v.dead);
-  if (wave === null || isBoss === null || towerDamaged === null || hp === null || maxHp === null || shield === null || maxShield === null || shieldsRemaining === null || dist === null || spawnTick === null || x === null || y === null || prevX === null || prevY === null || col === null || row === null || targetCol === null || targetRow === null || value === null || slowFactor === null || slowUntilTick === null || stunUntilTick === null || heading === null || turretCooldown === null || scatterTicks === null || broodCooldown === null || routeIndex === null || laneOffset === null || swayPhase === null || flightDist === null || flightOffX === null || flightOffY === null || flightDirX === null || flightDirY === null || dead === null) return null;
+  if (wave === null || isBoss === null || towerDamaged === null || hp === null || maxHp === null || shield === null || maxShield === null || shieldsRemaining === null || dist === null || spawnTick === null || x === null || y === null || prevX === null || prevY === null || col === null || row === null || targetCol === null || targetRow === null || lastDir === null || lastDir < -1 || lastDir > 3 || value === null || slowFactor === null || slowUntilTick === null || stunUntilTick === null || heading === null || turretCooldown === null || scatterTicks === null || broodCooldown === null || routeIndex === null || laneOffset === null || swayPhase === null || flightDist === null || flightOffX === null || flightOffY === null || flightDirX === null || flightDirY === null || dead === null) return null;
   return {
     id, kind, wave, isBoss, towerDamaged, hp, maxHp, shield, maxShield, shieldsRemaining, dist, spawnTick,
-    x, y, prevX, prevY, col, row, targetCol, targetRow, value, slowFactor, slowUntilTick, stunUntilTick, heading,
+    x, y, prevX, prevY, col, row, targetCol, targetRow, lastDir, value, slowFactor, slowUntilTick, stunUntilTick, heading,
     attackTowerId, turretCooldown, scatterTicks, broodCooldown, routeIndex, laneOffset, swayPhase, flightDist,
     flightOffX, flightOffY, flightDirX, flightDirY, dead,
   };
