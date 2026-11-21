@@ -18,10 +18,10 @@ Nothing in flight.
 - **Spec:** `docs/MAPS-BATCH-2.md` — Moat, Hourglass, Trident, Switchyard, with exact geometry and
   measured path lengths.
 - **What ships:** four entries appended to `LEVELS`, their `level.<id>.name` keys in all seven
-  catalogues, and the gallery grid deriving its column count from `LEVELS.length` and the client width
-  (the fixed 3×2 no longer holds ten cards).
+  catalogues, and the `box(c0, c1, r0, r1)` wall helper back in `levels.ts` (it went out with the
+  Ladder fix). The gallery already scrolls, so ten cards need no layout change.
 - **Done when:** all four validate, each has buildable tiles and a proven placement, thumbnails stay
-  distinct across ten, and the grid fits at 1280×720 and 1024×768 in both directions.
+  distinct across ten, and the scrollbar reaches the fourth row at 1280×720.
 
 ### 2. Per-locale width assertions across the chrome
 
@@ -51,6 +51,12 @@ Nothing in flight.
 - **Note:** offered twice, never answered. Safe to ignore.
 
 ## Shipped recently
+
+- **Scrolling map gallery** (`4cd002e`) — three fixed columns, vertical scroll with a proportional
+  scrollbar, wheel/thumb/track/PageUp/PageDown input, focus-follows-scroll and clipped cards, so any
+  number of maps fits. 39 smoke checks at six and at twenty-six maps.
+- **The Ladder is playable** (`4b42644`) — the `box(1, 16, 3, 8)` fill left the map with zero buildable
+  tiles; the centre is hollow now and each band keeps a 2×2 balcony island.
 
 - **Map selection gallery** (`30390ee`) — Play opens a six-card gallery; thumbnails are drawn at
   runtime from each level's walls and route, cached per level id; `pd.map.v1` remembers the last map.
@@ -85,5 +91,5 @@ Kept here so these do not get re-proposed as new work:
   the plain web build; no AppID, no depot upload.
 - **Music.** `src/audio/sfx.ts` only.
 - **Art.** The artist fills in quality animations later; the SVGs are placeholders by design.
-- **Touch input, difficulty selection, more authored maps, co-op.** See `docs/design.md`,
+- **Touch input, difficulty selection, co-op.** See `docs/design.md`,
   "What is not built".
