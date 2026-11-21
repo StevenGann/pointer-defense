@@ -11954,7 +11954,7 @@ function dailyState(date) {
   placeTower(base, 'aa', 5, 5);
   const lone = towerAt(base, 5, 5);
   base.phase = 'wave';
-  base.enemies.push(stationary(1, 'flyer', 20, 5.5, 9.0));
+  base.enemies.push(stationary(1, 'flyer', 20, 5.5, 9.5));
   for (let i = 0; i < 90 && lone.damageDealt === 0; i++) tick(base);
   check(lone.damageDealt === 0, 'an unspotted AA cannot reach a flyer four tiles away');
 
@@ -11967,7 +11967,7 @@ function dailyState(date) {
   gun.tier = 20;
   gun.branch = 'A';
   s.phase = 'wave';
-  s.enemies.push(stationary(1, 'flyer', 20, 5.5, 9.0));
+  s.enemies.push(stationary(1, 'flyer', 20, 5.5, 9.5));
   for (let i = 0; i < 90 && aa.damageDealt === 0; i++) tick(s);
   check(aa.damageDealt > 0, 'a spotted AA fires past its own range');
 }
