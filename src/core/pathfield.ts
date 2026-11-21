@@ -5,8 +5,9 @@ import { COLS, ROWS, inBounds, type Grid, type Tile } from './grid.ts';
  *
  * Creeps walk downhill on the field — each step moves to the neighbouring tile closest to the exit —
  * which makes them take the shortest route through whatever maze the player has built. Towers are
- * walls, so every placement rewrites the field. Ties are broken in a fixed order (up, left, right,
- * down) so the route, and therefore the whole simulation, stays deterministic.
+ * walls, so every placement rewrites the field. Ties are broken by momentum (keep the current heading
+ * when it ties) then by a tile-parity scan order, so the route stays deterministic while symmetric
+ * forks alternate instead of always resolving toward the top-left.
  */
 
 const DIRS: readonly (readonly [number, number])[] = [
@@ -88,10 +89,12 @@ export function buildRouteField(
 
 /**
  * The neighbouring walkable tile with the lowest distance to the exit, or null if there is none.
- * Ties keep the first direction in the fixed order, so the choice is deterministic.
+ * Distance decides first, exactly as before. When two or more neighbours tie, `lastDir` (the direction
+ * index the enemy already travels in, or -1) wins if it is among them; otherwise a scan order picked
+ * by tile parity breaks the tie — `(col + row)` even scans up, left, right, down, odd scans down,
+ * right, left, up — so equal-length alternatives alternate instead of always resolving one way.
  */
-export function stepToward(field: Int32Array, col: number, row: number): Tile | null {
-  let best: Tile | null = null;
+export function stepToward(field: Int32Array, col: number, row: number, lastDir = -1): Tile | null {
   let bestDist = Infinity;
   for (let i = 0; i < DIRS.length; i++) {
     const c = col + DIRS[i][0];
@@ -99,12 +102,31 @@ export function stepToward(field: Int32Array, col: number, row: number): Tile | 
     if (!inBounds(c, r)) continue;
     const d = field[r * COLS + c];
     if (d < 0) continue;
-    if (d < bestDist) {
-      bestDist = d;
-      best = { col: c, row: r };
+    if (d < bestDist) bestDist = d;
+  }
+  if (bestDist === Infinity) return null;
+
+  // Momentum: keep walking in the direction already travelling when it is one of the tied steps.
+  if (lastDir >= 0 && lastDir < DIRS.length) {
+    const c = col + DIRS[lastDir][0];
+    const r = row + DIRS[lastDir][1];
+    if (inBounds(c, r) && field[r * COLS + c] === bestDist) {
+      return { col: c, row: r };
     }
   }
-  return best;
+
+  // Tile parity: even scans up, left, right, down; odd scans down, right, left, up.
+  const even = ((col + row) & 1) === 0;
+  for (let k = 0; k < DIRS.length; k++) {
+    const i = even ? k : DIRS.length - 1 - k;
+    const c = col + DIRS[i][0];
+    const r = row + DIRS[i][1];
+    if (!inBounds(c, r)) continue;
+    if (field[r * COLS + c] === bestDist) {
+      return { col: c, row: r };
+    }
+  }
+  return null;
 }
 
 /** Flood fill from spawn over walkable, unblocked tiles; true when the exit is unreachable. */
@@ -141,15 +163,22 @@ export function isSealed(grid: Grid, blocked: ReadonlySet<number>, spawn: Tile, 
   return true;
 }
 
-/** The route from spawn to exit by repeatedly stepping downhill, capped so a bad field cannot loop. */
+/**
+ * The route from spawn to exit by repeatedly stepping downhill, capped so a bad field cannot loop.
+ * The walker keeps its own momentum: the direction index of the step just taken (0 up, 1 left, 2
+ * right, 3 down, from the delta to the previous tile) is passed as `lastDir` on the next step, so the
+ * drawn route and the map thumbnail show the same smooth route a single enemy walks from the spawn.
+ */
 export function pathTiles(field: Int32Array, spawn: Tile): Tile[] {
   const out: Tile[] = [];
   let cur: Tile = { col: spawn.col, row: spawn.row };
+  let lastDir = -1;
   out.push(cur);
   for (let i = 0; i < COLS * ROWS; i++) {
     if (field[cur.row * COLS + cur.col] === 0) break;
-    const next = stepToward(field, cur.col, cur.row);
+    const next = stepToward(field, cur.col, cur.row, lastDir);
     if (!next) break;
+    lastDir = next.col !== cur.col ? (next.col > cur.col ? 2 : 1) : (next.row < cur.row ? 0 : 3);
     out.push(next);
     cur = next;
   }

@@ -66,9 +66,9 @@ import { AA_HOLD_CAP, AA_HOLD_WINDOW, AA_MIN_CLUSTER, buildSynergyLayout, leads,
 import { formatNumber } from '../src/core/format.ts';
 import { WAVE_COUNT, EARLY_CALL_FLOOR, buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, FLYER_FLIGHT_MEMBER_TICKS, FLYER_FLIGHT_SIZE, flyerSwarmFactor, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers, WAVE_ENEMY_CAP } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
-import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
+import { buildField, buildRouteField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
-import { LEVELS, DEFAULT_LEVEL, createGrid, levelById, toggleIndex, toggleOpenAt, validateLevel, MAX_TOGGLES } from '../src/core/levels.ts';
+import { LEVELS, DEFAULT_LEVEL, createGrid, levelById, levelRoutes, toggleIndex, toggleOpenAt, validateLevel, MAX_TOGGLES } from '../src/core/levels.ts';
 import { encodeLevel, decodeCode, encodeBytes, CODEC_PREFIX } from '../src/core/codec.ts';
 import {
   createEditor,
@@ -531,7 +531,9 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 
   // 5. A non-flyer fixture is byte-identical to the build before flyer flight. The hash below was
   // recorded from that build (commit 3cb9f15) with exactly this fixture. The Cannon now lands damage
-  // a flight later, but this fixture has no Cannon, so the hash is unchanged.
+  // a flight later, but this fixture has no Cannon, so the hash is unchanged. It was re-baselined once
+  // more for the ground pathing tie-break (docs/PATHING-TIEBREAK.md): the open-field fixture has
+  // downhill ties, so the momentum-then-parity rule moves ground enemies to different tiles.
   const nonFlyerFixture = () => {
     const s = stateOnLevel('open-field');
     s.economy.salvage = 10000;
@@ -551,7 +553,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     return createHash('sha1').update(buf.join(';')).digest('hex');
   };
   const fixtureHash = nonFlyerFixture();
-  check(fixtureHash === 'ef768fdff0d07c96d27a99421dee2f0675f03271',
+  check(fixtureHash === '91e682f18a605e301839c5e85cb43f60febf9409',
     `flyer flight: a non-flyer fixture run is byte-identical to the pre-flight build (${fixtureHash.slice(0, 10)})`);
 
   // 6. The same seed reproduces identical flyer flight; a different seed flies differently.
@@ -656,7 +658,9 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 {
   // A deterministic slice of a wave on each no-route level, hashed so any change to the single
   // implicit route (or to wave balance) trips this byte-identity check. The Cannon now lands damage
-  // a flight later, but this fixture places only a Gun, so the hash is unchanged.
+  // a flight later, but this fixture places only a Gun, so the hash is unchanged. It was re-baselined
+  // for the ground pathing tie-break (docs/PATHING-TIEBREAK.md): each of these four fields has
+  // downhill ties, so the momentum-then-parity rule moves ground enemies to different tiles.
   const simulate = (id) => {
     const s = stateOnLevel(id);
     s.economy.salvage = 10000;
@@ -681,7 +685,104 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     h ^= table.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
-  check((h >>> 0).toString(16) === '83ea51ae', `no-route levels unchanged (wave hash ${(h >>> 0).toString(16)})`);
+  check((h >>> 0).toString(16) === '818cfcb5', `no-route levels unchanged (wave hash ${(h >>> 0).toString(16)})`);
+}
+
+// --- 5h. Ground pathing tie-break (docs/PATHING-TIEBREAK.md §5) ---------------------------------
+{
+  // A lone enemy is byte-identical between two runs with the same seed, over 600 ticks. The seed
+  // controls flyers only; the ground tie-break is momentum + tile parity, both pure state, so the
+  // run reproduces exactly.
+  const trace = (seed) => {
+    const s = createRunState();
+    s.rng = seed;
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    s.phase = 'wave';
+    s.enemies.push(createEnemy(1, 'grunt', 1, SPAWN, EXIT));
+    const out = [];
+    for (let i = 0; i < 600; i++) {
+      tick(s);
+      for (const e of s.enemies) if (!e.dead) out.push(`${e.x},${e.y},${e.col},${e.row},${e.dist},${e.lastDir}`);
+    }
+    return out.join(';');
+  };
+  check(trace(12345) === trace(12345), 'pathing tie-break: a lone enemy over 600 ticks is byte-identical with the same seed');
+
+  // On the Corridor the route's above/below split is within 10 tiles of even (today it is 26/14).
+  {
+    const level = levelById('corridor');
+    const grid = createGrid(level);
+    const field = buildField(grid, new Set(), level.exits[0]);
+    const route = pathTiles(field, level.starts[0]);
+    const centreRow = level.starts[0].row;
+    let above = 0;
+    let below = 0;
+    for (const t of route) {
+      if (t.row < centreRow) above++;
+      else if (t.row > centreRow) below++;
+    }
+    check(Math.abs(above - below) <= 10,
+      `pathing tie-break: the Corridor route splits ${above}/${below} above/below centre (within 10 of even)`);
+  }
+
+  // Direction changes across the ten shipped maps stay under 45 when walked by the canonical
+  // walker (pathTiles), which keeps its own momentum. The drawn route is pathTiles, so this is the
+  // same route currentPath and every thumbnail show.
+  {
+    const dirIndex = (a, b) => (b.col !== a.col ? (b.col > a.col ? 2 : 1) : (b.row < a.row ? 0 : 3));
+    let changes = 0;
+    for (const level of LEVELS.slice(0, 10)) {
+      const grid = createGrid(level);
+      const spawn = level.starts[0];
+      const exit = level.exits[0];
+      const routes = levelRoutes(level);
+      const walks = routes.length === 0
+        ? [pathTiles(buildField(grid, new Set(), exit), spawn)]
+        : routes.map((r) => pathTiles(buildRouteField(grid, new Set(), exit, r), spawn));
+      for (const tiles of walks) {
+        for (let i = 2; i < tiles.length; i++) {
+          if (dirIndex(tiles[i - 2], tiles[i - 1]) !== dirIndex(tiles[i - 1], tiles[i])) changes++;
+        }
+      }
+    }
+    check(changes < 45, `pathing tie-break: ${changes} direction changes across the ten maps (under 45)`);
+  }
+
+  // A saved run mid-flight restores `lastDir` and continues without diverging.
+  {
+    const s = createRunState();
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    s.phase = 'wave';
+    s.wave = 1;
+    s.enemies.push(createEnemy(s.nextId++, 'grunt', 1, SPAWN, EXIT));
+    for (let i = 0; i < 30; i++) tick(s);
+    const saved = JSON.stringify(captureRun(s));
+    const restored = restoreRun(JSON.parse(saved));
+    check(restored !== null && restored.enemies[0].lastDir === s.enemies[0].lastDir,
+      `pathing tie-break: a mid-flight save restores lastDir (${s.enemies[0].lastDir})`);
+    if (restored) {
+      let diverged = false;
+      for (let i = 0; i < 200; i++) {
+        tick(s);
+        tick(restored);
+        const a = s.enemies.filter((e) => !e.dead).map((e) => `${e.x},${e.y},${e.col},${e.row},${e.dist},${e.lastDir}`);
+        const b = restored.enemies.filter((e) => !e.dead).map((e) => `${e.x},${e.y},${e.col},${e.row},${e.dist},${e.lastDir}`);
+        if (a.join(';') !== b.join(';')) diverged = true;
+      }
+      check(!diverged, 'pathing tie-break: a restored mid-flight run continues without diverging');
+    }
+  }
+
+  // Ground pathing draws no rng: a lone grunt leaves the rng stream position untouched.
+  {
+    const s = createRunState();
+    const seed = s.rng;
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    s.phase = 'wave';
+    s.enemies.push(createEnemy(1, 'grunt', 1, SPAWN, EXIT));
+    for (let i = 0; i < 600; i++) tick(s);
+    check(s.rng === seed, 'pathing tie-break: ground pathing draws no rng');
+  }
 }
 
 {
