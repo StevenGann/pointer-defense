@@ -28,6 +28,9 @@ export interface SynergyRow {
   /** Dash pattern: on / off pixels. Distinct per synergy, so colour is never the only signal. */
   readonly dash: number;
   readonly gap: number;
+  /** The white art asset drawn for the edge's line (`ui/<link>`), distinct per synergy so shape,
+   *  not colour alone, tells two rows apart under deuteranopia (docs/SYNERGIES.md §5). */
+  readonly link: string;
   /**
    * `sync` joins peers and forms clusters (the firing beat). `gift` is one-way: each source tower
    * lends `targets` a buff, makes no clusters, and only the source needs a branch.
@@ -41,7 +44,7 @@ export interface SynergyRow {
 
 /** The catalogue. `aa-sync` is the only row until the mechanism is playtested (docs/SYNERGIES.md §9). */
 export const SYNERGIES: readonly SynergyRow[] = [
-  { id: 'aa-sync', kinds: ['aa', 'aa'], color: 0xffe14d, dash: 4, gap: 3, mode: 'sync' },
+  { id: 'aa-sync', kinds: ['aa', 'aa'], color: 0xffe14d, dash: 4, gap: 3, link: 'synergy-link', mode: 'sync' },
   // Marksman optics: a Gun on branch A lends its range to adjacent AA and Cannon towers.
   {
     id: 'spotter',
@@ -50,6 +53,7 @@ export const SYNERGIES: readonly SynergyRow[] = [
     color: 0x64d8ff,
     dash: 9,
     gap: 4,
+    link: 'synergy-link-spotter',
     mode: 'gift',
     sourceBranch: 'A',
   },
@@ -62,6 +66,8 @@ export interface SynergyEdge {
   readonly color: number;
   readonly dash: number;
   readonly gap: number;
+  /** The row's link art name, so the view can pick the texture per edge rather than per synergy id. */
+  readonly link: string;
 }
 
 /** A connected group of synergetic towers, its members sorted so every leader precedes its followers. */
@@ -133,7 +139,7 @@ export function buildSynergyLayout(towers: readonly Tower[]): SynergyLayout {
         if (!orthogonal(a, b)) continue;
         const lead = leads(a, b) ? a : b;
         const follow = lead === a ? b : a;
-        edges.push({ lead, follow, color: row.color, dash: row.dash, gap: row.gap });
+        edges.push({ lead, follow, color: row.color, dash: row.dash, gap: row.gap, link: row.link });
         adj[i].push(j);
         adj[j].push(i);
       }
@@ -193,7 +199,7 @@ export function buildSynergyLayout(towers: readonly Tower[]): SynergyLayout {
         if (!orthogonal(source, target)) continue;
         // A Minesweeper lays mines instead of firing; a range gift to it would be a lie.
         if (target.kind === 'cannon' && target.branch === 'B') continue;
-        edges.push({ lead: source, follow: target, color: row.color, dash: row.dash, gap: row.gap });
+        edges.push({ lead: source, follow: target, color: row.color, dash: row.dash, gap: row.gap, link: row.link });
         const list = spotterSources.get(target.id);
         if (list === undefined) spotterSources.set(target.id, [source]);
         else list.push(source);

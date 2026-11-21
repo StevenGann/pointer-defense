@@ -1407,6 +1407,11 @@
       "rev": "918cb1ef7e"
     },
     {
+      "name": "ui/synergy-link-spotter",
+      "frames": 1,
+      "rev": "7d83402390"
+    },
+    {
       "name": "upgrades/_upgrade-placeholder",
       "frames": 1,
       "rev": "950da9994b"

@@ -11510,13 +11510,17 @@ function dailyState(date) {
   check(buildSynergyLayout(ortho.towers).edges.length === 1, 'an orthogonal AA pair forms one edge');
 
   check(
-    SYNERGIES.length === 2 && SYNERGIES[0].id === 'aa-sync' && SYNERGIES[0].color === 0xffe14d && SYNERGIES[0].dash === 4 && SYNERGIES[0].gap === 3,
+    SYNERGIES.length === 2 && SYNERGIES[0].id === 'aa-sync' && SYNERGIES[0].color === 0xffe14d && SYNERGIES[0].dash === 4 && SYNERGIES[0].gap === 3 && SYNERGIES[0].link === 'synergy-link',
     'the catalogue keeps the amber aa-sync row, dash 4 on / 3 off',
   );
   const spot = SYNERGIES[1];
   check(
-    spot.id === 'spotter' && spot.mode === 'gift' && spot.color === 0x64d8ff && spot.dash === 9 && spot.gap === 4,
+    spot.id === 'spotter' && spot.mode === 'gift' && spot.color === 0x64d8ff && spot.dash === 9 && spot.gap === 4 && spot.link === 'synergy-link-spotter',
     'the second row is the cyan spotter gift, dash 9 on / 4 off',
+  );
+  check(
+    SYNERGIES[0].link !== SYNERGIES[1].link,
+    'the two catalogue rows do not share a link asset',
   );
   check(
     spot.sourceBranch === 'A' && spot.targets.includes('aa') && spot.targets.includes('cannon'),
@@ -11999,16 +12003,18 @@ function dailyState(date) {
   const names = manifest.map((a) => a.name);
   check(names.includes('ui/synergy-halo'), 'the synergy halo is in the art manifest');
   check(names.includes('ui/synergy-link'), 'the synergy link is in the art manifest');
-  for (const file of ['synergy-halo', 'synergy-link']) {
+  check(names.includes('ui/synergy-link-spotter'), 'the spotter link is in the art manifest');
+  for (const file of ['synergy-halo', 'synergy-link', 'synergy-link-spotter']) {
     const svg = readFileSync(new URL(`../public/art/ui/${file}.svg`, import.meta.url), 'utf8');
     check(svg.includes('<svg') && svg.includes('viewBox'), `${file}.svg is a real SVG the artist can open`);
   }
   const boardSrc = readFileSync(new URL('../src/view/board.ts', import.meta.url), 'utf8');
-  check(boardSrc.includes("getArtTexture('synergy-halo'") && boardSrc.includes("getArtTexture('synergy-link'"),
-    'the board draws the synergy from the SVG assets');
+  check(boardSrc.includes("getArtTexture('synergy-halo'"), 'the board draws the halo from the SVG asset');
+  check(boardSrc.includes('edge.link') && !boardSrc.includes("getArtTexture('synergy-link'"),
+    'the board reads the link texture per edge, not a single hardcoded name');
   const artSrc = readFileSync(new URL('../src/view/art.ts', import.meta.url), 'utf8');
-  check(artSrc.includes("'synergy-halo'") && artSrc.includes("'synergy-link'"),
-    'both synergy assets are in ART_MANIFEST, so the loader will actually request them');
+  check(artSrc.includes("'synergy-halo'") && artSrc.includes("'synergy-link'") && artSrc.includes("'synergy-link-spotter'"),
+    'all three synergy assets are in ART_MANIFEST, so the loader will actually request them');
   check(/this\.synergyLayer\.addChild\(this\.synergy, this\.synergyArt\)/.test(boardSrc),
     'the procedural fallback is drawn under the art, so a slow load does not blank the line');
 }

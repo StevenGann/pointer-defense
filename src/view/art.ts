@@ -158,7 +158,7 @@ const PROJECTILE_NAMES = ['shell', 'missile'] as const;
 const MINE_NAMES = ['mine-armed', 'mine-unarmed'] as const;
 
 /** Synergy indicators (docs/SYNERGIES.md): white art, tinted by the engine to the synergy colour. */
-const SYNERGY_NAMES = ['synergy-halo', 'synergy-link'] as const;
+const SYNERGY_NAMES = ['synergy-halo', 'synergy-link', 'synergy-link-spotter'] as const;
 
 function entries(category: ArtCategory, dir: string, names: readonly string[]): ArtEntry[] {
   return names.map((name) => ({ name, category, file: `${dir}/${name}.svg` }));

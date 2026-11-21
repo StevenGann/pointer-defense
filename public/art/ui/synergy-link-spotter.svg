@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="24" viewBox="0 0 64 24">
+  <!--
+    Synergy link (spotter) — the one-way gift bar drawn from a Marksman to its beneficiary.
+
+    The artist owns this file. The engine draws it horizontally at the midpoint between the two
+    tower centres, rotated 90° for a north/south pair, tinted with the synergy's colour and scaled so
+    its width matches the gap between the two bases. It is white/pale for the same reason as the
+    sibling `synergy-link.svg`: the tint carries the colour, so keep the art colourless.
+
+    Where `synergy-link.svg` is a single bar (symmetric peers), this one is two parallel rails with a
+    chevron between them. The chevron points toward the gift's receiver (the "follow" tower), which is
+    the +x direction of this file. The engine mirrors the sprite horizontally when the lead sits on
+    the far side, so the chevron always points from lead to follow on screen.
+
+    The middle 60% is all that is reliably visible — the outer ends tuck under the tower bases — so
+    the rails and chevron live in the centre band, and the ends fade out so the rails do not look cut
+    off where a base covers them.
+  -->
+  <defs>
+    <linearGradient id="fade" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="18%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="82%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="core" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.35"/>
+      <stop offset="50%" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.35"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Two rails split the single bar into a track: the gap and the chevron are the one-way signal. -->
+  <rect x="0" y="5" width="64" height="5" rx="2.5" fill="url(#fade)" opacity="0.45"/>
+  <rect x="4" y="6.5" width="56" height="2.5" rx="1.25" fill="url(#core)"/>
+
+  <rect x="0" y="14" width="64" height="5" rx="2.5" fill="url(#fade)" opacity="0.45"/>
+  <rect x="4" y="15.5" width="56" height="2.5" rx="1.25" fill="url(#core)"/>
+
+  <!-- Chevron points +x, the lead-to-follow direction; the engine mirrors it when the lead is east or south. -->
+  <path d="M28 8 L36 12 L28 16" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+</svg>

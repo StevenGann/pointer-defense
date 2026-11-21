@@ -651,9 +651,9 @@ export class BoardView {
       const { alpha } = synergyEdgeStyle(state.clock, quality, edgePeriod());
       const haloPx = Math.round(cell * SYNERGY_HALO_CELLS);
       const haloTex = getArtTexture('synergy-halo', haloPx);
-      const linkTex = getArtTexture('synergy-link', Math.round(haloPx * SYNERGY_LINK_TEXTURE_SCALE));
-      if (haloTex !== null && linkTex !== null) {
-        // The artist's SVG carries the shape; the engine owns the colour, the pulse and the layout.
+      if (haloTex !== null) {
+        // The halo is reserved for symmetric rows: it means "these are peers", and only clusters
+        // carry it. A one-way gift never gets one (docs/SYNERGIES.md §9).
         for (const cluster of layout.clusters) {
           for (const t of cluster.members) {
             const spr = this.synergyHaloSprite(haloIndex++);
@@ -668,22 +668,30 @@ export class BoardView {
             spr.visible = true;
           }
         }
-        for (const edge of layout.edges) {
-          const { x0, y0, x1, y1 } = synergyEdgeEndpoints(edge, board, cell);
-          const spr = this.synergyLinkSprite(linkIndex++);
-          spr.texture = linkTex;
-          spr.tint = edge.color;
-          spr.width = Math.hypot(x1 - x0, y1 - y0) + cell * SYNERGY_LINK_OVERLAP;
-          spr.height = cell * SYNERGY_LINK_HEIGHT;
-          // Adjacency is orthogonal, so the link is only ever horizontal or vertical.
-          spr.rotation = edge.lead.col === edge.follow.col ? Math.PI / 2 : 0;
-          spr.position.set((x0 + x1) / 2, (y0 + y1) / 2);
-          spr.alpha = alpha * SYNERGY_LINK_ALPHA;
-          spr.visible = true;
+      }
+      for (const edge of layout.edges) {
+        // Each row ships its own link art, so the texture is chosen per edge. getArtTexture is
+        // cached by name and size, so this is a map lookup, not a per-frame raster.
+        const linkTex = getArtTexture(edge.link, Math.round(haloPx * SYNERGY_LINK_TEXTURE_SCALE));
+        if (linkTex === null) {
+          // Before this row's SVG lands (or if the artist removes it) the procedural dash still draws.
+          drawSynergyEdge(this.synergy, edge, board, cell, state.clock, quality);
+          continue;
         }
-      } else {
-        // Before the SVGs land (or if the artist removes them) the procedural line still draws.
-        for (const edge of layout.edges) drawSynergyEdge(this.synergy, edge, board, cell, state.clock, quality);
+        const { x0, y0, x1, y1 } = synergyEdgeEndpoints(edge, board, cell);
+        const spr = this.synergyLinkSprite(linkIndex++);
+        spr.texture = linkTex;
+        spr.tint = edge.color;
+        spr.width = Math.hypot(x1 - x0, y1 - y0) + cell * SYNERGY_LINK_OVERLAP;
+        spr.height = cell * SYNERGY_LINK_HEIGHT;
+        // Adjacency is orthogonal, so the link is only ever horizontal or vertical.
+        spr.rotation = edge.lead.col === edge.follow.col ? Math.PI / 2 : 0;
+        // The spotter's chevron points +x in its art; mirror it when the lead sits east or south
+        // so the gift always points from lead to follow, never the other way.
+        if (edge.follow.col < edge.lead.col || edge.follow.row < edge.lead.row) spr.scale.x *= -1;
+        spr.position.set((x0 + x1) / 2, (y0 + y1) / 2);
+        spr.alpha = alpha * SYNERGY_LINK_ALPHA;
+        spr.visible = true;
       }
     }
     for (let i = haloIndex; i < this.synergyHalos.length; i++) this.synergyHalos[i].visible = false;
