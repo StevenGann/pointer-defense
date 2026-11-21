@@ -30,6 +30,9 @@ export interface Projectile {
 /** A Flak shell's travel speed, tiles per second. */
 export const SHELL_SPEED = 20;
 
+/** A Cannon shell's travel speed, tiles per second. */
+export const CANNON_SHELL_SPEED = 14;
+
 /** Missile speed at launch, tiles per second. */
 export const MISSILE_INITIAL_SPEED = 6;
 /** Missile acceleration, tiles per second squared. */
