@@ -18,25 +18,19 @@ not count, and the one after it is taken instead.
 
 ## Next
 
-### 1. Four more stock maps
+### 1. Tower licences (prestige unlocks)
 
-- **Spec:** `docs/MAPS-BATCH-2.md` — Moat, Hourglass, Trident, Switchyard, with exact geometry and
-  measured path lengths.
-- **What ships:** four entries appended to `LEVELS`, their `level.<id>.name` keys in all seven
-  catalogues, and the `box(c0, c1, r0, r1)` wall helper back in `levels.ts` (it went out with the
-  Ladder fix). The gallery already scrolls, so ten cards need no layout change.
-- **Done when:** all four validate, each has buildable tiles and a proven placement, thumbnails stay
-  distinct across ten, and the scrollbar reaches the fourth row at 1280×720.
+- **Spec:** `docs/PRESTIGE.md` — eight RP-priced licences, one per gated tower, making that tower
+  available from the first build phase of every run. Costs ladder from 3 RP (Cannon) to 16 RP (Cursor);
+  Early Access stays the 30 RP bulk buy and marks the licences `Covered`.
+- **What ships:** `unlockTower` on the tree effect, `unlockedTowers` on `TreeEffects`, the one-line
+  check in `towerUnlocked`, tolerant parsing in `runsave.ts` (no `RUN_SAVE_VERSION` bump), eight nodes
+  in the existing Restore tiers, sixteen keys per catalogue.
+- **Done when:** a licensed tower places on wave 1 and the same tower does not without it; buying
+  deducts the exact cost and refuses when short or owned; an old mid-run save still restores with no
+  licences; Early Access covers every licence row.
 
-### 2. Per-locale width assertions across the chrome
-
-- **Why:** the menu bar got per-locale fit tests when the CJK width bug was fixed; the HUD panels,
-  dialogs, buttons and status bar still only assert that English fits. Russian runs ~130% of English
-  and Hebrew ~110%, so a translation can overflow a rect that English passes.
-- **Done when:** a smoke group measures every fixed-width label in the HUD, the dialogs and the
-  status bar under all seven locales and fails on overflow or collision.
-
-### 3. Native review of the six machine-draft catalogues
+### 2. Native review of the six machine-draft catalogues
 
 - **Why:** every non-English catalogue is `draft: true`. Machine translation is worst exactly where
   this UI lives — buttons, jargon, and short labels with no context.
@@ -47,7 +41,7 @@ not count, and the one after it is taken instead.
 
 ## Housekeeping
 
-### 4. Branch and worktree sweep
+### 3. Branch and worktree sweep
 
 - **Why:** the repo carries 100+ merged branches and roughly 50 worktrees; only `pd-upgate` holds
   `main`. It works, it is just noise when looking for something.
