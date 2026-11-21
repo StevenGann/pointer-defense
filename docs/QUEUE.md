@@ -13,7 +13,12 @@ not count, and the one after it is taken instead.
 
 ## Doing
 
-Nothing in flight.
+1. **Seven more stock maps** — `docs/MAPS-BATCH-3.md`. Comb, Shelves, Pinwheel, Twin Halls,
+   Ziggurat, Gauntlet, Quarry; ten maps to seventeen. Branch `feat/maps-batch-3`.
+2. **Ad progress bar** — `docs/ADS-PROGRESS.md`. A three-pixel bar on the bottom of every ad, the
+   dialog grown to 220x98 to hold it. Branch `feat/ads-progress`.
+3. **Pathing review** — an agent is reading how the field and `stepToward` decide a route, measuring
+   whether enemies favour one side, and proposing fixes. Analysis only; branch `feat/pathing-review`.
 
 ## Next
 
