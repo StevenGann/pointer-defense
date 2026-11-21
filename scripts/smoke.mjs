@@ -596,7 +596,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 {
   // Every level loads with a walkable start and exit and a route of the documented length.
   const ROUTE_TOLERANCE = 2;
-  const ROUTE_LENGTHS = { corridor: 48, dumbbell: 28, 'open-field': 22, turnstile: 20, fork: 22, ladder: 25, moat: 27, hourglass: 27, trident: 20, switchyard: 28 };
+  const ROUTE_LENGTHS = { corridor: 48, dumbbell: 28, 'open-field': 22, turnstile: 20, fork: 22, ladder: 25, moat: 27, hourglass: 27, trident: 20, switchyard: 28, comb: 70, shelves: 73, pinwheel: 28, 'twin-halls': 28, ziggurat: 30, gauntlet: 30, quarry: 30 };
   for (const level of LEVELS) {
     const grid = createGrid(level);
     const field = buildField(grid, new Set(), level.exits[0]);
@@ -13413,18 +13413,79 @@ function dailyState(date) {
   check(routeLength(sw, closed) === 38 && routeLength(sw, new Set()) === 28,
     `switchyard: route is 38 with both shutters closed and 28 with both open (${routeLength(sw, closed)}/${routeLength(sw, new Set())})`);
 
-  // 4. Ten maps fill four rows and overflow at 1280x720; the last card is reachable by scrolling.
+  // 4. Seventeen maps fill six rows and overflow at 1280x720; the last card is reachable by scrolling.
   const client = computeLayout(1280, 720).client;
   const grid = computeMapGrid(client, LEVELS.length, 0);
-  check(LEVELS.length === 10, 'the gallery holds ten maps');
-  check(grid.rows === 4, `ten maps are four rows (${grid.rows})`);
-  check(grid.overflow === true, 'ten maps overflow at 1280x720');
+  check(LEVELS.length === 17, 'the gallery holds seventeen maps');
+  check(grid.rows === 6, `seventeen maps are six rows (${grid.rows})`);
+  check(grid.overflow === true, 'seventeen maps overflow at 1280x720');
   check(scrollForFocus(LEVELS.length - 1, grid.scrollMax, 0, grid.rowsVisible) === grid.scrollMax,
     'scrollForFocus reaches the last card');
 
-  // 5. The ten thumbnails are pairwise distinct.
+  // 5. The seventeen thumbnails are pairwise distinct.
   const thumbs = LEVELS.map((l) => JSON.stringify(levelThumbnail(l)));
-  check(new Set(thumbs).size === LEVELS.length, 'the ten thumbnails are pairwise distinct');
+  check(new Set(thumbs).size === LEVELS.length, 'the seventeen thumbnails are pairwise distinct');
+}
+
+// --- Maps batch 3 (docs/MAPS-BATCH-3.md) --------------------------------------------------------
+{
+  const SPEC = {
+    comb: { buildable: 168, route: 70 },
+    shelves: { buildable: 155, route: 73 },
+    pinwheel: { buildable: 198, route: 28 },
+    'twin-halls': { buildable: 206, route: 28 },
+    ziggurat: { buildable: 174, route: 30 },
+    gauntlet: { buildable: 196, route: 30 },
+    quarry: { buildable: 128, route: 30 },
+  };
+  const routeLength = (level) => {
+    const grid = createGrid(level);
+    const field = buildField(grid, new Set(), level.exits[0]);
+    return field[level.starts[0].row * COLS + level.starts[0].col];
+  };
+
+  // 1. Each new level validates and matches the doc's buildable and route numbers, measured through
+  //    the real field rather than a re-implementation.
+  for (const id of Object.keys(SPEC)) {
+    const level = levelById(id);
+    check(level.id === id, `${id}: levelById resolves the new map`);
+    check(validateLevel(level) === null, `${id}: validateLevel accepts the map`);
+    const grid = createGrid(level);
+    let buildable = 0;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (tileAt(grid, c, r) === 'buildable') buildable++;
+    check(buildable === SPEC[id].buildable, `${id}: ${buildable} buildable tiles (expected ${SPEC[id].buildable})`);
+    check(routeLength(level) === SPEC[id].route, `${id}: route is ${SPEC[id].route} tiles`);
+  }
+
+  // 2. A gun places through canPlace on a real run state, and at least one tile sits next to the route.
+  for (const id of Object.keys(SPEC)) {
+    const s = stateOnLevel(id);
+    s.economy.salvage = 10000;
+    let placed = false;
+    outer:
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      if (canPlace(s, 'gun', c, r)) { placed = true; break outer; }
+    }
+    check(placed, `${id}: a gun places through canPlace on a real run state`);
+
+    const level = levelById(id);
+    const route = new Set(pathTiles(buildField(createGrid(level), new Set(), level.exits[0]), level.starts[0])
+      .map((t) => t.row * COLS + t.col));
+    let nextToRoute = 0;
+    const grid = createGrid(level);
+    for (const idx of route) {
+      const c = idx % COLS;
+      const r = Math.floor(idx / COLS);
+      for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nc = c + dc;
+        const nr = r + dr;
+        if (nc < 0 || nr < 0 || nc >= COLS || nr >= ROWS) continue;
+        if (route.has(nr * COLS + nc)) continue;
+        if (tileAt(grid, nc, nr) === 'buildable') nextToRoute++;
+      }
+    }
+    check(nextToRoute > 0, `${id}: at least one buildable tile sits next to the route`);
+  }
 }
 
 // --- 48. Help content: placeholders (docs/HELP-REVIEW.md §2) --------------------------------------

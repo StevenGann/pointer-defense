@@ -752,6 +752,13 @@ export const uk: Catalogue = {
   'level.hourglass.name': 'Пісочний годинник',
   'level.trident.name': 'Тризуб',
   'level.switchyard.name': 'Сортувальна станція',
+  'level.comb.name': 'The Comb',
+  'level.shelves.name': 'The Shelves',
+  'level.pinwheel.name': 'The Pinwheel',
+  'level.twinHalls.name': 'Twin Halls',
+  'level.ziggurat.name': 'The Ziggurat',
+  'level.gauntlet.name': 'The Gauntlet',
+  'level.quarry.name': 'The Quarry',
 
   'level.problem.tooManyShutters': 'забагато стулок',
   'level.problem.shutterOutOfBounds': 'стулка поза межами',

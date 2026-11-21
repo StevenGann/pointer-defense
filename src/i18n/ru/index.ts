@@ -462,6 +462,13 @@ export const ru = {
   'level.hourglass.name': 'Песочные часы',
   'level.trident.name': 'Трезубец',
   'level.switchyard.name': 'Сортировочная станция',
+  'level.comb.name': 'The Comb',
+  'level.shelves.name': 'The Shelves',
+  'level.pinwheel.name': 'The Pinwheel',
+  'level.twinHalls.name': 'Twin Halls',
+  'level.ziggurat.name': 'The Ziggurat',
+  'level.gauntlet.name': 'The Gauntlet',
+  'level.quarry.name': 'The Quarry',
 
   'level.problem.tooManyShutters': 'слишком много затворов',
   'level.problem.shutterOutOfBounds': 'затвор вне границ',

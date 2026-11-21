@@ -742,6 +742,13 @@ export const es: Catalogue = {
   'level.hourglass.name': 'El Reloj de Arena',
   'level.trident.name': 'El Tridente',
   'level.switchyard.name': 'La Playa de Maniobras',
+  'level.comb.name': 'The Comb',
+  'level.shelves.name': 'The Shelves',
+  'level.pinwheel.name': 'The Pinwheel',
+  'level.twinHalls.name': 'Twin Halls',
+  'level.ziggurat.name': 'The Ziggurat',
+  'level.gauntlet.name': 'The Gauntlet',
+  'level.quarry.name': 'The Quarry',
 
   'level.problem.tooManyShutters': 'demasiadas compuertas',
   'level.problem.shutterOutOfBounds': 'una compuerta está fuera de los límites',

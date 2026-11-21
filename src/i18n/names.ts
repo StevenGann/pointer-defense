@@ -37,6 +37,13 @@ const LEVEL_NAME_KEY: Readonly<Record<string, string>> = {
   hourglass: 'level.hourglass.name',
   trident: 'level.trident.name',
   switchyard: 'level.switchyard.name',
+  comb: 'level.comb.name',
+  shelves: 'level.shelves.name',
+  pinwheel: 'level.pinwheel.name',
+  'twin-halls': 'level.twinHalls.name',
+  ziggurat: 'level.ziggurat.name',
+  gauntlet: 'level.gauntlet.name',
+  quarry: 'level.quarry.name',
 };
 
 /** The display name for a shipped map id (docs/MAP-SELECT.md). */
