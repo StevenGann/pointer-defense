@@ -271,9 +271,9 @@ function clickSlackBonus(s: RunState): number {
   return hasUpgrade(s, 'wide-reticle') ? WIDE_RETICLE_SLACK : 0;
 }
 
-/** Whether a tower kind is unlocked for this run (Early Access unlocks everything at wave 1). */
+/** Whether a tower kind is unlocked for this run (a licence unlocks it at wave 1). */
 export function towerUnlocked(s: RunState, kind: TowerKind): boolean {
-  return s.treeEffects.unlockAllTowers || isTowerUnlocked(kind, s.wave);
+  return s.treeEffects.unlockedTowers.includes(kind) || isTowerUnlocked(kind, s.wave);
 }
 
 /** One-shot things that happened during a tick; the view drains `events` to spawn effects. */
