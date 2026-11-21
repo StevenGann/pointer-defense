@@ -13,9 +13,8 @@ not count, and the one after it is taken instead.
 
 ## Doing
 
-- **Per-locale width assertions** — in flight on `feat/i18n-widths`.
-- **Tower licences (prestige unlocks)** — in flight on `feat/prestige-licences`. Includes deleting
-  Early Access and migrating the profiles that own it to all eight licences.
+- **Per-locale width assertions** — follow-up in flight on `feat/i18n-widths`: the fit checks landed,
+  but three strings were shortened by changing their meaning, and are being made to fit instead.
 
 ## Next
 
@@ -40,6 +39,8 @@ not count, and the one after it is taken instead.
 
 ## Shipped recently
 
+- **Tower licences** (`241fd58`) — eight RP-priced prestige unlocks; Early Access removed and its
+  owners migrated to all eight licences.
 - **Four more maps** (`58a0604`) — Moat, Hourglass, Trident, Switchyard, appended to `LEVELS`; ten
   maps, four rows, and the gallery's scrollbar reaches the last one.
 - **Scrolling map gallery** (`4cd002e`) — three fixed columns, vertical scroll with a proportional
