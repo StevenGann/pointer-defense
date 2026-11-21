@@ -155,7 +155,7 @@ import {
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
 import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName, TOOLTIP_BLUE } from '../src/view/tooltipText.ts';
-import { drawTower, clearTowerSprites, BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre, synergyEdgeEndpoints, synergyEdgeStyle, recoilOffset, RECOIL_DURATION_TICKS, RECOIL_PEAK_CELLS } from '../src/view/board.ts';
+import { drawTower, clearTowerSprites, BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRACER_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre, synergyEdgeEndpoints, synergyEdgeStyle, recoilOffset, RECOIL_DURATION_TICKS, RECOIL_PEAK_CELLS } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, computeWindowChromeGeom, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
 import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, statusPerfText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect, modalRect, modalMenuAt, modalMessageTop } from '../src/view/hud.ts';
@@ -6738,31 +6738,41 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   resetArt();
 }
 
-// --- 37i.1 No tracer for a Cannon shot (docs/CANNON-NO-TRACER.md) --------------------------------
+// --- 37i.1 Line-tower tracer colours (docs/LINE-TRACERS.md) -------------------------------------
 {
   const fx = new EffectsView();
 
-  // A Cannon shot keeps its muzzle flash and drops the tracer: the shell is the shot.
-  fx.addShot(createTower(1, 'cannon', 3, 6), 8, 6);
-  check(fx.muzzles.length === 1, 'effects: a Cannon shot adds a muzzle flash');
-  check(fx.tracers.length === 0, 'effects: a Cannon shot adds no tracer');
+  // TRACER_COLOR maps only the line towers: the Gun's yellow and the Laser's red.
+  check(Object.keys(TRACER_COLOR).sort().join(',') === 'gun,laser',
+    'effects: TRACER_COLOR has entries for gun and laser only');
+  check(TRACER_COLOR.gun === 0xffd400, 'effects: the Gun tracer is yellow');
+  check(TRACER_COLOR.laser === 0xff3300, 'effects: the Laser tracer is red');
 
-  // Every other tower keeps both.
-  fx.addShot(createTower(2, 'gun', 3, 6), 8, 6);
-  check(fx.muzzles.length === 2, 'effects: a Gun shot adds a muzzle flash');
-  check(fx.tracers.length === 1, 'effects: a Gun shot adds a tracer');
+  // A Gun shot adds one tracer; a Laser shot adds one.
+  fx.addShot(createTower(1, 'gun', 3, 6), 8, 6);
+  check(fx.muzzles.length === 1 && fx.tracers.length === 1, 'effects: a Gun shot adds one tracer');
+  fx.addShot(createTower(2, 'laser', 3, 6), 8, 6);
+  check(fx.muzzles.length === 2 && fx.tracers.length === 2, 'effects: a Laser shot adds one tracer');
+
+  // Taser, Frost, Cannon and Flak shots add no tracer but keep their muzzle flash.
+  fx.addShot(createTower(3, 'taser', 3, 6), 8, 6);
+  fx.addShot(createTower(4, 'frost', 3, 6), 8, 6);
+  fx.addShot(createTower(5, 'cannon', 3, 6), 8, 6);
+  fx.addShot(createTower(6, 'aa', 3, 6), 8, 6); // Flak (and Missile) launch a projectile
+  check(fx.muzzles.length === 6, 'effects: Taser, Frost, Cannon and Flak each add a muzzle flash');
+  check(fx.tracers.length === 2, 'effects: Taser, Frost, Cannon and Flak add no tracer');
 
   // A Beacon fires nothing: no muzzle and no tracer.
-  fx.addShot(createTower(3, 'beacon', 3, 6), 8, 6);
-  check(fx.muzzles.length === 2, 'effects: a Beacon shot adds no muzzle');
-  check(fx.tracers.length === 1, 'effects: a Beacon shot adds no tracer');
+  fx.addShot(createTower(7, 'beacon', 3, 6), 8, 6);
+  check(fx.muzzles.length === 6, 'effects: a Beacon shot adds no muzzle');
+  check(fx.tracers.length === 2, 'effects: a Beacon shot adds no tracer');
 
   // The tracer pool still compacts to empty once every tracer's life has elapsed.
   const s = createRunState();
   s.tick = 10;
   const layout = computeLayout(1280, 800);
   fx.draw(s, layout);
-  check(fx.tracers.length === 1, 'effects: a live tracer survives its first draw');
+  check(fx.tracers.length === 2, 'effects: live tracers survive their first draw');
   s.tick = 10 + 6;
   fx.draw(s, layout);
   check(fx.tracers.length === 0, 'effects: the tracer pool compacts to empty');

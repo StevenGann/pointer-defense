@@ -3,7 +3,7 @@ import { PAL, worldToPixel, type Layout } from './chrome.ts';
 import { ENEMY_STATS, isBossVariant, type EnemyKind } from '../core/enemies.ts';
 import type { Branch, Tower, TowerKind } from '../core/towers.ts';
 import type { RunState } from '../core/state.ts';
-import { ENEMY_COLOR, SHIELD_COLOR, TOWER_COLOR } from './board.ts';
+import { ENEMY_COLOR, SHIELD_COLOR, TOWER_COLOR, TRACER_COLOR } from './board.ts';
 import { animationOf, artNameForBranch, effectFrameTexture, getArtFrames } from './art.ts';
 import { secondsToWholeTicks } from './anim.ts';
 
@@ -192,15 +192,18 @@ export class EffectsView {
       color: TOWER_COLOR[tower.kind],
       born: 0,
     });
-    // A Cannon fires a shell that leads its target, so the tracer (a line to where the enemy was at
-    // fire time) is redundant and wrong. It keeps the muzzle flash and sound; the shell is the shot.
-    if (tower.kind !== 'cannon') {
+    // A tracer is the shot only for a line tower (docs/LINE-TRACERS.md): the Gun's yellow line and
+    // the Laser's red beam. Towers that launch a projectile — Cannon, Flak, Missile — or carry their
+    // own effect — the Taser's arc, the Frost's pulse — keep the muzzle flash and sound but draw no
+    // line.
+    const tracerColor = TRACER_COLOR[tower.kind];
+    if (tracerColor !== undefined) {
       pushCap(this.tracers, CAP_TRACER, {
         x0: ox,
         y0: oy,
         x1: x,
         y1: y,
-        color: TOWER_COLOR[tower.kind],
+        color: tracerColor,
         born: 0,
       });
     }

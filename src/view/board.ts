@@ -92,6 +92,16 @@ export const TOWER_COLOR: Record<TowerKind, number> = {
 };
 
 /**
+ * The colour of a hitscan tracer, only for towers whose shot *is* the line (docs/LINE-TRACERS.md).
+ * The Gun's yellow and the Laser's red; every other kind is absent, so it draws no tracer.
+ * `TOWER_COLOR` stays the identity colour for muzzles, branch marks and procedural bodies.
+ */
+export const TRACER_COLOR: Partial<Record<TowerKind, number>> = {
+  gun: 0xffd400,
+  laser: 0xff3300,
+};
+
+/**
  * Identity of the static tile layer: the authored level, the grid size and the board geometry.
  * The layer is redrawn only when this key changes, so a map cycle rebuilds the walls while a
  * resize-free frame leaves them alone.
