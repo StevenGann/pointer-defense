@@ -250,6 +250,86 @@ const SWITCHYARD_TOGGLES: readonly LevelToggle[] = [
   { col: 13, row: 2, periodTicks: 540, openTicks: 240, phaseTicks: 180 },
 ];
 
+/** The Comb: four teeth hang from the top edge and five rise from the bottom, interleaved. */
+const COMB_WALLS: readonly (readonly [number, number])[] = [
+  ...vertical(4, 0, 7),
+  ...vertical(8, 0, 7),
+  ...vertical(12, 0, 7),
+  ...vertical(16, 0, 7),
+  ...vertical(2, 4, 11),
+  ...vertical(6, 4, 11),
+  ...vertical(10, 4, 11),
+  ...vertical(14, 4, 11),
+  ...vertical(18, 4, 11),
+];
+
+/** The Shelves: five long shelves, alternating which edge they hang from. */
+const SHELVES_WALLS: readonly (readonly [number, number])[] = [
+  ...horizontal(2, 0, 16),
+  ...horizontal(4, 3, 19),
+  ...horizontal(6, 0, 16),
+  ...horizontal(8, 3, 19),
+  ...horizontal(10, 0, 16),
+];
+
+/** The Pinwheel: four L-blocks, each rotated a quarter turn around the centre. */
+const PINWHEEL_WALLS: readonly (readonly [number, number])[] = [
+  ...horizontal(3, 2, 8),
+  ...vertical(8, 0, 3),
+  ...vertical(11, 2, 8),
+  ...horizontal(2, 11, 17),
+  ...horizontal(8, 11, 17),
+  ...vertical(11, 8, 11),
+  ...vertical(8, 8, 11),
+  ...horizontal(8, 2, 8),
+];
+
+/** Twin Halls: two halls joined by two necks, with a 2x2 block in each corner of each hall. */
+const TWIN_HALLS_WALLS: readonly (readonly [number, number])[] = [
+  ...vertical(10, 0, 4),
+  ...vertical(10, 7, 11),
+  ...box(3, 5, 2, 3),
+  ...box(3, 5, 7, 8),
+  ...box(14, 16, 2, 3),
+  ...box(14, 16, 7, 8),
+];
+
+/** The Ziggurat: three stepped frames, each open on a different side. */
+const ZIGGURAT_WALLS: readonly (readonly [number, number])[] = [
+  ...horizontal(1, 1, 18),
+  ...vertical(1, 2, 10),
+  ...vertical(18, 2, 9),
+  ...horizontal(3, 4, 15),
+  ...vertical(4, 4, 8),
+  ...vertical(15, 4, 7),
+  ...horizontal(5, 7, 12),
+  ...vertical(7, 6, 7),
+  ...vertical(12, 6, 7),
+];
+
+/** The Gauntlet: eleven 2x2 pillars on a stagger, forcing a weaving corridor. */
+const GAUNTLET_WALLS: readonly (readonly [number, number])[] = [
+  ...box(3, 4, 2, 3),
+  ...box(7, 8, 2, 3),
+  ...box(11, 12, 2, 3),
+  ...box(15, 16, 2, 3),
+  ...box(5, 6, 5, 6),
+  ...box(9, 10, 5, 6),
+  ...box(13, 14, 5, 6),
+  ...box(3, 4, 8, 9),
+  ...box(7, 8, 8, 9),
+  ...box(11, 12, 8, 9),
+  ...box(15, 16, 8, 9),
+];
+
+/** The Quarry: four big blocks with a cross of open lanes between them. */
+const QUARRY_WALLS: readonly (readonly [number, number])[] = [
+  ...box(2, 8, 2, 5),
+  ...box(11, 17, 2, 5),
+  ...box(2, 8, 7, 10),
+  ...box(11, 17, 7, 10),
+];
+
 export const LEVELS: readonly Level[] = [
   {
     id: 'corridor',
@@ -325,6 +405,55 @@ export const LEVELS: readonly Level[] = [
     starts: [{ col: 0, row: 5 }],
     exits: [{ col: 19, row: 5 }],
     toggles: SWITCHYARD_TOGGLES,
+  },
+  {
+    id: 'comb',
+    name: t('level.comb.name'),
+    walls: COMB_WALLS,
+    starts: [{ col: 0, row: 0 }],
+    exits: [{ col: COLS - 1, row: ROWS - 1 }],
+  },
+  {
+    id: 'shelves',
+    name: t('level.shelves.name'),
+    walls: SHELVES_WALLS,
+    starts: [{ col: 17, row: 0 }],
+    exits: [{ col: COLS - 1, row: ROWS - 1 }],
+  },
+  {
+    id: 'pinwheel',
+    name: t('level.pinwheel.name'),
+    walls: PINWHEEL_WALLS,
+    starts: [{ col: 0, row: 5 }],
+    exits: [{ col: COLS - 1, row: 6 }],
+  },
+  {
+    id: 'twin-halls',
+    name: t('level.twinHalls.name'),
+    walls: TWIN_HALLS_WALLS,
+    starts: [{ col: 0, row: 1 }],
+    exits: [{ col: COLS - 1, row: 10 }],
+  },
+  {
+    id: 'ziggurat',
+    name: t('level.ziggurat.name'),
+    walls: ZIGGURAT_WALLS,
+    starts: [{ col: 9, row: 0 }],
+    exits: [{ col: 10, row: ROWS - 1 }],
+  },
+  {
+    id: 'gauntlet',
+    name: t('level.gauntlet.name'),
+    walls: GAUNTLET_WALLS,
+    starts: [{ col: 0, row: 0 }],
+    exits: [{ col: COLS - 1, row: ROWS - 1 }],
+  },
+  {
+    id: 'quarry',
+    name: t('level.quarry.name'),
+    walls: QUARRY_WALLS,
+    starts: [{ col: 0, row: 0 }],
+    exits: [{ col: COLS - 1, row: ROWS - 1 }],
   },
 ];
 

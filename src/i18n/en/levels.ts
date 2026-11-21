@@ -12,6 +12,13 @@ export const levels = {
   'level.hourglass.name': 'The Hourglass',
   'level.trident.name': 'The Trident',
   'level.switchyard.name': 'The Switchyard',
+  'level.comb.name': 'The Comb',
+  'level.shelves.name': 'The Shelves',
+  'level.pinwheel.name': 'The Pinwheel',
+  'level.twinHalls.name': 'Twin Halls',
+  'level.ziggurat.name': 'The Ziggurat',
+  'level.gauntlet.name': 'The Gauntlet',
+  'level.quarry.name': 'The Quarry',
 
   'level.problem.tooManyShutters': 'too many shutters',
   'level.problem.shutterOutOfBounds': 'a shutter is out of bounds',
