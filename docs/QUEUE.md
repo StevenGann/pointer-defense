@@ -13,23 +13,11 @@ not count, and the one after it is taken instead.
 
 ## Doing
 
-**Help, phase 1 — content.** Fixing the thirteen written-out numbers and adding the six missing
-topics (`docs/HELP-REVIEW.md` §1-3). Running on `feat/help-content`.
+Nothing in flight.
 
 ## Next
 
-### 1. Help, phase 2 — the CHM chrome
-
-- **Why:** Print and Options are drawn and do nothing, Locate is missing, and the tree has no
-  keyboard.
-- **Done when:** `docs/HELP-REVIEW.md` §4 is closed and its §5 checks pass.
-
-### 2. Help, phase 3 — translations
-
-- **Why:** every changed and new key, in six locales, after the chrome stops adding keys.
-- **Done when:** `i18n:check` passes with no English left in a non-English catalogue, still `draft`.
-
-### 3. Native review of the six machine-draft catalogues
+### 1. Native review of the six machine-draft catalogues
 
 - **Why:** every non-English catalogue is `draft: true`. Machine translation is worst exactly where
   this UI lives — buttons, jargon, and short labels with no context.
@@ -50,6 +38,11 @@ merged branches deleted, leaving `main` plus one spare detached checkout.
 
 ## Shipped recently
 
+- **Help, all three phases** — content audit with every number bound to its constant and six new
+  topics (`docs/HELP-REVIEW.md`); the CHM chrome (print, Options, Locate, tree keys, context menu,
+  topic count, all-words search, tooltips); all six catalogues translated.
+- **Menu submenus** (`60d8616`) — Spawn is a real nested flyout with hover, flip, clamp, keyboard and
+  RTL mirroring; `secondColumn` is gone.
 - **Synergies batch 2** (`9790aa3`) — Chill, Interlock, Shatter and Buttress, with marks drawn in
   `Graphics` rather than new art.
 - **Branch and worktree sweep** — 65 worktrees down to 2, 142 branches down to 1.
