@@ -458,6 +458,10 @@ export const ru = {
   'level.turnstile.name': 'Турникет',
   'level.fork.name': 'Развилка',
   'level.ladder.name': 'Лестница',
+  'level.moat.name': 'Ров',
+  'level.hourglass.name': 'Песочные часы',
+  'level.trident.name': 'Трезубец',
+  'level.switchyard.name': 'Сортировочная станция',
 
   'level.problem.tooManyShutters': 'слишком много затворов',
   'level.problem.shutterOutOfBounds': 'затвор вне границ',

@@ -66,6 +66,12 @@ function horizontal(row: number, c0: number, c1: number): readonly (readonly [nu
   return out;
 }
 
+function box(c0: number, c1: number, r0: number, r1: number): readonly (readonly [number, number])[] {
+  const out: [number, number][] = [];
+  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) out.push([c, r]);
+  return out;
+}
+
 /** Four baffles force four switchbacks; the route winds 48 tiles through the gaps. */
 const CORRIDOR_WALLS: readonly (readonly [number, number])[] = [
   ...vertical(4, 0, 8),
@@ -171,6 +177,79 @@ const LADDER_WALLS: readonly (readonly [number, number])[] = [
 const LADDER_LEFT: Route = [{ col: 0, row: 2 }, ...column(0, 3, 9), ...rowRun(9, 1, 17)];
 const LADDER_RIGHT: Route = [{ col: 0, row: 2 }, ...rowRun(2, 1, 17), ...column(17, 3, 9)];
 
+/**
+ * The Moat: a one-tile-wide ring road around a sealed nine-tile courtyard. Enemies circle the ring
+ * from the spawn corner to the exit corner, never entering the courtyard, while the player's towers
+ * sit inside it and fire over the moat wall at the arc nearest them. A tower placed on the ring
+ * pushes the flow the long way round. Reads as enclosure and coverage.
+ */
+const MOAT_WALLS: readonly (readonly [number, number])[] = [
+  ...horizontal(0, 0, 19),
+  ...horizontal(11, 0, 19),
+  ...vertical(0, 0, 11),
+  ...vertical(19, 0, 11),
+  ...horizontal(2, 2, 17),
+  ...horizontal(9, 2, 17),
+  ...vertical(2, 3, 8),
+  ...vertical(17, 3, 8),
+];
+
+/**
+ * The Hourglass: one full-height wall with a single gate between two wide rooms, and four 2x2 blocks
+ * that break up the corners so the rooms are not empty rectangles. Everything the player builds aims
+ * at the gate or at the long approach to it. Reads as a chokepoint.
+ */
+const HOURGLASS_WALLS: readonly (readonly [number, number])[] = [
+  ...vertical(9, 0, 4),
+  ...vertical(9, 6, 11),
+  ...box(3, 4, 2, 3),
+  ...box(15, 16, 2, 3),
+  ...box(3, 4, 8, 9),
+  ...box(15, 16, 8, 9),
+];
+
+/**
+ * The Trident: three authored lanes from one spawn to one exit — a short middle lane straight across,
+ * a long top lane and a longer bottom lane. The four 2x2 blocks sit between the lanes, where one tower
+ * can reach two of them at once. Reads as routing.
+ */
+const TRIDENT_WALLS: readonly (readonly [number, number])[] = [
+  ...box(4, 5, 3, 4),
+  ...box(13, 14, 3, 4),
+  ...box(4, 5, 7, 8),
+  ...box(13, 14, 7, 8),
+];
+
+const TRIDENT_TOP: Route = [
+  { col: 0, row: 5 }, ...column(0, 1, 4), ...rowRun(1, 1, 19), ...column(19, 2, 4),
+];
+const TRIDENT_MID: Route = rowRun(5, 0, 19);
+const TRIDENT_BOTTOM: Route = [
+  { col: 0, row: 5 }, ...column(0, 6, 10), ...rowRun(10, 1, 19), ...column(19, 6, 9),
+];
+
+/**
+ * The Switchyard: two full-height walls, each with a permanent gap and one shutter on a different
+ * period, so the route keeps changing shape — the long way round by default, a shortcut while a
+ * shutter is open. Neither shutter can ever seal the map, because each wall keeps its permanent gap.
+ * Reads as timing.
+ */
+const SWITCHYARD_WALLS: readonly (readonly [number, number])[] = [
+  ...vertical(6, 0, 0),
+  ...vertical(6, 2, 8),
+  ...vertical(6, 10, 11),
+  ...vertical(13, 0, 1),
+  ...vertical(13, 3, 9),
+  ...vertical(13, 11, 11),
+  ...box(2, 3, 7, 8),
+  ...box(16, 17, 3, 4),
+];
+
+const SWITCHYARD_TOGGLES: readonly LevelToggle[] = [
+  { col: 6, row: 9, periodTicks: 720, openTicks: 300, phaseTicks: 0 },
+  { col: 13, row: 2, periodTicks: 540, openTicks: 240, phaseTicks: 180 },
+];
+
 export const LEVELS: readonly Level[] = [
   {
     id: 'corridor',
@@ -216,6 +295,36 @@ export const LEVELS: readonly Level[] = [
     starts: [{ col: 0, row: 2 }],
     exits: [{ col: 17, row: 9 }],
     routes: [LADDER_LEFT, LADDER_RIGHT],
+  },
+  {
+    id: 'moat',
+    name: t('level.moat.name'),
+    walls: MOAT_WALLS,
+    starts: [{ col: 1, row: 1 }],
+    exits: [{ col: 18, row: 10 }],
+  },
+  {
+    id: 'hourglass',
+    name: t('level.hourglass.name'),
+    walls: HOURGLASS_WALLS,
+    starts: [{ col: 0, row: 2 }],
+    exits: [{ col: 19, row: 9 }],
+  },
+  {
+    id: 'trident',
+    name: t('level.trident.name'),
+    walls: TRIDENT_WALLS,
+    starts: [{ col: 0, row: 5 }],
+    exits: [{ col: 19, row: 5 }],
+    routes: [TRIDENT_TOP, TRIDENT_MID, TRIDENT_BOTTOM],
+  },
+  {
+    id: 'switchyard',
+    name: t('level.switchyard.name'),
+    walls: SWITCHYARD_WALLS,
+    starts: [{ col: 0, row: 5 }],
+    exits: [{ col: 19, row: 5 }],
+    toggles: SWITCHYARD_TOGGLES,
   },
 ];
 

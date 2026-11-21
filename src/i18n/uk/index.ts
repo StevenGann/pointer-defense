@@ -734,6 +734,10 @@ export const uk: Catalogue = {
   'level.turnstile.name': 'Турнікет',
   'level.fork.name': 'Розвилка',
   'level.ladder.name': 'Драбина',
+  'level.moat.name': 'Рів',
+  'level.hourglass.name': 'Пісочний годинник',
+  'level.trident.name': 'Тризуб',
+  'level.switchyard.name': 'Сортувальна станція',
 
   'level.problem.tooManyShutters': 'забагато стулок',
   'level.problem.shutterOutOfBounds': 'стулка поза межами',

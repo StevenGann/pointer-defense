@@ -724,6 +724,10 @@ export const es: Catalogue = {
   'level.turnstile.name': 'Torniquete',
   'level.fork.name': 'La Bifurcación',
   'level.ladder.name': 'La Escalera',
+  'level.moat.name': 'El Foso',
+  'level.hourglass.name': 'El Reloj de Arena',
+  'level.trident.name': 'El Tridente',
+  'level.switchyard.name': 'La Playa de Maniobras',
 
   'level.problem.tooManyShutters': 'demasiadas compuertas',
   'level.problem.shutterOutOfBounds': 'una compuerta está fuera de los límites',
