@@ -9,22 +9,11 @@ Work is taken from the top. An item that needs a decision goes back to Sydney ra
 
 ## Doing
 
-Nothing in flight — the two builds below merged; the map gallery is next to dispatch.
+Nothing in flight.
 
 ## Next
 
-### 1. Map selection gallery
-
-- **Spec:** `docs/MAP-SELECT.md`.
-- **What ships:** Play opens a six-card gallery instead of starting `LEVELS[0]`; thumbnails are drawn
-  at runtime from each level's own walls and route (no art files, cached per level id); card names use
-  the existing localized `level.*.name` keys; focus order follows the visual order in RTL; the last map
-  is remembered in `pd.map.v1`.
-- **Done when:** every map's thumbnail is distinct and stable, six cards fit the client area in all
-  seven locales, `Enter` starts the focused map, and `Esc` returns to the menu.
-- **Why:** five of six authored maps are currently unreachable without the editor.
-
-### 2. Per-locale width assertions across the chrome
+### 1. Per-locale width assertions across the chrome
 
 - **Why:** the menu bar got per-locale fit tests when the CJK width bug was fixed; the HUD panels,
   dialogs, buttons and status bar still only assert that English fits. Russian runs ~130% of English
@@ -32,7 +21,7 @@ Nothing in flight — the two builds below merged; the map gallery is next to di
 - **Done when:** a smoke group measures every fixed-width label in the HUD, the dialogs and the
   status bar under all seven locales and fails on overflow or collision.
 
-### 3. Native review of the six machine-draft catalogues
+### 2. Native review of the six machine-draft catalogues
 
 - **Why:** every non-English catalogue is `draft: true`. Machine translation is worst exactly where
   this UI lives — buttons, jargon, and short labels with no context.
@@ -43,7 +32,7 @@ Nothing in flight — the two builds below merged; the map gallery is next to di
 
 ## Housekeeping
 
-### 4. Branch and worktree sweep
+### 3. Branch and worktree sweep
 
 - **Why:** the repo carries 100+ merged branches and roughly 50 worktrees; only `pd-upgate` holds
   `main`. It works, it is just noise when looking for something.
@@ -53,6 +42,13 @@ Nothing in flight — the two builds below merged; the map gallery is next to di
 
 ## Shipped recently
 
+- **Map selection gallery** (`30390ee`) — Play opens a six-card gallery; thumbnails are drawn at
+  runtime from each level's walls and route, cached per level id; `pd.map.v1` remembers the last map.
+- **Spotter synergy** (`ecabd19`) — a Marksman (Gun branch A) lends its range, capped at 5.5 tiles, to
+  orthogonally adjacent AA and Cannon towers; max never sum, Minesweeper excluded, a downed Marksman
+  spots nothing. Spec is `docs/SYNERGIES.md` §9.
+- **Per-row synergy art** (`bf9a4c1`) — the spotter row draws its own chevroned link, so the two rows
+  differ by shape as well as colour.
 - **Tower Synergies** (`4e1703b`) — adjacent AAs hold their fire for a leader and land one volley;
   amber dashed edges below the tower bases, View → Synergy lines, a Help page, all seven locales.
 - **Ad tips, ads localized** (`a891c44`) — the ad dialog carries a verified gameplay tip under the
