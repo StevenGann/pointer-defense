@@ -1,4 +1,4 @@
-import { FONT_SIZE, type Rect } from './chrome.ts';
+import { FONT_SIZE, LIST_SCROLL_W, type Rect } from './chrome.ts';
 import { isRtl } from './direction.ts';
 import { LEVELS, type Level } from '../core/levels.ts';
 
@@ -13,9 +13,16 @@ export const MAP_CARD_W = 196;
 export const MAP_CARD_H = 146;
 export const MAP_CARD_GAP = 12;
 export const MAP_GRID_COLS = 3;
-export const MAP_GRID_ROWS = 2;
 export const MAP_NAME_SIZE = FONT_SIZE.body;
 export const MAP_HISTORY_SIZE = FONT_SIZE.small;
+
+/** The gallery reserves the list view's scrollbar column, so the two scrollbars match (docs/MAP-SELECT.md). */
+export const MAP_SCROLL_W = LIST_SCROLL_W;
+
+/** The gap below the "Select a map" title (centred at client.y + 14) to the first card row. */
+const MAP_VIEW_TOP = 28;
+/** The gap above the client's bottom edge the last visible row keeps clear. */
+const MAP_VIEW_BOTTOM = 8;
 
 export interface MapCardRect {
   /** The LEVELS index this card represents. */
@@ -23,12 +30,105 @@ export interface MapCardRect {
   rect: Rect;
 }
 
-/** The six cards centred in the client area. In RTL the columns read right to left; nothing else moves. */
-export function computeMapCards(client: Rect, count: number): MapCardRect[] {
+export interface MapGrid {
+  /** Cards with the scroll offset already applied; `index` is the LEVELS index. */
+  cards: MapCardRect[];
+  /** The clipping rect the cards live in. */
+  view: Rect;
+  /** ceil(count / MAP_GRID_COLS). */
+  rows: number;
+  /** floor((view.h + gap) / (cardH + gap)) full rows that fit in the view. */
+  rowsVisible: number;
+  /** The clamped scroll position, in rows. */
+  firstRow: number;
+  /** max(0, rows - rowsVisible). */
+  scrollMax: number;
+  /** True when the grid overflows and needs a scrollbar. */
+  overflow: boolean;
+  /** The scrollbar track; zero-sized when not overflowing. */
+  scrollbar: Rect;
+  /** The raised thumb; zero-sized when not overflowing. */
+  thumb: Rect;
+}
+
+/** The scalar geometry shared by card placement, hit-testing and the scrollbar draw. */
+export interface MapGridMetrics {
+  view: Rect;
+  /** x of the leftmost visual card (RTL flips which array column lands here). */
+  ox: number;
+  /** y of the first (scrolled) row. */
+  oy: number;
+  /** cardW + gap, the horizontal column pitch. */
+  colStep: number;
+  /** cardH + gap, the vertical row pitch. */
+  rowStep: number;
+  rows: number;
+  rowsVisible: number;
+  firstRow: number;
+  scrollMax: number;
+  overflow: boolean;
+  scrollbar: Rect;
+  thumb: Rect;
+}
+
+export function clampMapScroll(firstRow: number, scrollMax: number): number {
+  return Math.max(0, Math.min(firstRow, scrollMax));
+}
+
+/**
+ * The row the grid must scroll to so `index`'s row is fully visible, leaving the scroll alone when it
+ * already is. Never exceeds `scrollMax`.
+ */
+export function scrollForFocus(index: number, scrollMax: number, currentFirstRow: number, rowsVisible: number): number {
+  const row = Math.floor(index / MAP_GRID_COLS);
+  const lo = Math.max(0, row - (rowsVisible - 1));
+  const hi = Math.min(scrollMax, row);
+  const next = currentFirstRow < lo ? lo : currentFirstRow > hi ? hi : currentFirstRow;
+  return clampMapScroll(next, scrollMax);
+}
+
+/** The scrollable grid's geometry, without the per-card array (so the view draws allocation-free). */
+export function mapGridMetrics(client: Rect, count: number, firstRowRaw: number): MapGridMetrics {
+  const view: Rect = {
+    x: client.x,
+    y: client.y + MAP_VIEW_TOP,
+    w: client.w,
+    h: client.h - MAP_VIEW_TOP - MAP_VIEW_BOTTOM,
+  };
+  const rowStep = MAP_CARD_H + MAP_CARD_GAP;
+  const colStep = MAP_CARD_W + MAP_CARD_GAP;
+  const rows = Math.ceil(count / MAP_GRID_COLS);
+  const rowsVisible = Math.floor((view.h + MAP_CARD_GAP) / rowStep);
+  const scrollMax = Math.max(0, rows - rowsVisible);
+  const firstRow = clampMapScroll(firstRowRaw, scrollMax);
+  const overflow = scrollMax > 0;
+
+  const scrollbar: Rect = overflow
+    ? { x: isRtl() ? view.x : view.x + view.w - MAP_SCROLL_W, y: view.y, w: MAP_SCROLL_W, h: view.h }
+    : { x: view.x, y: view.y, w: 0, h: 0 };
+
+  // The thumb is proportional to the visible fraction with the list scrollbar's 14 px minimum, and its
+  // travel is the track height minus the thumb height so row 0 and scrollMax reach the two ends.
+  const thumbH = overflow ? Math.max(14, Math.round(view.h * (rowsVisible / rows))) : 0;
+  const thumbY = overflow && scrollMax > 0 ? Math.round((view.h - thumbH) * (firstRow / scrollMax)) : 0;
+  const thumb: Rect = overflow
+    ? { x: scrollbar.x + 1, y: view.y + thumbY, w: MAP_SCROLL_W - 2, h: thumbH }
+    : { x: 0, y: 0, w: 0, h: 0 };
+
+  // The card column reserves the scrollbar's column on the opposite side, so a map keeps its grid
+  // position as the set grows and cards never slide under the scrollbar.
   const gridW = MAP_GRID_COLS * MAP_CARD_W + (MAP_GRID_COLS - 1) * MAP_CARD_GAP;
-  const gridH = MAP_GRID_ROWS * MAP_CARD_H + (MAP_GRID_ROWS - 1) * MAP_CARD_GAP;
-  const ox = client.x + Math.floor((client.w - gridW) / 2);
-  const oy = client.y + Math.floor((client.h - gridH) / 2);
+  const contentW = view.w - MAP_SCROLL_W;
+  const contentX = isRtl() ? view.x + MAP_SCROLL_W : view.x;
+  const ox = contentX + Math.floor((contentW - gridW) / 2);
+  const oy = view.y - firstRow * rowStep;
+
+  return { view, ox, oy, colStep, rowStep, rows, rowsVisible, firstRow, scrollMax, overflow, scrollbar, thumb };
+}
+
+/** The full grid model, with every card positioned against the scroll offset. */
+export function computeMapGrid(client: Rect, count: number, firstRow: number): MapGrid {
+  const m = mapGridMetrics(client, count, firstRow);
   const cards: MapCardRect[] = [];
   for (let i = 0; i < count; i++) {
     const col = i % MAP_GRID_COLS;
@@ -37,20 +137,39 @@ export function computeMapCards(client: Rect, count: number): MapCardRect[] {
     cards.push({
       index: i,
       rect: {
-        x: ox + visualCol * (MAP_CARD_W + MAP_CARD_GAP),
-        y: oy + row * (MAP_CARD_H + MAP_CARD_GAP),
+        x: m.ox + visualCol * m.colStep,
+        y: m.oy + row * m.rowStep,
         w: MAP_CARD_W,
         h: MAP_CARD_H,
       },
     });
   }
-  return cards;
+  return {
+    cards,
+    view: m.view,
+    rows: m.rows,
+    rowsVisible: m.rowsVisible,
+    firstRow: m.firstRow,
+    scrollMax: m.scrollMax,
+    overflow: m.overflow,
+    scrollbar: m.scrollbar,
+    thumb: m.thumb,
+  };
 }
 
-/** The LEVELS index under a point, or null when the point is not on a card. */
-export function mapCardAt(client: Rect, x: number, y: number, count: number): number | null {
-  for (const c of computeMapCards(client, count)) {
-    if (x >= c.rect.x && x < c.rect.x + c.rect.w && y >= c.rect.y && y < c.rect.y + c.rect.h) return c.index;
+/** The LEVELS index under a point, or null when the point is off the view or on a scrolled-out card. */
+export function mapCardAt(client: Rect, x: number, y: number, count: number, firstRow: number): number | null {
+  const grid = computeMapGrid(client, count, firstRow);
+  const v = grid.view;
+  if (x < v.x || x >= v.x + v.w || y < v.y || y >= v.y + v.h) return null;
+  for (const c of grid.cards) {
+    const r = c.rect;
+    // A partly visible card is hit-testable only over the slice still inside the view.
+    const x0 = Math.max(r.x, v.x);
+    const x1 = Math.min(r.x + r.w, v.x + v.w);
+    const y0 = Math.max(r.y, v.y);
+    const y1 = Math.min(r.y + r.h, v.y + v.h);
+    if (x >= x0 && x < x1 && y >= y0 && y < y1) return c.index;
   }
   return null;
 }
@@ -73,7 +192,7 @@ export function moveMapFocus(focus: number, dir: MapFocusDir, count: number): nu
   else dr = 1;
   const nc = col + dc;
   const nr = row + dr;
-  if (nc < 0 || nc >= MAP_GRID_COLS || nr < 0 || nr >= MAP_GRID_ROWS) return focus;
+  if (nc < 0 || nc >= MAP_GRID_COLS || nr < 0) return focus;
   const next = nr * MAP_GRID_COLS + nc;
   return next < count ? next : focus;
 }
@@ -93,7 +212,7 @@ export function mapFocusForId(id: string | null): number {
 export type MapGalleryAction = 'start' | 'back' | null;
 
 /** One gallery keypress: the new focus plus the action the wiring must perform. */
-export function mapGalleryKey(focus: number, key: string): { focus: number; action: MapGalleryAction } {
+export function mapGalleryKey(focus: number, key: string, pageRows = 2): { focus: number; action: MapGalleryAction } {
   switch (key) {
     case 'enter':
       return { focus, action: 'start' };
@@ -107,6 +226,10 @@ export function mapGalleryKey(focus: number, key: string): { focus: number; acti
       return { focus: moveMapFocus(focus, 'up', LEVELS.length), action: null };
     case 'arrowdown':
       return { focus: moveMapFocus(focus, 'down', LEVELS.length), action: null };
+    case 'pageup':
+      return { focus: Math.max(0, focus - pageRows * MAP_GRID_COLS), action: null };
+    case 'pagedown':
+      return { focus: Math.min(LEVELS.length - 1, focus + pageRows * MAP_GRID_COLS), action: null };
     case 'home':
       return { focus: 0, action: null };
     case 'end':

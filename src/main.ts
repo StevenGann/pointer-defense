@@ -108,7 +108,7 @@ import { HELP_PAGES, pageUnlocked } from './content/help.ts';
 import { EditorView, editorPaletteAt, editorToggleNudgeAt, editorToolbarAt, type EditorAction, type ToggleNudge } from './view/editor.ts';
 import { MapLibraryView, NameDialogView, computeMapLibrary, computeNameDialog, mapLibraryHitAt, nameDialogButtonAt, type MapLibraryHit, type MapLibraryMode } from './view/mapLibrary.ts';
 import { MapsScreenView } from './view/mapsScreen.ts';
-import { mapCardAt, mapFocusForId, mapGalleryKey, mapLevelAt } from './view/mapSelect.ts';
+import { clampMapScroll, computeMapGrid, mapCardAt, mapFocusForId, mapGalleryKey, mapLevelAt, scrollForFocus, MAP_GRID_COLS } from './view/mapSelect.ts';
 import { t, currentLocaleName } from './i18n/index.ts';
 import { switchLocale } from './i18n/activate.ts';
 import { LOCALES } from './i18n/locales.ts';
@@ -296,7 +296,11 @@ let screen: Screen =
   continueState !== null ? 'menu' : profile.lastChoice === 'editor' ? 'editor' : profile.lastChoice === 'load' ? 'menu' : 'maps';
 let runOrigin: 'play' | 'load' | 'editor' = 'play';
 // The map-selection gallery (docs/MAP-SELECT.md): focus is a LEVELS index, remembered by map id.
+// Scroll is view state only: it is never persisted and resets to the focused row whenever the gallery
+// opens. `mapsThumbDrag` is true while the pointer drags the scrollbar thumb.
 let mapsFocus: number = mapFocusForId(readRememberedMap());
+let mapsScroll = 0;
+let mapsThumbDrag = false;
 let mapsBest: ReadonlyMap<string, number> = bestByMapMap(profile.runs);
 let mapsHover: number | null = null;
 const editor: EditorModel = createEditor();
@@ -914,6 +918,7 @@ function openMaps(): void {
   saveProfile(profile);
   recordsSession.hide();
   mapsFocus = mapFocusForId(readRememberedMap());
+  mapsScroll = Math.floor(mapsFocus / MAP_GRID_COLS);
   mapsBest = bestByMapMap(profile.runs);
   mapsHover = null;
   screen = 'maps';
@@ -930,6 +935,15 @@ function startSelectedMap(): void {
 function closeMaps(): void {
   mapsHover = null;
   screen = 'menu';
+}
+
+/** Map a pointer y to a gallery row by inverting the thumb's proportional travel. */
+function mapsScrollForThumbY(y: number): number {
+  const grid = computeMapGrid(layout.client, LEVELS.length, mapsScroll);
+  const travel = grid.view.h - grid.thumb.h;
+  if (travel <= 0) return 0;
+  const frac = (y - grid.view.y - grid.thumb.h / 2) / travel;
+  return clampMapScroll(Math.round(frac * grid.scrollMax), grid.scrollMax);
 }
 
 /** The Daily button's label and disabled state, computed from the profile and the local date. */
@@ -1601,7 +1615,11 @@ app.canvas.addEventListener('pointermove', (e) => {
     return;
   }
   if (screen === 'maps') {
-    mapsHover = mapCardAt(layout.client, x, y, LEVELS.length);
+    if (mapsThumbDrag) {
+      mapsScroll = mapsScrollForThumbY(y);
+      return;
+    }
+    mapsHover = mapCardAt(layout.client, x, y, LEVELS.length, mapsScroll);
     return;
   }
 });
@@ -1610,7 +1628,20 @@ app.canvas.addEventListener('pointerdown', (e) => {
   const { x, y } = canvasPoint(e);
   if (screen === 'maps') {
     if (e.button !== 0) return;
-    const idx = mapCardAt(layout.client, x, y, LEVELS.length);
+    const grid = computeMapGrid(layout.client, LEVELS.length, mapsScroll);
+    if (grid.overflow) {
+      if (pointInRect(grid.thumb, x, y)) {
+        mapsThumbDrag = true;
+        return;
+      }
+      if (pointInRect(grid.scrollbar, x, y)) {
+        // A click on the track pages toward the click, keeping one row of overlap for context.
+        const dir = y < grid.thumb.y ? -1 : 1;
+        mapsScroll = clampMapScroll(mapsScroll + dir * (grid.rowsVisible - 1), grid.scrollMax);
+        return;
+      }
+    }
+    const idx = mapCardAt(layout.client, x, y, LEVELS.length, mapsScroll);
     if (idx !== null) {
       mapsFocus = idx;
       startSelectedMap();
@@ -1740,7 +1771,10 @@ app.canvas.addEventListener('pointerdown', (e) => {
 });
 
 app.canvas.addEventListener('pointerup', (e) => {
-  if (e.button === 0) painting = false;
+  if (e.button === 0) {
+    painting = false;
+    mapsThumbDrag = false;
+  }
 });
 
 app.canvas.addEventListener('wheel', (e) => {
@@ -1777,6 +1811,15 @@ app.canvas.addEventListener('wheel', (e) => {
     if (pointInRect(ul.listField, x, y)) {
       e.preventDefault();
       upgradesSession.scrollBy(Math.sign(e.deltaY) * 3, ul);
+      return;
+    }
+  }
+  // The gallery scrolls one row per notch while the pointer is inside its view.
+  if (screen === 'maps') {
+    const grid = computeMapGrid(layout.client, LEVELS.length, mapsScroll);
+    if (pointInRect(grid.view, x, y)) {
+      e.preventDefault();
+      mapsScroll = clampMapScroll(mapsScroll + Math.sign(e.deltaY), grid.scrollMax);
       return;
     }
   }
@@ -1830,10 +1873,12 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (screen === 'maps') {
-    const r = mapGalleryKey(mapsFocus, key);
+    const grid = computeMapGrid(layout.client, LEVELS.length, mapsScroll);
+    const r = mapGalleryKey(mapsFocus, key, grid.rowsVisible);
     mapsFocus = r.focus;
     if (r.action === 'start') startSelectedMap();
     else if (r.action === 'back') closeMaps();
+    else mapsScroll = scrollForFocus(mapsFocus, grid.scrollMax, mapsScroll, grid.rowsVisible);
     return;
   }
   if (screen === 'editor') {
@@ -2218,7 +2263,7 @@ app.ticker.add((ticker) => {
   } else if (screen === 'maps') {
     loadInput.style.display = 'none';
     nameInput.style.display = 'none';
-    mapsScreenView.draw(layout, mapsFocus, mapsHover, mapsBest);
+    mapsScreenView.draw(layout, mapsFocus, mapsHover, mapsBest, mapsScroll);
   }
 
   cursor.position.set(mouse.hover.x, mouse.hover.y);

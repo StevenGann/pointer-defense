@@ -127,7 +127,7 @@ import { appendRun, appendDailyRun, buildRunRecord, runTotals, bestByMap } from 
 import { buildRecordsRows, totalsLine, bestByMapLine, computeRecordsLayout, recordsHitAt, formatRecordDate, outcomeLabel } from '../src/view/records.ts';
 import { captureRun, restoreRun, loadRunSave, saveRun, clearRunSave, hasRunSave, RUN_SAVE_KEY } from '../src/core/runsave.ts';
 import { computeMenuScreen, menuButtonAt, computeMenuWindow, computeMenuAnim, marqueeMaskRect } from '../src/view/menuScreen.ts';
-import { computeMapCards, mapCardAt, moveMapFocus, mapGalleryKey, mapFocusForId, mapLevelAt, MAP_CARD_W, MAP_CARD_H, MAP_CARD_GAP, MAP_GRID_COLS, MAP_GRID_ROWS, MAP_NAME_SIZE, MAP_HISTORY_SIZE } from '../src/view/mapSelect.ts';
+import { computeMapGrid, clampMapScroll, scrollForFocus, mapCardAt, moveMapFocus, mapGalleryKey, mapFocusForId, mapLevelAt, MAP_CARD_W, MAP_CARD_H, MAP_CARD_GAP, MAP_GRID_COLS, MAP_SCROLL_W, MAP_NAME_SIZE, MAP_HISTORY_SIZE } from '../src/view/mapSelect.ts';
 import { thumbnailTexture, thumbCacheSize } from '../src/view/mapsScreen.ts';
 import { levelThumbnail } from '../src/core/thumb.ts';
 import { MAP_SAVE_KEY, rememberMap, readRememberedMap } from '../src/core/mapSave.ts';
@@ -12345,13 +12345,14 @@ function dailyState(date) {
     setLocale(mod[Object.keys(mod)[0]], code);
     clearTextWidthCache();
     setDirection(code === 'he' ? 'rtl' : 'ltr');
-    const cards = computeMapCards(l.client, LEVELS.length);
+    const cards = computeMapGrid(l.client, LEVELS.length, 0).cards;
+    const view = computeMapGrid(l.client, LEVELS.length, 0).view;
     check(cards.length === LEVELS.length, `gallery fit: ${code} lays out every card`);
     for (const card of cards) {
-      if (card.rect.x < l.client.x || card.rect.y < l.client.y ||
-        card.rect.x + card.rect.w > l.client.x + l.client.w || card.rect.y + card.rect.h > l.client.y + l.client.h) {
+      if (card.rect.x < view.x || card.rect.y < view.y ||
+        card.rect.x + card.rect.w > view.x + view.w || card.rect.y + card.rect.h > view.y + view.h) {
         allFit = false;
-        console.log(`  gallery fit miss: ${code} card ${card.index} leaves the client area`);
+        console.log(`  gallery fit miss: ${code} card ${card.index} leaves the view`);
       }
     }
     let overlaps = 0;
@@ -12397,6 +12398,89 @@ function dailyState(date) {
   check(readRememberedMap(store) === 'fork', 'pd.map.v1: a new choice overwrites the old one');
   check(mapFocusForId(readRememberedMap(store)) === LEVELS.findIndex((l) => l.id === 'fork'),
     'pd.map.v1: the remembered id selects its card on reopen');
+}
+
+{
+  // 8. Gallery scroll (feat/gallery-scroll): the grid is three columns, any number of rows.
+  const client = computeLayout(1280, 720).client;
+
+  // 8a. Six maps fit in the view: no overflow, no scrollbar, no card leaves the view.
+  const six = computeMapGrid(client, 6, 0);
+  check(six.rows === 2, 'scroll: six maps are two rows');
+  check(six.overflow === false, 'scroll: six maps do not overflow');
+  check(six.scrollbar.w === 0 && six.scrollbar.h === 0, 'scroll: no overflow means a zero-sized scrollbar');
+  check(six.thumb.w === 0 && six.thumb.h === 0, 'scroll: no overflow means a zero-sized thumb');
+  let sixInside = true;
+  for (const c of six.cards) {
+    if (c.rect.x < six.view.x || c.rect.y < six.view.y ||
+      c.rect.x + c.rect.w > six.view.x + six.view.w || c.rect.y + c.rect.h > six.view.y + six.view.h) sixInside = false;
+  }
+  check(sixInside, 'scroll: with six maps every card sits inside the view');
+
+  // 8b. Twenty-six maps overflow to nine rows, and the thumb is proportional with a 14 px minimum.
+  const g26 = computeMapGrid(client, 26, 0);
+  check(g26.rows === 9, 'scroll: twenty-six maps are nine rows');
+  check(g26.overflow === true, 'scroll: twenty-six maps overflow');
+  check(g26.scrollMax === g26.rows - g26.rowsVisible, 'scroll: scrollMax is rows - rowsVisible');
+  check(g26.rowsVisible > 0, 'scroll: at least one row is visible');
+  const wantThumbH = Math.max(14, Math.round(g26.view.h * (g26.rowsVisible / g26.rows)));
+  check(g26.thumb.h === wantThumbH && g26.thumb.h >= 14,
+    'scroll: the thumb height is proportional to the visible fraction and at least 14 px');
+  const end = computeMapGrid(client, 26, g26.scrollMax);
+  check(g26.thumb.y === g26.view.y, 'scroll: the thumb starts at the top of the track');
+  check(end.thumb.y + end.thumb.h === g26.view.y + g26.view.h, 'scroll: the thumb travels the full track across scrollMax');
+
+  // 8c. clampMapScroll clamps both ends; scrollForFocus keeps its card fully visible in range.
+  check(clampMapScroll(-1, g26.scrollMax) === 0, 'scroll: clampMapScroll clamps below zero');
+  check(clampMapScroll(999, g26.scrollMax) === g26.scrollMax, 'scroll: clampMapScroll clamps above scrollMax');
+  check(clampMapScroll(3, g26.scrollMax) === 3, 'scroll: clampMapScroll keeps an in-range row');
+  for (const index of [0, 4, 9, 13, 25]) {
+    const row = scrollForFocus(index, g26.scrollMax, g26.firstRow, g26.rowsVisible);
+    check(row >= 0 && row <= g26.scrollMax, `scroll: scrollForFocus(${index}) stays within scrollMax`);
+    const targetRow = Math.floor(index / MAP_GRID_COLS);
+    check(targetRow >= row && targetRow <= row + g26.rowsVisible - 1,
+      `scroll: scrollForFocus(${index}) keeps its card fully visible`);
+  }
+  check(scrollForFocus(0, g26.scrollMax, g26.scrollMax, g26.rowsVisible) === 0,
+    'scroll: focusing the first card scrolls back to the top');
+  check(scrollForFocus(25, g26.scrollMax, 0, g26.rowsVisible) === g26.scrollMax,
+    'scroll: focusing the last card scrolls to the bottom');
+
+  // 8d. mapCardAt honours the scroll: a visible card hits, a scrolled-out card does not.
+  const scrolled = computeMapGrid(client, 26, 3);
+  const vis = scrolled.cards[9];
+  check(mapCardAt(client, vis.rect.x + 10, vis.rect.y + 10, 26, 3) === 9, 'scroll: a visible card is hit');
+  const gone = scrolled.cards[0];
+  check(mapCardAt(client, gone.rect.x + 10, gone.rect.y + 10, 26, 3) === null,
+    'scroll: a card scrolled out of the view is not hit');
+  // Row 6 is only partly visible at firstRow 3: hit-testable over the slice inside the view only.
+  const partial = scrolled.cards[18];
+  check(mapCardAt(client, partial.rect.x + 10, scrolled.view.y + scrolled.view.h - 2, 26, 3) === 18,
+    'scroll: a partly visible card is hit over its visible slice');
+  check(mapCardAt(client, partial.rect.x + 10, partial.rect.y + partial.rect.h - 2, 26, 3) === null,
+    'scroll: a point inside a card but past the view bottom is not hit');
+
+  // 8e. The scrollbar hugs the right edge in LTR and the left edge in RTL; cards never overlap it.
+  const overlaps = (a, b) => Math.min(a.x + a.w, b.x + b.w) > Math.max(a.x, b.x) && Math.min(a.y + a.h, b.y + b.h) > Math.max(a.y, b.y);
+  setDirection('rtl');
+  const rtl = computeMapGrid(client, 26, 0);
+  check(rtl.scrollbar.x === client.x, 'scroll: RTL puts the scrollbar on the client left edge');
+  check(rtl.scrollbar.x + rtl.scrollbar.w === client.x + MAP_SCROLL_W, 'scroll: RTL scrollbar is one reserved column wide');
+  setDirection('ltr');
+  const ltr = computeMapGrid(client, 26, 0);
+  check(ltr.scrollbar.x + ltr.scrollbar.w === client.x + client.w, 'scroll: LTR puts the scrollbar on the client right edge');
+  let noOverlap = true;
+  for (const c of ltr.cards) if (overlaps(c.rect, ltr.scrollbar)) noOverlap = false;
+  for (const c of rtl.cards) if (overlaps(c.rect, rtl.scrollbar)) noOverlap = false;
+  check(noOverlap, 'scroll: no card overlaps the scrollbar in either direction');
+
+  // 8f. moveMapFocus spans arbitrary rows, and pageup/pagedown move a page of rows.
+  check(moveMapFocus(22, 'down', 26) === 25, 'scroll: down reaches the next row on a tall grid');
+  check(moveMapFocus(23, 'down', 26) === 23, 'scroll: down clamps past the last card');
+  check(mapGalleryKey(0, 'pagedown', g26.rowsVisible).focus === Math.min(LEVELS.length - 1, g26.rowsVisible * MAP_GRID_COLS),
+    'scroll: pagedown moves one page of rows');
+  check(mapGalleryKey(LEVELS.length - 1, 'pageup', g26.rowsVisible).focus === Math.max(0, LEVELS.length - 1 - g26.rowsVisible * MAP_GRID_COLS),
+    'scroll: pageup moves one page of rows back');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
