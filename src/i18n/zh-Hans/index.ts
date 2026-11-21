@@ -190,6 +190,7 @@ export const zh: Catalogue = {
 
   'tooltip.cursorName': '光标 T{tier}',
   'tooltip.fullyUpgraded': '已升满',
+  'tooltip.synergy': 'Synergy: {name}',
   'tooltip.branchSuffix': ' — {branch}',
   'tooltip.towerName': '{name} T{tier}',
   'tooltip.repairHeals': '治疗 {heal} HP/s · 半径 {radius}',
@@ -900,6 +901,7 @@ export const zh: Catalogue = {
   ...help,
 
   // Window title.
+  'synergy.aaSync.name': 'Synchronized Fire',
   'synergy.spotter.name': 'Spotter',
   'synergy.spotter.description': '神射手分支上的枪会将其射程借给相邻的 AA 和炮塔。',
   'synergy.chill.name': 'Chill',

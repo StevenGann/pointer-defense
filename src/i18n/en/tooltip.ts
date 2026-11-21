@@ -76,6 +76,7 @@ export const tooltip = {
   // Placed-tower tooltips.
   'tooltip.cursorName': 'Cursor T{tier}',
   'tooltip.fullyUpgraded': 'Fully upgraded',
+  'tooltip.synergy': 'Synergy: {name}',
   'tooltip.branchSuffix': ' — {branch}',
   'tooltip.towerName': '{name} T{tier}',
   'tooltip.repairHeals': 'Heals {heal} HP/s · Radius {radius}',

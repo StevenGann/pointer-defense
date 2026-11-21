@@ -197,6 +197,16 @@ export function paletteTooltipLines(kind: TowerKind): string[] {
   return [name, b.blurb, stats, traitsLine, turnText(b.turnRate)];
 }
 
+/** The catalogue name key for a synergy row id; the one kebab-case id maps to a camelCase key. */
+function synergyName(id: string): string {
+  return id === 'aa-sync' ? t('synergy.aaSync.name') : t(`synergy.${id}.name`);
+}
+
+/** One "Synergy: {name}" tooltip line per row, in the order given. */
+function synergyTooltipLines(rows: readonly string[]): string[] {
+  return rows.map((row) => t('tooltip.synergy', { name: synergyName(row) }));
+}
+
 /** Tooltip lines for a placed tower: its live stats with aura bonuses, as the sim sees them. */
 export function towerTooltipLines(
   tower: Tower,
@@ -205,12 +215,14 @@ export function towerTooltipLines(
   specMult?: number,
   healedCount = 0,
   maintenanceStatus: string | null = null,
+  synergyRows: readonly string[] = [],
 ): string[] {
   if (tower.kind === 'cursor') {
     const lines =
       pointer !== undefined && specMult !== undefined
         ? cursorTooltipLines(tower, pointer, specMult, maintenanceStatus)
         : [t('tooltip.cursorName', { tier: tower.tier })];
+    lines.push(...synergyTooltipLines(synergyRows));
     if (isFullyUpgraded(tower)) lines.push(t('tooltip.fullyUpgraded'));
     return lines;
   }
@@ -226,6 +238,7 @@ export function towerTooltipLines(
       t('tooltip.repairHealing', { count: healedCount }),
       t('tooltip.sell', { amount: formatNumber(sellValue(tower)) }),
     ];
+    lines.push(...synergyTooltipLines(synergyRows));
     if (isFullyUpgraded(tower)) lines.push(t('tooltip.fullyUpgraded'));
     return lines;
   }
@@ -244,6 +257,7 @@ export function towerTooltipLines(
               : t('tooltip.gateClosed')
             : t('tooltip.wallBlocksGround');
     const lines = [name, hp, blocks, t('tooltip.sell', { amount: formatNumber(sellValue(tower)) })];
+    lines.push(...synergyTooltipLines(synergyRows));
     if (isFullyUpgraded(tower)) lines.push(t('tooltip.fullyUpgraded'));
     return lines;
   }
@@ -265,6 +279,7 @@ export function towerTooltipLines(
       lines.push(t('tooltip.beaconCommand'));
     }
     lines.push(t('tooltip.sell', { amount: formatNumber(sellValue(tower)) }));
+    lines.push(...synergyTooltipLines(synergyRows));
     if (isFullyUpgraded(tower)) lines.push(t('tooltip.fullyUpgraded'));
     return lines;
   }
@@ -290,6 +305,7 @@ export function towerTooltipLines(
       turnText(st.turnRate),
       t('tooltip.sell', { amount: formatNumber(sellValue(tower)) }),
     ];
+    lines.push(...synergyTooltipLines(synergyRows));
     if (isFullyUpgraded(tower)) lines.push(t('tooltip.fullyUpgraded'));
     return lines;
   }
@@ -302,6 +318,7 @@ export function towerTooltipLines(
       t('tooltip.minesStats', { damage: MINE_DAMAGE, radius: MINE_BLAST_RADIUS.toFixed(1), max: MINE_LIVE_CAP, seconds: secs }),
       t('tooltip.sell', { amount: formatNumber(sellValue(tower)) }),
     ];
+    lines.push(...synergyTooltipLines(synergyRows));
     if (isFullyUpgraded(tower)) lines.push(t('tooltip.fullyUpgraded'));
     return lines;
   }
@@ -320,6 +337,7 @@ export function towerTooltipLines(
     turnText(st.turnRate),
     t('tooltip.sell', { amount: formatNumber(sellValue(tower)) }),
   ];
+  lines.push(...synergyTooltipLines(synergyRows));
   if (isFullyUpgraded(tower)) lines.push(t('tooltip.fullyUpgraded'));
   return lines;
 }

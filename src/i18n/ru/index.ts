@@ -694,6 +694,7 @@ export const ru = {
 
   'tooltip.cursorName': 'Курсор T{tier}',
   'tooltip.fullyUpgraded': 'Полностью улучшено',
+  'tooltip.synergy': 'Synergy: {name}',
   'tooltip.branchSuffix': ' — {branch}',
   'tooltip.towerName': '{name} T{tier}',
   'tooltip.repairHeals': 'Лечит {heal} HP/с · Радиус {radius}',
@@ -911,6 +912,7 @@ export const ru = {
   'name.modifier.rush': 'Натиск',
 
   // ── Window title ──────────────────────────────────────────────────────────────────────────
+  'synergy.aaSync.name': 'Synchronized Fire',
   'synergy.spotter.name': 'Наводчик',
   'synergy.spotter.description': 'Стрелок на ветке «Снайпер» передаёт свой радиус соседним башням AA и Пушка.',
   'synergy.chill.name': 'Стужа',

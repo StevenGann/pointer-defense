@@ -201,6 +201,7 @@ export const uk: Catalogue = {
 
   'tooltip.cursorName': 'Курсор T{tier}',
   'tooltip.fullyUpgraded': 'Повністю покращено',
+  'tooltip.synergy': 'Synergy: {name}',
   'tooltip.branchSuffix': ' — {branch}',
   'tooltip.towerName': '{name} T{tier}',
   'tooltip.repairHeals': 'Лікує {heal} HP/с · Радіус {radius}',
@@ -913,6 +914,7 @@ export const uk: Catalogue = {
   'name.modifier.rush': 'Натиск',
 
   // Window title.
+  'synergy.aaSync.name': 'Synchronized Fire',
   'synergy.spotter.name': 'Навідник',
   'synergy.spotter.description': 'Стрілець на гілці «Снайпер» передає свій радіус сусіднім вежам AA та Гармата.',
   'synergy.chill.name': 'Холод',

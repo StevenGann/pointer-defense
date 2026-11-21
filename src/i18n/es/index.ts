@@ -191,6 +191,7 @@ export const es: Catalogue = {
 
   'tooltip.cursorName': 'Cursor T{tier}',
   'tooltip.fullyUpgraded': 'Mejorada al máximo',
+  'tooltip.synergy': 'Synergy: {name}',
   'tooltip.branchSuffix': ' — {branch}',
   'tooltip.towerName': '{name} T{tier}',
   'tooltip.repairHeals': 'Cura {heal} HP/s · Radio {radius}',
@@ -903,6 +904,7 @@ export const es: Catalogue = {
   'screen.number.crit': 'CRIT {amount}',
 
   // Window title.
+  'synergy.aaSync.name': 'Synchronized Fire',
   'synergy.spotter.name': 'Spotter',
   'synergy.spotter.description': 'Una Pistola en su rama Tirador presta su alcance a las torres AA y Cañón adyacentes.',
   'synergy.chill.name': 'Chill',

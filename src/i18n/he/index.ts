@@ -189,6 +189,7 @@ export const he: Catalogue = {
   'tooltip.palette.traitsNone': 'תכונות: אין',
   'tooltip.cursorName': 'סמן T{tier}',
   'tooltip.fullyUpgraded': 'שדרוג מלא',
+  'tooltip.synergy': 'Synergy: {name}',
   'tooltip.branchSuffix': ' — {branch}',
   'tooltip.towerName': '{name} T{tier}',
   'tooltip.repairHeals': 'מרפא {heal} HP/s · רדיוס {radius}',
@@ -876,6 +877,7 @@ export const he: Catalogue = {
   'screen.number.crit': 'קריט {amount}',
 
   // Window title.
+  'synergy.aaSync.name': 'Synchronized Fire',
   'synergy.spotter.name': 'Spotter',
   'synergy.spotter.description': 'רובה בענף הצלף שלו מקנה את הטווח שלו למגדלי AA ולתותחים סמוכים.',
   'synergy.chill.name': 'Chill',

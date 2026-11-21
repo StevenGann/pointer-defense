@@ -2,6 +2,7 @@ import type { Catalogue } from '../index.ts';
 
 /** The shipped synergy rows' display names and descriptions (docs/SYNERGIES.md §9, docs/SYNERGIES-BATCH-2.md). */
 export const synergy = {
+  'synergy.aaSync.name': 'Synchronized Fire',
   'synergy.spotter.name': 'Spotter',
   'synergy.spotter.description': 'A Gun on its Marksman branch lends its range to adjacent AA and Cannon towers.',
   'synergy.chill.name': 'Chill',
