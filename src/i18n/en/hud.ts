@@ -42,8 +42,8 @@ export const hud = {
   'hud.override': 'Override',
 
   // Tower detail pane.
-  'hud.towerName': '{name}  T{tier} of {max}',
-  'hud.towerBranch': ' - {branch}',
+  'hud.towerName': '{name}  T{tier}',
+  'hud.towerBranch': '{branch}',
   'hud.towerOffline': ' — OFFLINE',
   'hud.wallHp': 'HP {hp}',
   'hud.wallHpMax': 'HP {hp}/{max}',

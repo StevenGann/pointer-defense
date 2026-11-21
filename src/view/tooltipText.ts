@@ -13,7 +13,6 @@ import {
   isMinesweeper,
   isRepairing,
   isTowerUnlocked,
-  kindMaxTier,
   MINE_BLAST_RADIUS,
   MINE_DAMAGE,
   MINE_EXPIRE_TICKS,
@@ -387,7 +386,7 @@ export function cursorUpgradeTooltipLines(tower: Tower, salvage: number): Toolti
   const beforeRng = cursorRadius(tower);
   const afterRng = cursorRadius({ ...tower, tier: next });
   const segments: TooltipSegment[] = [
-    { text: t('tooltip.cursorUpgradeRate', { tier: tierOfMax('cursor', tower.tier), next: tierOfMax('cursor', next), before: fmt1(beforeRate) }) },
+    { text: t('tooltip.cursorUpgradeRate', { tier: tierLabel(tower.tier), next: tierLabel(next), before: fmt1(beforeRate) }) },
     good(fmt1(afterRate) + '/s'),
   ];
   if (afterRng !== beforeRng) segments.push({ text: t('tooltip.rngDelta', { before: fmt1(beforeRng) }) }, good(fmt1(afterRng)));
@@ -444,9 +443,9 @@ function good(n: string): TooltipSegment {
   return { text: n, color: TOOLTIP_GOOD };
 }
 
-/** "T{tier} of {max}" — the tier out of the kind's cap, so a combat tower reads T12 of 20. */
-function tierOfMax(kind: TowerKind, tier: number): string {
-  return t('tooltip.tierOfMax', { tier, max: kindMaxTier(kind) });
+/** "T{tier}" — the tier alone, without the kind's cap (docs/DETAIL-BRANCH-ROW.md §3). */
+function tierLabel(tier: number): string {
+  return t('tooltip.tier', { tier });
 }
 
 /** Tooltip for a repair tower's Upgrade button: tier 2 widens the radius, tier 3 deepens the heal. */
@@ -459,7 +458,7 @@ export function repairUpgradeTooltipLines(tower: Tower, salvage: number): Toolti
   const afterHeal = repairHealRate({ ...tower, tier: next });
   const beforeRng = repairRadius(tower);
   const afterRng = repairRadius({ ...tower, tier: next });
-  const segments: TooltipSegment[] = [{ text: t('tooltip.repairUpgrade', { tier: tierOfMax('repair', tower.tier), next: tierOfMax('repair', next) }) }];
+  const segments: TooltipSegment[] = [{ text: t('tooltip.repairUpgrade', { tier: tierLabel(tower.tier), next: tierLabel(next) }) }];
   if (afterRng !== beforeRng) segments.push({ text: t('tooltip.rngDeltaBare', { before: fmt1(beforeRng) }) }, good(fmt1(afterRng)));
   if (afterHeal !== beforeHeal) {
     if (segments.length > 1) segments.push({ text: ' · ' });
@@ -486,7 +485,7 @@ export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[
     const before = effectiveStats(tower);
     const after = effectiveStats({ ...tower, tier: next, branch: tower.branch });
     return [[
-      { text: t('tooltip.beaconUpgrade', { name: towerName('beacon'), tier: tierOfMax('beacon', tower.tier), next: tierOfMax('beacon', next), pct: Math.round(before.auraDamage * 100) }) },
+      { text: t('tooltip.beaconUpgrade', { name: towerName('beacon'), tier: tierLabel(tower.tier), next: tierLabel(next), pct: Math.round(before.auraDamage * 100) }) },
       good('+' + Math.round(after.auraDamage * 100) + '%'),
       { text: t('tooltip.cost', { cost: formatNumber(cost) }) },
     ]];
@@ -496,7 +495,7 @@ export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[
     const before = wallMaxHp(tower.tier, tower.branch);
     const after = wallMaxHp(next, tower.branch);
     return [[
-      { text: t('tooltip.wallUpgradeHp', { tier: tierOfMax('wall', next), before: fmtHp(before) }) },
+      { text: t('tooltip.wallUpgradeHp', { tier: tierLabel(next), before: fmtHp(before) }) },
       good(fmtHp(after)),
       { text: t('tooltip.cost', { cost: formatNumber(cost) }) },
     ]];
@@ -504,7 +503,7 @@ export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[
 
   if (isMinesweeper(tower)) {
     return [[
-      { text: t('tooltip.minesweeperUpgrade', { tier: tierOfMax('cannon', tower.tier), next: tierOfMax('cannon', next) }) },
+      { text: t('tooltip.minesweeperUpgrade', { tier: tierLabel(tower.tier), next: tierLabel(next) }) },
       { text: t('tooltip.costBare', { cost: formatNumber(cost) }) },
     ]];
   }
@@ -513,7 +512,7 @@ export function upgradeTooltipLines(tower: Tower, salvage: number): TooltipLine[
   const before = effectiveStats(tower);
   const after = effectiveStats({ ...tower, tier: next });
   return [[
-    { text: t('tooltip.upgradeDmg', { name, tier: tierOfMax(tower.kind, tower.tier), next: tierOfMax(tower.kind, next), before: fmt1(before.damage * tower.auraDamage) }) },
+    { text: t('tooltip.upgradeDmg', { name, tier: tierLabel(tower.tier), next: tierLabel(next), before: fmt1(before.damage * tower.auraDamage) }) },
     good(fmt1(after.damage * tower.auraDamage)),
     { text: t('tooltip.rngDelta', { before: fmt1(before.range + tower.auraRange) }) },
     good(fmt1(after.range + tower.auraRange)),

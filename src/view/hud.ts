@@ -18,7 +18,6 @@ import {
   hasBranches,
   isOffline,
   isRepairing,
-  kindMaxTier,
   repairCost,
   repairHealRate,
   repairHealingCount,
@@ -156,6 +155,8 @@ interface TowerDetailLayout {
   box: Rect;
   name: Rect;
   close: Rect;
+  /** The branch name's own row directly under the title, only when the tower has picked one. */
+  branch: Rect | null;
   stats: Rect;
   route: Rect;
   /** The Synced line for an AA in a cluster: its rect plus the cluster size, or null. */
@@ -284,6 +285,10 @@ export function computeHud(l: Layout, s: RunState): HudLayout {
       h: CONTROL_BOX_H,
     };
     cy += 20;
+    // The branch name gets its own 18 px row under the title so the title no longer overflows; it
+    // exists only once the tower has picked a branch, so the pane grows by 18 px exactly when it does.
+    const branch: Rect | null = tower.branch !== null ? { x: x + 6, y: cy, w: w - 12, h: 18 } : null;
+    if (branch) cy += 18;
     const stats: Rect = { x: x + 6, y: cy, w: w - 12, h: 18 };
     cy += 18;
     const routeRow: Rect = { x: x + 6, y: cy, w: w - 12, h: 18 };
@@ -350,7 +355,7 @@ export function computeHud(l: Layout, s: RunState): HudLayout {
     const sell: Rect = { x: innerX, y: cy, w: innerW, h: 24 };
     cy += 24;
     const box: Rect = { x, y: boxTop, w, h: cy - boxTop + 6 };
-    detail = { box, name, close, stats, route: routeRow, synced, target, upgrade, branches, repair, sell };
+    detail = { box, name, close, branch, stats, route: routeRow, synced, target, upgrade, branches, repair, sell };
     cy = box.y + box.h + 6;
   }
 
@@ -706,6 +711,7 @@ export class HudView {
   private readonly salvage = makeText('');
   private readonly route = makeText('');
   private readonly towerName = makeText('', true);
+  private readonly towerBranch = makeText('');
   private readonly towerStats = makeText('');
   private readonly towerRoute = makeText('');
   private readonly towerSynced = makeText('');
@@ -754,6 +760,7 @@ export class HudView {
       this.salvage,
       this.route,
       this.towerName,
+      this.towerBranch,
       this.towerStats,
       this.towerRoute,
       this.towerSynced,
@@ -1003,6 +1010,7 @@ export class HudView {
       bevel(g, d.box, true, PAL.face);
 
       this.towerName.visible = true;
+      this.towerBranch.visible = d.branch !== null;
       this.towerStats.visible = true;
       this.towerRoute.visible = true;
       this.upgradeButton.visible = true;
@@ -1012,11 +1020,19 @@ export class HudView {
       this.targetValue.visible = d.target !== null;
       for (const text of this.branchButtons) text.visible = true;
 
-      const branch = tower.branch === null ? '' : t('hud.towerBranch', { branch: branchName(tower.kind, tower.branch) });
-      this.towerName.text = t('hud.towerName', { name: towerName(tower.kind), tier: tower.tier, max: kindMaxTier(tower.kind) }) + branch + (isOffline(tower) ? t('hud.towerOffline') : '');
+      this.towerName.text = t('hud.towerName', { name: towerName(tower.kind), tier: tower.tier }) + (isOffline(tower) ? t('hud.towerOffline') : '');
       const tn = textX(d.name, 'start');
       this.towerName.anchor.x = tn.anchor;
       this.towerName.position.set(tn.x, d.name.y + Math.floor(d.name.h / 2));
+
+      if (d.branch) {
+        this.towerBranch.text = t('hud.towerBranch', { branch: branchName(tower.kind, tower.branch!) });
+        const tb = textX(d.branch, 'start');
+        this.towerBranch.anchor.x = tb.anchor;
+        this.towerBranch.position.set(tb.x, d.branch.y + Math.floor(d.branch.h / 2));
+      } else {
+        this.towerBranch.text = '';
+      }
 
       // The detail pane's close box: a raised Win95 box with the same X glyph the help window uses.
       bevel(g, d.close, true, PAL.face);
@@ -1151,6 +1167,7 @@ export class HudView {
     }
 
     this.towerName.text = '';
+    this.towerBranch.text = '';
     this.towerStats.text = '';
     this.towerRoute.text = '';
     this.towerSynced.text = '';
@@ -1160,6 +1177,7 @@ export class HudView {
     this.targetButton.text = '';
     this.targetValue.text = '';
     this.towerName.visible = false;
+    this.towerBranch.visible = false;
     this.towerStats.visible = false;
     this.towerRoute.visible = false;
     this.towerSynced.visible = false;

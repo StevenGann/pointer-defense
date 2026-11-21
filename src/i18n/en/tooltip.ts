@@ -114,7 +114,7 @@ export const tooltip = {
 
   // Spend previews.
   'tooltip.cannotAfford': 'Cannot afford (${salvage} of ${cost})',
-  'tooltip.tierOfMax': 'T{tier} of {max}',
+  'tooltip.tier': 'T{tier}',
   'tooltip.cursorUpgradeRate': 'Cursor {tier} → {next} — rate {before} → ',
   'tooltip.rngDelta': ' · rng {before} → ',
   'tooltip.cost': ', ${cost}',

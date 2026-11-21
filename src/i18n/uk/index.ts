@@ -88,8 +88,8 @@ export const uk: Catalogue = {
   'hud.maxLevel': 'Максимальний рівень',
   'hud.override': 'Перемикання',
 
-  'hud.towerName': '{name}  T{tier} з {max}',
-  'hud.towerBranch': ' - {branch}',
+  'hud.towerName': '{name}  T{tier}',
+  'hud.towerBranch': '{branch}',
   'hud.towerOffline': ' — ОФЛАЙН',
   'hud.wallHp': 'HP {hp}',
   'hud.wallHpMax': 'HP {hp}/{max}',
@@ -237,7 +237,7 @@ export const uk: Catalogue = {
   'tooltip.cursorClickDamage': 'Шкода кліком {damage} (50% від {player})',
 
   'tooltip.cannotAfford': 'Не вистачає (${salvage} з ${cost})',
-  'tooltip.tierOfMax': 'T{tier} з {max}',
+  'tooltip.tier': 'T{tier}',
   'tooltip.cursorUpgradeRate': 'Курсор {tier} → {next} — темп {before} → ',
   'tooltip.rngDelta': ' · радіус {before} → ',
   'tooltip.cost': ', ${cost}',

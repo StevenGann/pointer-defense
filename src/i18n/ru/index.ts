@@ -406,8 +406,8 @@ export const ru = {
   'hud.maxLevel': 'Макс. уровень',
   'hud.override': 'Перенацелить',
 
-  'hud.towerName': '{name}  T{tier} из {max}',
-  'hud.towerBranch': ' — {branch}',
+  'hud.towerName': '{name}  T{tier}',
+  'hud.towerBranch': '{branch}',
   'hud.towerOffline': ' — ОТКЛЮЧЕНА',
   'hud.wallHp': 'HP {hp}',
   'hud.wallHpMax': 'HP {hp}/{max}',
@@ -733,7 +733,7 @@ export const ru = {
   'tooltip.cursorClickDamage': 'Урон от клика {damage} (50% от {player})',
 
   'tooltip.cannotAfford': 'Не хватает (${salvage} из ${cost})',
-  'tooltip.tierOfMax': 'T{tier} из {max}',
+  'tooltip.tier': 'T{tier}',
   'tooltip.cursorUpgradeRate': 'Курсор {tier} → {next} — скорострельность {before} → ',
   'tooltip.rngDelta': ' · радиус {before} → ',
   'tooltip.cost': ', ${cost}',
