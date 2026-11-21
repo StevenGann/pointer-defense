@@ -5,6 +5,7 @@ import { textWidth } from './metrics.ts';
 import {
   AD_AUTOUPDATE_DAMAGE_MULT,
   AD_DEFRAG_SALVAGE_PCT,
+  AD_LIFETIME_TICKS,
   AD_SCREENSAVER_DAMAGE,
   AD_TIMEZONE_SPEED_MULT,
   type Ad,
@@ -12,6 +13,7 @@ import {
 } from '../core/ads.ts';
 import type { RunState } from '../core/state.ts';
 import { TRAY_LIFETIME_TICKS, type TrayPopup } from '../core/upgrades.ts';
+import { isRtl } from './direction.ts';
 
 /**
  * Draws the live desktop ad as a Windows 95 dialog at the main window's own scale: the title bar
@@ -111,6 +113,22 @@ export function adCloseRect(ad: Ad): Rect {
   };
 }
 
+/** The progress bar's track: 3 px tall, inset 6 px from each side, sitting just inside the bottom
+ *  bevel so the tip's last line clears it by 2 px (docs/ADS-PROGRESS.md §2). */
+export function adProgressRect(ad: Ad): Rect {
+  return { x: ad.x + 6, y: ad.y + ad.h - 7, w: ad.w - 12, h: 3 };
+}
+
+/** The progress bar's filled portion, from `ad.ttl` and nothing else: the fraction clamped to 0..1,
+ *  rounded to whole pixels, at least 1 px while the ad lives, and mirrored to grow from the right
+ *  edge under RTL. */
+export function adProgressFillRect(ad: Ad): Rect {
+  const track = adProgressRect(ad);
+  const frac = Math.min(1, Math.max(0, ad.ttl / AD_LIFETIME_TICKS));
+  const w = ad.ttl > 0 ? Math.max(1, Math.round(track.w * frac)) : Math.round(track.w * frac);
+  return { x: isRtl() ? track.x + track.w - w : track.x, y: track.y, w, h: track.h };
+}
+
 function makeText(text: string): Text {
   return new Text({ text, style: { fontFamily: FONT, fontSize: FONT_SIZE.body, fill: PAL.text } });
 }
@@ -190,6 +208,12 @@ export class AdView {
     const separatorY = adRewardLineY(ad) + 8;
     g.moveTo(ad.x + 2, separatorY + 0.5).lineTo(ad.x + ad.w - 2, separatorY + 0.5).stroke({ width: 1, color: PAL.shadow });
     this.tip.position.set(ad.x + TIP_PAD, separatorY + 2);
+
+    // Progress bar: the tray pop-up's thin bar along the bottom, drawn for every kind from ad.ttl.
+    const bar = adProgressRect(ad);
+    const fill = adProgressFillRect(ad);
+    g.rect(bar.x, bar.y, bar.w, bar.h).fill(PAL.shadow);
+    g.rect(fill.x, fill.y, fill.w, fill.h).fill(PAL.title);
   }
 }
 

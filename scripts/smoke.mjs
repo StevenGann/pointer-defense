@@ -140,7 +140,7 @@ import { restartWindows, checkAchievements, enterEndless, pointerDamageMult, tow
 import { cheatsEnabled, setCheatsVisibleForTests, SPAWN_KINDS, spawnKindLabel } from '../src/core/cheats.ts';
 import { dashRects, offsetSegment, routeOffset } from '../src/view/route.ts';
 import { enemyDrawOrder, popupCloseHit, popupCloseRect, popupWindowRect, POPUP_TITLE_H, POPUP_CLOSE_W, POPUP_CLOSE_H } from '../src/view/popupEnemy.ts';
-import { adCloseRect, wrapAdTip, adRewardLineY, adTipMaxWidth } from '../src/view/ad.ts';
+import { adCloseRect, wrapAdTip, adRewardLineY, adTipMaxWidth, adProgressRect, adProgressFillRect } from '../src/view/ad.ts';
 import {
   hatchSegments,
   lerpColor,
@@ -4618,10 +4618,10 @@ function cursorTower(tier, branch) {
 
 // --- Ad tips: layout, selection, the Blue Screen trap, and no repeats (docs/ADS-TIPS.md) --------
 {
-  // Geometry: the dialog grows to 220x92 and the reward line keeps its pre-tip place.
+  // Geometry: the dialog grows to 220x98 and the reward line keeps its pre-tip place.
   const s = createRunState();
   const ad = spawnAd(s, 'defrag');
-  check(AD_W === 220 && AD_H === 92, `the ad is ${AD_W}x${AD_H} (220x92)`);
+  check(AD_W === 220 && AD_H === 98, `the ad is ${AD_W}x${AD_H} (220x98)`);
   check(adRewardLineY(ad) === ad.y + 2 + TITLE_H + 19, 'the reward line stays 19 px below the title bar');
   check(adTipMaxWidth(ad) === 208, `the tip block has a ${adTipMaxWidth(ad)} px text budget`);
   check(ad.tip !== null, 'defrag carries a tip');
@@ -4661,6 +4661,79 @@ function cursorTower(tier, branch) {
   setLocale(en, 'en');
   clearTextWidthCache();
   setDirection('ltr');
+}
+
+// --- Ad progress bar: geometry, fill, RTL, Blue Screen, and no sim effect (docs/ADS-PROGRESS.md) --
+{
+  const s = createRunState();
+  const ad = spawnAd(s, 'defrag');
+
+  // Track geometry: 3 px tall, 6 px in from each side, just inside the bottom bevel.
+  const track = adProgressRect(ad);
+  check(track.x === ad.x + 6 && track.w === ad.w - 12 && track.h === 3,
+    'the bar track is 3 px tall and 6 px in from each side');
+  check(track.y === ad.y + ad.h - 7, 'the bar track sits 7 px above the dialog bottom');
+  check(track.y >= ad.y + 2 && track.y + track.h <= ad.y + ad.h - 2,
+    'the bar track sits inside the 2 px bevel');
+
+  // Fill fraction: full, half, one pixel, zero (kept at least 1 px while ttl > 0).
+  const fillW = (ttl) => {
+    ad.ttl = ttl;
+    return adProgressFillRect(ad).w;
+  };
+  check(fillW(AD_LIFETIME_TICKS) === track.w, 'the bar is full at full lifetime');
+  check(fillW(Math.floor(AD_LIFETIME_TICKS / 2)) === Math.round(track.w / 2), 'the bar is half full at half lifetime');
+  check(fillW(1) === 1, 'the bar keeps 1 px at one tick left');
+  check(fillW(0) === 0, 'the bar is empty at zero ticks');
+
+  // The tip's last line (three 12 px lines below the reward line and separator) clears the bar by 2 px.
+  const tipBottom = adRewardLineY(ad) + 8 + 2 + 3 * 12;
+  check(track.y - tipBottom >= 2, `the tip's last line clears the bar by ${track.y - tipBottom} px`);
+}
+
+{
+  // RTL mirrors the fill so it grows from the right edge, and leaves the track where it was.
+  const s = createRunState();
+  const ad = spawnAd(s, 'defrag');
+  const track = adProgressRect(ad);
+  ad.ttl = Math.floor(AD_LIFETIME_TICKS / 2);
+  const ltr = adProgressFillRect(ad);
+  setDirection('rtl');
+  const rtl = adProgressFillRect(ad);
+  setDirection('ltr');
+  check(adProgressRect(ad).x === track.x && adProgressRect(ad).y === track.y,
+    'RTL leaves the bar track where it was');
+  check(rtl.w === ltr.w && rtl.y === ltr.y && rtl.h === ltr.h, 'RTL keeps the fill size');
+  check(ltr.x === track.x && rtl.x === track.x + track.w - rtl.w,
+    'RTL grows the fill from the right edge');
+}
+
+{
+  // Blue Screen draws the bar like every other kind: its only tell stays the 1 px-high title text.
+  const s = createRunState();
+  const ad = spawnAd(s, 'bluescreen');
+  const track = adProgressRect(ad);
+  const fill = adProgressFillRect(ad);
+  check(track.h === 3 && fill.w === track.w && fill.h === 3, 'Blue Screen draws the bar');
+}
+
+{
+  // The bar reads ad.ttl and nothing else, so a run's outcome cannot depend on it. Dismissing an ad
+  // at a fixed tick must be byte-identical whether the dialog was 92 or 98 px tall — the height is
+  // the only sim-visible change (docs/ADS-PROGRESS.md §3).
+  const dismissAt = (h) => {
+    const s = createRunState();
+    s.rng = 0x5adc0de;
+    s.economy.salvage = 1000;
+    s.viewport.boardCol = { x: 8, y: 8, w: 480, h: 360 };
+    const ad = spawnAd(s, 'defrag');
+    ad.h = h;
+    for (let i = 0; i < 240; i++) tick(s);
+    dismissAd(s, s.ad.id);
+    return JSON.stringify(captureRun(s));
+  };
+  check(dismissAt(98) === dismissAt(92),
+    'dismissing an ad at a fixed tick leaves the run unchanged apart from the ad height');
 }
 
 {
