@@ -19,6 +19,9 @@ not count, and the one after it is taken instead.
    dialog grown to 220x98 to hold it. Branch `feat/ads-progress`.
 3. **Pathing review** — an agent is reading how the field and `stepToward` decide a route, measuring
    whether enemies favour one side, and proposing fixes. Analysis only; branch `feat/pathing-review`.
+4. **Synergy in the tower tooltip** — `docs/TOWER-SYNERGY-TOOLTIP.md`. One `Synergy: <name>` line per
+   synergy the tower is really in, read from a new `rowsOf` map on the memoised layout. Branch
+   `feat/synergy-tooltip`.
 
 ## Next
 
