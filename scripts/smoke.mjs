@@ -155,7 +155,7 @@ import {
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
 import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName, TOOLTIP_BLUE } from '../src/view/tooltipText.ts';
-import { drawTower, clearTowerSprites, BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRACER_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre, synergyEdgeEndpoints, synergyEdgeStyle, recoilOffset, RECOIL_DURATION_TICKS, RECOIL_PEAK_CELLS } from '../src/view/board.ts';
+import { drawTower, clearTowerSprites, BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRACER_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre, synergyEdgeEndpoints, synergyEdgeStyle, recoilOffset, RECOIL_DURATION_TICKS, RECOIL_PEAK_CELLS, SLOW_TINT } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, computeWindowChromeGeom, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
 import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, statusPerfText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect, modalRect, modalMenuAt, modalMessageTop } from '../src/view/hud.ts';
@@ -7064,6 +7064,45 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   view.draw(s, layout, 0, { col: 0, row: 0, onBoard: false, x: 0, y: 0 });
   check(view.enemySprites[0] === ref && view.enemySprites[0].texture === f2,
     'animated: the pooled sprite persists and swaps texture, no allocation');
+  resetArt();
+}
+
+{
+  // Slow-tint (docs/SLOW-TINT.md): a slowed enemy's body reads pale blue; the cue is presentation-only.
+  const r = (SLOW_TINT >> 16) & 0xff;
+  const g = (SLOW_TINT >> 8) & 0xff;
+  const b = SLOW_TINT & 0xff;
+  check(r < b && g > r, `SLOW_TINT is a pale blue, not merely desaturated (r=${r} g=${g} b=${b})`);
+
+  resetArt();
+  const gruntTex = new Texture({ width: 4, height: 4 });
+  injectArtTexture('grunt', gruntTex);
+  const s = stateOnLevel('open-field');
+  const e = createEnemy(1, 'grunt', 1, SPAWN, EXIT);
+  e.x = 5.5;
+  e.y = 6.5;
+  e.prevX = 5.5;
+  e.prevY = 6.5;
+  e.spawnTick = 0;
+  e.slowUntilTick = 100;
+  e.slowFactor = 0.5;
+  s.enemies.push(e);
+  const layout = computeLayout(1280, 800);
+  const view = new BoardView();
+  const hover = { col: 0, row: 0, onBoard: false, x: 0, y: 0 };
+
+  s.tick = 99;
+  view.draw(s, layout, 0, hover);
+  check(view.enemySprites[0].tint === SLOW_TINT, 'a slowed enemy sprite tints SLOW_TINT');
+
+  s.tick = 100;
+  view.draw(s, layout, 0, hover);
+  check(view.enemySprites[0].tint === 0xffffff, 'the tint clears the tick the slow expires (tick === slowUntilTick)');
+
+  e.slowUntilTick = 0;
+  s.tick = 99;
+  view.draw(s, layout, 0, hover);
+  check(view.enemySprites[0].tint === 0xffffff, 'an unslowed enemy sprite stays 0xffffff');
   resetArt();
 }
 
