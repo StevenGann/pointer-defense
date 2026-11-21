@@ -8,6 +8,7 @@
  */
 
 import type { Profile } from './save.ts';
+import type { TowerKind } from './towers.ts';
 import { t } from '../i18n/index.ts';
 
 export type TreeTier = 1 | 2 | 3 | 4 | 5;
@@ -48,8 +49,8 @@ export interface TreeEffects {
   autoWave: boolean;
   /** Free Gun towers placed near the spawn at run start (Preload). */
   preloadGuns: number;
-  /** Every tower kind unlocked from the first build phase (Early Access). */
-  unlockAllTowers: boolean;
+  /** Tower kinds granted at wave 1 by owned licences. Empty when none are owned. */
+  unlockedTowers: TowerKind[];
   /** The tier newly placed towers start at (New Game+). */
   startTier: number;
   /** Extra Restore Points each reboot banks (Windows Update). */
@@ -58,7 +59,10 @@ export interface TreeEffects {
   rpGainMult: number;
 }
 
-export type TreeEffect = Partial<TreeEffects>;
+export type TreeEffect = Partial<TreeEffects> & {
+  /** A tower kind this node unlocks from the first build phase of every run. */
+  unlockTower?: TowerKind;
+};
 
 export interface TreeNode {
   readonly id: string;
@@ -77,6 +81,8 @@ export const TREE_NODES: readonly TreeNode[] = [
   { id: 'fast-boot-1', name: t('tree.fastBoot1.name'), tier: 1, unlockLevel: 0, cost: 5, description: t('tree.fastBoot1.description'), effect: { startingWave: 3 } },
   { id: 'warm-cache', name: t('tree.warmCache.name'), tier: 1, unlockLevel: 0, cost: 6, description: t('tree.warmCache.description'), effect: { towerDamagePct: 0.1 } },
   { id: 'steady-hand', name: t('tree.steadyHand.name'), tier: 1, unlockLevel: 0, cost: 6, description: t('tree.steadyHand.description'), effect: { pointerDamagePct: 0.1 } },
+  { id: 'cannon-licence', name: t('tree.cannonLicence.name'), tier: 1, unlockLevel: 0, cost: 3, description: t('tree.cannonLicence.description'), effect: { unlockTower: 'cannon' } },
+  { id: 'aa-licence', name: t('tree.aaLicence.name'), tier: 1, unlockLevel: 0, cost: 4, description: t('tree.aaLicence.description'), effect: { unlockTower: 'aa' } },
 
   // Tier 2 — unlock at level 8
   { id: 'auto-login', name: t('tree.autoLogin.name'), tier: 2, unlockLevel: 8, cost: 6, description: t('tree.autoLogin.description'), effect: { autoWave: true } },
@@ -84,18 +90,23 @@ export const TREE_NODES: readonly TreeNode[] = [
   { id: 'fast-boot-2', name: t('tree.fastBoot2.name'), tier: 2, unlockLevel: 8, cost: 12, description: t('tree.fastBoot2.description'), effect: { startingWave: 8 } },
   { id: 'cooling-loop', name: t('tree.coolingLoop.name'), tier: 2, unlockLevel: 8, cost: 12, description: t('tree.coolingLoop.description'), effect: { repairSpeedMult: 1.25 } },
   { id: 'bulk-discount', name: t('tree.bulkDiscount.name'), tier: 2, unlockLevel: 8, cost: 14, description: t('tree.bulkDiscount.description'), effect: { costMultiplier: 0.92 } },
+  { id: 'frost-licence', name: t('tree.frostLicence.name'), tier: 2, unlockLevel: 8, cost: 5, description: t('tree.frostLicence.description'), effect: { unlockTower: 'frost' } },
+  { id: 'beacon-licence', name: t('tree.beaconLicence.name'), tier: 2, unlockLevel: 8, cost: 6, description: t('tree.beaconLicence.description'), effect: { unlockTower: 'beacon' } },
+  { id: 'laser-licence', name: t('tree.laserLicence.name'), tier: 2, unlockLevel: 8, cost: 8, description: t('tree.laserLicence.description'), effect: { unlockTower: 'laser' } },
 
   // Tier 3 — unlock at level 20
   { id: 'safe-mode', name: t('tree.safeMode.name'), tier: 3, unlockLevel: 20, cost: 18, description: t('tree.safeMode.description'), effect: { integrity: 5, rpGainMult: 0.9 } },
   { id: 'blue-screen', name: t('tree.blueScreen.name'), tier: 3, unlockLevel: 20, cost: 18, description: t('tree.blueScreen.description'), effect: { integrity: -5, rpGainMult: 1.25 } },
   { id: 'bulk-discount-2', name: t('tree.bulkDiscount2.name'), tier: 3, unlockLevel: 20, cost: 22, description: t('tree.bulkDiscount2.description'), effect: { costMultiplier: 0.93 } },
   { id: 'fast-boot-3', name: t('tree.fastBoot3.name'), tier: 3, unlockLevel: 20, cost: 25, description: t('tree.fastBoot3.description'), effect: { startingWave: 15 } },
-  { id: 'early-access', name: t('tree.earlyAccess.name'), tier: 3, unlockLevel: 20, cost: 30, description: t('tree.earlyAccess.description'), effect: { unlockAllTowers: true } },
+  { id: 'taser-licence', name: t('tree.taserLicence.name'), tier: 3, unlockLevel: 20, cost: 10, description: t('tree.taserLicence.description'), effect: { unlockTower: 'taser' } },
+  { id: 'repair-licence', name: t('tree.repairLicence.name'), tier: 3, unlockLevel: 20, cost: 12, description: t('tree.repairLicence.description'), effect: { unlockTower: 'repair' } },
 
   // Tier 4 — unlock at level 40
   { id: 'hot-swap', name: t('tree.hotSwap.name'), tier: 4, unlockLevel: 40, cost: 30, description: t('tree.hotSwap.description'), effect: { sellRefund: 0.9 } },
   { id: 'windows-update', name: t('tree.windowsUpdate.name'), tier: 4, unlockLevel: 40, cost: 35, description: t('tree.windowsUpdate.description'), effect: { extraSpecsPerReboot: 1 } },
   { id: 'fast-boot-4', name: t('tree.fastBoot4.name'), tier: 4, unlockLevel: 40, cost: 45, description: t('tree.fastBoot4.description'), effect: { startingWave: 25 } },
+  { id: 'cursor-licence', name: t('tree.cursorLicence.name'), tier: 4, unlockLevel: 40, cost: 16, description: t('tree.cursorLicence.description'), effect: { unlockTower: 'cursor' } },
 
   // Tier 5 — unlock at level 70
   { id: 'restore-point', name: t('tree.restorePoint.name'), tier: 5, unlockLevel: 70, cost: 60, description: t('tree.restorePoint.description'), effect: { startSalvagePct: 0.1 } },
@@ -104,6 +115,18 @@ export const TREE_NODES: readonly TreeNode[] = [
 ];
 
 export const TREE_NODE_IDS: readonly string[] = TREE_NODES.map((n) => n.id);
+
+/** The eight tower-licence node ids, in tower order. Used by the early-access profile migration. */
+export const LICENCE_IDS: readonly string[] = [
+  'cannon-licence',
+  'aa-licence',
+  'frost-licence',
+  'beacon-licence',
+  'laser-licence',
+  'taser-licence',
+  'repair-licence',
+  'cursor-licence',
+];
 
 /** True when `id` is one of the authored tree nodes. */
 export function isTreeNodeId(id: unknown): id is string {
@@ -167,7 +190,7 @@ const IDENTITY_EFFECTS: TreeEffects = {
   repairSpeedMult: 1,
   autoWave: false,
   preloadGuns: 0,
-  unlockAllTowers: false,
+  unlockedTowers: [],
   startTier: 1,
   extraSpecsPerReboot: 0,
   rpGainMult: 1,
@@ -176,6 +199,7 @@ const IDENTITY_EFFECTS: TreeEffects = {
 /** Merge every owned node's effect into one `TreeEffects` value. */
 export function effectsFor(profile: Profile): TreeEffects {
   const fx: TreeEffects = { ...IDENTITY_EFFECTS };
+  const unlockedTowers = new Set<TowerKind>();
   for (const id of profile.tree) {
     const node = treeNodeById(id);
     if (!node) continue;
@@ -191,10 +215,11 @@ export function effectsFor(profile: Profile): TreeEffects {
     if (e.repairSpeedMult !== undefined) fx.repairSpeedMult *= e.repairSpeedMult;
     if (e.autoWave !== undefined) fx.autoWave = fx.autoWave || e.autoWave;
     if (e.preloadGuns !== undefined) fx.preloadGuns += e.preloadGuns;
-    if (e.unlockAllTowers !== undefined) fx.unlockAllTowers = fx.unlockAllTowers || e.unlockAllTowers;
+    if (e.unlockTower !== undefined) unlockedTowers.add(e.unlockTower);
     if (e.startTier !== undefined) fx.startTier = Math.max(fx.startTier, e.startTier);
     if (e.extraSpecsPerReboot !== undefined) fx.extraSpecsPerReboot += e.extraSpecsPerReboot;
     if (e.rpGainMult !== undefined) fx.rpGainMult *= e.rpGainMult;
   }
+  fx.unlockedTowers = [...unlockedTowers].sort();
   return fx;
 }

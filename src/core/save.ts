@@ -9,7 +9,7 @@
 
 import { BOSS_KINDS, ENEMY_KINDS, isBossVariant, isEnemyKind, type EnemyKind } from './enemies.ts';
 import { TOWER_KINDS, towerUnlockWave } from './towers.ts';
-import { isTreeNodeId } from './tree.ts';
+import { isTreeNodeId, LICENCE_IDS } from './tree.ts';
 
 export const SAVE_KEY = 'pointer-defense/save';
 
@@ -377,7 +377,7 @@ function parseRuns(value: unknown): RunRecord[] {
 }
 
 /** Parse a stored value into a valid profile, or null when it is not usable. */
-function parseProfile(raw: string): Profile | null {
+function parseProfile(raw: string): { profile: Profile; migrated: boolean } | null {
   let data: unknown;
   try {
     data = JSON.parse(raw);
@@ -413,9 +413,13 @@ function parseProfile(raw: string): Profile | null {
     typeof o.lastSalvage === 'number' && Number.isFinite(o.lastSalvage)
       ? Math.max(0, Math.floor(o.lastSalvage))
       : 0;
-  const tree = Array.isArray(o.tree)
-    ? [...new Set(o.tree.filter((id): id is string => typeof id === 'string' && isTreeNodeId(id)))]
-    : [];
+  // The removed `early-access` node granted every licence; migrate it to the eight licence ids so a
+  // player who bought it keeps all eight towers. `treeNodeById` already drops ids it no longer knows.
+  const rawTree = Array.isArray(o.tree) ? o.tree : [];
+  const tree = [...new Set(rawTree.filter((id): id is string => typeof id === 'string' && isTreeNodeId(id)))];
+  if (rawTree.includes('early-access')) {
+    for (const id of LICENCE_IDS) if (!tree.includes(id)) tree.push(id);
+  }
   const achievements = Array.isArray(o.achievements)
     ? o.achievements.filter((a): a is string => typeof a === 'string')
     : [];
@@ -457,7 +461,8 @@ function parseProfile(raw: string): Profile | null {
   // The last daily's result (docs/DAILY.md); an older save without the field simply has none played.
   const daily = parseDaily(o.daily);
 
-  return { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, achievementDates, mapsCleared, lifetimeBossKillsByPointer, bestWave, reboots, runs, daily, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice };
+  const profile: Profile = { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, achievementDates, mapsCleared, lifetimeBossKillsByPointer, bestWave, reboots, runs, daily, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice };
+  return { profile, migrated: rawTree.includes('early-access') };
 }
 
 /**
@@ -472,8 +477,17 @@ export function loadProfile(storage?: StorageLike | null): Profile {
     if (raw === null) return cloneProfile(defaultProfile());
     const parsed = parseProfile(raw);
     if (parsed === null) return cloneProfile(defaultProfile());
-    fallback = cloneProfile(parsed);
-    return parsed;
+    fallback = cloneProfile(parsed.profile);
+    // A migration rewrites the profile so the exchange (early-access -> eight licences) is persisted,
+    // and so loading twice is idempotent.
+    if (parsed.migrated) {
+      try {
+        store.setItem(SAVE_KEY, JSON.stringify(parsed.profile));
+      } catch {
+        // The in-memory copy is already migrated; the write-back is best-effort.
+      }
+    }
+    return parsed.profile;
   } catch {
     return cloneProfile(fallback);
   }

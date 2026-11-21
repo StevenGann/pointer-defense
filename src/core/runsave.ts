@@ -18,7 +18,7 @@
 import { COLS, inBounds, type Tile } from './grid.ts';
 import { createGrid, levelRoutes, validateLevel, type Level, type LevelToggle, type Route } from './levels.ts';
 import { isEnemyKind, type Enemy, type EnemyKind } from './enemies.ts';
-import { isTowerKind, recomputeAuras, TIERS, type Branch, type TargetMode, type Tier, type Tower, type TowerKind } from './towers.ts';
+import { isTowerKind, recomputeAuras, TIERS, TOWER_KINDS, TOWER_UNLOCK_WAVE, type Branch, type TargetMode, type Tier, type Tower, type TowerKind } from './towers.ts';
 import type { Projectile } from './projectiles.ts';
 import { rebuildField, STARTING_INTEGRITY, type Mine, type Phase, type RunState, type WaveRun, type WaveSnapshot } from './state.ts';
 import type { Economy } from './economy.ts';
@@ -43,6 +43,9 @@ const BUFF_KINDS: readonly BuffKind[] = ['turbo', 'overdrive', 'windfall'];
 const PROJECTILE_KINDS: readonly Projectile['kind'][] = ['shell', 'missile'];
 const TARGET_MODES: readonly TargetMode[] = ['first', 'strong', 'close'];
 const BRANCHES: readonly Branch[] = ['A', 'B', 'C'];
+
+/** Tower kinds a licence can grant: every kind that is not free from the first build phase. */
+const GATED_TOWER_KINDS: readonly TowerKind[] = TOWER_KINDS.filter((k) => TOWER_UNLOCK_WAVE[k] > 0);
 
 /** Absurd-count ceilings a valid board can never reach (docs/RUN-SAVE.md). */
 const MAX_TOWERS = 240;
@@ -756,6 +759,21 @@ function parseSpecs(v: unknown): SpecLevels | null {
   return { cpu, ram, gpu, disk };
 }
 
+function parseUnlockedTowers(v: unknown, legacyUnlockAll: boolean): TowerKind[] {
+  const out: TowerKind[] = [];
+  if (Array.isArray(v)) {
+    for (const k of v) {
+      if (isTowerKind(k) && !out.includes(k)) out.push(k);
+    }
+  }
+  // A pre-licence save carried `unlockAllTowers`; treat it as every gated kind licensed so an
+  // in-flight run keeps the towers it was already using at wave 1. The flag is never written again.
+  if (legacyUnlockAll) {
+    for (const k of GATED_TOWER_KINDS) if (!out.includes(k)) out.push(k);
+  }
+  return out;
+}
+
 function parseTreeEffects(v: unknown): TreeEffects | null {
   if (!isObj(v)) return null;
   const startingWave = int(v.startingWave);
@@ -769,12 +787,12 @@ function parseTreeEffects(v: unknown): TreeEffects | null {
   const repairSpeedMult = num(v.repairSpeedMult);
   const autoWave = bool(v.autoWave);
   const preloadGuns = int(v.preloadGuns);
-  const unlockAllTowers = bool(v.unlockAllTowers);
   const startTier = int(v.startTier);
   const extraSpecsPerReboot = int(v.extraSpecsPerReboot);
   const rpGainMult = num(v.rpGainMult);
-  if (startingWave === null || startSalvagePct === null || startSalvageFlat === null || towerDamagePct === null || pointerDamagePct === null || integrity === null || costMultiplier === null || sellRefund === null || repairSpeedMult === null || autoWave === null || preloadGuns === null || unlockAllTowers === null || startTier === null || extraSpecsPerReboot === null || rpGainMult === null) return null;
-  return { startingWave, startSalvagePct, startSalvageFlat, towerDamagePct, pointerDamagePct, integrity, costMultiplier, sellRefund, repairSpeedMult, autoWave, preloadGuns, unlockAllTowers, startTier, extraSpecsPerReboot, rpGainMult };
+  if (startingWave === null || startSalvagePct === null || startSalvageFlat === null || towerDamagePct === null || pointerDamagePct === null || integrity === null || costMultiplier === null || sellRefund === null || repairSpeedMult === null || autoWave === null || preloadGuns === null || startTier === null || extraSpecsPerReboot === null || rpGainMult === null) return null;
+  const unlockedTowers = parseUnlockedTowers(v.unlockedTowers, bool(v.unlockAllTowers) === true);
+  return { startingWave, startSalvagePct, startSalvageFlat, towerDamagePct, pointerDamagePct, integrity, costMultiplier, sellRefund, repairSpeedMult, autoWave, preloadGuns, unlockedTowers, startTier, extraSpecsPerReboot, rpGainMult };
 }
 
 /**

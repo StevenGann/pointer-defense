@@ -133,7 +133,7 @@ import { levelThumbnail } from '../src/core/thumb.ts';
 import { MAP_SAVE_KEY, rememberMap, readRememberedMap } from '../src/core/mapSave.ts';
 import { computeUpgradesLayout, UpgradesSession, upgradesStatusText, upgradesEmptyLines } from '../src/view/upgrades.ts';
 import { computeRestoreLayout, RestoreSession, restoreProgress, restoreDirty } from '../src/view/restore.ts';
-import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES } from '../src/core/tree.ts';
+import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES, LICENCE_IDS } from '../src/core/tree.ts';
 import { ACHIEVEMENTS } from '../src/core/achievements.ts';
 import { restartWindows, checkAchievements, enterEndless, pointerDamageMult, towerCost, overclockCap, towerIntervalTicks } from '../src/core/state.ts';
 import { cheatsEnabled, setCheatsVisibleForTests, SPAWN_KINDS } from '../src/core/cheats.ts';
@@ -8267,11 +8267,11 @@ function helpFmtDps(damage, fireTicks) { return fireTicks <= 0 ? '—' : (damage
 }
 
 {
-  // 45b. The tree has exactly 21 nodes across the five tiers.
-  check(TREE_NODES.length === 21, `exactly 21 tree nodes (${TREE_NODES.length})`);
-  check(new Set(TREE_NODES.map((n) => n.id)).size === 21, 'tree node ids are unique');
+  // 45b. The tree has exactly 28 nodes across the five tiers (eight licences replaced Early Access).
+  check(TREE_NODES.length === 28, `exactly 28 tree nodes (${TREE_NODES.length})`);
+  check(new Set(TREE_NODES.map((n) => n.id)).size === 28, 'tree node ids are unique');
   const byTier = [1, 2, 3, 4, 5].map((t) => TREE_NODES.filter((n) => n.tier === t).length).join(',');
-  check(byTier === '5,5,5,3,3', `tree tiers hold 5/5/5/3/3 nodes (${byTier})`);
+  check(byTier === '7,8,6,4,3', `tree tiers hold 7/8/6/4/3 nodes (${byTier})`);
 }
 
 {
@@ -8325,9 +8325,10 @@ function helpFmtDps(damage, fireTicks) { return fireTicks <= 0 ? '—' : (damage
   check(ps.towers.every((t) => t.kind === 'gun' && t.col >= 1 && t.col <= 3), 'preloaded Guns sit near the spawn');
 
   const ea = defaultProfile();
-  ea.tree.push('early-access');
+  ea.tree.push('cannon-licence');
   const eas = createRunState(ea);
-  check(towerUnlocked(eas, 'cursor'), 'Early Access unlocks the Cursor from wave 0');
+  eas.wave = 1;
+  check(towerUnlocked(eas, 'cannon'), 'a Cannon licence unlocks the Cannon from wave 1');
 
   const ng = defaultProfile();
   ng.tree.push('new-game-plus');
@@ -8370,13 +8371,157 @@ function helpFmtDps(damage, fireTicks) { return fireTicks <= 0 ? '—' : (damage
     fx.startingWave === 0 && fx.startSalvageFlat === 0 && fx.startSalvagePct === 0 &&
       fx.towerDamagePct === 0 && fx.pointerDamagePct === 0 && fx.integrity === 0 &&
       fx.costMultiplier === 1 && fx.sellRefund === 0.7 && fx.repairSpeedMult === 1 &&
-      fx.autoWave === false && fx.preloadGuns === 0 && fx.unlockAllTowers === false &&
+      fx.autoWave === false && fx.preloadGuns === 0 && fx.unlockedTowers.length === 0 &&
       fx.startTier === 1 && fx.extraSpecsPerReboot === 0 && fx.rpGainMult === 1,
     'an empty tree produces the identity effect',
   );
   const s = createRunState(defaultProfile());
   check(s.wave === 0 && s.economy.salvage === 60 && s.integrity === 20 && s.towers.length === 0,
     'a run with an empty tree is identical to today');
+}
+
+// --- 45i. Tower licences (docs/PRESTIGE.md) ----------------------------------------------------
+{
+  // The merged effect lists licensed kinds, sorted and without duplicates, and empty with none.
+  const none = defaultProfile();
+  check(JSON.stringify(effectsFor(none).unlockedTowers) === '[]', 'no licences: unlockedTowers is empty');
+  const p = defaultProfile();
+  p.tree.push('cannon-licence');
+  check(JSON.stringify(effectsFor(p).unlockedTowers) === '["cannon"]', "a cannon licence reports ['cannon']");
+  p.tree.push('aa-licence');
+  p.tree.push('cannon-licence'); // duplicate: a profile never holds one id twice, but the fold must not
+  check(JSON.stringify(effectsFor(p).unlockedTowers) === '["aa","cannon"]',
+    'two licences report sorted kinds without duplicates');
+}
+
+{
+  // towerUnlocked at wave 1 is true for a licensed kind and false without it, for all eight.
+  const gated = TOWER_KINDS.filter((k) => TOWER_UNLOCK_WAVE[k] > 0);
+  for (const kind of gated) {
+    const plain = createRunState(defaultProfile());
+    plain.wave = 1;
+    check(!towerUnlocked(plain, kind), `${kind} is locked at wave 1 without a licence`);
+    const p = defaultProfile();
+    p.tree.push(`${kind}-licence`);
+    const licensed = createRunState(p);
+    licensed.wave = 1;
+    check(towerUnlocked(licensed, kind), `${kind} is unlocked at wave 1 with its licence`);
+  }
+}
+
+{
+  // The eight nodes exist with the exact tier, gate and cost from the spec.
+  const spec = [
+    ['cannon-licence', 1, 0, 3],
+    ['aa-licence', 1, 0, 4],
+    ['frost-licence', 2, 8, 5],
+    ['beacon-licence', 2, 8, 6],
+    ['laser-licence', 2, 8, 8],
+    ['taser-licence', 3, 20, 10],
+    ['repair-licence', 3, 20, 12],
+    ['cursor-licence', 4, 40, 16],
+  ];
+  for (const [id, tier, level, cost] of spec) {
+    const node = treeNodeById(id);
+    check(node !== undefined && node.tier === tier && node.unlockLevel === level && node.cost === cost,
+      `${id} is tier ${tier}, level ${level}, cost ${cost}`);
+  }
+  check(!TREE_NODES.some((n) => n.id === 'early-access'), 'early-access is gone from TREE_NODES');
+
+  // Every catalogue carries all sixteen licence keys, and no early-access key survives.
+  const licenceKeys = [
+    'tree.cannonLicence.name', 'tree.cannonLicence.description',
+    'tree.aaLicence.name', 'tree.aaLicence.description',
+    'tree.frostLicence.name', 'tree.frostLicence.description',
+    'tree.beaconLicence.name', 'tree.beaconLicence.description',
+    'tree.laserLicence.name', 'tree.laserLicence.description',
+    'tree.taserLicence.name', 'tree.taserLicence.description',
+    'tree.repairLicence.name', 'tree.repairLicence.description',
+    'tree.cursorLicence.name', 'tree.cursorLicence.description',
+  ];
+  let cataloguesOk = true;
+  for (const code of ['en', 'es', 'fr', 'ru', 'uk', 'zh-Hans', 'he']) {
+    const mod = await import(`../src/i18n/${code}/index.ts`);
+    const cat = mod[Object.keys(mod)[0]];
+    if (!licenceKeys.every((k) => cat[k] !== undefined)) cataloguesOk = false;
+    if (Object.keys(cat).some((k) => k.startsWith('tree.earlyAccess'))) cataloguesOk = false;
+  }
+  check(cataloguesOk, 'every catalogue carries the sixteen licence keys and no early-access key');
+}
+
+{
+  // Buying a licence through the existing purchase path: exact cost, short-RP refusal, owned refusal.
+  const p = defaultProfile();
+  p.rp = 100;
+  p.rpEarned = 20;
+  const node = treeNodeById('cannon-licence');
+  check(canBuy(p, node), 'cannon-licence is buyable');
+  check(buyNode(p, node), 'buying cannon-licence succeeds');
+  check(p.rp === 97, `cannon-licence deducts exactly 3 RP (${p.rp})`);
+  check(!buyNode(p, node), 'an owned licence cannot be bought again');
+
+  const short = defaultProfile();
+  short.rp = 2;
+  short.rpEarned = 20;
+  check(!canBuy(short, treeNodeById('cannon-licence')), 'a licence is refused when RP is short');
+  check(!buyNode(short, treeNodeById('cannon-licence')), 'buyNode returns false when RP is short');
+}
+
+{
+  // A profile with licences round-trips through save/load.
+  const p = defaultProfile();
+  p.tree = ['cannon-licence', 'cursor-licence', 'loose-change'];
+  const store = { value: '', getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
+  saveProfile(p, store);
+  const loaded = loadProfile(store);
+  check(JSON.stringify(loaded.tree) === JSON.stringify(p.tree), 'profile save/load round-trips licences');
+
+  // A legacy profile holding early-access migrates to all eight licences, and the migration is
+  // idempotent (the rewritten save no longer carries the id).
+  const legacy = defaultProfile();
+  legacy.tree = ['early-access', 'loose-change'];
+  const legacyStore = { value: '', getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
+  saveProfile(legacy, legacyStore);
+  const migrated = loadProfile(legacyStore);
+  check(!migrated.tree.includes('early-access'), 'early-access is removed on profile migration');
+  check(migrated.tree.includes('loose-change'), 'migration keeps the other owned nodes');
+  check(LICENCE_IDS.every((id) => migrated.tree.includes(id)), 'migration grants all eight licences');
+  const again = loadProfile(legacyStore);
+  check(JSON.stringify(again.tree) === JSON.stringify(migrated.tree), 'the migration is idempotent');
+
+  // A profile without the id is untouched.
+  const plain = defaultProfile();
+  plain.tree = ['loose-change'];
+  const plainStore = { value: '', getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
+  saveProfile(plain, plainStore);
+  check(JSON.stringify(loadProfile(plainStore).tree) === JSON.stringify(['loose-change']),
+    'a profile without early-access is untouched');
+}
+
+{
+  // A legacy treeEffects with unlockAllTowers:true and no unlockedTowers restores every gated kind.
+  const s = createRunState();
+  s.wave = 5;
+  const save = captureRun(s);
+  save.treeEffects = { ...save.treeEffects, unlockAllTowers: true };
+  delete save.treeEffects.unlockedTowers;
+  const restored = restoreRun(save, defaultProfile());
+  check(restored !== null, 'a legacy treeEffects restores without failing');
+  const gated = TOWER_KINDS.filter((k) => TOWER_UNLOCK_WAVE[k] > 0);
+  check(
+    restored !== null && restored.treeEffects.unlockedTowers.length === gated.length &&
+      gated.every((k) => restored.treeEffects.unlockedTowers.includes(k)),
+    'legacy unlockAllTowers restores with every gated kind unlocked',
+  );
+
+  // A pre-licence save (no unlockedTowers key) restores with an empty list.
+  const s2 = createRunState();
+  s2.wave = 5;
+  const save2 = captureRun(s2);
+  delete save2.treeEffects.unlockedTowers;
+  const restored2 = restoreRun(save2, defaultProfile());
+  check(restored2 !== null && restored2.treeEffects.unlockedTowers.length === 0,
+    'a pre-licence save restores with an empty unlockedTowers list');
 }
 
 // --- 46. The achievements grid ---------------------------------------------------------------
