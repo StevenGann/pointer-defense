@@ -19,11 +19,28 @@ not count, and the one after it is taken instead.
    dialog grown to 220x98 to hold it. Branch `feat/ads-progress`.
 3. **Pathing review** — an agent is reading how the field and `stepToward` decide a route, measuring
    whether enemies favour one side, and proposing fixes. Analysis only; branch `feat/pathing-review`.
-4. **Synergy in the tower tooltip** — `docs/TOWER-SYNERGY-TOOLTIP.md`. One `Synergy: <name>` line per
+4. **Cannon shells** — `docs/CANNON-SHELLS.md`. The Cannon stops dealing damage invisibly: it fires a
+   shell that leads the target and lands its splash a flight later, reusing the Flak shell's
+   machinery. Branch `feat/cannon-shells`.
+5. **Synergy in the tower tooltip** — `docs/TOWER-SYNERGY-TOOLTIP.md`. One `Synergy: <name>` line per
    synergy the tower is really in, read from a new `rowsOf` map on the memoised layout. Branch
    `feat/synergy-tooltip`.
 
 ## Next
+
+### 0. Ground pathing tie-break
+
+- **What:** `docs/PATHING-REVIEW.md` proves the one-sided route. `stepToward` keeps the first
+  neighbour that ties for the shortest step, and the scan order is up, left, right, down, so a
+  symmetric fork sends 20 of 20 enemies up, and the Corridor's route leans 26 tiles above centre to
+  14 below.
+- **Recommended rule:** momentum first — keep the current heading when it ties — then the
+  tile-parity order only where momentum does not decide. Measured over all ten maps: 33 direction
+  changes against the baseline's 28 (the parity-only rule sawtooths to 79, so it is rejected), with
+  the above/below split moving from 180/87 to 142/125.
+- **Done when:** the rule is in `stepToward`, the two smoke hashes are re-baselined with a note, and
+  the Corridor route is checked by eye.
+- **Not started:** holds until the five in-flight items land.
 
 ### 1. Native review of the six machine-draft catalogues
 
