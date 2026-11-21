@@ -28,7 +28,7 @@ export const hud = {
   'hud.killsTitle': 'KILLS',
   'hud.killsByTower': 'by towers: {count}',
   'hud.killsByPointer': 'by pointer: {count}',
-  'hud.killsPointerBonus': 'x{bonus} on pointer kills',
+  'hud.killsPointerBonus': 'pointer kills x{bonus}',
   'hud.globalUpgradesTitle': 'GLOBAL UPGRADES',
   'hud.pointerTitle': 'POINTER',
 

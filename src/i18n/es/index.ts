@@ -60,7 +60,7 @@ export const es: Catalogue = {
   'hud.perfFps': '{fps}/s',
   'hud.perfQuality': 'Q: {quality}',
   'hud.buffRow': '{name} — {seconds} s',
-  'hud.upgradesNone': 'Mejoras — ninguna todavía',
+  'hud.upgradesNone': 'Sin mejoras aún',
   'hud.upgradesAllOwned': 'Mejoras — todas conseguidas',
   'hud.upgradesNew': 'Mejoras — {count} nuevas',
   'hud.restoreRow': 'Restaurar — {rp} PR',
@@ -71,7 +71,7 @@ export const es: Catalogue = {
   'hud.killsTitle': 'BAJAS',
   'hud.killsByTower': 'por torres: {count}',
   'hud.killsByPointer': 'por puntero: {count}',
-  'hud.killsPointerBonus': 'x{bonus} en bajas del puntero',
+  'hud.killsPointerBonus': 'x{bonus} en puntero',
   'hud.globalUpgradesTitle': 'MEJORAS GLOBALES',
   'hud.pointerTitle': 'PUNTERO',
   'hud.pointerOverclock': 'Overclock {level} / {ceiling}',
@@ -121,7 +121,7 @@ export const es: Catalogue = {
   'hud.victorySalvage': 'Chatarra ganada: ${earned}',
   'hud.victoryIntegrity': 'Integridad restante: {integrity}',
   'hud.endless': 'Infinito',
-  'hud.restartWindows': 'Reiniciar Windows',
+  'hud.restartWindows': 'Reiniciar',
 
   // Tooltip prose.
   'tooltip.branch.gunA': 'Tirador',
@@ -370,13 +370,13 @@ export const es: Catalogue = {
 
   // Desktop ads and tips.
   'ads.kind.defrag.title': 'Desfragmentación completa',
-  'ads.kind.defrag.message': 'Cerrar para +{pct}% de chatarra',
+  'ads.kind.defrag.message': 'Cerrar para +{pct}% chatarra',
   'ads.kind.autoupdate.title': 'AutoUpdate',
   'ads.kind.autoupdate.message': 'Cerrar para +{pct}% de torres',
   'ads.kind.timezone.title': 'Cambio de zona horaria',
-  'ads.kind.timezone.message': 'Cerrar para -{pct}% de velocidad',
+  'ads.kind.timezone.message': 'Cerrar para -{pct}% velocidad',
   'ads.kind.freeware.title': 'Freeware',
-  'ads.kind.freeware.message': 'Cerrar para una Pistola gratis',
+  'ads.kind.freeware.message': 'Cerrar para Pistola gratis',
   'ads.kind.screensaver.title': 'Salvapantallas',
   'ads.kind.screensaver.message': 'Cerrar para {damage} de daño',
   'ads.kind.bluescreen.title': 'Pantalla azul',

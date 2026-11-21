@@ -354,7 +354,7 @@ export const ru = {
   'ads.kind.timezone.title': 'Смена часового пояса',
   'ads.kind.timezone.message': 'Закрыть за -{pct}% скорости',
   'ads.kind.freeware.title': 'Freeware',
-  'ads.kind.freeware.message': 'Закрыть за бесплатное Орудие',
+  'ads.kind.freeware.message': 'Закрыть за Орудие',
   'ads.kind.screensaver.title': 'Заставка',
   'ads.kind.screensaver.message': 'Закрыть за {damage} урона',
   'ads.kind.bluescreen.title': 'Синий экран',
@@ -382,10 +382,10 @@ export const ru = {
   'hud.perfQuality': 'Качество: {quality}',
   'hud.buffRow': '{name} — {seconds} с',
 
-  'hud.upgradesNone': 'Улучшения — пока нет',
+  'hud.upgradesNone': 'Улучшений пока нет',
   'hud.upgradesAllOwned': 'Улучшения — все куплены',
   'hud.upgradesNew': 'Улучшения — новых: {count}',
-  'hud.restoreRow': 'Восстановление — {rp} RP',
+  'hud.restoreRow': 'Восстановить {rp} RP',
 
   'hud.compositionEntry': '{count} × {kind}',
   'hud.compositionMods': 'мод.: {modifiers}',
@@ -394,8 +394,8 @@ export const ru = {
   'hud.killsTitle': 'УБИЙСТВА',
   'hud.killsByTower': 'башнями: {count}',
   'hud.killsByPointer': 'указателем: {count}',
-  'hud.killsPointerBonus': '×{bonus} за убийства указателем',
-  'hud.globalUpgradesTitle': 'ГЛОБАЛЬНЫЕ УЛУЧШЕНИЯ',
+  'hud.killsPointerBonus': '×{bonus} указателем',
+  'hud.globalUpgradesTitle': 'ГЛОБАЛЬНЫЕ УЛУЧШ.',
   'hud.pointerTitle': 'УКАЗАТЕЛЬ',
 
   'hud.pointerOverclock': 'Разгон {level} / {ceiling}',
@@ -449,7 +449,7 @@ export const ru = {
   'hud.victorySalvage': 'Заработано лома: ${earned}',
   'hud.victoryIntegrity': 'Осталось целостности: {integrity}',
   'hud.endless': 'Бесконечный',
-  'hud.restartWindows': 'Перезагрузить Windows',
+  'hud.restartWindows': 'Перезагр. Windows',
 
   // ── Levels ────────────────────────────────────────────────────────────────────────────────
   'level.corridor.name': 'Коридор',
@@ -559,7 +559,7 @@ export const ru = {
 
   'shell.confirm.restartTitle': 'Перезагрузить Windows',
   'shell.confirm.restartBody': 'Это завершает забег и начисляет {points} точек восстановления.',
-  'shell.confirm.restart': 'Перезагрузить',
+  'shell.confirm.restart': 'Перезапуск',
   'shell.confirm.newRunTitle': 'Новый забег',
   'shell.confirm.newRunBody': 'Начать новый забег? Текущий забег будет отброшен.',
   'shell.confirm.discardTitle': 'Начать заново',

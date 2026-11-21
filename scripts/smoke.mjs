@@ -100,7 +100,7 @@ import { computeEditorLayout, editorToolbarAt } from '../src/view/editor.ts';
 import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, ENEMY_KINDS, BOSS_KINDS, isBossKind, isBossVariant, isPopupEnemy, isFlyerKind, slowFactorFor, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS, CARRIER_BROOD_COUNT, CARRIER_BROOD_INTERVAL_TICKS, CARRIER_BROOD_SCATTER_TICKS, CARRIER_DEATH_BROOD_COUNT, DREADNOUGHT_PLATING, WIRECUTTER_EMP_RADIUS, WIRECUTTER_EMP_TICKS, RAM_TOWER_DPS, RAM_TURRET_DAMAGE, RAM_TURRET_RANGE } from '../src/core/enemies.ts';
 import { missileSeed, AA_SALVO_COUNT } from '../src/core/projectiles.ts';
 import { rngNext } from '../src/core/rng.ts';
-import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS, AD_KINDS } from '../src/core/ads.ts';
+import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS, AD_KINDS, AD_DEFRAG_SALVAGE_PCT, AD_AUTOUPDATE_DAMAGE_MULT, AD_TIMEZONE_SPEED_MULT, AD_SCREENSAVER_DAMAGE } from '../src/core/ads.ts';
 import { AD_TIPS } from '../src/content/adTips.ts';
 import {
   comboMultiplier,
@@ -179,7 +179,8 @@ import { HELP_PAGES, pageUnlocked, lockedReason, pageById } from '../src/content
 import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, computeHelpScroll, HelpSession, helpIndexList, helpSearchResults, helpTopicPath, HELP_W, HELP_H, HELP_LINE_H, HELP_HEADING_H, HELP_SCROLL_LINES, helpArtLayout } from '../src/view/help.ts';
 import { parseHelpMarkdown, layoutHelpBlocks, helpMeasure, ITEM_GAP } from '../src/view/helpMarkdown.ts';
 import { nextHelpMode, contextHelpPage, contextHelpHitAt } from '../src/view/contexthelp.ts';
-import { buildAchievementGrid, gridRowCount, gridCellRect, ACH_COLUMNS, ACH_CELL, ACH_GUTTER, computeAchievementGrid, achievementGridHitAt, AchievementSession } from '../src/view/dialog.ts';
+import { buildAchievementGrid, gridRowCount, gridCellRect, ACH_COLUMNS, ACH_CELL, ACH_GUTTER, computeAchievementGrid, achievementGridHitAt, AchievementSession, computeDialog } from '../src/view/dialog.ts';
+import { computeNameDialog } from '../src/view/mapLibrary.ts';
 import {
   ART_MANIFEST,
   ART_VIEWBOX,
@@ -258,7 +259,7 @@ import {
   SHAKE_LEAK_FREEZE_MS,
 } from '../src/view/shake.ts';
 import { t, plural, formatInt, formatMoney, setLocale } from '../src/i18n/index.ts';
-import { levelName } from '../src/i18n/names.ts';
+import { levelName, towerName } from '../src/i18n/names.ts';
 import { clearTextWidthCache } from '../src/view/metrics.ts';
 import { setDirection, isRtl, mirrorX } from '../src/view/direction.ts';
 import { en } from '../src/i18n/en/index.ts';
@@ -12381,6 +12382,142 @@ function dailyState(date) {
       check(hit === items[i].name, `menu fit: ${code} word ${i} is hit-testable`);
     }
   }
+  setLocale(en, 'en');
+  clearTextWidthCache();
+  setDirection('ltr');
+}
+
+// Per-locale chrome fit: every fixed-width chrome label — the build palette, the right HUD panel, the
+// status bar, the ads, the dialogs and their buttons — must fit the rect it is drawn in, measured with
+// `textWidth` (the same convention the menu-fit group uses) in all seven locales. Russian runs ~130%
+// of English width and Hebrew ~110%, so a string that clears an English rect can still overflow it.
+{
+  const l = computeLayout(1280, 720);
+  const codes = ['en', 'es', 'fr', 'ru', 'uk', 'zh-Hans', 'he'];
+  const BODY = FONT_SIZE.body;
+  const SMALL = FONT_SIZE.small;
+
+  const checkFit = (code, label, text, size, budget) => {
+    const w = Math.ceil(textWidth(text, size));
+    check(w <= budget, `fit: ${code} · ${label} (${w} > ${budget})`);
+  };
+  // A label indented `pad` from its start edge overflows once it crosses the far edge of its rect.
+  const startFit = (code, label, text, rect, size, pad = 6) => checkFit(code, label, text, size, rect.w - pad);
+  // A centred label overflows once it is wider than its box.
+  const centerFit = (code, label, text, rect, size) => checkFit(code, label, text, size, rect.w);
+
+  // The ad reward line, from the same effect constants the drawing code reads.
+  const adMessage = (kind) => {
+    switch (kind) {
+      case 'defrag': return t('ads.kind.defrag.message', { pct: Math.round(AD_DEFRAG_SALVAGE_PCT * 100) });
+      case 'autoupdate': return t('ads.kind.autoupdate.message', { pct: Math.round((AD_AUTOUPDATE_DAMAGE_MULT - 1) * 100) });
+      case 'timezone': return t('ads.kind.timezone.message', { pct: Math.round((1 - AD_TIMEZONE_SPEED_MULT) * 100) });
+      case 'screensaver': return t('ads.kind.screensaver.message', { damage: AD_SCREENSAVER_DAMAGE });
+      default: return t(`ads.kind.${kind}.message`);
+    }
+  };
+
+  for (const code of codes) {
+    const mod = await import(`../src/i18n/${code}/index.ts`);
+    setLocale(mod[Object.keys(mod)[0]], code);
+    clearTextWidthCache();
+    setDirection(code === 'he' ? 'rtl' : 'ltr');
+
+    const s = createRunState();
+
+    // --- Build palette (left panel) ---
+    const h = computeHud(l, s);
+    startFit(code, 'hud.integrity', t('hud.integrity', { current: s.integrity, max: STARTING_INTEGRITY }), h.integrity, BODY);
+    startFit(code, 'hud.salvage', salvageReadoutText(s), h.salvage, BODY);
+    if (h.route) startFit(code, 'hud.route', t('hud.route', { count: currentPath(s).length }), h.route, BODY);
+    for (const { kind, rect } of h.towers) {
+      startFit(code, `hud.towerButton.${kind}`, t('hud.towerButton', { name: towerName(kind), cost: formatNumber(towerCost(s, kind)) }), rect, BODY);
+    }
+    startFit(code, 'hud.startWave', t('hud.startWave', { wave: s.wave + 1 }), h.wave, BODY);
+    startFit(code, 'hud.auto', t('hud.auto'), h.autoWave, BODY, 20);
+
+    // --- Right HUD panel ---
+    const rp = computeRightPanel(l, s);
+    startFit(code, 'hud.nextWaveTitle', rp.nextWave.title, rp.nextWave.rect, BODY);
+    rp.nextWave.rows.forEach((row, i) => startFit(code, `hud.nextWave.row.${i}`, row, rp.nextWave.rect, BODY));
+    startFit(code, 'hud.killsTitle', rp.kills.title, rp.kills.rect, BODY);
+    rp.kills.rows.forEach((row, i) => startFit(code, `hud.kills.row.${i}`, row, rp.kills.rect, BODY));
+    startFit(code, 'hud.pointerTitle', t('hud.pointerTitle'), rp.pointer.rect, BODY);
+    // POINTER rows are wrapped by the view to its own budget (rowWidth = w - 12 - 4), so the drawn
+    // row must fit that budget, not the raw text.
+    rp.pointer.rows.forEach((row, i) => checkFit(code, `hud.pointer.row.${i}`, row.text, BODY, row.rect.w - 4));
+    startFit(code, 'hud.pointerUpgrade', rp.pointer.upgradeText, rp.pointer.upgrade, BODY);
+    if (rp.pointer.override) startFit(code, 'hud.override', t('hud.override'), rp.pointer.override, BODY, 20);
+    startFit(code, 'hud.globalUpgradesTitle', rp.globalUpgrades.title, rp.globalUpgrades.rect, BODY);
+    rp.globalUpgrades.rows.forEach((row, i) => startFit(code, `hud.globalUpgrades.row.${i}`, row, rp.globalUpgrades.rect, BODY));
+
+    // --- Status bar segments ---
+    const sp = l.statusPanes;
+    for (const key of ['status.pickTower', 'status.startWave', 'status.shoot', 'status.callEarly', 'status.laneBroke', 'status.victory', 'status.inspectTower', 'status.contextHelp']) {
+      startFit(code, key, t(key), sp.left, BODY, 4);
+    }
+    startFit(code, 'status.placeTower', t('status.placeTower', { name: towerName('gun') }), sp.left, BODY, 4);
+    startFit(code, 'hud.waveLabel', waveLabel(s), sp.middle, BODY, 4);
+    startFit(code, 'hud.speed', speedStatusText(s.speed), sp.speed, BODY, 4);
+
+    // --- Ad dialog (fixed 220x92): title, reward line, and the three-line tip block ---
+    const adTitleBudget = AD_W - 6 - 2 - CONTROL_BOX_W;
+    const tipW = AD_W - 12;
+    for (const kind of AD_KINDS) {
+      checkFit(code, `ads.kind.${kind}.title`, t(`ads.kind.${kind}.title`), BODY, adTitleBudget);
+      checkFit(code, `ads.kind.${kind}.message`, adMessage(kind), BODY, AD_W - 12);
+    }
+    for (const tip of AD_TIPS) {
+      const lines = wrapAdTip(t(`ads.tip.${tip}`), tipW);
+      check(lines.length <= 3, `fit: ${code} · ads.tip.${tip} wraps to ${lines.length} lines (max 3)`);
+      for (const line of lines) checkFit(code, `ads.tip.${tip}`, line, SMALL, tipW);
+    }
+
+    // --- Save/load name dialog (fixed 360) ---
+    const name = computeNameDialog(l);
+    startFit(code, 'dlg.mapLibrary.saveTitle', t('dlg.mapLibrary.saveTitle'), name.rect, BODY);
+    centerFit(code, 'dlg.mapLibrary.ok', t('dlg.mapLibrary.ok'), name.ok, BODY);
+    centerFit(code, 'dlg.mapLibrary.cancel', t('dlg.mapLibrary.cancel'), name.cancel, BODY);
+
+    // --- Start-over and the other single-label confirm dialogs ---
+    const dialogs = [
+      { title: t('shell.confirm.discardTitle'), rows: [{ text: t('shell.confirm.discardBody', { wave: 5 }) }], buttons: [{ id: 'discard', label: t('shell.confirm.yes') }, { id: 'cancel', label: t('shell.confirm.no') }] },
+      { title: t('shell.confirm.restartTitle'), rows: [{ text: t('shell.confirm.restartBody', { points: 42 }) }], buttons: [{ id: 'restart', label: t('shell.confirm.restart') }, { id: 'cancel', label: t('shell.confirm.cancel') }] },
+      { title: t('shell.confirm.newRunTitle'), rows: [{ text: t('shell.confirm.newRunBody') }], buttons: [{ id: 'new-run', label: t('shell.confirm.ok') }, { id: 'cancel', label: t('shell.confirm.cancel') }] },
+    ];
+    for (const model of dialogs) {
+      const d = computeDialog(l, model);
+      startFit(code, `${model.title}`, model.title, d.rect, BODY);
+      model.buttons.forEach((b, i) => centerFit(code, `${model.title}.${b.id}`, b.label, d.buttons[i].rect, BODY));
+    }
+
+    // --- Victory / defeat modal ---
+    const vm = victoryModalRect(l);
+    const vb = victoryButtons(vm);
+    const defeat = modalRect(l);
+    const defeatRestart = { x: defeat.x + Math.floor((defeat.w - 96) / 2), y: defeat.y + defeat.h - 26 - 10, w: 96, h: 26 };
+    startFit(code, 'hud.gameOver', t('hud.gameOver'), defeat, BODY);
+    startFit(code, 'hud.victory', t('hud.victory'), vm, BODY);
+    centerFit(code, 'hud.restart', t('hud.restart'), defeatRestart, BODY);
+    centerFit(code, 'hud.restartWindows', t('hud.restartWindows'), vb.restart, BODY);
+    centerFit(code, 'hud.endless', t('hud.endless'), vb.endless, BODY);
+
+    // --- Menu buttons (fixed 240 px, glyph inset 40) ---
+    const menu = computeMenuScreen(l, null, { label: t('shell.menu.daily'), disabled: false });
+    for (const b of menu.buttons) {
+      checkFit(code, `shell.menu.${b.id}`, b.label, BODY, b.rect.w - 40);
+    }
+  }
+
+  // The widened victory buttons still sit inside their modal and clear each other.
+  {
+    const vm = victoryModalRect(l);
+    const b = victoryButtons(vm);
+    check(b.restart.x >= vm.x + 10 && b.restart.x + b.restart.w <= vm.x + vm.w - 10, 'fit: victory restart button stays inside its modal');
+    check(b.endless.x >= vm.x + 10 && b.endless.x + b.endless.w <= vm.x + vm.w - 10, 'fit: victory endless button stays inside its modal');
+    check(b.endless.x + b.endless.w <= b.restart.x, 'fit: victory buttons do not overlap');
+  }
+
   setLocale(en, 'en');
   clearTextWidthCache();
   setDirection('ltr');

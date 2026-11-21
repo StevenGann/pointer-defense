@@ -643,8 +643,8 @@ export function victoryButtons(m: Rect): VictoryButtons {
   const bh = 26;
   const pad = 10;
   const gap = 6;
-  const restartW = 118;
-  const endlessW = 68;
+  const restartW = 142;
+  const endlessW = 92;
   const y = m.y + m.h - bh - pad;
   const restart: Rect = { x: m.x + m.w - pad - restartW, y, w: restartW, h: bh };
   const endless: Rect = { x: restart.x - gap - endlessW, y, w: endlessW, h: bh };
