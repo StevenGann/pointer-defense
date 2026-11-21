@@ -32,17 +32,26 @@ Why these numbers: the price is a function of the unlock wave, so the ladder is 
 Licence is a first-session purchase and a Cursor Licence is a deep-run goal. The early tier gates at
 level 0 on purpose — the two cheapest licences are meant to be reachable before the tree opens up.
 
-## Coexistence with Early Access
+## Early Access is removed
 
-`early-access` already exists: tier 3, level 20, **30 RP**, `unlockAllTowers: true`. It is not removed
-and not repriced. The two overlap, and the rule is:
+`early-access` (tier 3, level 20, 30 RP, `unlockAllTowers`) is deleted by this change. Eight licences
+that each give one tower are a better shape than one node that gives all eight: they are cheaper per
+tower, reachable from meta level 0, and they make the player choose which tower matters to their build.
+Keeping both would leave the eight licences permanently dominated by a 30 RP node that grants more.
 
-- A licence is the cheap, targeted, early option: 3–8 RP for the one tower you actually want, at meta
-  level 0.
-- Early Access stays the bulk option for a player who has already invested 20 levels: 30 RP for
-  everything at once, which is cheaper than all eight licences (64 RP) but later and lumpier.
-- **When Early Access is owned, licence rows are marked `Covered` and cannot be bought.** Spending RP
-  on a licence you already have the effect of is a trap, and the row is where the trap is visible.
+Removing a node that people have bought needs a migration, not just a deletion:
+
+- **Profile.** On load, if `profile.tree` contains `early-access`, drop it and add all eight licence
+  ids, then mark the profile dirty so the exchange is written back. Nobody loses what they paid for,
+  and the Restore window shows eight owned licences where the one owned node used to be.
+- **A run in flight.** A mid-run save written before the change carries `unlockAllTowers: true` in
+  `treeEffects`. When that save is restored, treat the legacy flag as "every licence is owned" so the
+  run does not lose access to the towers it was already using at wave 1. The flag is then not written
+  again.
+- **Code.** Delete the node, the `unlockAllTowers` effect, its branch in `effectsFor`, the field in
+  `TreeEffects` and in `parseTreeEffects`'s required list, and the `tree.earlyAccess.*` keys from all
+  seven catalogues. A legacy `unlockAllTowers` in an old save is simply an unknown key and is ignored —
+  which is why the parser must stay tolerant of extra fields.
 
 ## Data model
 
@@ -107,8 +116,8 @@ The Restore window already renders every tier and lists its nodes as rows with a
 - Row title: the licence name. Price: the RP cost, as every other row.
 - Description: two sentences, in the tooltip — "Cannon towers are available from the first build phase
   of every run. They still cost salvage to build."
-- When Early Access is owned: the row's price cell reads `Covered` and `canBuy` is false, in the same
-  grey as an already-owned row. Owned licences show the existing owned state.
+- Owned licences show the existing owned state; there is no `Covered` state any more, because nothing
+  grants all eight at once.
 - Tier headers are unchanged; a licence that is not yet reachable by level is hidden behind its tier
   exactly like the existing nodes.
 
@@ -129,8 +138,9 @@ translator fixes one string, not eight.
   short, and refuses when already owned.
 - Round trip: a profile with licences saves and loads back with the same set; a `treeEffects` object
   written before this feature loads with `unlockedTowers: []` and does not fail `restoreRun`.
-- Early Access covers: with `early-access` owned, every kind reports unlocked at wave 1 and each licence
-  row is not buyable.
+- Migration: a profile whose `tree` contains `early-access` loads with that id gone and all eight
+  licences present, and the saved profile is rewritten; a mid-run save carrying
+  `unlockAllTowers: true` restores with every kind unlocked and does not fail.
 - i18n: every catalogue carries all sixteen keys, and `i18n:check` passes.
 
 ## Out of scope
@@ -145,8 +155,6 @@ translator fixes one string, not eight.
 - **Should licences apply to the Daily?** Yes. The Daily already inherits the whole Restore tree
   (salvage, integrity, starting wave), so excluding licences would be the inconsistent choice, and the
   Daily's comparability is already profile-relative by design.
-- **Should a licence cost more after Early Access is bought?** No. It is covered, not re-priced; a
-  covered row simply cannot be bought.
 - **Eight nodes in four tiers, or one new tier of their own?** Keep them in the existing tiers. A sixth
   tier would need a layout change to the Restore window and would read as a new progression axis, which
   this is not.

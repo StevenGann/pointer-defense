@@ -21,14 +21,15 @@ not count, and the one after it is taken instead.
 ### 1. Tower licences (prestige unlocks)
 
 - **Spec:** `docs/PRESTIGE.md` — eight RP-priced licences, one per gated tower, making that tower
-  available from the first build phase of every run. Costs ladder from 3 RP (Cannon) to 16 RP (Cursor);
-  Early Access stays the 30 RP bulk buy and marks the licences `Covered`.
+  available from the first build phase of every run. Costs ladder from 3 RP (Cannon) to 16 RP (Cursor).
+  Early Access is **deleted**, and profiles that own it are migrated to all eight licences.
 - **What ships:** `unlockTower` on the tree effect, `unlockedTowers` on `TreeEffects`, the one-line
   check in `towerUnlocked`, tolerant parsing in `runsave.ts` (no `RUN_SAVE_VERSION` bump), eight nodes
   in the existing Restore tiers, sixteen keys per catalogue.
 - **Done when:** a licensed tower places on wave 1 and the same tower does not without it; buying
   deducts the exact cost and refuses when short or owned; an old mid-run save still restores with no
-  licences; Early Access covers every licence row.
+  licences; a profile that owned Early Access loads with all eight and a mid-run save carrying the old
+  flag still has every tower unlocked.
 
 ### 2. Native review of the six machine-draft catalogues
 
