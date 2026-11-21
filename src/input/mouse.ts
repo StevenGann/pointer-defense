@@ -70,7 +70,7 @@ import { t } from '../i18n/index.ts';
  * event here bails out early and those screens own their input.
  */
 
-export type Screen = 'menu' | 'run' | 'editor';
+export type Screen = 'menu' | 'run' | 'editor' | 'maps';
 
 export interface HoverState {
   x: number;

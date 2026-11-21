@@ -767,6 +767,9 @@ export const uk: Catalogue = {
 
   'shell.continue': 'Хвиля {wave} — {map}',
   'shell.daily': 'Щоденно — {date}',
+  'shell.maps.title': 'Вибір карти',
+  'shell.maps.best': 'Найкраща хвиля: {n}',
+  'shell.maps.best.none': 'Не зіграно',
   'shell.achievement': 'Досягнення: {name}',
   'shell.notice.popupEscaped': 'Спливне вікно зникло — без шкоди',
   'shell.notice.shutterOpen': 'Стулку {index} відчинено',

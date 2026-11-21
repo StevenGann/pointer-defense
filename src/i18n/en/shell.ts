@@ -24,6 +24,11 @@ export const shell = {
   'shell.menu.shortcut.records': 'R',
   'shell.menu.shortcut.load': 'L',
 
+  // Map-selection gallery (docs/MAP-SELECT.md).
+  'shell.maps.title': 'Select a map',
+  'shell.maps.best': 'Best: wave {n}',
+  'shell.maps.best.none': 'Not played',
+
   // Load-code dialog.
   'shell.load.title': 'Load code',
   'shell.load.ok': 'OK',

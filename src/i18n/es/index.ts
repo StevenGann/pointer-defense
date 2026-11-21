@@ -791,6 +791,9 @@ export const es: Catalogue = {
 
   'shell.continue': 'Oleada {wave} — {map}',
   'shell.daily': 'Diario — {date}',
+  'shell.maps.title': 'Elegir mapa',
+  'shell.maps.best': 'Mejor: oleada {n}',
+  'shell.maps.best.none': 'Sin jugar',
   'shell.achievement': 'Logro: {name}',
   'shell.notice.popupEscaped': 'El emergente escapó — sin daños',
   'shell.notice.shutterOpen': 'La compuerta {index} se abrió',
