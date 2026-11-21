@@ -13,11 +13,23 @@ not count, and the one after it is taken instead.
 
 ## Doing
 
-Nothing in flight.
+**Help, phase 1 — content.** Fixing the thirteen written-out numbers and adding the six missing
+topics (`docs/HELP-REVIEW.md` §1-3). Running on `feat/help-content`.
 
 ## Next
 
-### 1. Native review of the six machine-draft catalogues
+### 1. Help, phase 2 — the CHM chrome
+
+- **Why:** Print and Options are drawn and do nothing, Locate is missing, and the tree has no
+  keyboard.
+- **Done when:** `docs/HELP-REVIEW.md` §4 is closed and its §5 checks pass.
+
+### 2. Help, phase 3 — translations
+
+- **Why:** every changed and new key, in six locales, after the chrome stops adding keys.
+- **Done when:** `i18n:check` passes with no English left in a non-English catalogue, still `draft`.
+
+### 3. Native review of the six machine-draft catalogues
 
 - **Why:** every non-English catalogue is `draft: true`. Machine translation is worst exactly where
   this UI lives — buttons, jargon, and short labels with no context.
