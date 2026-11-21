@@ -13,29 +13,12 @@ not count, and the one after it is taken instead.
 
 ## Doing
 
-1. **Ground pathing tie-break** — `docs/PATHING-TIEBREAK.md`. Momentum first among tied neighbours,
-   then the tile-parity order; the two smoke hashes re-baselined. Branch `feat/pathing-tiebreak`.
-2. **No tracer for Cannon shots** — `docs/CANNON-NO-TRACER.md`. The muzzle flash and sound stay; the
-   red line to the target's old position goes, because the shell is the shot. Branch
-   `feat/cannon-no-tracer`.
+Nothing. The two open items are shipped; the only unblocked work left is the native review, which is
+blocked on people.
 
 ## Next
 
-### 0. Ground pathing tie-break
-
-- **What:** `docs/PATHING-REVIEW.md` proves the one-sided route. `stepToward` keeps the first
-  neighbour that ties for the shortest step, and the scan order is up, left, right, down, so a
-  symmetric fork sends 20 of 20 enemies up, and the Corridor's route leans 26 tiles above centre to
-  14 below.
-- **Recommended rule:** momentum first — keep the current heading when it ties — then the
-  tile-parity order only where momentum does not decide. Measured over all ten maps: 33 direction
-  changes against the baseline's 28 (the parity-only rule sawtooths to 79, so it is rejected), with
-  the above/below split moving from 180/87 to 142/125.
-- **Done when:** the rule is in `stepToward`, the two smoke hashes are re-baselined with a note, and
-  the Corridor route is checked by eye.
-- **Not started:** holds until the five in-flight items land.
-
-### 1. Native review of the six machine-draft catalogues
+### 0. Native review of the six machine-draft catalogues
 
 - **Why:** every non-English catalogue is `draft: true`. Machine translation is worst exactly where
   this UI lives — buttons, jargon, and short labels with no context.
@@ -55,6 +38,25 @@ Nothing outstanding. The branch and worktree sweep ran on 2026-11-21: 59 stale w
 merged branches deleted, leaving `main` plus one spare detached checkout.
 
 ## Shipped recently
+
+- **No-Build tile** (`7e515a4`) — a third `TileKind` that is walkable and unbuildable: a 0.14-alpha
+  shadow hatch in the tile pass, a fourth editor paint tool, tile value `3` in the share codec, and a
+  darkened floor on thumbnails.
+- **Cannon fires shells** (`43444e2`) — a real projectile at 14 tiles/s that leads its target and lands
+  damage on impact; measured 0.0% against the old hitscan.
+- **Loss returns to the menu** (`5ef44e8`) — the Game Over button is Main Menu and calls `exitRun`;
+  `ctx.restart` and `hud.restart` are gone.
+- **Synergy names in the tower tooltip** (`ccabc5e`) — one `Synergy:` line per row held, and
+  `aa-sync` finally has a name: Synchronized Fire.
+- **Ad progress bar** (`94cf196`) — 3 px along the bottom, dialog 220×98.
+- **Seventeen maps** (`index-D-IrjDir`) — batch 3: Comb, Shelves, Pinwheel, Twin Halls, Ziggurat,
+  Gauntlet, Quarry.
+- **No enemy facing tick** (`51ac996`) — the weak-point notch is gone and the Help line that pointed at
+  it now describes the mechanic instead.
+- **No Cannon tracer** (`f922c58`) — the muzzle flash stays, the line to the target's old position goes.
+- **Pathing tie-break** (`3339b01`) — momentum then tile parity: 33 direction changes against 28, the
+  Corridor split improving from 26/14 to 22/18, and the drawn route smoothing with it.
+
 
 - **Help, all three phases** — content audit with every number bound to its constant and six new
   topics (`docs/HELP-REVIEW.md`); the CHM chrome (print, Options, Locate, tree keys, context menu,
