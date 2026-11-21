@@ -17,7 +17,7 @@ Nothing in flight.
 
 ## Next
 
-## 1. Native review of the six machine-draft catalogues
+### 1. Native review of the six machine-draft catalogues
 
 - **Why:** every non-English catalogue is `draft: true`. Machine translation is worst exactly where
   this UI lives — buttons, jargon, and short labels with no context.
