@@ -13,7 +13,17 @@ Nothing in flight.
 
 ## Next
 
-### 1. Per-locale width assertions across the chrome
+### 1. Four more stock maps
+
+- **Spec:** `docs/MAPS-BATCH-2.md` — Moat, Hourglass, Trident, Switchyard, with exact geometry and
+  measured path lengths.
+- **What ships:** four entries appended to `LEVELS`, their `level.<id>.name` keys in all seven
+  catalogues, and the gallery grid deriving its column count from `LEVELS.length` and the client width
+  (the fixed 3×2 no longer holds ten cards).
+- **Done when:** all four validate, each has buildable tiles and a proven placement, thumbnails stay
+  distinct across ten, and the grid fits at 1280×720 and 1024×768 in both directions.
+
+### 2. Per-locale width assertions across the chrome
 
 - **Why:** the menu bar got per-locale fit tests when the CJK width bug was fixed; the HUD panels,
   dialogs, buttons and status bar still only assert that English fits. Russian runs ~130% of English
@@ -21,7 +31,7 @@ Nothing in flight.
 - **Done when:** a smoke group measures every fixed-width label in the HUD, the dialogs and the
   status bar under all seven locales and fails on overflow or collision.
 
-### 2. Native review of the six machine-draft catalogues
+### 3. Native review of the six machine-draft catalogues
 
 - **Why:** every non-English catalogue is `draft: true`. Machine translation is worst exactly where
   this UI lives — buttons, jargon, and short labels with no context.
@@ -32,7 +42,7 @@ Nothing in flight.
 
 ## Housekeeping
 
-### 3. Branch and worktree sweep
+### 4. Branch and worktree sweep
 
 - **Why:** the repo carries 100+ merged branches and roughly 50 worktrees; only `pd-upgate` holds
   `main`. It works, it is just noise when looking for something.
