@@ -17,17 +17,7 @@ Nothing in flight.
 
 ## Next
 
-### 1. Synergies, batch 2
-
-- **Spec:** `docs/SYNERGIES-BATCH-2.md` — Chill (Frost → AA), Interlock (Laser → Taser), Shatter
-  (Cannon ↔ Frost) and Buttress (Bulwark wall ↔ Bulwark wall), with the catalogue rows, the
-  behaviour of each, and the tests.
-- **Done when:** all four fire in a seeded run, the marks are distinguishable without colour, a Taser
-  with no adjacent Laser is unchanged against the old baseline, and the determinism hash matches on a
-  second replay.
-
-
-### 1. Native review of the six machine-draft catalogues
+## 1. Native review of the six machine-draft catalogues
 
 - **Why:** every non-English catalogue is `draft: true`. Machine translation is worst exactly where
   this UI lives — buttons, jargon, and short labels with no context.
@@ -43,6 +33,8 @@ merged branches deleted, leaving `main` plus one spare detached checkout.
 
 ## Shipped recently
 
+- **Synergies batch 2** (`9790aa3`) — Chill, Interlock, Shatter and Buttress, with marks drawn in
+  `Graphics` rather than new art.
 - **Branch and worktree sweep** — 65 worktrees down to 2, 142 branches down to 1.
 - **Per-locale chrome fit** (`3abbb26`) — 771 fit checks over seven locales, plus real overflow fixes in
   the catalogues. Restart Windows, Endless and the Global Upgrades title keep their meaning.
