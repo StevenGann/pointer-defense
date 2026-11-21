@@ -11,6 +11,10 @@ needs to hold ten cards.
 Every number in this document was measured by building the candidate `Level` and running the real
 `validateLevel`, `createGrid`, `buildField` and `pathTiles` over it — not estimated from the picture.
 
+A note for whoever implements this: `box(c0, c1, r0, r1)` was removed from `src/core/levels.ts` with
+the Ladder fix, because nothing used it any more. Two of these maps need it, so it comes back — same
+signature, same body as the other wall helpers.
+
 ## Design rules these four follow
 
 - 20×12 board, exactly one spawn and one exit, both on tiles a route can reach.
