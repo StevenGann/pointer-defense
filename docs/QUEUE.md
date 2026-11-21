@@ -17,6 +17,16 @@ Nothing in flight.
 
 ## Next
 
+### 1. Synergies, batch 2
+
+- **Spec:** `docs/SYNERGIES-BATCH-2.md` — Chill (Frost → AA), Interlock (Laser → Taser), Shatter
+  (Cannon ↔ Frost) and Buttress (Bulwark wall ↔ Bulwark wall), with the catalogue rows, the
+  behaviour of each, and the tests.
+- **Done when:** all four fire in a seeded run, the marks are distinguishable without colour, a Taser
+  with no adjacent Laser is unchanged against the old baseline, and the determinism hash matches on a
+  second replay.
+
+
 ### 1. Native review of the six machine-draft catalogues
 
 - **Why:** every non-English catalogue is `draft: true`. Machine translation is worst exactly where
