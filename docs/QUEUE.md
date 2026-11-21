@@ -24,7 +24,10 @@ not count, and the one after it is taken instead.
    machinery. Branch `feat/cannon-shells`.
 5. **Loss returns to the main menu** — `docs/LOSS-TO-MENU.md`. The Game Over button stops creating a
    fresh Corridor run and calls the existing `exitRun()` instead. Branch `feat/loss-menu`.
-6. **Synergy in the tower tooltip** — `docs/TOWER-SYNERGY-TOOLTIP.md`. One `Synergy: <name>` line per
+6. **The No-Build tile** — `docs/NO-BUILD-TILE.md`. A third tile kind: walkable floor with a faint
+   crosshatch, refused by tower and wall placement, painted in the editor. Branch
+   `feat/no-build-tile`.
+7. **Synergy in the tower tooltip** — `docs/TOWER-SYNERGY-TOOLTIP.md`. One `Synergy: <name>` line per
    synergy the tower is really in, read from a new `rowsOf` map on the memoised layout. Branch
    `feat/synergy-tooltip`.
 
