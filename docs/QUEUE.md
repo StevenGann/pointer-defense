@@ -13,8 +13,7 @@ not count, and the one after it is taken instead.
 
 ## Doing
 
-- **Per-locale width assertions** — follow-up in flight on `feat/i18n-widths`: the fit checks landed,
-  but three strings were shortened by changing their meaning, and are being made to fit instead.
+Nothing in flight.
 
 ## Next
 
@@ -39,6 +38,8 @@ not count, and the one after it is taken instead.
 
 ## Shipped recently
 
+- **Per-locale chrome fit** (`3abbb26`) — 771 fit checks over seven locales, plus real overflow fixes in
+  the catalogues. Restart Windows, Endless and the Global Upgrades title keep their meaning.
 - **Tower licences** (`241fd58`) — eight RP-priced prestige unlocks; Early Access removed and its
   owners migrated to all eight licences.
 - **Four more maps** (`58a0604`) — Moat, Hourglass, Trident, Switchyard, appended to `LEVELS`; ten
