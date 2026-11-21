@@ -4177,6 +4177,81 @@ function cursorTower(tier, branch) {
   check(at60 === run(1000 / 23), 'cursors in flight: same result at 23 Hz frames');
 }
 
+{
+  // 25k. A wave start snaps every Cursor tower's pointer to its home tile (docs/CURSOR-WAVE-RESET.md).
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  placeTower(s, 'cursor', 8, 8);
+  const cursors = s.towers.filter((t) => t.kind === 'cursor');
+  for (const c of cursors) {
+    c.cursorX = c.col + 0.5 + 1;
+    c.cursorY = c.row + 0.5 - 1;
+  }
+  check(startWave(s), 'cursor reset: the next wave starts');
+  check(
+    cursors.every((c) => c.cursorX === c.col + 0.5 && c.cursorY === c.row + 0.5),
+    `cursor reset: every cursor is exactly at its home after startWave (${cursors.map((c) => `${c.cursorX},${c.cursorY}`).join(' / ')})`,
+  );
+}
+
+{
+  // 25l. A cursor wedged into a blocked tile is home after the next startWave and wanders again.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  const c = s.towers.find((t) => t.kind === 'cursor');
+  let blocked = null;
+  for (let r = 0; r < ROWS && blocked === null; r++) {
+    for (let col = 0; col < COLS; col++) {
+      if (tileAt(s.grid, col, r) !== 'buildable') {
+        blocked = [col, r];
+        break;
+      }
+    }
+  }
+  c.cursorX = blocked[0] + 0.5;
+  c.cursorY = blocked[1] + 0.5;
+  check(startWave(s), 'cursor wedge: the next wave starts');
+  check(c.cursorX === 5.5 && c.cursorY === 5.5, `cursor wedge: a wedged cursor is home after startWave (${c.cursorX}, ${c.cursorY})`);
+  let moved = false;
+  for (let i = 0; i < 60; i++) {
+    tick(s);
+    if (c.cursorX !== 5.5 || c.cursorY !== 5.5) {
+      moved = true;
+      break;
+    }
+  }
+  check(moved, 'cursor wedge: the cursor wanders again after the reset');
+}
+
+{
+  // 25m. The reset is a position write: it draws nothing from the run's rng stream.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'cursor', 5, 5);
+  const c = s.towers.find((t) => t.kind === 'cursor');
+  c.cursorX = 11.5;
+  c.cursorY = 0.5;
+  const rngBefore = s.rng;
+  startWave(s);
+  check(s.rng === rngBefore, 'cursor reset draws no rng: the run stream position is unchanged by startWave');
+}
+
+{
+  // 25n. A wave start with no Cursor towers changes nothing.
+  const s = allUnlocked();
+  s.economy.salvage = 100000;
+  placeTower(s, 'gun', 3, 6);
+  const towersBefore = JSON.stringify(s.towers.map((t) => [t.kind, t.col, t.row]));
+  const rngBefore = s.rng;
+  const waveBefore = s.wave;
+  check(startWave(s), 'cursor-free wave start: the next wave starts');
+  check(s.wave === waveBefore + 1 && s.phase === 'wave', 'cursor-free wave start: only the wave advances');
+  check(JSON.stringify(s.towers.map((t) => [t.kind, t.col, t.row])) === towersBefore && s.rng === rngBefore,
+    'cursor-free wave start: towers and rng are untouched');
+}
+
 // --- 26. Auto-wave --------------------------------------------------------------------------
 
 {

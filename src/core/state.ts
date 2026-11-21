@@ -1541,6 +1541,12 @@ export function startWave(s: RunState): boolean {
   s.leaksByWave.set(s.wave, 0);
   s.modifiers = waveModifiers(s.wave);
   recomputeAuras(s.towers, s.clock);
+  for (const t of s.towers) {
+    if (t.kind !== 'cursor') continue;
+    const home = cursorHome(t);
+    t.cursorX = home.x;
+    t.cursorY = home.y;
+  }
   s.events.push({ type: 'waveStarted', wave: s.wave });
   const unlocked = TOWER_KINDS.filter((k) => isTowerUnlocked(k, s.wave) && !isTowerUnlocked(k, s.wave - 1));
   if (unlocked.length > 0) s.events.push({ type: 'towerUnlocked', kinds: unlocked });
