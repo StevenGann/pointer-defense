@@ -196,16 +196,13 @@ S     #      #     X
 
 ## What the gallery needs
 
-`LEVELS.length` becomes ten, so the fixed 3×2 grid in `src/view/mapSelect.ts` no longer holds. The grid
-must derive from the card count and the client width instead of from constants:
+`LEVELS.length` becomes ten, which is four rows at the gallery's three columns — more than the client
+area shows at once. The answer is the scrolling gallery specified in `docs/MAP-SELECT.md` §Layout: a
+proportional scrollbar on the right edge (left in RTL), one row per wheel notch, focus-follows-scroll,
+and cards clipped to the view. With ten maps the bar is visible at 1280×720; with six it is not.
 
-- `cols = clamp(floor((client.w + MAP_CARD_GAP) / (MAP_CARD_W + MAP_CARD_GAP)), 3, 5)`
-- `rows = ceil(count / cols)`
-
-At 1280×720 the client is 1228×600, which fits **five columns** (1028 wide) in **two rows**
-(304 tall). At 1024×768 the client is 972 wide, which fits **four columns**, so ten cards become
-four by three. Nothing else changes: cards stay 196×146 with a 120×72 thumbnail, the grid stays centred,
-RTL still runs the columns right to left, and arrow-key focus follows the computed column count.
+Nothing else about the cards changes: 196×146 with a 120×72 thumbnail, three columns, centred, RTL
+columns right to left.
 
 ## Localization
 

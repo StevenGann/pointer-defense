@@ -37,13 +37,28 @@ the map it advertises.
 
 ## Layout
 
-Six cards, three across and two down, inside the existing menu client area — no new window size, so
-the gallery inherits the chrome, the title bar and the RTL mirroring that already work.
+Cards inside the existing menu client area — no new window size, so the gallery inherits the chrome,
+the title bar and the RTL mirroring that already work.
 
 - Card 196×146, gap 12, thumbnail 120×72 at the top, name at 13 px below it, history at 11 px beneath
   that. Focused card draws the same 2 px focus ring the menu buttons use.
+- **Three columns, always.** The column count does not follow the window width or the number of maps,
+  so a map keeps the same grid position as more maps ship. Growth is answered by scrolling, not by
+  shrinking cards or widening the grid.
+- **The gallery scrolls vertically.** Visible rows are `floor((viewH + MAP_CARD_GAP) / (MAP_CARD_H +
+  MAP_CARD_GAP))`; when the shipped maps exceed that, a proportional scrollbar appears on the right
+  edge (the left edge in RTL), reusing the list-scrollbar geometry already in `chrome.ts`. The bar is
+  present only while it is needed: six maps fit in two rows, ten need four.
+- Scroll input: the wheel moves one row per notch, the thumb drags, a click on the track pages, and
+  `PageUp`/`PageDown` page. Moving focus with the arrow keys scrolls the grid just enough to keep the
+  focused card fully visible. `Home`/`End` still jump focus to the first and last card.
+- Cards are clipped to the view: a partly visible row shows its top edge only, and no name or history
+  line draws outside the view.
+- Scroll position is view state. It is not persisted, is not part of a run, and never changes which map
+  `Enter` starts.
 - The grid is built from `direction.ts`: in RTL the cards run right to left, and arrow keys follow the
-  visual order rather than the array order. Nothing else mirrors.
+  visual order rather than the array order. Nothing else mirrors — the scrollbar moves to the left edge
+  and the wheel direction is unchanged.
 - Names come from the existing catalogue; the two new labels are `shell.maps.title` and
   `shell.maps.best` (`Best: wave {n}` / `Not played`). All seven locales get draft strings.
 - If the profile has no runs, every card says `Not played`; the gallery never hides a map.
@@ -60,6 +75,11 @@ of the map, not a gate, so there is no lock icon and no progression state to get
 - The description is stable across calls and across a reload (it is derived, not drawn).
 - The gallery fits the client area with six cards at 1280×720 in all seven locales: no card overlaps
   its neighbour, no name or history line overflows its card.
+- Scroll geometry is pure and testable at any count: six maps produce no scrollbar and no overflow;
+  ten maps at three columns produce four rows, a scrollbar, and a `scrollMax` of one row at 1280×720.
+  `Home`/`End` and arrow-key focus reach every card at both ends of the scroll.
+- A card that is scrolled out of view is not hit-testable, and the card at the top of the view is
+  reported at the right index after a scroll.
 - Keyboard focus order matches visual order in both directions, and `Enter` on a focused card starts
   that level's run (asserted on the `startRun` argument, not on a screenshot).
 - `Esc` from the gallery returns to the menu; `Play` from the menu reaches the gallery and does not
