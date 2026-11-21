@@ -848,7 +848,9 @@ const BRANCH_EFFECTS: Readonly<Record<TowerKind, Readonly<Partial<Record<Branch,
   },
   frost: {
     A: { slowFactor: 0.4, slowTicks: secondsToTicks(2.5) },
-    B: { slowFactor: 1, damageMul: 4, splashAdd: 0.6 },
+    // Shard: the pulse deals its damage to every enemy in radius, replacing the old single-target
+    // hit plus splash. `slowFactor` stays 1 so the pulse reads it as the damage branch (docs/FROST-PULSE.md).
+    B: { slowFactor: 1, damageMul: 4 },
   },
   laser: {
     A: { pierce: 8, damageMul: 1.5 },

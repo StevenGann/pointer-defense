@@ -1468,16 +1468,18 @@ if (wallMode) {
   silent = false;
 
   console.log('\n=== maps ===');
-  console.log('  map          waves cleared   integrity   salvage   closed   leaked   tower dmg%   max tier');
+  console.log('  map          waves cleared   integrity   kills   leaks   salvage   closed   leaked   tower dmg%   max tier');
   for (const { level, std } of mapRows) {
     const p = std.final.popups;
     const tower = std.final.state.economy.damage.tower;
     const pointer = std.final.state.economy.damage.pointer;
     const towerPct = tower + pointer > 0 ? Math.round((tower / (tower + pointer)) * 100) : 0;
+    const kills = std.final.state.economy.kills.tower + std.final.state.economy.kills.pointer;
     const highestTier = std.final.state.towers.reduce((m, t) => Math.max(m, t.tier), 0);
     console.log(
       `  ${level.id.padEnd(11)}  ${String(std.final.clearedWaves).padStart(13)}  ` +
-        `${String(std.final.integrity).padStart(9)}  ${String(std.final.earned).padStart(7)}  ` +
+        `${String(std.final.integrity).padStart(9)}  ${String(kills).padStart(6)}  ${String(std.final.state.totalLeaks).padStart(5)}  ` +
+        `${String(std.final.earned).padStart(7)}  ` +
         `${String(p.closed).padStart(6)}  ${String(p.leaked).padStart(6)}  ${String(towerPct).padStart(10)}%` +
         `  ${String(highestTier).padStart(8)}`,
     );

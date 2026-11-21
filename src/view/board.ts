@@ -175,6 +175,21 @@ export const ENEMY_COLOR: Record<EnemyKind, number> = {
 /** The single cyan for shield visuals: the shield ring, the impact arc and the `SHD` floater. */
 export const SHIELD_COLOR = 0x00d0d0;
 
+/** Ticks a Frost pulse ring takes to expand to the tower's radius (docs/FROST-PULSE.md). */
+const FROST_PULSE_TICKS = 8;
+/** Stroke width of the pulse ring, in px. */
+const FROST_PULSE_WIDTH = 2;
+/** Cap on pooled pulse rings, like every other short-lived effect pool. */
+const FROST_PULSE_CAP = 48;
+
+/** One Frost pulse ring: a world-space centre, its live radius (tiles) and the tick it was born. */
+interface FrostPulse {
+  x: number;
+  y: number;
+  radius: number;
+  born: number;
+}
+
 /**
  * The board's nominal cell size, in px. The Help viewer's art preview (docs/HELP-ART.md) scales its
  * sprite from this single reference so a tower body or enemy silhouette previews at exactly twice the
@@ -271,7 +286,7 @@ export function enemyHealthBarVisible(e: Enemy): boolean {
  */
 export const BOARD_LAYER_ORDER = Object.freeze([
   'tileSprites', 'tiles', 'path', 'shadows', 'mines', 'mineArt', 'shutterSprites', 'toggles', 'synergy', 'towerSprites',
-  'towers', 'auras', 'wrenches', 'popups', 'enemies', 'enemyBodies', 'enemyFx', 'cursorArrows', 'ghost', 'overlay',
+  'towers', 'auras', 'wrenches', 'pulses', 'popups', 'enemies', 'enemyBodies', 'enemyFx', 'cursorArrows', 'ghost', 'overlay',
   'projectileArt',
 ] as const);
 export type BoardLayerName = (typeof BOARD_LAYER_ORDER)[number];
@@ -319,6 +334,7 @@ export class BoardView {
   private readonly auraSprites: Sprite[] = [];
   private readonly wrenches = new Container();
   private readonly wrenchSprites: Sprite[] = [];
+  private readonly pulses = new Graphics();
   private readonly towerSprites = new Container();
   private readonly towerBaseSprites: Sprite[] = [];
   private readonly towerTurretSprites: Sprite[] = [];
@@ -350,6 +366,9 @@ export class BoardView {
   /** Tower id -> the sim tick it last fired, for a Mortar's turret recoil (docs/MORTAR-RECOIL.md). */
   private readonly recoilTicks = new Map<number, number>();
 
+  /** Pooled Frost pulse rings, capped and compacted in place like every other short-lived effect. */
+  private readonly pulsePool: FrostPulse[] = [];
+
   constructor() {
     this.ghostBase.anchor.set(0.5, 0.5);
     this.ghostTurret.anchor.set(0.5, 0.5);
@@ -371,6 +390,7 @@ export class BoardView {
       towers: this.towers,
       auras: this.auras,
       wrenches: this.wrenches,
+      pulses: this.pulses,
       popups: this.popups,
       enemies: this.enemies,
       enemyBodies: this.enemyBodies,
@@ -603,6 +623,14 @@ export class BoardView {
     this.recoilTicks.set(id, tick);
   }
 
+  /** Queue a Frost pulse ring: expands from the tower to its live radius over 8 ticks (docs/FROST-PULSE.md). */
+  noteFrostPulse(tower: Tower, state: RunState): void {
+    const radius = effectiveRange(state, tower, effectiveStats(tower));
+    const pulse: FrostPulse = { x: tower.col + 0.5, y: tower.row + 0.5, radius, born: state.tick };
+    if (this.pulsePool.length >= FROST_PULSE_CAP) this.pulsePool.shift();
+    this.pulsePool.push(pulse);
+  }
+
   draw(
     state: RunState,
     l: Layout,
@@ -795,6 +823,26 @@ export class BoardView {
       for (let i = auraIndex; i < this.auraSprites.length; i++) this.auraSprites[i].visible = false;
     } else {
       for (const s of this.auraSprites) s.visible = false;
+    }
+
+    // Frost pulse rings: expand from the tower to its radius over 8 ticks, fading as they grow, in
+    // the Frost's own blue, under the enemies. Pooled, capped, and skipped entirely at lean quality.
+    this.pulses.clear();
+    let pw = 0;
+    for (let i = 0; i < this.pulsePool.length; i++) {
+      const p = this.pulsePool[i];
+      const age = state.tick - p.born;
+      if (age < 0 || age >= FROST_PULSE_TICKS) continue;
+      this.pulsePool[pw++] = p;
+    }
+    this.pulsePool.length = pw;
+    if (quality !== 'lean') {
+      for (const p of this.pulsePool) {
+        const t = (state.tick - p.born) / FROST_PULSE_TICKS;
+        const cx = board.x + p.x * cell;
+        const cy = board.y + p.y * cell;
+        this.pulses.circle(cx, cy, p.radius * t * cell).stroke({ width: FROST_PULSE_WIDTH, color: TOWER_COLOR.frost, alpha: 1 - t });
+      }
     }
 
     const hoveredTower = hover.onBoard ? towerAt(state, hover.col, hover.row) : undefined;

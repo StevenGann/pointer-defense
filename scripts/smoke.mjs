@@ -3393,42 +3393,91 @@ function chokeWalls(gaps) {
 }
 
 {
-  // A Frost locked to 'close' slows the nearest enemy, ignoring a stored 'strong' preference.
+  // Frost is a radial pulse (docs/FROST-PULSE.md): one pulse slows every enemy inside its radius,
+  // leaves enemies outside untouched, and a tier-1 Frost deals no damage.
+  const s = allUnlocked();
+  s.economy.salvage = 10000;
+  placeTower(s, 'frost', 5, 5);
+  s.phase = 'wave';
+  s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const a = stationary(1, 'grunt', 1, 5.5, 5.0);
+  const b = stationary(2, 'grunt', 1, 5.5, 4.0);
+  const c = stationary(3, 'grunt', 1, 6.5, 5.5);
+  const out = stationary(4, 'grunt', 1, 9.5, 5.5);
+  s.enemies.push(a, b, c, out);
+  tick(s);
+  check(a.slowFactor === 0.3 && b.slowFactor === 0.3 && c.slowFactor === 0.3,
+    `one pulse slows all three enemies in radius (${a.slowFactor}, ${b.slowFactor}, ${c.slowFactor})`);
+  check(out.slowFactor === 1, `an enemy outside the radius is untouched (slowFactor ${out.slowFactor})`);
+  check(a.hp === a.maxHp && b.hp === b.maxHp && c.hp === c.maxHp,
+    'a tier-1 Frost pulse deals no damage');
+}
+
+{
+  // Two overlapping Frosts give the same slow as one: applySlow's weaker-wins rule is unchanged.
+  const one = allUnlocked();
+  one.economy.salvage = 10000;
+  placeTower(one, 'frost', 5, 5);
+  one.phase = 'wave';
+  one.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const e1 = stationary(1, 'grunt', 1, 5.5, 4.0);
+  one.enemies.push(e1);
+  tick(one);
+
+  const two = allUnlocked();
+  two.economy.salvage = 10000;
+  placeTower(two, 'frost', 5, 5);
+  placeTower(two, 'frost', 6, 5);
+  two.phase = 'wave';
+  two.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+  const e2 = stationary(1, 'grunt', 1, 5.5, 4.0);
+  two.enemies.push(e2);
+  tick(two);
+  check(e1.slowFactor === 0.3 && e2.slowFactor === e1.slowFactor,
+    `two Frosts give the same slow as one (${e2.slowFactor} === ${e1.slowFactor})`);
+}
+
+{
+  // The pulse fires only when an enemy is in range, on the documented interval.
   const s = allUnlocked();
   s.economy.salvage = 10000;
   placeTower(s, 'frost', 5, 5);
   const frost = towerAt(s, 5, 5);
-  frost.targetMode = 'strong';
   s.phase = 'wave';
   s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
-  const near = stationary(1, 'grunt', 1, 5.5, 5.0);
-  const far = stationary(2, 'grunt', 1, 5.5, 4.0);
-  far.hp = 500;
-  s.enemies.push(near, far);
+  const out = stationary(1, 'grunt', 1, 9.5, 5.5); // outside the radius, keeps the wave alive
+  s.enemies.push(out);
   tick(s);
-  check(near.hp < near.maxHp, `frost with target=strong still fires at the closest enemy (near hp ${near.hp})`);
-  check(near.slowFactor === 0.3, `frost slows the closest enemy (slowFactor ${near.slowFactor})`);
-  check(far.hp === 500, `the farther enemy is untouched (far hp ${far.hp})`);
+  check(s.events.filter((e) => e.type === 'shot').length === 0, 'no enemy in range: the Frost does not fire');
+
+  const e = stationary(2, 'grunt', 1, 5.5, 4.0);
+  s.enemies.push(e);
+  const interval = towerIntervalTicks(s, effectiveStats(frost).fireInterval);
+  tick(s);
+  check(s.events.filter((ev) => ev.type === 'shot').length === 1, 'an enemy in range: the Frost fires');
+  check(frost.cooldown === interval - 1, `the Frost arms its cooldown for the documented interval (${frost.cooldown})`);
+  s.events.length = 0;
+  for (let i = 0; i < interval; i++) tick(s);
+  check(s.events.filter((ev) => ev.type === 'shot').length === 1, 'the Frost fires again after exactly one interval');
 }
 
 {
-  // Manual Override still beats Frost's lock: while the marked enemy is in range, the frost fires at
-  // it even though a closer enemy would normally be chosen.
+  // Branch B (Shard) damages every enemy in radius, not one plus a splash, and does not slow.
   const s = allUnlocked();
   s.economy.salvage = 10000;
   placeTower(s, 'frost', 5, 5);
+  upgradeTower(s, 5, 5); // 1 -> 2
+  chooseBranch(s, 5, 5, 'B'); // 2 -> 3 branch B
   s.phase = 'wave';
   s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
-  const near = stationary(1, 'grunt', 1, 5.5, 5.0);
-  const marked = stationary(2, 'grunt', 1, 5.5, 4.0);
-  marked.hp = 1;
-  s.enemies.push(near, marked);
-  s.pointer.targetId = marked.id;
-  toggleManualOverride(s);
-
+  const a = stationary(1, 'grunt', 1, 5.5, 5.0);
+  const b = stationary(2, 'grunt', 1, 5.5, 4.0);
+  const c = stationary(3, 'grunt', 1, 6.5, 5.5);
+  s.enemies.push(a, b, c);
   tick(s);
-  check(marked.dead, 'override: the frost fires at the marked enemy instead of the closest');
-  check(near.hp === near.maxHp, 'override: the closer enemy is untouched while the mark lives');
+  check(a.hp < a.maxHp && b.hp < b.maxHp && c.hp < c.maxHp,
+    `branch B damages every enemy in radius (hp ${a.hp}, ${b.hp}, ${c.hp})`);
+  check(a.slowFactor === 1 && b.slowFactor === 1 && c.slowFactor === 1, 'branch B does not slow');
 }
 
 {
@@ -6761,6 +6810,9 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   fx.addShot(createTower(6, 'aa', 3, 6), 8, 6); // Flak (and Missile) launch a projectile
   check(fx.muzzles.length === 6, 'effects: Taser, Frost, Cannon and Flak each add a muzzle flash');
   check(fx.tracers.length === 2, 'effects: Taser, Frost, Cannon and Flak add no tracer');
+
+  // A Frost keeps its muzzle but drops the tracer: the pulse ring is the shot (docs/FROST-PULSE.md).
+  // The ring lives in the board view's own pool, so it is covered by the Frost tests, not here.
 
   // A Beacon fires nothing: no muzzle and no tracer.
   fx.addShot(createTower(7, 'beacon', 3, 6), 8, 6);
@@ -14199,6 +14251,47 @@ function dailyState(date) {
   check(!/Math\.random/.test(boardSrc) && !/Math\.random/.test(mainSrc), 'mortar recoil: no Math.random in board.ts or main.ts');
   check(!/rngNext|\.rng\b/.test(boardSrc), 'mortar recoil: the view draws no run rng');
 }
+
+// --- Frost pulse ring (docs/FROST-PULSE.md) -----------------------------------------------------
+{
+  const layout = computeLayout(1280, 800);
+  const hover = { col: 0, row: 0, onBoard: false, x: 0, y: 0 };
+  const s = allUnlocked();
+  s.economy.salvage = 10000;
+  placeTower(s, 'frost', 5, 5);
+  const frost = towerAt(s, 5, 5);
+  s.tick = 100;
+
+  const view = new BoardView();
+
+  // Full quality draws the expanding ring; lean quality skips it entirely.
+  view.noteFrostPulse(frost, s);
+  view.draw(s, layout, 0, hover, undefined, 'full');
+  check(view.pulsePool.length === 1 && view.pulses.context.instructions.length > 0,
+    'frost pulse: a queued pulse draws at full quality');
+  const ringColor = view.pulses.context.instructions.map((i) => i.data.style.color).find((c) => c !== undefined && c !== 0);
+  check(ringColor === 0x3399cc, `frost pulse: the ring is the Frost blue 0x3399cc (${ringColor})`);
+  view.draw(s, layout, 0, hover, undefined, 'lean');
+  check(view.pulses.context.instructions.length === 0, 'frost pulse: nothing draws at lean quality');
+
+  // The ring lives 8 ticks, then the pool compacts it away.
+  view.pulsePool.length = 0;
+  view.noteFrostPulse(frost, s);
+  s.tick = 100 + 8;
+  view.draw(s, layout, 0, hover, undefined, 'full');
+  check(view.pulsePool.length === 0, 'frost pulse: the ring expires after 8 ticks');
+
+  // The pool is capped like every other short-lived effect.
+  view.pulsePool.length = 0;
+  for (let i = 0; i < 64; i++) view.noteFrostPulse(frost, s);
+  check(view.pulsePool.length === 48, `frost pulse: the pool is capped (${view.pulsePool.length})`);
+
+  // The ring layer sorts under the enemy sprites (docs/FROST-PULSE.md §2).
+  const li = (n) => BOARD_LAYER_ORDER.indexOf(n);
+  check(li('pulses') < li('enemies') && li('pulses') > li('towers'),
+    'frost pulse: the pulses layer sits under enemies, above towers');
+}
+
 
 // --- Map selection (docs/MAP-SELECT.md) ---------------------------------------------------------
 {
