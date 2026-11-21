@@ -166,8 +166,8 @@ export function computeUpgradesLayout(l: Layout, s: RunState, tab: UpgradesTab =
     def,
     owned: hasUpgrade(s, def.id),
     affordable: s.economy.salvage >= def.cost,
-    rect: { x: list.body.x, y: list.body.y + i * UPGRADE_ROW_H, w: list.body.w, h: UPGRADE_ROW_H },
-    icon: { x: list.colX[0] + 4, y: list.body.y + i * UPGRADE_ROW_H + 1, w: UPGRADE_ICON, h: UPGRADE_ICON },
+    rect: { x: list.body.x, y: list.body.y + (i - list.firstRow) * UPGRADE_ROW_H, w: list.body.w, h: UPGRADE_ROW_H },
+    icon: { x: list.colX[0] + 4, y: list.body.y + (i - list.firstRow) * UPGRADE_ROW_H + 1, w: UPGRADE_ICON, h: UPGRADE_ICON },
   }));
 
   const status = computeStatusBar(statusBar, [0, 150]);
