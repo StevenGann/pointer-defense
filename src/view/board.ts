@@ -294,6 +294,9 @@ export type BoardLayerName = (typeof BOARD_LAYER_ORDER)[number];
 const AURA_COLOR = 0x6699ff;
 const SLOW_COLOR = 0x00d0ff;
 
+/** The pale-blue body tint applied to a slowed enemy's art (docs/SLOW-TINT.md). */
+export const SLOW_TINT = 0xbfdfff;
+
 /** The four tower-status auras, one sprite per status per tower (docs/TOWER-AURAS.md). */
 const AURA_STATUSES = ['heal', 'beacon', 'override', 'emp'] as const;
 type AuraStatus = (typeof AURA_STATUSES)[number];
@@ -2379,11 +2382,13 @@ function drawEnemy(
     sprite.height = bodyPx;
     sprite.rotation = ENEMY_ART_ROTATES.has(e.kind) ? e.heading : 0;
     sprite.alpha = 1;
+    sprite.tint = slowed ? SLOW_TINT : 0xffffff;
     // No ellipse here: a sprite-backed body casts a real silhouette shadow (BoardView.shadows).
   } else {
     sprite.visible = false;
-    // The procedural fallback has no texture to cast; the flyer shape keeps its faint ellipse.
-    drawEnemyShape(bodies, baseEnemyKind(e.kind), ex, ey, r, color, e.heading);
+    // The procedural fallback has no texture to cast; the flyer shape keeps its faint ellipse. The
+    // body colour is blended toward the slow tint so it reads the same way the sprite does.
+    drawEnemyShape(bodies, baseEnemyKind(e.kind), ex, ey, r, slowed ? lerpColor(color, SLOW_TINT, 0.55) : color, e.heading);
   }
 
   // Every boss's own art carries its crown, and the Ram's carries its drill. These runtime stand-ins
