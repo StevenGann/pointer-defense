@@ -46,7 +46,7 @@ export const help: Catalogue = {
   'help.getting-started.2': 'Phase de construction\u00A0: placez des tours et dessinez le labyrinthe. Appuyez sur Lancer la vague (ou Entrée) quand vous êtes prêt.',
   'help.getting-started.3': "Vagues\u00A0: les ennemis traversent de l'entrée vers la sortie. Tout ce qui passe coûte de l'intégrité.",
   'help.getting-started.4': 'Intégrité\u00A0: vous commencez avec {integrity}. Quand elle atteint zéro, la partie est terminée.',
-  'help.getting-started.5': "Le pointeur\u00A0: cliquez sur les ennemis pour leur tirer dessus. Visez l'encoche de tête pour infliger le double de dégâts.",
+  'help.getting-started.5': "Le pointeur\u00A0: cliquez sur les ennemis pour leur tirer dessus. Un coup sur le bord avant inflige le double de dégâts.",
   'help.getting-started.6': "Les tours de combat s'améliorent sur {maxTier} paliers\u00A0; les murs, la Réparation et le Curseur s'arrêtent plus tôt, chacun sur sa propre échelle.",
 
   // Mechanics: the pointer ladder.

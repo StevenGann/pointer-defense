@@ -44,7 +44,7 @@ export const help: Catalogue = {
   'help.getting-started.2': 'Fase de construcción: coloca torres y da forma al laberinto. Pulsa Iniciar oleada (o Intro) cuando estés listo.',
   'help.getting-started.3': 'Oleadas: los enemigos cruzan de la entrada a la salida. Todo lo que se cuela cuesta integridad.',
   'help.getting-started.4': 'Integridad: empiezas con {integrity}. Cuando llega a cero, la partida termina.',
-  'help.getting-started.5': 'El puntero: haz clic en los enemigos para dispararles. Apunta a la muesca delantera para infligir el doble de daño.',
+  'help.getting-started.5': 'El puntero: haz clic en los enemigos para dispararles. Un golpe en el borde delantero inflige el doble de daño.',
   'help.getting-started.6': 'Las torres de combate mejoran hasta {maxTier} rangos; los muros, la Reparación y el Cursor se detienen antes en sus propias escaleras.',
 
   // Mechanics: the pointer ladder.

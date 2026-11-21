@@ -47,7 +47,7 @@ export const help = {
   'help.getting-started.2': 'Build phase: place towers and shape the maze. Press Start Wave (or Enter) when you are ready.',
   'help.getting-started.3': 'Waves: enemies cross from the entrance to the exit. Anything that gets through costs integrity.',
   'help.getting-started.4': 'Integrity: you start with {integrity}. When it reaches zero the run is over.',
-  'help.getting-started.5': 'The pointer: click enemies to shoot them. Aim for the leading notch to deal double damage.',
+  'help.getting-started.5': 'The pointer: click enemies to shoot them. A hit on the leading edge deals double damage.',
   'help.getting-started.6': 'Combat towers upgrade through {maxTier} tiers; walls, Repair and the Cursor stop earlier on their own ladders.',
 
   // Mechanics: the pointer ladder.
