@@ -13,25 +13,13 @@ not count, and the one after it is taken instead.
 
 ## Doing
 
-- **1. Four more stock maps** — dispatched to OpenCode on `feat/maps-batch-2` from `e8d94fb`.
-- **2. Per-locale width assertions** — dispatched to OpenCode on `feat/i18n-widths` from `e8d94fb`.
+- **Per-locale width assertions** — in flight on `feat/i18n-widths`.
+- **Tower licences (prestige unlocks)** — in flight on `feat/prestige-licences`. Includes deleting
+  Early Access and migrating the profiles that own it to all eight licences.
 
 ## Next
 
-### 1. Tower licences (prestige unlocks)
-
-- **Spec:** `docs/PRESTIGE.md` — eight RP-priced licences, one per gated tower, making that tower
-  available from the first build phase of every run. Costs ladder from 3 RP (Cannon) to 16 RP (Cursor).
-  Early Access is **deleted**, and profiles that own it are migrated to all eight licences.
-- **What ships:** `unlockTower` on the tree effect, `unlockedTowers` on `TreeEffects`, the one-line
-  check in `towerUnlocked`, tolerant parsing in `runsave.ts` (no `RUN_SAVE_VERSION` bump), eight nodes
-  in the existing Restore tiers, sixteen keys per catalogue.
-- **Done when:** a licensed tower places on wave 1 and the same tower does not without it; buying
-  deducts the exact cost and refuses when short or owned; an old mid-run save still restores with no
-  licences; a profile that owned Early Access loads with all eight and a mid-run save carrying the old
-  flag still has every tower unlocked.
-
-### 2. Native review of the six machine-draft catalogues
+### 1. Native review of the six machine-draft catalogues
 
 - **Why:** every non-English catalogue is `draft: true`. Machine translation is worst exactly where
   this UI lives — buttons, jargon, and short labels with no context.
@@ -42,7 +30,7 @@ not count, and the one after it is taken instead.
 
 ## Housekeeping
 
-### 3. Branch and worktree sweep
+### 2. Branch and worktree sweep
 
 - **Why:** the repo carries 100+ merged branches and roughly 50 worktrees; only `pd-upgate` holds
   `main`. It works, it is just noise when looking for something.
@@ -52,6 +40,8 @@ not count, and the one after it is taken instead.
 
 ## Shipped recently
 
+- **Four more maps** (`58a0604`) — Moat, Hourglass, Trident, Switchyard, appended to `LEVELS`; ten
+  maps, four rows, and the gallery's scrollbar reaches the last one.
 - **Scrolling map gallery** (`4cd002e`) — three fixed columns, vertical scroll with a proportional
   scrollbar, wheel/thumb/track/PageUp/PageDown input, focus-follows-scroll and clipped cards, so any
   number of maps fits. 39 smoke checks at six and at twenty-six maps.
