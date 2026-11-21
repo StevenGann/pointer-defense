@@ -132,7 +132,7 @@ import { computeMapGrid, clampMapScroll, scrollForFocus, mapCardAt, moveMapFocus
 import { thumbnailTexture, thumbCacheSize, thumbBase } from '../src/view/mapsScreen.ts';
 import { levelThumbnail } from '../src/core/thumb.ts';
 import { MAP_SAVE_KEY, rememberMap, readRememberedMap } from '../src/core/mapSave.ts';
-import { computeUpgradesLayout, UpgradesSession, upgradesStatusText, upgradesEmptyLines } from '../src/view/upgrades.ts';
+import { computeUpgradesLayout, UpgradesSession, upgradesStatusText, upgradesEmptyLines, upgradesHitAt, UPGRADE_ROW_H } from '../src/view/upgrades.ts';
 import { computeRestoreLayout, RestoreSession, restoreProgress, restoreDirty } from '../src/view/restore.ts';
 import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES, LICENCE_IDS } from '../src/core/tree.ts';
 import { ACHIEVEMENTS } from '../src/core/achievements.ts';
@@ -11657,6 +11657,30 @@ function dailyState(date) {
   early.wave = 20; // one upgrade revealed
   const earlyLayout = computeUpgradesLayout(layout, early, 'available', 0);
   check(!earlyLayout.list.overflow, 'a short list draws no scrollbar');
+
+  // Scrolled rows: the text, icons and hit rects move with the zebra stripes, not just the stripes.
+  const scrolled = computeUpgradesLayout(layout, s, 'available', 2);
+  const topRow = scrolled.rows[scrolled.list.firstRow];
+  check(topRow.rect.y === scrolled.list.body.y, 'the row at firstRow sits at the body top when scrolled');
+  let rowLeaves = false;
+  for (let i = scrolled.list.firstRow; i < scrolled.list.firstRow + scrolled.list.rowsVisible && i < scrolled.rows.length; i++) {
+    const r = scrolled.rows[i].rect;
+    if (r.y < scrolled.list.body.y || r.y + r.h > scrolled.list.body.y + scrolled.list.body.h) rowLeaves = true;
+  }
+  check(!rowLeaves, 'no visible row leaves the body when scrolled');
+
+  const centreX = scrolled.list.body.x + scrolled.list.body.w / 2;
+  const centreY = scrolled.list.body.y + UPGRADE_ROW_H / 2;
+  const hit = upgradesHitAt(scrolled, centreX, centreY);
+  check(hit?.type === 'row' && hit.id === scrolled.rows[scrolled.list.firstRow].def.id,
+    'a hit at the first row centre returns the row at firstRow, not row 0');
+
+  const atMax = computeUpgradesLayout(layout, s, 'available', scrolled.list.scrollMax);
+  check(atMax.list.firstRow === atMax.list.scrollMax, 'scrolling to scrollMax sets firstRow to scrollMax');
+  const lastRow = atMax.rows[atMax.rows.length - 1];
+  check(lastRow.rect.y + lastRow.rect.h <= atMax.list.body.y + atMax.list.body.h,
+    'the last row stays inside the body at scrollMax');
+  check(lastRow.icon.y === lastRow.rect.y + 1, 'the last row icon aligns with its row at scrollMax');
 }
 
 // --- Visual pass 4: Restore tabs, Apply dirty state and the progress bar ----------------------
