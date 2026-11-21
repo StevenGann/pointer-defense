@@ -46,7 +46,7 @@ export const help: Catalogue = {
   'help.getting-started.2': '建造阶段：放置防御塔并设计迷宫。准备好后点击“开始波次”（或按回车）。',
   'help.getting-started.3': '波次：敌人从入口移动到出口。任何穿过的敌人都会消耗完整度。',
   'help.getting-started.4': '完整度：开局为 {integrity}。降到零时本局结束。',
-  'help.getting-started.5': '指针：点击敌人射击它们。瞄准前方的凹槽以造成双倍伤害。',
+  'help.getting-started.5': '指针：点击敌人射击它们。击中前缘会造成双倍伤害。',
   'help.getting-started.6': '战斗防御塔可升级至 {maxTier} 级；墙、修理和光标则在各自的阶梯上更早停止。',
 
   // Mechanics: the pointer ladder.

@@ -2285,16 +2285,6 @@ function drawEnemy(
   // The Wirecutter's EMP radius reads as a faint amber ring, telegraphing what it is about to knock out.
   if (e.kind === 'saboteur-boss') drawEmpAura(fx, ex, ey, cell);
 
-  // Weak-point notch: a short tick on the leading edge where a precision click pays double.
-  {
-    const n0 = r * 0.7;
-    const n1 = r * 1.08;
-    const nh = e.heading;
-    fx.moveTo(ex + Math.cos(nh) * n0, ey + Math.sin(nh) * n0)
-      .lineTo(ex + Math.cos(nh) * n1, ey + Math.sin(nh) * n1)
-      .stroke({ width: 2, color: PAL.highlight });
-  }
-
   if (slowed) {
     const sr = r + 2.5;
     const a0 = Math.PI * 0.2;
