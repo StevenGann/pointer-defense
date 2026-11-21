@@ -853,6 +853,8 @@ export const fr: Catalogue = {
   'name.modifier.rush': 'Ruée',
 
   // Window title.
+  'synergy.spotter.name': 'Spotter',
+  'synergy.spotter.description': 'A Gun on its Marksman branch lends its range to adjacent AA and Cannon towers.',
   'synergy.chill.name': 'Chill',
   'synergy.chill.description': 'Un Givre adjacent permet à cette AA de ralentir chaque volant qu\'elle touche.',
   'synergy.interlock.name': 'Interlock',

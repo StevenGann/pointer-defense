@@ -894,6 +894,8 @@ export const uk: Catalogue = {
   'name.modifier.rush': 'Натиск',
 
   // Window title.
+  'synergy.spotter.name': 'Spotter',
+  'synergy.spotter.description': 'A Gun on its Marksman branch lends its range to adjacent AA and Cannon towers.',
   'synergy.chill.name': 'Chill',
   'synergy.chill.description': 'Сусідній Мороз дозволяє цій AA сповільнювати кожного летуна, якого вона вражає.',
   'synergy.interlock.name': 'Interlock',

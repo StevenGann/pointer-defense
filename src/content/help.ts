@@ -1,6 +1,6 @@
 import { enemyName, towerName } from '../i18n/names.ts';
 import { t } from '../i18n/index.ts';
-import { BOSS_KINDS, ENEMY_KINDS, ENEMY_STATS, waveHpScale, type EnemyKind } from '../core/enemies.ts';
+import { BOSS_KINDS, ENEMY_KINDS, ENEMY_STATS, waveHpScale, type EnemyKind, PACER_AURA_RADIUS, CARRIER_BROOD_COUNT, CARRIER_BROOD_INTERVAL_TICKS, CARRIER_DEATH_BROOD_COUNT, WIRECUTTER_EMP_RADIUS, WIRECUTTER_EMP_TICKS, DREADNOUGHT_SLOW_RESIST } from '../core/enemies.ts';
 import {
   TOWER_KINDS,
   TOWER_STATS,
@@ -21,6 +21,8 @@ import {
   MINE_BLAST_RADIUS,
   MAX_TIER,
   kindMaxTier,
+  BRANCH_TIER,
+  CURSOR_CLICK_DAMAGE_FACTOR,
   type Branch,
   type Tier,
   type Tower,
@@ -29,7 +31,7 @@ import {
 import { TICK_HZ } from '../core/time.ts';
 import { AA_SALVO_COUNT } from '../core/projectiles.ts';
 import { AA_HOLD_CAP, AA_HOLD_WINDOW } from '../core/synergy.ts';
-import { RAM_SALVAGE_PER_POINT } from '../core/state.ts';
+import { RAM_SALVAGE_PER_POINT, STARTING_INTEGRITY } from '../core/state.ts';
 import {
   CRIT_BASE_CHANCE,
   CRIT_MARKED_CHANCE,
@@ -43,7 +45,11 @@ import {
   POINTER_STAGES,
 } from '../core/pointer.ts';
 import { SPEC_CAPS, rpGain, specLevelCost, specEffectCompactText, type Profile } from '../core/save.ts';
-import { earlyCallBonus } from '../core/waves.ts';
+import { earlyCallBonus, EARLY_CALL_FLOOR, WAVE_COUNT } from '../core/waves.ts';
+import { ACHIEVEMENTS } from '../core/achievements.ts';
+import { DAILY_WAVES } from '../core/daily.ts';
+import { LEVELS } from '../core/levels.ts';
+import { TREE_NODES } from '../core/tree.ts';
 import { branchName } from '../view/tooltipText.ts';
 import { artNameForEnemy, artNameForTowerBase, artNameForTowerTurret } from '../view/art.ts';
 
@@ -168,7 +174,7 @@ const gettingStartedPage: HelpPage = {
     t('help.getting-started.1'),
     t('help.getting-started.2'),
     t('help.getting-started.3'),
-    t('help.getting-started.4'),
+    t('help.getting-started.4', { integrity: STARTING_INTEGRITY }),
     t('help.getting-started.5'),
     t('help.getting-started.6', { maxTier: MAX_TIER }),
   ],
@@ -176,6 +182,12 @@ const gettingStartedPage: HelpPage = {
 
 // ---------------------------------------------------------------------------------------------
 // Mechanics (always available)
+
+/** The lowest and highest RP price across the eight tower-licence nodes (docs/PRESTIGE.md). */
+function licencePriceRange(): { low: number; high: number } {
+  const costs = TREE_NODES.filter((n) => n.effect.unlockTower !== undefined).map((n) => n.cost);
+  return { low: Math.min(...costs), high: Math.max(...costs) };
+}
 
 const mechanicsPages: readonly HelpPage[] = [
   {
@@ -251,7 +263,7 @@ const mechanicsPages: readonly HelpPage[] = [
     gate: { kind: 'none' },
     body: [
       t('help.mechanics-early-call.1'),
-      t('help.mechanics-early-call.2', { bonus: earlyCallBonus(0, 2) }),
+      t('help.mechanics-early-call.2', { bonus: earlyCallBonus(0, 2), floor: EARLY_CALL_FLOOR }),
       t('help.mechanics-early-call.3'),
     ],
   },
@@ -285,8 +297,75 @@ const mechanicsPages: readonly HelpPage[] = [
     category: 'mechanics',
     gate: { kind: 'none' },
     body: [
-      t('help.mechanics-endless.1'),
+      t('help.mechanics-endless.1', { final: WAVE_COUNT }),
       t('help.mechanics-endless.2'),
+    ],
+  },
+  {
+    id: 'mechanics-licences',
+    title: t('help.page.mechanics-licences.title'),
+    category: 'mechanics',
+    gate: { kind: 'none' },
+    body: [
+      t('help.mechanics-licences.1'),
+      t('help.mechanics-licences.2'),
+      t('help.mechanics-licences.3', licencePriceRange()),
+      t('help.mechanics-licences.4'),
+    ],
+  },
+  {
+    id: 'mechanics-maps',
+    title: t('help.page.mechanics-maps.title'),
+    category: 'mechanics',
+    gate: { kind: 'none' },
+    body: [
+      t('help.mechanics-maps.1', { maps: LEVELS.length }),
+      t('help.mechanics-maps.2'),
+      t('help.mechanics-maps.3'),
+    ],
+  },
+  {
+    id: 'mechanics-global-upgrades',
+    title: t('help.page.mechanics-global-upgrades.title'),
+    category: 'mechanics',
+    gate: { kind: 'none' },
+    body: [
+      t('help.mechanics-global-upgrades.1'),
+      t('help.mechanics-global-upgrades.2'),
+      t('help.mechanics-global-upgrades.3'),
+    ],
+  },
+  {
+    id: 'mechanics-daily',
+    title: t('help.page.mechanics-daily.title'),
+    category: 'mechanics',
+    gate: { kind: 'none' },
+    body: [
+      t('help.mechanics-daily.1'),
+      t('help.mechanics-daily.2', { waves: DAILY_WAVES }),
+      t('help.mechanics-daily.3'),
+    ],
+  },
+  {
+    id: 'mechanics-achievements',
+    title: t('help.page.mechanics-achievements.title'),
+    category: 'mechanics',
+    gate: { kind: 'none' },
+    body: [
+      t('help.mechanics-achievements.1', { count: ACHIEVEMENTS.length }),
+      t('help.mechanics-achievements.2'),
+      t('help.mechanics-achievements.3'),
+    ],
+  },
+  {
+    id: 'mechanics-editor',
+    title: t('help.page.mechanics-editor.title'),
+    category: 'mechanics',
+    gate: { kind: 'none' },
+    body: [
+      t('help.mechanics-editor.1'),
+      t('help.mechanics-editor.2'),
+      t('help.mechanics-editor.3'),
     ],
   },
 ];
@@ -304,6 +383,7 @@ const synergyPage: HelpPage = {
     t('help.synergy.2', { interval: Math.round(TOWER_STATS.aa.fireInterval) }),
     t('help.synergy.3', { window: AA_HOLD_WINDOW, cap: AA_HOLD_CAP }),
     t('help.synergy.4'),
+    t('synergy.spotter.name') + ' — ' + t('synergy.spotter.description'),
     t('synergy.chill.name') + ' — ' + t('synergy.chill.description'),
     t('synergy.interlock.name') + ' — ' + t('synergy.interlock.description'),
     t('synergy.shatter.name') + ' — ' + t('synergy.shatter.description'),
@@ -361,6 +441,19 @@ const bossesInGeneralPage: HelpPage = {
   ],
 };
 
+/** A boss gimmick line's numbers, read from the sim constants. */
+function bossGimmickParams(kind: EnemyKind): Record<string, string | number> {
+  if (kind === 'runner-boss') return { radius: PACER_AURA_RADIUS };
+  if (kind === 'flyer-boss') {
+    return { brood: CARRIER_BROOD_COUNT, interval: fmt(CARRIER_BROOD_INTERVAL_TICKS / TICK_HZ), death: CARRIER_DEATH_BROOD_COUNT };
+  }
+  if (kind === 'saboteur-boss') {
+    return { radius: fmt(WIRECUTTER_EMP_RADIUS), duration: fmt(WIRECUTTER_EMP_TICKS / TICK_HZ) };
+  }
+  if (kind === 'armoured-boss') return { resist: fmt(DREADNOUGHT_SLOW_RESIST) };
+  return {};
+}
+
 function bossPage(kind: EnemyKind): HelpPage {
   const st = ENEMY_STATS[kind];
   const artName = artNameForEnemy(kind);
@@ -372,7 +465,7 @@ function bossPage(kind: EnemyKind): HelpPage {
     body: [
       t(`help.boss-${kind}.1`, { hp: st.hp, speed: fmt(st.speed), integrity: st.integrity }),
       ...hpTable(kind),
-      t(`help.boss-${kind}.2`),
+      t(`help.boss-${kind}.2`, bossGimmickParams(kind)),
       t(`help.boss-${kind}.3`),
     ],
     ...(artName !== null ? { art: { base: artName } } : {}),
@@ -459,6 +552,9 @@ function branchEffectParams(kind: TowerKind, branch: Branch): Record<string, str
   if (kind === 'aa' && branch === 'B') {
     return { salvo: AA_SALVO_COUNT, pct: fmtPct(1 / AA_SALVO_COUNT) };
   }
+  if (kind === 'taser' && branch === 'A') {
+    return { chain: effectiveStats(synthTower('taser', BRANCH_TIER, branch)).chainCount };
+  }
   if (kind === 'wall') {
     return { hp: wallMaxHp(3, branch) };
   }
@@ -486,6 +582,20 @@ function branchBullets(kind: TowerKind): string[] {
   });
 }
 
+/** The role line's numbers, read from the sim where the sentence needs them. */
+function roleLineParams(kind: TowerKind): Record<string, string | number> {
+  if (kind === 'frost') {
+    return { slow: fmtPct(TOWER_STATS.frost.slowFactor), duration: fmt(TOWER_STATS.frost.slowTicks / TICK_HZ) };
+  }
+  if (kind === 'aa') {
+    return { mult: fmtMult(TOWER_STATS.aa.flyerDamageMult ?? 1) };
+  }
+  if (kind === 'cursor') {
+    return { pct: fmtPct(CURSOR_CLICK_DAMAGE_FACTOR) };
+  }
+  return {};
+}
+
 function towerPage(kind: TowerKind): HelpPage {
   const base = artNameForTowerBase(kind);
   const turret = artNameForTowerTurret(kind);
@@ -495,10 +605,10 @@ function towerPage(kind: TowerKind): HelpPage {
     t(`help.tower-${kind}.1`, { cost: `$${st.cost}`, unlock }),
     ...towerTable(kind),
   ];
-  if (towerBranches(kind).length > 0) body.push(t(`help.tower-${kind}.2`));
+  if (towerBranches(kind).length > 0) body.push(t(`help.tower-${kind}.2`, { branchTier: BRANCH_TIER }));
   body.push(...branchBullets(kind));
   const roleLine = towerBranches(kind).length === 0 ? 2 : towerBranches(kind).length === 3 ? 6 : 5;
-  body.push(t(`help.tower-${kind}.${roleLine}`));
+  body.push(t(`help.tower-${kind}.${roleLine}`, roleLineParams(kind)));
   return {
     id: `tower-${kind}`,
     title: towerName(kind),
