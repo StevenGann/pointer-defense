@@ -33,6 +33,10 @@ const LEVEL_NAME_KEY: Readonly<Record<string, string>> = {
   turnstile: 'level.turnstile.name',
   fork: 'level.fork.name',
   ladder: 'level.ladder.name',
+  moat: 'level.moat.name',
+  hourglass: 'level.hourglass.name',
+  trident: 'level.trident.name',
+  switchyard: 'level.switchyard.name',
 };
 
 /** The display name for a shipped map id (docs/MAP-SELECT.md). */

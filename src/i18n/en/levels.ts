@@ -8,6 +8,10 @@ export const levels = {
   'level.turnstile.name': 'Turnstile',
   'level.fork.name': 'The Fork',
   'level.ladder.name': 'The Ladder',
+  'level.moat.name': 'The Moat',
+  'level.hourglass.name': 'The Hourglass',
+  'level.trident.name': 'The Trident',
+  'level.switchyard.name': 'The Switchyard',
 
   'level.problem.tooManyShutters': 'too many shutters',
   'level.problem.shutterOutOfBounds': 'a shutter is out of bounds',

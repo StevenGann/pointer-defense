@@ -67,7 +67,7 @@ import { WAVE_COUNT, buildSchedule, earlyCallBonus, endlessCountBase, endlessInt
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
-import { LEVELS, DEFAULT_LEVEL, createGrid, levelById, toggleOpenAt, validateLevel, MAX_TOGGLES } from '../src/core/levels.ts';
+import { LEVELS, DEFAULT_LEVEL, createGrid, levelById, toggleIndex, toggleOpenAt, validateLevel, MAX_TOGGLES } from '../src/core/levels.ts';
 import { encodeLevel, decodeCode, encodeBytes, CODEC_PREFIX } from '../src/core/codec.ts';
 import {
   createEditor,
@@ -593,7 +593,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 {
   // Every level loads with a walkable start and exit and a route of the documented length.
   const ROUTE_TOLERANCE = 2;
-  const ROUTE_LENGTHS = { corridor: 48, dumbbell: 28, 'open-field': 22, turnstile: 20, fork: 22, ladder: 25 };
+  const ROUTE_LENGTHS = { corridor: 48, dumbbell: 28, 'open-field': 22, turnstile: 20, fork: 22, ladder: 25, moat: 27, hourglass: 27, trident: 20, switchyard: 28 };
   for (const level of LEVELS) {
     const grid = createGrid(level);
     const field = buildField(grid, new Set(), level.exits[0]);
@@ -12334,8 +12334,9 @@ function dailyState(date) {
 }
 
 {
-  // 6. The gallery grid fits the client area at 1280x720 in all seven locales: no card leaves the
-  // client, no two cards overlap, and no name or history line overflows its 196 px card.
+  // 6. The gallery grid fits the client area at 1280x720 in all seven locales: no card overflows the
+  // client width (ten maps scroll vertically, so rows below the view are expected), no two cards
+  // overlap, and no name or history line overflows its 196 px card.
   const l = computeLayout(1280, 720);
   const codes = ['en', 'es', 'fr', 'ru', 'uk', 'zh-Hans', 'he'];
   const budget = MAP_CARD_W - 16; // 8 px padding each side of the card
@@ -12349,10 +12350,9 @@ function dailyState(date) {
     const view = computeMapGrid(l.client, LEVELS.length, 0).view;
     check(cards.length === LEVELS.length, `gallery fit: ${code} lays out every card`);
     for (const card of cards) {
-      if (card.rect.x < view.x || card.rect.y < view.y ||
-        card.rect.x + card.rect.w > view.x + view.w || card.rect.y + card.rect.h > view.y + view.h) {
+      if (card.rect.x < view.x || card.rect.x + card.rect.w > view.x + view.w) {
         allFit = false;
-        console.log(`  gallery fit miss: ${code} card ${card.index} leaves the view`);
+        console.log(`  gallery fit miss: ${code} card ${card.index} leaves the view horizontally`);
       }
     }
     let overlaps = 0;
@@ -12481,6 +12481,64 @@ function dailyState(date) {
     'scroll: pagedown moves one page of rows');
   check(mapGalleryKey(LEVELS.length - 1, 'pageup', g26.rowsVisible).focus === Math.max(0, LEVELS.length - 1 - g26.rowsVisible * MAP_GRID_COLS),
     'scroll: pageup moves one page of rows back');
+}
+
+// --- Maps batch 2 (docs/MAPS-BATCH-2.md) --------------------------------------------------------
+{
+  const NEW_IDS = ['moat', 'hourglass', 'trident', 'switchyard'];
+
+  // 1. Each new level validates and leaves at least 60 buildable tiles.
+  for (const id of NEW_IDS) {
+    const level = levelById(id);
+    check(level.id === id, `${id}: levelById resolves the new map`);
+    check(validateLevel(level) === null, `${id}: validateLevel accepts the map`);
+    const grid = createGrid(level);
+    let buildable = 0;
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (tileAt(grid, c, r) === 'buildable') buildable++;
+    check(buildable >= 60, `${id}: ${buildable} buildable tiles (expected at least 60)`);
+  }
+
+  // 2. A gun places through the placement path on at least one tile of each map.
+  for (const id of NEW_IDS) {
+    const s = stateOnLevel(id);
+    s.economy.salvage = 10000;
+    let placed = false;
+    outer:
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      if (canPlace(s, 'gun', c, r)) { placed = true; break outer; }
+    }
+    check(placed, `${id}: a gun places through canPlace on at least one tile`);
+  }
+
+  // 3. Path lengths match the spec: moat 27, hourglass 27, trident lanes 27/20/29, switchyard
+  //    38 with both shutters closed and 28 with both open.
+  const routeLength = (level, blocked = new Set()) =>
+    pathTiles(buildField(createGrid(level), blocked, level.exits[0]), level.starts[0]).length;
+  check(routeLength(levelById('moat')) === 27, 'moat: shortest route is 27 tiles');
+  check(routeLength(levelById('hourglass')) === 27, 'hourglass: shortest route is 27 tiles');
+
+  const trident = levelById('trident');
+  const lanes = (trident.routes ?? []).map((r) => r.length);
+  check(JSON.stringify(lanes) === JSON.stringify([27, 20, 29]),
+    `trident: lane lengths are 27/20/29 (${lanes.join('/')})`);
+
+  const sw = levelById('switchyard');
+  const closed = new Set((sw.toggles ?? []).map((t) => toggleIndex(t)));
+  check(routeLength(sw, closed) === 38 && routeLength(sw, new Set()) === 28,
+    `switchyard: route is 38 with both shutters closed and 28 with both open (${routeLength(sw, closed)}/${routeLength(sw, new Set())})`);
+
+  // 4. Ten maps fill four rows and overflow at 1280x720; the last card is reachable by scrolling.
+  const client = computeLayout(1280, 720).client;
+  const grid = computeMapGrid(client, LEVELS.length, 0);
+  check(LEVELS.length === 10, 'the gallery holds ten maps');
+  check(grid.rows === 4, `ten maps are four rows (${grid.rows})`);
+  check(grid.overflow === true, 'ten maps overflow at 1280x720');
+  check(scrollForFocus(LEVELS.length - 1, grid.scrollMax, 0, grid.rowsVisible) === grid.scrollMax,
+    'scrollForFocus reaches the last card');
+
+  // 5. The ten thumbnails are pairwise distinct.
+  const thumbs = LEVELS.map((l) => JSON.stringify(levelThumbnail(l)));
+  check(new Set(thumbs).size === LEVELS.length, 'the ten thumbnails are pairwise distinct');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
