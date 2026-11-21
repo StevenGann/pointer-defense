@@ -12364,6 +12364,15 @@ function dailyState(date) {
     }
   }
 
+  // The widened victory buttons still sit inside their modal and clear each other.
+  {
+    const vm = victoryModalRect(l);
+    const b = victoryButtons(vm);
+    check(b.restart.x >= vm.x + 10 && b.restart.x + b.restart.w <= vm.x + vm.w - 10, 'fit: victory restart button stays inside its modal');
+    check(b.endless.x >= vm.x + 10 && b.endless.x + b.endless.w <= vm.x + vm.w - 10, 'fit: victory endless button stays inside its modal');
+    check(b.endless.x + b.endless.w <= b.restart.x, 'fit: victory buttons do not overlap');
+  }
+
   setLocale(en, 'en');
   clearTextWidthCache();
   setDirection('ltr');

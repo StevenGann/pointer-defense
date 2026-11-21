@@ -77,7 +77,7 @@ export const uk: Catalogue = {
   'hud.killsByTower': 'вежами: {count}',
   'hud.killsByPointer': 'вказівником: {count}',
   'hud.killsPointerBonus': '×{bonus} вказівником',
-  'hud.globalUpgradesTitle': 'ПОКРАЩЕННЯ',
+  'hud.globalUpgradesTitle': 'ГЛОБАЛЬНІ ПОКРАЩ.',
   'hud.pointerTitle': 'ВКАЗІВНИК',
 
   'hud.pointerOverclock': 'Розгін {level} / {ceiling}',
@@ -131,7 +131,7 @@ export const uk: Catalogue = {
   'hud.victorySalvage': 'Зароблено брухту: ${earned}',
   'hud.victoryIntegrity': 'Залишок цілісності: {integrity}',
   'hud.endless': 'Без меж',
-  'hud.restartWindows': 'Перезапустити',
+  'hud.restartWindows': 'Перезапуск Windows',
 
   // Tooltip prose.
   'tooltip.branch.gunA': 'Снайпер',

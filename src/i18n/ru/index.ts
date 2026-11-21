@@ -395,7 +395,7 @@ export const ru = {
   'hud.killsByTower': 'башнями: {count}',
   'hud.killsByPointer': 'указателем: {count}',
   'hud.killsPointerBonus': '×{bonus} указателем',
-  'hud.globalUpgradesTitle': 'УЛУЧШЕНИЯ',
+  'hud.globalUpgradesTitle': 'ГЛОБАЛЬНЫЕ УЛУЧШ.',
   'hud.pointerTitle': 'УКАЗАТЕЛЬ',
 
   'hud.pointerOverclock': 'Разгон {level} / {ceiling}',
@@ -448,8 +448,8 @@ export const ru = {
   'hud.victoryKills': 'Убийства — башни {tower} · указатель {pointer}',
   'hud.victorySalvage': 'Заработано лома: ${earned}',
   'hud.victoryIntegrity': 'Осталось целостности: {integrity}',
-  'hud.endless': 'Без края',
-  'hud.restartWindows': 'Перезагрузить',
+  'hud.endless': 'Бесконечный',
+  'hud.restartWindows': 'Перезагр. Windows',
 
   // ── Levels ────────────────────────────────────────────────────────────────────────────────
   'level.corridor.name': 'Коридор',
