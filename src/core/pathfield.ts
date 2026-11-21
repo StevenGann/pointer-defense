@@ -53,12 +53,12 @@ function bfs(cols: number, rows: number, walkable: (idx: number) => boolean, exi
 }
 
 /**
- * The ground field: only buildable tiles are walkable, and `blocked` tiles are impassable. Towers
- * (including walls) live in `blocked`, so every placement rewrites the field.
+ * The ground field: only `blocked` tiles are impassable, so both `buildable` and `no-build` tiles are
+ * walkable. Towers (including walls) live in `blocked`, so every placement rewrites the field.
  */
 export function buildField(grid: Grid, blocked: ReadonlySet<number>, exit: Tile): Int32Array {
   const { cols, rows, tiles } = grid;
-  return bfs(cols, rows, (idx) => tiles[idx] === 'buildable' && !blocked.has(idx), exit);
+  return bfs(cols, rows, (idx) => tiles[idx] !== 'blocked' && !blocked.has(idx), exit);
 }
 
 /**
@@ -83,7 +83,7 @@ export function buildRouteField(
   const walkable = new Set<number>();
   for (const t of route) walkable.add(t.row * grid.cols + t.col);
   const { cols, rows, tiles } = grid;
-  return bfs(cols, rows, (idx) => walkable.has(idx) && tiles[idx] === 'buildable' && !blocked.has(idx), exit);
+  return bfs(cols, rows, (idx) => walkable.has(idx) && tiles[idx] !== 'blocked' && !blocked.has(idx), exit);
 }
 
 /**
@@ -132,7 +132,7 @@ export function isSealed(grid: Grid, blocked: ReadonlySet<number>, spawn: Tile, 
       if (!inBounds(c, r)) continue;
       const ni = r * cols + c;
       if (seen[ni]) continue;
-      if (tiles[ni] !== 'buildable') continue;
+      if (tiles[ni] === 'blocked') continue;
       if (blocked.has(ni)) continue;
       seen[ni] = 1;
       stack[top++] = ni;

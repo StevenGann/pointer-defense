@@ -825,8 +825,11 @@ export const uk: Catalogue = {
   'shell.editor.cannotSave': 'Неможливо зберегти: {reason}',
   'shell.editor.untitled': 'Без назви',
   'shell.editor.newMap': 'Нова карта',
+  'shell.editor.tool.noBuild': 'No-Build',
+  'shell.editor.tool.noBuildHint': 'Walkable floor you cannot build on.',
 
   'shell.refusal.blockedTile': 'Ця клітинка заблокована.',
+  'shell.refusal.noBuildTile': 'No towers on a No-Build tile.',
   'shell.refusal.shutterTile': 'Це клітинка стулки — на ній не можна будувати.',
   'shell.refusal.occupied': 'Там уже стоїть вежа.',
   'shell.refusal.noSalvage': 'Недостатньо брухту для цієї вежі.',

@@ -41,6 +41,8 @@ export interface Level {
   readonly name: string;
   /** Wall tiles as [col, row]. */
   readonly walls: readonly (readonly [number, number])[];
+  /** Walkable tiles that towers cannot be built on, as [col, row]. */
+  readonly noBuild?: readonly (readonly [number, number])[];
   /** v0.10b: exactly one. */
   readonly starts: readonly Tile[];
   /** v0.10b: exactly one. */
@@ -487,6 +489,11 @@ export function levelFingerprint(level: Level): string {
     mix(c);
     mix(r);
   }
+  const noBuild = [...(level.noBuild ?? [])].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  for (const [c, r] of noBuild) {
+    mix(c);
+    mix(r);
+  }
   for (const t of [...(level.toggles ?? [])].sort((a, b) => a.col - b.col || a.row - b.row)) {
     mix(t.col);
     mix(t.row);
@@ -590,6 +597,11 @@ export function validateLevel(level: Level): string | null {
   const toggles = levelToggles(level);
   if (toggles.length > MAX_TOGGLES) return 'too many toggles';
   const grid = createGrid(level);
+  const wallSet = new Set(level.walls.map(([c, r]) => r * COLS + c));
+  for (const [c, r] of level.noBuild ?? []) {
+    if (!inBounds(c, r)) return 'no-build out of bounds';
+    if (wallSet.has(r * COLS + c)) return 'no-build on a wall tile';
+  }
   for (const t of toggles) {
     if (!inBounds(t.col, t.row)) return 'toggle out of bounds';
     if (tileAt(grid, t.col, t.row) !== 'buildable') return 'toggle on a wall tile';
@@ -637,6 +649,9 @@ export function createGrid(level: Level): Grid {
   const tiles: TileKind[] = new Array<TileKind>(COLS * ROWS).fill('buildable');
   for (const [c, r] of level.walls) {
     tiles[r * COLS + c] = 'blocked';
+  }
+  for (const [c, r] of level.noBuild ?? []) {
+    tiles[r * COLS + c] = 'no-build';
   }
   return { cols: COLS, rows: ROWS, tiles };
 }

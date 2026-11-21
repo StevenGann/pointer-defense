@@ -928,7 +928,7 @@ export class BoardView {
         if (!kind) continue;
         const px = board.x + col * cell;
         const py = board.y + row * cell;
-        const name = kind === 'buildable' ? 'tile' : 'obstacle';
+        const name = kind === 'blocked' ? 'obstacle' : 'tile';
         const tex = getArtTexture(name, cell);
         if (tex !== null) {
           const s = new Sprite(tex);
@@ -940,6 +940,12 @@ export class BoardView {
         } else {
           drawTile(g, kind, px, py, cell);
         }
+      }
+    }
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        if (tileAt(grid, col, row) !== 'no-build') continue;
+        drawNoBuildHatch(g, board.x + col * cell, board.y + row * cell, cell);
       }
     }
   }
@@ -976,16 +982,26 @@ export class BoardView {
   }
 }
 
-function drawTile(g: Graphics, kind: 'buildable' | 'blocked', px: number, py: number, cell: number): void {
-  if (kind === 'buildable') {
+function drawTile(g: Graphics, kind: 'buildable' | 'blocked' | 'no-build', px: number, py: number, cell: number): void {
+  if (kind === 'blocked') {
+    g.rect(px, py, cell, cell).fill(0xa0a0a0);
+    edgeRect(g, px, py, cell, 0x707070);
+  } else {
     g.rect(px, py, cell, cell).fill(PAL.face);
     hline(g, px, px + cell, py + 0.5, PAL.highlight);
     vline(g, px + 0.5, py, py + cell, PAL.highlight);
     hline(g, px, px + cell, py + cell - 0.5, PAL.shadow);
     vline(g, px + cell - 0.5, py, py + cell, PAL.shadow);
-  } else {
-    g.rect(px, py, cell, cell).fill(0xa0a0a0);
-    edgeRect(g, px, py, cell, 0x707070);
+  }
+}
+
+/**
+ * The No-Build tile's translucent crosshatch: both diagonal families of a 1 px hatch, spacing 4 px,
+ * inset 1 px, drawn in the tile pass beneath everything that moves (docs/NO-BUILD-TILE.md §2).
+ */
+function drawNoBuildHatch(g: Graphics, px: number, py: number, cell: number): void {
+  for (const seg of hatchSegments(px + 1, py + 1, cell - 2, 4)) {
+    g.moveTo(seg.x1, seg.y1).lineTo(seg.x2, seg.y2).stroke({ width: 1, color: PAL.shadow, alpha: 0.14 });
   }
 }
 

@@ -2,6 +2,7 @@ import { Container, Graphics, Text } from 'pixi.js';
 import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
 import { t } from '../i18n/index.ts';
 import { COLS, ROWS } from '../core/grid.ts';
+import { hatchSegments } from './wallAppearance.ts';
 import {
   EDITOR_TOOLS,
   editorToggleAt,
@@ -250,6 +251,9 @@ export class EditorView {
     } else if (problem !== null) {
       this.statusText.text = problem;
       this.statusText.style.fill = PAL.maroon;
+    } else if (model.tool === 'no-build') {
+      this.statusText.text = t('shell.editor.tool.noBuildHint');
+      this.statusText.style.fill = PAL.text;
     } else {
       this.statusText.text = t('dlg.editor.ready');
       this.statusText.style.fill = PAL.text;
@@ -284,20 +288,25 @@ function drawToolbarButton(g: Graphics, r: Rect, enabled: boolean, hovered: bool
   }
 }
 
-function drawEditorTile(g: Graphics, tile: 'floor' | 'wall' | 'shutter', px: number, py: number, cell: number): void {
-  if (tile === 'floor') {
+function drawEditorTile(g: Graphics, tile: 'floor' | 'wall' | 'shutter' | 'no-build', px: number, py: number, cell: number): void {
+  if (tile === 'wall') {
+    g.rect(px, py, cell, cell).fill(0xa0a0a0);
+    edgeRect(g, px, py, cell, 0x707070);
+  } else if (tile === 'shutter') {
+    g.rect(px, py, cell, cell).fill(0x807060);
+    edgeRect(g, px, py, cell, 0x403020);
+    g.moveTo(px + 2, py + cell - 2).lineTo(px + cell - 2, py + 2).stroke({ width: 1, color: 0x403020 });
+  } else {
     g.rect(px, py, cell, cell).fill(PAL.face);
     hline(g, px, px + cell, py + 0.5, PAL.highlight);
     vline(g, px + 0.5, py, py + cell, PAL.highlight);
     hline(g, px, px + cell, py + cell - 0.5, PAL.shadow);
     vline(g, px + cell - 0.5, py, py + cell, PAL.shadow);
-  } else if (tile === 'wall') {
-    g.rect(px, py, cell, cell).fill(0xa0a0a0);
-    edgeRect(g, px, py, cell, 0x707070);
-  } else {
-    g.rect(px, py, cell, cell).fill(0x807060);
-    edgeRect(g, px, py, cell, 0x403020);
-    g.moveTo(px + 2, py + cell - 2).lineTo(px + cell - 2, py + 2).stroke({ width: 1, color: 0x403020 });
+    if (tile === 'no-build') {
+      for (const seg of hatchSegments(px + 1, py + 1, cell - 2, 4)) {
+        g.moveTo(seg.x1, seg.y1).lineTo(seg.x2, seg.y2).stroke({ width: 1, color: PAL.shadow, alpha: 0.14 });
+      }
+    }
   }
 }
 

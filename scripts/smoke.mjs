@@ -129,7 +129,7 @@ import { buildRecordsRows, totalsLine, bestByMapLine, computeRecordsLayout, reco
 import { captureRun, restoreRun, loadRunSave, saveRun, clearRunSave, hasRunSave, RUN_SAVE_KEY } from '../src/core/runsave.ts';
 import { computeMenuScreen, menuButtonAt, computeMenuWindow, computeMenuAnim, marqueeMaskRect } from '../src/view/menuScreen.ts';
 import { computeMapGrid, clampMapScroll, scrollForFocus, mapCardAt, moveMapFocus, mapGalleryKey, mapFocusForId, mapLevelAt, MAP_CARD_W, MAP_CARD_H, MAP_CARD_GAP, MAP_GRID_COLS, MAP_SCROLL_W, MAP_NAME_SIZE, MAP_HISTORY_SIZE } from '../src/view/mapSelect.ts';
-import { thumbnailTexture, thumbCacheSize } from '../src/view/mapsScreen.ts';
+import { thumbnailTexture, thumbCacheSize, thumbBase } from '../src/view/mapsScreen.ts';
 import { levelThumbnail } from '../src/core/thumb.ts';
 import { MAP_SAVE_KEY, rememberMap, readRememberedMap } from '../src/core/mapSave.ts';
 import { computeUpgradesLayout, UpgradesSession, upgradesStatusText, upgradesEmptyLines } from '../src/view/upgrades.ts';
@@ -7533,6 +7533,101 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     'an edited map with the same geometry has the same route length as the shipped map');
   check(JSON.stringify(buildSchedule(1)) === JSON.stringify(buildSchedule(1)), 'wave generation is unchanged for an edited map');
   check(startWave(edited), 'a wave starts on the edited map');
+}
+
+// --- 43b. The No-Build tile (docs/NO-BUILD-TILE.md) -------------------------------------------
+{
+  const nbLevel = (extra) => ({
+    id: '', name: 'NoBuild', walls: [[4, 5]],
+    starts: [{ col: 0, row: 6 }], exits: [{ col: 19, row: 6 }],
+    toggles: [],
+    ...extra,
+  });
+
+  // Pathing: a no-build tile is walkable and routes identically to a buildable tile there.
+  const buildableGrid = createGrid(nbLevel({}));
+  const noBuildGrid = createGrid(nbLevel({ noBuild: [[10, 6]] }));
+  const exit = { col: 19, row: 6 };
+  const fieldBuildable = buildField(buildableGrid, new Set(), exit);
+  const fieldNoBuild = buildField(noBuildGrid, new Set(), exit);
+  check(tileAt(noBuildGrid, 10, 6) === 'no-build', 'createGrid marks a no-build tile');
+  check(tileAt(noBuildGrid, 4, 5) === 'blocked', 'createGrid keeps the wall beside the no-build tile');
+  check(JSON.stringify(Array.from(fieldNoBuild)) === JSON.stringify(Array.from(fieldBuildable)),
+    'pathing across a no-build tile matches the same board with a buildable tile');
+
+  // canPlace is false on a no-build tile for every tower kind (walls included), with the new reason.
+  const s = createRunState(undefined, nbLevel({ noBuild: [[10, 6]] }));
+  s.wave = 24; // unlock every tower kind
+  for (const kind of TOWER_KINDS) {
+    check(!canPlace(s, kind, 10, 6), `canPlace refuses ${kind} on a no-build tile`);
+  }
+  check(canPlace(s, 'gun', 1, 1), 'a buildable tile still places');
+  check(t('shell.refusal.noBuildTile') === 'No towers on a No-Build tile.',
+    'the no-build refusal string is present');
+
+  // validateLevel accepts noBuild, rejects a tile listed as both wall and no-build.
+  check(validateLevel(nbLevel({ noBuild: [[10, 6]] })) === null, 'validateLevel accepts a no-build tile');
+  check(validateLevel(nbLevel({ walls: [[4, 5], [10, 6]], noBuild: [[10, 6]] })) !== null,
+    'validateLevel rejects a tile that is both wall and no-build');
+
+  // Save round-trip: all three tile kinds (plus a shutter) encode, decode and paint back identically.
+  const allKinds = {
+    id: '', name: 'ThreeKinds', walls: [[4, 5]], noBuild: [[10, 6]],
+    starts: [{ col: 0, row: 6 }], exits: [{ col: 19, row: 6 }],
+    toggles: [{ col: 12, row: 6, periodTicks: 900, openTicks: 420, phaseTicks: 0 }],
+  };
+  const dec = decodeCode(encodeLevel(allKinds));
+  check(dec.ok, 'a map with all three tile kinds round-trips');
+  check(dec.ok && JSON.stringify([...dec.level.noBuild].sort()) === JSON.stringify([[10, 6]]),
+    'the round-trip keeps the no-build tiles');
+  check(dec.ok && dec.level.walls.some(([c, r]) => c === 4 && r === 5), 'the round-trip keeps the walls');
+  check(dec.ok && (dec.level.toggles ?? []).length === 1, 'the round-trip keeps the shutter');
+
+  // An old two-character save (no no-build value in the bitfield) still loads.
+  const old = { id: '', name: 'Old', walls: [[3, 2]], starts: [{ col: 0, row: 6 }], exits: [{ col: 19, row: 6 }], toggles: [] };
+  const oldDec = decodeCode(encodeLevel(old));
+  check(oldDec.ok && JSON.stringify([...(oldDec.level.noBuild ?? [])]) === '[]', 'an old two-character save still loads');
+
+  // Draw order: the hatch is drawn in the tile pass, before the enemy layer.
+  {
+    const layout = computeLayout(1280, 800);
+    const hover = { col: 0, row: 0, onBoard: false, x: 0, y: 0 };
+    const v = new BoardView();
+    v.draw(createRunState(undefined, nbLevel({ noBuild: [[10, 6]] })), layout, 0, hover);
+    const children = v.root.children;
+    const tilesIdx = children.indexOf(v.tiles);
+    const enemiesIdx = children.indexOf(v.enemies);
+    check(tilesIdx >= 0 && enemiesIdx >= 0 && tilesIdx < enemiesIdx,
+      'the no-build hatch (tile layer) sits before the enemy layer in the container order');
+  }
+
+  // Thumbnail: a no-build tile differs from a floor tile by exactly the 8 % darkening.
+  {
+    const parse = (hex) => {
+      const n = parseInt(hex.slice(1), 16);
+      return [(n >> 16) & 0xff, (n >> 8) & 0xff, n & 0xff];
+    };
+    const floor = parse(thumbBase('open'));
+    const nb = parse(thumbBase('no-build'));
+    const expected = floor.map((c) => Math.round(c * 0.92));
+    check(JSON.stringify(nb) === JSON.stringify(expected),
+      `a no-build thumbnail tile is the floor darkened 8 % (${thumbBase('no-build')})`);
+    const cells = levelThumbnail(nbLevel({ noBuild: [[1, 1]] }));
+    check(cells[1 * COLS + 1] === 'no-build', 'levelThumbnail marks an off-route no-build tile');
+  }
+
+  // Editor: paint, erase, and the wall-over-no-build replacement.
+  {
+    const m = createEditor();
+    selectEditorTool(m, 'no-build');
+    check(paintEditor(m, 3, 4) === null && editorTileAt(m, 3, 4) === 'no-build', 'the No-Build tool paints a no-build tile');
+    selectEditorTool(m, 'wall');
+    check(paintEditor(m, 3, 4) === null && editorTileAt(m, 3, 4) === 'wall', 'painting a wall over a no-build tile replaces it');
+    selectEditorTool(m, 'no-build');
+    check(paintEditor(m, 3, 4) === null && editorTileAt(m, 3, 4) === 'no-build', 'painting a no-build tile over a wall replaces it');
+    eraseEditor(m, 3, 4);
+    check(editorTileAt(m, 3, 4) === 'floor', 'erase paints a no-build tile back to floor');
+  }
 }
 
 // --- 44. Minesweeper (Cannon branch B) --------------------------------------------------------

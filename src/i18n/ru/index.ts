@@ -599,8 +599,11 @@ export const ru = {
   'shell.editor.cannotSave': 'Не удаётся сохранить: {reason}',
   'shell.editor.untitled': 'Без названия',
   'shell.editor.newMap': 'Новая карта',
+  'shell.editor.tool.noBuild': 'No-Build',
+  'shell.editor.tool.noBuildHint': 'Walkable floor you cannot build on.',
 
   'shell.refusal.blockedTile': 'Эта клетка заблокирована.',
+  'shell.refusal.noBuildTile': 'No towers on a No-Build tile.',
   'shell.refusal.shutterTile': 'Эта клетка — затвор, на ней нельзя строить.',
   'shell.refusal.occupied': 'Там уже стоит башня.',
   'shell.refusal.noSalvage': 'Недостаточно лома для этой башни.',

@@ -813,8 +813,11 @@ export const zh: Catalogue = {
   'shell.editor.cannotSave': '无法保存：{reason}',
   'shell.editor.untitled': '未命名',
   'shell.editor.newMap': '新建地图',
+  'shell.editor.tool.noBuild': 'No-Build',
+  'shell.editor.tool.noBuildHint': 'Walkable floor you cannot build on.',
 
   'shell.refusal.blockedTile': '该地块已被阻挡。',
+  'shell.refusal.noBuildTile': 'No towers on a No-Build tile.',
   'shell.refusal.shutterTile': '该地块是挡板，无法建造。',
   'shell.refusal.occupied': '那里已有一座防御塔。',
   'shell.refusal.noSalvage': '废料不足以建造该防御塔。',

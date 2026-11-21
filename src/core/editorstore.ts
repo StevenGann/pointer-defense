@@ -122,6 +122,12 @@ function parseLevel(v: unknown): Level | null {
   if (id === null || name === null) return null;
   const walls = parseWalls(v.walls);
   if (walls === null) return null;
+  let noBuild: readonly (readonly [number, number])[] | undefined;
+  if (v.noBuild !== undefined && v.noBuild !== null) {
+    const parsed = parseWalls(v.noBuild);
+    if (parsed === null) return null;
+    noBuild = parsed;
+  }
   const starts = v.starts === undefined ? null : parseTiles(v.starts);
   if (starts === null || starts.length === 0) return null;
   const exits = v.exits === undefined ? null : parseTiles(v.exits);
@@ -134,7 +140,15 @@ function parseLevel(v: unknown): Level | null {
     toggles = parsed;
   }
 
-  const level: Level = { id, name, walls, starts, exits, ...(toggles !== undefined ? { toggles } : {}) };
+  const level: Level = {
+    id,
+    name,
+    walls,
+    starts,
+    exits,
+    ...(noBuild !== undefined ? { noBuild } : {}),
+    ...(toggles !== undefined ? { toggles } : {}),
+  };
   return level;
 }
 
@@ -162,7 +176,7 @@ function parseDraft(v: unknown): EditorDraft | null {
   if (!Array.isArray(v.tiles) || v.tiles.length !== COLS * ROWS) return null;
   const tiles: EditorTileKind[] = [];
   for (const t of v.tiles) {
-    if (t !== 'floor' && t !== 'wall' && t !== 'shutter') return null;
+    if (t !== 'floor' && t !== 'wall' && t !== 'shutter' && t !== 'no-build') return null;
     tiles.push(t);
   }
   const start = v.start === null ? null : parseTile(v.start);
@@ -301,6 +315,7 @@ export function applyMapEntry(model: EditorModel, entry: EditorMapEntry): void {
   const level = entry.level;
   const tiles: EditorTileKind[] = new Array<EditorTileKind>(COLS * ROWS).fill('floor');
   for (const [c, r] of level.walls) tiles[r * COLS + c] = 'wall';
+  for (const [c, r] of level.noBuild ?? []) tiles[r * COLS + c] = 'no-build';
   const toggles = (level.toggles ?? []).map((t) => ({ ...t }));
   for (const t of toggles) tiles[t.row * COLS + t.col] = 'shutter';
   model.tiles = tiles;

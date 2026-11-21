@@ -13,11 +13,12 @@ import { buildField, pathTiles } from './pathfield.ts';
  * module has no idea what a pixel or a Pixi texture is.
  */
 
-export type ThumbCell = 'wall' | 'route' | 'spawn' | 'exit' | 'open';
+export type ThumbCell = 'wall' | 'route' | 'spawn' | 'exit' | 'open' | 'no-build';
 
 export function levelThumbnail(level: Level): ThumbCell[] {
   const out: ThumbCell[] = new Array<ThumbCell>(COLS * ROWS).fill('open');
   for (const [c, r] of level.walls) out[r * COLS + c] = 'wall';
+  for (const [c, r] of level.noBuild ?? []) out[r * COLS + c] = 'no-build';
 
   const routes = levelRoutes(level);
   if (routes.length > 0) {
