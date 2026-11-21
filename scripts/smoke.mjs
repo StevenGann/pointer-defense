@@ -1005,7 +1005,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   placeTower(s, 'wall', 5, 5);
   const wall = towerAt(s, 5, 5);
   const line = upgradeTooltipLines(wall, s.economy.salvage)[0];
-  check(tooltipText(line) === 'Wall T2 of 3 — HP 60 → 180, $12',
+  check(tooltipText(line) === 'Wall T2 — HP 60 → 180, $12',
     `upgrade tooltip reads the tier-2 total and cost (${tooltipText(line)})`);
   upgradeTower(s, 5, 5);
   check(towerAt(s, 5, 5).maxHp === 180, 'the tooltip after-value matches the wall after buying');
@@ -10150,6 +10150,34 @@ function helpFmtDps(damage, fireTicks) { return fireTicks <= 0 ? '—' : (damage
 }
 
 {
+  // ux2b. Worst-case column height (docs/DETAIL-BRANCH-ROW.md §4): the new branch row plus the three
+  // stacked branch buttons. The game never shows both at once (a branch is picked at tier 3, the
+  // buttons at tier 2), but a tier-2 cursor with a branch forced is the tallest the pane can be, so it
+  // is the ceiling every other detail view sits under. The detail box and the panel's last row
+  // (auto-wave) must both end inside the sidebar.
+  for (const [vw, vh] of [[1280, 720], [1024, 768]]) {
+    const l = computeLayout(vw, vh);
+    const bottom = l.leftPanel.y + l.leftPanel.h;
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    check(placeTower(s, 'cursor', 5, 5), `place a cursor for the worst-case column at ${vw}x${vh}`);
+    const c = towerAt(s, 5, 5);
+    c.tier = 2;
+    c.branch = 'A';
+    selectPlacedTower(s, c);
+    const h = computeHud(l, s);
+    check(h.detail !== null && h.detail.branch !== null && h.detail.branches.length === 3,
+      `the worst case keeps the branch row and three stacked branch buttons at ${vw}x${vh}`);
+    const boxBottom = h.detail.box.y + h.detail.box.h;
+    const lastBottom = h.autoWave.y + h.autoWave.h;
+    check(boxBottom <= bottom,
+      `the worst-case detail box ends inside the sidebar at ${vw}x${vh} (${boxBottom} <= ${bottom})`);
+    check(lastBottom <= bottom,
+      `the worst-case last row ends inside the sidebar at ${vw}x${vh} (${lastBottom} <= ${bottom})`);
+  }
+}
+
+{
   // ux3. The readout prints $N (in the larger readout size, right-aligned) and --- under Blackout;
   // the status bar no longer has a salvage pane or prints the salvage figure.
   const l = computeLayout(1280, 720);
@@ -13602,7 +13630,7 @@ function dailyState(date) {
       const dh = computeHud(l, ds);
       if (dh.detail) {
         const d = dh.detail;
-        assertFit('detail name', t('hud.towerName', { name: t('name.tower.gun'), tier: gun.tier, max: kindMaxTier('gun') }));
+        assertFit('detail name', t('hud.towerName', { name: t('name.tower.gun'), tier: gun.tier }));
         assertFit('detail route', t('hud.route', { count: currentPath(ds).length }));
         assertFit('detail sell', t('hud.sell', { amount: formatNumber(sellValue(gun, ds.treeEffects.sellRefund)) }));
         for (const b of d.branches) assertFit('branch', b.label, FONT_SIZE.small);
@@ -13703,6 +13731,33 @@ function dailyState(date) {
     }
     startFit(code, 'hud.startWave', t('hud.startWave', { wave: s.wave + 1 }), h.wave, BODY);
     startFit(code, 'hud.auto', t('hud.auto'), h.autoWave, BODY, 20);
+
+    // --- Tower detail: the branch row under the title, at the pane's inner width ---
+    // The longest shipped branch name in this locale must fit the 18 px branch row (docs/DETAIL-BRANCH-ROW.md §4).
+    // branchName() is frozen to the boot locale, so measure the catalogue keys directly, as the branch
+    // row renders them once the app reloads in this locale.
+    const branchLetters = { gun: ['A', 'B'], cannon: ['A', 'B'], taser: ['A', 'B'], frost: ['A', 'B'], laser: ['A', 'B'], aa: ['A', 'B'], beacon: ['A', 'B'], wall: ['A', 'B', 'C'], cursor: ['A', 'B', 'C'] };
+    let longestBranch = '';
+    let longestBranchW = 0;
+    for (const [kind, letters] of Object.entries(branchLetters)) {
+      for (const br of letters) {
+        const name = t(`tooltip.branch.${kind}${br}`);
+        const w = Math.ceil(textWidth(name, BODY));
+        if (w > longestBranchW) { longestBranchW = w; longestBranch = name; }
+      }
+    }
+    const ds = allUnlocked();
+    ds.economy.salvage = 1e9;
+    if (placeTower(ds, 'gun', 5, 5)) {
+      const gun = towerAt(ds, 5, 5);
+      gun.tier = 2;
+      gun.branch = 'A';
+      selectPlacedTower(ds, gun);
+      const dh = computeHud(l, ds);
+      if (dh.detail && dh.detail.branch) {
+        checkFit(code, 'hud.towerBranch', t('hud.towerBranch', { branch: longestBranch }), BODY, dh.detail.branch.w);
+      }
+    }
 
     // --- Right HUD panel ---
     const rp = computeRightPanel(l, s);
