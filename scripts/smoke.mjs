@@ -713,6 +713,24 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 }
 
 {
+  // The Ladder hollows its centre: the box that once filled cols 1-16 / rows 3-8 is gone, so the
+  // central rectangle and both balcony islands are buildable, and a tower actually places through
+  // the placement path (not just on the grid).
+  const ladder = levelById('ladder');
+  const grid = createGrid(ladder);
+  let buildable = 0;
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (tileAt(grid, c, r) === 'buildable') buildable++;
+  check(buildable >= 40, `ladder: ${buildable} buildable tiles (expected at least 40)`);
+  for (const [c, r] of [[1, 3], [8, 5], [16, 8], [4, 0], [5, 1], [14, 10], [15, 11]]) {
+    check(tileAt(grid, c, r) === 'buildable', `ladder: (${c},${r}) is buildable`);
+  }
+  check(validateLevel(ladder) === null, 'ladder: validateLevel accepts the map');
+  const s = stateOnLevel('ladder');
+  check(canPlace(s, 'gun', 8, 5), 'ladder: a tower places in the hollow centre');
+  check(canPlace(s, 'gun', 4, 0), 'ladder: a tower places on the top balcony island');
+}
+
+{
   // Spawned enemies alternate routes by a seeded, deterministic round-robin.
   const assign = () => {
     const s = stateOnLevel('fork');

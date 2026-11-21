@@ -112,13 +112,6 @@ const TURNSTILE_TOGGLES: readonly LevelToggle[] = [
   { col: 9, row: 1, periodTicks: 600, openTicks: 240, phaseTicks: 300 },
 ];
 
-/** A solid rectangle of wall tiles, for filling the inside of a carved corridor. */
-function box(c0: number, c1: number, r0: number, r1: number): readonly (readonly [number, number])[] {
-  const out: [number, number][] = [];
-  for (let r = r0; r <= r1; r++) for (let c = c0; c <= c1; c++) out.push([c, r]);
-  return out;
-}
-
 /** A solid rectangle of corridor tiles, for a route's walkable set. */
 function band(c0: number, c1: number, r0: number, r1: number): Route {
   const out: Tile[] = [];
@@ -155,18 +148,24 @@ const FORK_UPPER: Route = [{ col: 0, row: 6 }, ...band(0, 19, 2, 5), { col: 19, 
 const FORK_LOWER: Route = [{ col: 0, row: 6 }, ...band(0, 19, 7, 10), { col: 19, row: 6 }];
 
 /**
- * The Ladder: two vertical corridors (the rails) joined by two horizontal cross-links (the rungs),
- * forming a hollow rectangle. Route A walks the left rail and the bottom rung; route B walks the top
- * rung and the right rail. The two share only the spawn corner (0,2) and the exit corner (17,9).
+ * The Ladder: two rungs (row 2 and row 9) and two rails (col 0 and col 17) around a hollow centre,
+ * so the whole central rectangle is open buildable floor. Each solid band leaves a 2x2 balcony
+ * island — cols 4-5 in the top band and cols 14-15 in the bottom band — placed so a short-range
+ * tower on an island can still reach the rung below (top island) or above (bottom island). Route A
+ * walks the left rail and the bottom rung; route B walks the top rung and the right rail. The two
+ * share only the spawn corner (0,2) and the exit corner (17,9).
  */
 const LADDER_WALLS: readonly (readonly [number, number])[] = [
-  ...horizontal(0, 0, 19),
-  ...horizontal(1, 0, 19),
-  ...horizontal(10, 0, 19),
-  ...horizontal(11, 0, 19),
+  ...horizontal(0, 0, 3),
+  ...horizontal(0, 6, 19),
+  ...horizontal(1, 0, 3),
+  ...horizontal(1, 6, 19),
+  ...horizontal(10, 0, 13),
+  ...horizontal(10, 16, 19),
+  ...horizontal(11, 0, 13),
+  ...horizontal(11, 16, 19),
   ...vertical(18, 2, 9),
   ...vertical(19, 2, 9),
-  ...box(1, 16, 3, 8),
 ];
 
 const LADDER_LEFT: Route = [{ col: 0, row: 2 }, ...column(0, 3, 9), ...rowRun(9, 1, 17)];
