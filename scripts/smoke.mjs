@@ -60,7 +60,7 @@ import { FLYER_OFF_KIND_DAMAGE,
   damageWall,
   rebuildField,
 } from '../src/core/state.ts';
-import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE, MINE_BLAST_RADIUS, CURSOR_CLICK_DAMAGE_FACTOR, repairHealRate, repairRadius, MAX_TIER, TIERS, kindMaxTier, COMBAT_KINDS, BRANCH_TIER } from '../src/core/towers.ts';
+import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, isMortar, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE, MINE_BLAST_RADIUS, CURSOR_CLICK_DAMAGE_FACTOR, repairHealRate, repairRadius, MAX_TIER, TIERS, kindMaxTier, COMBAT_KINDS, BRANCH_TIER } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { AA_HOLD_CAP, AA_HOLD_WINDOW, AA_MIN_CLUSTER, buildSynergyLayout, leads, spotterGrant, SPOTTER_CAP, SYNERGIES, CHILL_SLOW_FACTOR, CHILL_SLOW_TICKS, SHATTER_BURST_DELAY_TICKS, SHATTER_BURST_SPLASH, SHATTER_BURST_DAMAGE_MULT, BUTTRESS_GROUP_CAP, isBulwark } from '../src/core/synergy.ts';
 import { formatNumber } from '../src/core/format.ts';
@@ -155,7 +155,7 @@ import {
   WALL_FACE_PRESSED,
 } from '../src/view/wallAppearance.ts';
 import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName, TOOLTIP_BLUE } from '../src/view/tooltipText.ts';
-import { drawTower, clearTowerSprites, BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre, synergyEdgeEndpoints, synergyEdgeStyle } from '../src/view/board.ts';
+import { drawTower, clearTowerSprites, BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre, synergyEdgeEndpoints, synergyEdgeStyle, recoilOffset, RECOIL_DURATION_TICKS, RECOIL_PEAK_CELLS } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, computeWindowChromeGeom, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
 import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, statusPerfText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect, modalRect, modalMenuAt, modalMessageTop } from '../src/view/hud.ts';
@@ -13906,6 +13906,52 @@ function dailyState(date) {
   const sprites = [fakeSprite(), fakeSprite(), fakeSprite()];
   clearTowerSprites(sprites);
   check(sprites.every((sp) => sp.visible === false), 'phantom turret: clearTowerSprites hides every pooled sprite');
+}
+
+// --- Mortar recoil (docs/MORTAR-RECOIL.md) -------------------------------------------------------
+{
+  const cell = 44;
+  const peak = RECOIL_PEAK_CELLS * cell;
+  const fire = 1000;
+
+  // 1. Zero before the shot and from age 10 on (the duration is 10 ticks).
+  const zero = (o) => o.dx === 0 && o.dy === 0;
+  check(zero(recoilOffset(fire, fire - 1, cell)), 'mortar recoil: zero before the shot');
+  check(zero(recoilOffset(fire, fire + RECOIL_DURATION_TICKS, cell)), 'mortar recoil: zero from age 10');
+  check(zero(recoilOffset(fire, fire + 50, cell)), 'mortar recoil: zero well after the shot');
+
+  // 2. Peak at age 0 is 0.035 * cell within a pixel, and the envelope never grows with age: no later
+  // tick displaces the turret past the peak displacement.
+  const at0 = recoilOffset(fire, fire, cell);
+  const mag0 = Math.hypot(at0.dx, at0.dy);
+  check(Math.abs(mag0 - peak) < 1, `mortar recoil: peak at age 0 is 0.035*cell within a pixel (${mag0.toFixed(2)}px vs ${peak.toFixed(2)}px)`);
+  let bounded = true;
+  for (let k = 1; k < RECOIL_DURATION_TICKS; k++) {
+    const m = Math.hypot(recoilOffset(fire, fire + k, cell).dx, recoilOffset(fire, fire + k, cell).dy);
+    if (m > peak + 1e-9) bounded = false;
+  }
+  check(bounded, 'mortar recoil: the offset never exceeds the peak displacement (envelope never grows)');
+
+  // 3. Determinism: the same inputs always give the same offsets.
+  check(recoilOffset(fire, fire + 3, cell).dx === recoilOffset(fire, fire + 3, cell).dx &&
+        recoilOffset(fire, fire + 3, cell).dy === recoilOffset(fire, fire + 3, cell).dy,
+    'mortar recoil: the same inputs repeat the same offsets');
+
+  // 4. A Mortar records a recoil tick; a plain Cannon and a Minesweeper record none.
+  const mortar = createTower(1, 'cannon', 0, 0);
+  mortar.branch = 'A';
+  const plainCannon = createTower(2, 'cannon', 0, 0);
+  const minesweeper = createTower(3, 'cannon', 0, 0);
+  minesweeper.branch = 'B';
+  check(isMortar(mortar), 'mortar recoil: a Mortar (cannon branch A) records a recoil tick');
+  check(!isMortar(plainCannon), 'mortar recoil: a plain Cannon records no recoil');
+  check(!isMortar(minesweeper) && isMinesweeper(minesweeper), 'mortar recoil: a Minesweeper (cannon branch B) records no recoil');
+
+  // 5. No new rng: the recoil source must not call Math.random or draw from the run's rng stream.
+  const boardSrc = readFileSync(fileURLToPath(new URL('../src/view/board.ts', import.meta.url)), 'utf8');
+  const mainSrc = readFileSync(fileURLToPath(new URL('../src/main.ts', import.meta.url)), 'utf8');
+  check(!/Math\.random/.test(boardSrc) && !/Math\.random/.test(mainSrc), 'mortar recoil: no Math.random in board.ts or main.ts');
+  check(!/rngNext|\.rng\b/.test(boardSrc), 'mortar recoil: the view draws no run rng');
 }
 
 // --- Map selection (docs/MAP-SELECT.md) ---------------------------------------------------------

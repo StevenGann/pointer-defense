@@ -337,6 +337,9 @@ export class BoardView {
   private staticKey = '';
   private pathKey = '';
 
+  /** Tower id -> the sim tick it last fired, for a Mortar's turret recoil (docs/MORTAR-RECOIL.md). */
+  private readonly recoilTicks = new Map<number, number>();
+
   constructor() {
     this.ghostBase.anchor.set(0.5, 0.5);
     this.ghostTurret.anchor.set(0.5, 0.5);
@@ -585,6 +588,11 @@ export class BoardView {
     return this.popupTexts[i];
   }
 
+  /** Record that `id` fired this tick, so its turret shakes for the recoil duration. */
+  noteRecoil(id: number, tick: number): void {
+    this.recoilTicks.set(id, tick);
+  }
+
   draw(
     state: RunState,
     l: Layout,
@@ -713,6 +721,14 @@ export class BoardView {
 
     let towerIndex = 0;
     let wallOverlayIndex = 0;
+    // Recoil ticks are presentation-only: drop towers that no longer exist and shots whose shake has
+    // run out, so the map never accumulates entries across a long run.
+    if (this.recoilTicks.size > 0) {
+      const liveIds = new Set(state.towers.map((t) => t.id));
+      for (const [id, fireTick] of this.recoilTicks) {
+        if (!liveIds.has(id) || state.clock - fireTick >= RECOIL_DURATION_TICKS) this.recoilTicks.delete(id);
+      }
+    }
     for (const t of state.towers) {
       const baseSprite = this.towerBaseSprite(towerIndex);
       const turretSprite = this.towerTurretSprite(towerIndex);
@@ -721,7 +737,7 @@ export class BoardView {
       // Wall overlays are drawn after the base so they sit on top of the face sprite.
       const overlayA = t.kind === 'wall' ? this.wallOverlaySprite(wallOverlayIndex++) : null;
       const overlayB = t.kind === 'wall' ? this.wallOverlaySprite(wallOverlayIndex++) : null;
-      drawTower(baseSprite, turretSprite, markSprite, wrenchSprite, this.towers, t, board, cell, state.clock, overlayA, overlayB, quality);
+      drawTower(baseSprite, turretSprite, markSprite, wrenchSprite, this.towers, t, board, cell, state.clock, overlayA, overlayB, quality, this.recoilTicks.get(t.id) ?? null);
       towerIndex++;
     }
     for (let i = towerIndex; i < this.towerBaseSprites.length; i++) this.towerBaseSprites[i].visible = false;
@@ -1309,6 +1325,30 @@ function dottedLine(g: Graphics, x1: number, y1: number, x2: number, y2: number,
   g.stroke({ width: 1, color });
 }
 
+/**
+ * Mortar recoil (docs/MORTAR-RECOIL.md). A Cannon on branch A kicks its turret when it fires: the
+ * turret sprite alone, not the camera, not the board, not the enemy. Presentation-only — nothing is
+ * added to the sim, no event changes, no save field, no rng.
+ */
+
+/** Ticks the turret shakes after a Mortar shot (about 160 ms). */
+export const RECOIL_DURATION_TICKS = 10;
+/** Peak turret displacement as a fraction of a cell (about 1.5 px at a 44 px cell). */
+export const RECOIL_PEAK_CELLS = 0.035;
+
+/**
+ * The turret's recoil offset for a shot that fired at `fireTick`, in pixels. Zero before the shot
+ * and from age 10 on. The envelope decays linearly from 1 at the firing tick to 0 at the last tick;
+ * two incommensurate sinusoids make it read as a shake, and no rng is used so a replay is identical.
+ */
+export function recoilOffset(fireTick: number, clock: number, cell: number): { dx: number; dy: number } {
+  const k = clock - fireTick;
+  if (k < 0 || k >= RECOIL_DURATION_TICKS) return { dx: 0, dy: 0 };
+  const d = 1 - k / RECOIL_DURATION_TICKS;
+  const a = RECOIL_PEAK_CELLS * cell;
+  return { dx: a * d * Math.sin(2.4 * k), dy: a * d * 0.6 * Math.cos(3.1 * k) };
+}
+
 export function drawTower(
   baseSprite: Sprite,
   turretSprite: Sprite,
@@ -1322,6 +1362,7 @@ export function drawTower(
   overlayA: Sprite | null = null,
   overlayB: Sprite | null = null,
   quality: QualityLevel = 'full',
+  recoilFireTick: number | null = null,
 ): void {
   const cx = board.x + (t.col + 0.5) * cell;
   const cy = board.y + (t.row + 0.5) * cell;
@@ -1362,6 +1403,15 @@ export function drawTower(
   if (isFullyUpgraded(t)) {
     const r = pipRect(cx, cy, cell, pipUsesBottomCorner(t, clock));
     drawPip(g, r);
+  }
+
+  // A Mortar shot shakes the turret alone, on top of the position drawTowerBody set above. The plinth,
+  // branch mark, health bar and finished-upgrade pip stay put. `lean` already drops per-tower
+  // decoration, so the recoil is skipped there too.
+  if (recoilFireTick !== null && quality !== 'lean') {
+    const off = recoilOffset(recoilFireTick, clock, cell);
+    turretSprite.position.x += off.dx;
+    turretSprite.position.y += off.dy;
   }
 }
 

@@ -375,6 +375,11 @@ export function isMinesweeper(tower: Tower): boolean {
   return tower.kind === 'cannon' && tower.branch === 'B';
 }
 
+/** True when a Cannon's branch A has turned it into a Mortar (its turret kicks when it fires). */
+export function isMortar(tower: Tower): boolean {
+  return tower.kind === 'cannon' && tower.branch === 'A';
+}
+
 /** A wall's hit points at each tier, before the tier-3 branch doubling. Walls stop at tier 3; the
  *  higher entries mirror tier 3 defensively. */
 const WALL_HP_BY_TIER: Readonly<Record<number, number>> = { 1: 60, 2: 180, 3: 540, 4: 540, 5: 540 };

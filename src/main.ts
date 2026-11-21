@@ -69,7 +69,7 @@ import { sfx, type SoundName } from './audio/sfx.ts';
 import { CameraShake, shakeImpulseFor } from './view/shake.ts';
 import { backingStorePixelSize, cssViewportSize, liveDevicePixelRatio } from './view/screen.ts';
 import { getArtTexture, onArtInvalidate, preloadArt, setArtDpr } from './view/art.ts';
-import { repairHealingCount, TOWER_KINDS, type Branch, type TowerKind } from './core/towers.ts';
+import { repairHealingCount, TOWER_KINDS, isMortar, type Branch, type TowerKind } from './core/towers.ts';
 import { isBossVariant, type EnemyKind } from './core/enemies.ts';
 import { encodeLevel, decodeCode } from './core/codec.ts';
 import { nextQuality, qualityFrameMs, qualityPin, type QualityLevel } from './core/quality.ts';
@@ -2046,7 +2046,11 @@ function drainEvents(): void {
       case 'shot': {
         const tower = state.towers.find((t) => t.id === ev.towerId);
         effects.addShot(tower, ev.x, ev.y);
-        if (tower) sfx.play(towerSound(tower.kind));
+        if (tower) {
+          sfx.play(towerSound(tower.kind));
+          // A Mortar (Cannon branch A) kicks its turret; the shake is presentation-only (docs/MORTAR-RECOIL.md).
+          if (isMortar(tower)) board.noteRecoil(tower.id, state.tick);
+        }
         break;
       }
       case 'damage': {
