@@ -36,6 +36,9 @@ export interface Spawn {
 /** A run is a hundred waves. Endless (101+) uses the same generator with a seed offset. */
 export const WAVE_COUNT = 100;
 
+/** The floor an early-call salvage bonus decays toward (docs/design.md §8.5). */
+export const EARLY_CALL_FLOOR = 5;
+
 /** Fixed offset mixed into the seed for endless waves, so 101+ is not a repeat of 1..100. */
 export const ENDLESS_SEED_OFFSET = 1_000_000;
 
@@ -554,7 +557,7 @@ export function earlyCallBonus(elapsedTicks: number, nextWave: number): number {
   const span = Math.max(60, last);
   const fraction = Math.min(1, Math.max(0, 1 - elapsedTicks / span));
   const kill = waveKillValue(nextWave);
-  return Math.min(kill, Math.max(5, Math.round(0.5 * kill * fraction)));
+  return Math.min(kill, Math.max(EARLY_CALL_FLOOR, Math.round(0.5 * kill * fraction)));
 }
 
 /** Total enemies in a wave, including a boss and its escorts on boss waves. */

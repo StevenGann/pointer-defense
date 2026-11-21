@@ -892,6 +892,8 @@ export const ru = {
   'name.modifier.rush': 'Натиск',
 
   // ── Window title ──────────────────────────────────────────────────────────────────────────
+  'synergy.spotter.name': 'Spotter',
+  'synergy.spotter.description': 'A Gun on its Marksman branch lends its range to adjacent AA and Cannon towers.',
   'synergy.chill.name': 'Chill',
   'synergy.chill.description': 'Соседний Мороз позволяет этой AA замедлять каждого летуна, которого она поражает.',
   'synergy.interlock.name': 'Interlock',

@@ -884,6 +884,8 @@ export const es: Catalogue = {
   'screen.number.crit': 'CRIT {amount}',
 
   // Window title.
+  'synergy.spotter.name': 'Spotter',
+  'synergy.spotter.description': 'A Gun on its Marksman branch lends its range to adjacent AA and Cannon towers.',
   'synergy.chill.name': 'Chill',
   'synergy.chill.description': 'Una Escarcha adyacente permite que esta AA ralentice a todo volador que golpea.',
   'synergy.interlock.name': 'Interlock',

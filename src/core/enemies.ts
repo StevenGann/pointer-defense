@@ -96,6 +96,9 @@ export function flyerSwayAmplitude(kind: EnemyKind): number {
 /** The Dreadnought's plating: flat reduction added to its base armour on every tower hit. */
 export const DREADNOUGHT_PLATING = 6;
 
+/** The Dreadnought's slow resistance: its slow strength is halved (docs/design.md §7). */
+export const DREADNOUGHT_SLOW_RESIST = 0.5;
+
 /** The Wirecutter's EMP: towers this close are knocked offline for this long as it passes. */
 export const WIRECUTTER_EMP_RADIUS = 2.5;
 export const WIRECUTTER_EMP_TICKS = TICK_HZ * 3;
@@ -133,7 +136,7 @@ export function isFlyerKind(kind: EnemyKind): boolean {
 
 /** Halve a slow's strength for the Dreadnought (armoured-boss), whose plating resists slows. */
 export function slowFactorFor(kind: EnemyKind, factor: number): number {
-  if (kind === 'armoured-boss' && factor < 1) return 1 - (1 - factor) / 2;
+  if (kind === 'armoured-boss' && factor < 1) return 1 - (1 - factor) * DREADNOUGHT_SLOW_RESIST;
   return factor;
 }
 

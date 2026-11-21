@@ -1,4 +1,4 @@
-import { effectiveStats, type Tower, type TowerKind } from './towers.ts';
+import { BRANCH_TIER, effectiveStats, type Tower, type TowerKind } from './towers.ts';
 
 /**
  * Tower synergies (docs/SYNERGIES.md).
@@ -10,8 +10,6 @@ import { effectiveStats, type Tower, type TowerKind } from './towers.ts';
 
 /** The hard ceiling on any range a `spotter` row hands over (docs/SYNERGIES.md §9). */
 export const SPOTTER_CAP = 5.5;
-/** How many tiers a tower must reach before its branch exists. */
-const BRANCH_TIER = 3;
 /** The smallest connected group of towers that counts as a cluster. A lone tower is never a cluster. */
 export const AA_MIN_CLUSTER = 2;
 /** How far ahead (in ticks) a follower will wait for a leader's shot before firing on its own. */

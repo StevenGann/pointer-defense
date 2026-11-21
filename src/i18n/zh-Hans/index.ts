@@ -881,6 +881,8 @@ export const zh: Catalogue = {
   ...help,
 
   // Window title.
+  'synergy.spotter.name': 'Spotter',
+  'synergy.spotter.description': 'A Gun on its Marksman branch lends its range to adjacent AA and Cannon towers.',
   'synergy.chill.name': 'Chill',
   'synergy.chill.description': '相邻的冰霜让这座 AA 能减速它命中的每个飞行敌人。',
   'synergy.interlock.name': 'Interlock',

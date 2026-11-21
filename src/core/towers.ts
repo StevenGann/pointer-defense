@@ -481,6 +481,9 @@ export function repairHealingCount(towers: readonly Tower[], healer: Tower, cloc
   return repairHealTargets(towers, healer, clock).length;
 }
 
+/** The tier at which a branching tower chooses its branch (docs/design.md §6.10). */
+export const BRANCH_TIER = 3;
+
 /** True for kinds that offer a branch choice at tier 3 (the repair tower currently does not). */
 export function hasBranches(kind: TowerKind): boolean {
   return kind !== 'repair';

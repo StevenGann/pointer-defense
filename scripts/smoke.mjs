@@ -60,11 +60,11 @@ import { FLYER_OFF_KIND_DAMAGE,
   damageWall,
   rebuildField,
 } from '../src/core/state.ts';
-import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE, MINE_BLAST_RADIUS, CURSOR_CLICK_DAMAGE_FACTOR, repairHealRate, repairRadius, MAX_TIER, TIERS, kindMaxTier, COMBAT_KINDS } from '../src/core/towers.ts';
+import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE, MINE_BLAST_RADIUS, CURSOR_CLICK_DAMAGE_FACTOR, repairHealRate, repairRadius, MAX_TIER, TIERS, kindMaxTier, COMBAT_KINDS, BRANCH_TIER } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
 import { AA_HOLD_CAP, AA_HOLD_WINDOW, AA_MIN_CLUSTER, buildSynergyLayout, leads, spotterGrant, SPOTTER_CAP, SYNERGIES, CHILL_SLOW_FACTOR, CHILL_SLOW_TICKS, SHATTER_BURST_DELAY_TICKS, SHATTER_BURST_SPLASH, SHATTER_BURST_DAMAGE_MULT, BUTTRESS_GROUP_CAP, isBulwark } from '../src/core/synergy.ts';
 import { formatNumber } from '../src/core/format.ts';
-import { WAVE_COUNT, buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, FLYER_FLIGHT_MEMBER_TICKS, FLYER_FLIGHT_SIZE, flyerSwarmFactor, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers, WAVE_ENEMY_CAP } from '../src/core/waves.ts';
+import { WAVE_COUNT, EARLY_CALL_FLOOR, buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, FLYER_FLIGHT_MEMBER_TICKS, FLYER_FLIGHT_SIZE, flyerSwarmFactor, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers, WAVE_ENEMY_CAP } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
 import { buildField, pathTiles, stepToward } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
@@ -98,7 +98,7 @@ import {
   replaceLibraryMap,
 } from '../src/core/editorstore.ts';
 import { computeEditorLayout, editorToolbarAt } from '../src/view/editor.ts';
-import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, ENEMY_KINDS, BOSS_KINDS, isBossKind, isBossVariant, isPopupEnemy, isFlyerKind, slowFactorFor, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS, CARRIER_BROOD_COUNT, CARRIER_BROOD_INTERVAL_TICKS, CARRIER_BROOD_SCATTER_TICKS, CARRIER_DEATH_BROOD_COUNT, DREADNOUGHT_PLATING, WIRECUTTER_EMP_RADIUS, WIRECUTTER_EMP_TICKS, RAM_TOWER_DPS, RAM_TURRET_DAMAGE, RAM_TURRET_RANGE } from '../src/core/enemies.ts';
+import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, ENEMY_KINDS, BOSS_KINDS, isBossKind, isBossVariant, isPopupEnemy, isFlyerKind, slowFactorFor, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS, CARRIER_BROOD_COUNT, CARRIER_BROOD_INTERVAL_TICKS, CARRIER_BROOD_SCATTER_TICKS, CARRIER_DEATH_BROOD_COUNT, DREADNOUGHT_PLATING, DREADNOUGHT_SLOW_RESIST, WIRECUTTER_EMP_RADIUS, WIRECUTTER_EMP_TICKS, RAM_TOWER_DPS, RAM_TURRET_DAMAGE, RAM_TURRET_RANGE } from '../src/core/enemies.ts';
 import { missileSeed, AA_SALVO_COUNT } from '../src/core/projectiles.ts';
 import { rngNext } from '../src/core/rng.ts';
 import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS, AD_KINDS, AD_DEFRAG_SALVAGE_PCT, AD_AUTOUPDATE_DAMAGE_MULT, AD_TIMEZONE_SPEED_MULT, AD_SCREENSAVER_DAMAGE } from '../src/core/ads.ts';
@@ -13152,6 +13152,194 @@ function dailyState(date) {
   // 5. The ten thumbnails are pairwise distinct.
   const thumbs = LEVELS.map((l) => JSON.stringify(levelThumbnail(l)));
   check(new Set(thumbs).size === LEVELS.length, 'the ten thumbnails are pairwise distinct');
+}
+
+// --- 48. Help content: placeholders (docs/HELP-REVIEW.md §2) --------------------------------------
+// Local mirrors of the content module's formatters, so each rendered value is asserted against the
+// exact string the page prints (the same convention the tier-table checks use).
+const hfmt = (n) => n.toFixed(2).replace(/\.?0+$/, '');
+const hfmtPct = (n) => `${Math.round(n * 100)}%`;
+const pageText = (id) => pageById(id).body.join('\n');
+
+{
+  // 48a. Every section-2 row renders the constant's value, and the constant is not written into the
+  // catalogue. The catalogue key keeps the {placeholder}; the rendered page fills it from the code.
+  const rows = [
+    {
+      page: 'getting-started',
+      key: 'help.getting-started.4',
+      expect: `start with ${STARTING_INTEGRITY}`,
+      placeholder: '{integrity}',
+      absent: 'start with 20',
+    },
+    {
+      page: 'mechanics-early-call',
+      key: 'help.mechanics-early-call.2',
+      expect: `floor of ${EARLY_CALL_FLOOR}`,
+      placeholder: '{floor}',
+      absent: 'floor of 5',
+    },
+    {
+      page: 'tower-frost',
+      key: 'help.tower-frost.5',
+      expect: `to ${hfmtPct(TOWER_STATS.frost.slowFactor)} speed for ${hfmt(TOWER_STATS.frost.slowTicks / TICK_HZ)} s`,
+      placeholder: '{slow}',
+      absent: '30% speed',
+    },
+    {
+      page: 'tower-taser',
+      key: 'help.tower-taser.3',
+      expect: `chains to ${effectiveStats(helpSynthTower('taser', BRANCH_TIER, 'A')).chainCount} targets`,
+      placeholder: '{chain}',
+      absent: 'chains to 3 targets',
+    },
+    {
+      page: 'tower-aa',
+      key: 'help.tower-aa.5',
+      expect: `for ${hfmt(TOWER_STATS.aa.flyerDamageMult ?? 1)}× damage`,
+      placeholder: '{mult}',
+      absent: 'hits them for double damage',
+    },
+    {
+      page: 'tower-cursor',
+      key: 'help.tower-cursor.6',
+      expect: `for ${hfmtPct(CURSOR_CLICK_DAMAGE_FACTOR)} of your click damage`,
+      placeholder: '{pct}',
+      absent: 'half your click damage',
+    },
+    {
+      page: 'tower-cursor',
+      key: 'help.tower-cursor.5',
+      expect: `below ${hfmtPct(CURSOR_REPAIR_THRESHOLD)}`,
+      placeholder: '{pct}',
+      absent: 'below 80%',
+    },
+    {
+      page: 'boss-runner-boss',
+      key: 'help.boss-runner-boss.2',
+      expect: `within ${PACER_AURA_RADIUS} tiles`,
+      placeholder: '{radius}',
+      absent: 'within 3 tiles',
+    },
+    {
+      page: 'boss-flyer-boss',
+      key: 'help.boss-flyer-boss.2',
+      expect: `${CARRIER_BROOD_COUNT} every ${hfmt(CARRIER_BROOD_INTERVAL_TICKS / TICK_HZ)} s`,
+      placeholder: '{brood}',
+      absent: 'three every 4 s',
+    },
+    {
+      page: 'boss-flyer-boss',
+      key: 'help.boss-flyer-boss.2',
+      expect: `${CARRIER_DEATH_BROOD_COUNT} more when it dies`,
+      placeholder: '{death}',
+      absent: 'six more when it dies',
+    },
+    {
+      page: 'boss-saboteur-boss',
+      key: 'help.boss-saboteur-boss.2',
+      expect: `within ${hfmt(WIRECUTTER_EMP_RADIUS)} tiles goes offline for ${hfmt(WIRECUTTER_EMP_TICKS / TICK_HZ)} s`,
+      placeholder: '{radius}',
+      absent: 'within 2.5 tiles',
+    },
+    {
+      page: 'boss-armoured-boss',
+      key: 'help.boss-armoured-boss.2',
+      expect: `work ${hfmt(DREADNOUGHT_SLOW_RESIST)} as well`,
+      placeholder: '{resist}',
+      absent: 'half as well',
+    },
+    {
+      page: 'mechanics-endless',
+      key: 'help.mechanics-endless.1',
+      expect: `wave ${WAVE_COUNT}`,
+      placeholder: '{final}',
+      absent: 'the hundredth wave',
+    },
+  ];
+  for (const row of rows) {
+    check(pageText(row.page).includes(row.expect),
+      `${row.key} renders "${row.expect}" (from the constant)`);
+    check(en[row.key].includes(row.placeholder) && !en[row.key].includes(row.absent),
+      `${row.key} carries ${row.placeholder}, not the written-out number`);
+  }
+
+  // The nine "at tier 3" branch notes read BRANCH_TIER from the catalogue, not a literal 3.
+  const branched = ['gun', 'cannon', 'taser', 'frost', 'laser', 'aa', 'beacon', 'wall', 'cursor'];
+  for (const kind of branched) {
+    const key = `help.tower-${kind}.2`;
+    check(pageText(`tower-${kind}`).includes(`at tier ${BRANCH_TIER}`),
+      `${key} renders "at tier ${BRANCH_TIER}" (BRANCH_TIER)`);
+    check(en[key].includes('{branchTier}') && !en[key].includes('at tier 3'),
+      `${key} carries {branchTier}, not the literal tier`);
+  }
+}
+
+{
+  // 48b. The specific written-out numbers removed in section 2 are gone from every help.* string.
+  // A simple scan for the exact phrases; deliberately not a general number detector.
+  const barePatterns = [
+    'start with 20',
+    'floor of 5',
+    '30% speed for 3 s',
+    'chains to 3 targets',
+    'hits them for double damage',
+    'half your click damage',
+    'within 3 tiles',
+    'three every 4 s',
+    'six more when it dies',
+    'within 2.5 tiles',
+    'goes offline for 3 s',
+    'half as well',
+    'at tier 3',
+    'the hundredth wave',
+  ];
+  const helpKeys = Object.keys(en).filter((k) => k.startsWith('help.'));
+  const offenders = [];
+  for (const k of helpKeys) {
+    for (const p of barePatterns) {
+      if (en[k].includes(p)) offenders.push(`${k} ("${p}")`);
+    }
+  }
+  check(offenders.length === 0,
+    `no help.* string keeps a section-2 written-out number (${offenders.join(', ') || 'none'})`);
+}
+
+{
+  // 48c. Every new page is present, ungated (unlocked for a fresh profile), non-empty and in the
+  // Mechanics chapter.
+  const newPages = [
+    'mechanics-licences',
+    'mechanics-maps',
+    'mechanics-global-upgrades',
+    'mechanics-daily',
+    'mechanics-achievements',
+    'mechanics-editor',
+  ];
+  for (const id of newPages) {
+    const p = pageById(id);
+    check(p !== undefined, `new page ${id} is present`);
+    check(p !== undefined && p.gate.kind === 'none', `new page ${id} is ungated`);
+    check(p !== undefined && pageUnlocked(p, defaultProfile()), `new page ${id} is unlocked for a fresh profile`);
+    check(p !== undefined && p.body.length >= 3 && p.body.length <= 5 && p.body.every((l) => l.length > 0),
+      `new page ${id} is non-empty and three to five lines`);
+    check(p !== undefined && p.category === 'mechanics', `new page ${id} is in the Mechanics chapter`);
+  }
+
+  // The generated counts ride placeholders, so the page can never drift from the code.
+  check(pageText('mechanics-maps').includes(`${LEVELS.length} maps`), `mechanics-maps names ${LEVELS.length} maps`);
+  check(pageText('mechanics-achievements').includes(`${ACHIEVEMENTS.length} achievements`), `mechanics-achievements names ${ACHIEVEMENTS.length} achievements`);
+  check(pageText('mechanics-daily').includes(`${DAILY_WAVES} waves`), `mechanics-daily names ${DAILY_WAVES} waves`);
+}
+
+{
+  // 48d. Placeholder parity: every placeholder in a help.* string is passed at its call site. The
+  // content module fills placeholders at import (t() throws on an unfilled one in development), so a
+  // rendered page line must never still carry a {placeholder}. Combined with 47f (no raw ${...}) this
+  // is the build-fails-on-a-missing-param guarantee made visible.
+  const leftover = HELP_PAGES.filter((p) => p.body.some((line) => /\{[a-zA-Z0-9_]+\}/.test(line)));
+  check(leftover.length === 0,
+    `every rendered help line has every placeholder filled (leftover: ${leftover.map((p) => p.id).join(', ') || 'none'})`);
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
