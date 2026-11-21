@@ -13,8 +13,11 @@ not count, and the one after it is taken instead.
 
 ## Doing
 
-**Ground pathing tie-break** — `docs/PATHING-REVIEW.md` §5. Momentum first among tied neighbours,
-then the tile-parity order; the two smoke hashes re-baselined. Branch `feat/pathing-tiebreak`.
+1. **Ground pathing tie-break** — `docs/PATHING-TIEBREAK.md`. Momentum first among tied neighbours,
+   then the tile-parity order; the two smoke hashes re-baselined. Branch `feat/pathing-tiebreak`.
+2. **No tracer for Cannon shots** — `docs/CANNON-NO-TRACER.md`. The muzzle flash and sound stay; the
+   red line to the target's old position goes, because the shell is the shot. Branch
+   `feat/cannon-no-tracer`.
 
 ## Next
 
