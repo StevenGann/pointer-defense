@@ -185,6 +185,7 @@ import {
   MISSILE_RETARGET_RANGE,
   MISSILE_TURN_RATE,
   missileSeed,
+  CANNON_SHELL_SPEED,
   SHELL_SPEED,
   type Projectile,
 } from './projectiles.ts';
@@ -3025,9 +3026,8 @@ function hitEnemy(s: RunState, t: Tower, st: EffectiveStats, e: Enemy, dmg: numb
   return e.dead;
 }
 
-function fireSplash(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg: number): void {
-  const cx = target.x;
-  const cy = target.y;
+/** Deal one tower's splash at a world point: full damage to every enemy in radius. */
+function fireSplashAt(s: RunState, t: Tower, st: EffectiveStats, cx: number, cy: number, dmg: number): void {
   let kills = 0;
   let hitSlowed = false;
   for (const e of s.enemies) {
@@ -3045,6 +3045,10 @@ function fireSplash(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dm
   if (t.kind === 'cannon' && hitSlowed && synergyLayout(s).shatterCannons.has(t.id)) {
     s.shatterBursts.push({ tick: s.tick + SHATTER_BURST_DELAY_TICKS, x: cx, y: cy, damage: dmg * SHATTER_BURST_DAMAGE_MULT, towerId: t.id });
   }
+}
+
+function fireSplash(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg: number): void {
+  fireSplashAt(s, t, st, target.x, target.y, dmg);
 }
 
 function fireChain(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg: number): void {
@@ -3509,6 +3513,11 @@ function fireTowers(s: RunState): void {
       fireMissileSalvo(s, t, st, target, dmg);
       continue;
     }
+    // The Cannon fires a real shell now: damage lands when the shell lands, not at fire time.
+    if (t.kind === 'cannon') {
+      fireCannonShell(s, t, st, target, dmg);
+      continue;
+    }
 
     s.events.push({ type: 'shot', towerId: t.id, x: target.x, y: target.y, splash: st.splash });
 
@@ -3787,8 +3796,8 @@ function tickMines(s: RunState): void {
 // ---------------------------------------------------------------------------------------------
 // AA projectiles
 
-/** A flyer's instantaneous velocity in tiles per second, from its heading and nominal speed. */
-function flyerVelocity(e: Enemy): { vx: number; vy: number } {
+/** An enemy's instantaneous velocity in tiles per second, from its heading and nominal speed. */
+function enemyVelocity(e: Enemy): { vx: number; vy: number } {
   const speed = speedPerTick(e.kind) * TICK_HZ;
   return { vx: Math.cos(e.heading) * speed, vy: Math.sin(e.heading) * speed };
 }
@@ -3800,7 +3809,32 @@ function fireFlakShell(s: RunState, t: Tower, st: EffectiveStats, target: Enemy,
   const dist = Math.hypot(target.x - ox, target.y - oy);
   const flightTicks = Math.max(1, Math.ceil(dist / (SHELL_SPEED / TICK_HZ)));
   const flightSec = flightTicks / TICK_HZ;
-  const vel = flyerVelocity(target);
+  const vel = enemyVelocity(target);
+  const px = target.x + vel.vx * flightSec;
+  const py = target.y + vel.vy * flightSec;
+  s.projectiles.push({
+    id: s.nextId++,
+    kind: 'shell',
+    x: ox,
+    y: oy,
+    vx: (px - ox) / flightSec,
+    vy: (py - oy) / flightSec,
+    targetId: target.id,
+    towerId: t.id,
+    damage: dmg,
+    lifetime: flightTicks,
+  });
+  s.events.push({ type: 'shot', towerId: t.id, x: target.x, y: target.y, splash: st.splash });
+}
+
+/** Launch a Cannon shell toward the target's predicted position; it splashes when its flight elapses. */
+function fireCannonShell(s: RunState, t: Tower, st: EffectiveStats, target: Enemy, dmg: number): void {
+  const ox = t.col + 0.5;
+  const oy = t.row + 0.5;
+  const dist = Math.hypot(target.x - ox, target.y - oy);
+  const flightTicks = Math.max(1, Math.ceil(dist / (CANNON_SHELL_SPEED / TICK_HZ)));
+  const flightSec = flightTicks / TICK_HZ;
+  const vel = enemyVelocity(target);
   const px = target.x + vel.vx * flightSec;
   const py = target.y + vel.vy * flightSec;
   s.projectiles.push({
@@ -3884,11 +3918,15 @@ function missileReached(p: Projectile, target: Enemy): boolean {
   return (target.x - p.x) ** 2 + (target.y - p.y) ** 2 <= r * r;
 }
 
-/** A Flak shell bursts: full damage to flyers in radius, half to ground, both only inside it. */
+/** A shell bursts: the Cannon splashes at the landing point, the AA Flak does its flyer/ground split. */
 function burstShell(s: RunState, p: Projectile): void {
   const tower = s.towers.find((t) => t.id === p.towerId);
   if (!tower) return; // the tower was sold mid-flight: the shell fizzles without damage
   const st = effectiveStats(tower);
+  if (tower.kind === 'cannon') {
+    fireSplashAt(s, tower, st, p.x, p.y, p.damage);
+    return;
+  }
   const r = st.splash;
   const cx = p.x;
   const cy = p.y;

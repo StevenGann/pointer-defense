@@ -99,7 +99,7 @@ import {
 } from '../src/core/editorstore.ts';
 import { computeEditorLayout, editorToolbarAt } from '../src/view/editor.ts';
 import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, ENEMY_KINDS, BOSS_KINDS, isBossKind, isBossVariant, isPopupEnemy, isFlyerKind, slowFactorFor, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS, CARRIER_BROOD_COUNT, CARRIER_BROOD_INTERVAL_TICKS, CARRIER_BROOD_SCATTER_TICKS, CARRIER_DEATH_BROOD_COUNT, DREADNOUGHT_PLATING, DREADNOUGHT_SLOW_RESIST, WIRECUTTER_EMP_RADIUS, WIRECUTTER_EMP_TICKS, RAM_TOWER_DPS, RAM_TURRET_DAMAGE, RAM_TURRET_RANGE } from '../src/core/enemies.ts';
-import { missileSeed, AA_SALVO_COUNT } from '../src/core/projectiles.ts';
+import { missileSeed, AA_SALVO_COUNT, CANNON_SHELL_SPEED } from '../src/core/projectiles.ts';
 import { rngNext } from '../src/core/rng.ts';
 import { spawnAd, dismissAd, AD_W, AD_H, AD_LIFETIME_TICKS, AD_KINDS, AD_DEFRAG_SALVAGE_PCT, AD_AUTOUPDATE_DAMAGE_MULT, AD_TIMEZONE_SPEED_MULT, AD_SCREENSAVER_DAMAGE } from '../src/core/ads.ts';
 import { AD_TIPS } from '../src/content/adTips.ts';
@@ -530,7 +530,8 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   }
 
   // 5. A non-flyer fixture is byte-identical to the build before flyer flight. The hash below was
-  // recorded from that build (commit 3cb9f15) with exactly this fixture.
+  // recorded from that build (commit 3cb9f15) with exactly this fixture. The Cannon now lands damage
+  // a flight later, but this fixture has no Cannon, so the hash is unchanged.
   const nonFlyerFixture = () => {
     const s = stateOnLevel('open-field');
     s.economy.salvage = 10000;
@@ -654,7 +655,8 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
 // --- 5g. Multi-route levels: no-routes unchanged, fork/ladder load, overlap, isolation -------
 {
   // A deterministic slice of a wave on each no-route level, hashed so any change to the single
-  // implicit route (or to wave balance) trips this byte-identity check.
+  // implicit route (or to wave balance) trips this byte-identity check. The Cannon now lands damage
+  // a flight later, but this fixture places only a Gun, so the hash is unchanged.
   const simulate = (id) => {
     const s = stateOnLevel(id);
     s.economy.salvage = 10000;
@@ -2898,7 +2900,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   const popup = stationary(3, 'popup', 15, 5.5, 4.5);
   s.enemies.push(target, covered, popup);
 
-  tick(s);
+  for (let i = 0; i < 30 && target.hp === target.maxHp; i++) tick(s);
   check(target.hp < target.maxHp, 'flak damages an unshielded enemy');
   check(covered.hp === covered.maxHp, 'flak burst does not damage a shielded enemy');
   check(popup.hp === popup.maxHp && !popup.dead, 'flak does not damage the window itself');
@@ -3363,7 +3365,7 @@ function chokeWalls(gaps) {
   far.dist = 10;
   strong.hp = 500;
   s.enemies.push(strong, far);
-  tick(s);
+  for (let i = 0; i < 30 && strong.hp === 500; i++) tick(s);
   check(strong.hp === 500 - 5, `cannon locked to 'strong' hits the biggest enemy (strong hp ${strong.hp})`);
   check(far.hp === far.maxHp, `the furthest-along enemy is untouched (far hp ${far.hp})`);
 }
@@ -3692,7 +3694,7 @@ function chokeWalls(gaps) {
   s.pointer.targetId = marked.id;
   toggleManualOverride(s);
 
-  tick(s);
+  for (let i = 0; i < 30 && !marked.dead; i++) tick(s);
   check(marked.dead, 'override: the cannon kills the marked weak enemy');
   check(strong.hp === 500, 'override: the stronger enemy is untouched while the mark lives');
 
@@ -12854,6 +12856,10 @@ function dailyState(date) {
 
 // --- Shatter (docs/SYNERGIES-BATCH-2.md §3) -----------------------------------------------------
 {
+  const settle = (s) => {
+    for (let i = 0; i < 60 && s.projectiles.length > 0; i++) tick(s);
+  };
+
   const shellInto = (slowed) => {
     const s = allUnlocked();
     s.economy.salvage = 1e9;
@@ -12862,15 +12868,19 @@ function dailyState(date) {
     const cannon = towerAt(s, 5, 5);
     cannon.angle = 0;
     s.phase = 'wave';
-    const grunt = stationary(1, 'grunt', 1, 5.5, 4.0);
+    const grunt = stationary(1, 'grunt', 1, 5.5, 3.3);
     grunt.hp = grunt.maxHp = 1e9;
     if (slowed) {
       grunt.slowUntilTick = 999999;
       grunt.slowFactor = 0.5;
     }
     s.enemies.push(grunt);
-    tick(s);
-    return { s, cannon, grunt };
+    tick(s); // fire the shell
+    const shell = s.projectiles[0];
+    const impactX = shell.x + shell.vx * (shell.lifetime / TICK_HZ);
+    const impactY = shell.y + shell.vy * (shell.lifetime / TICK_HZ);
+    settle(s); // let the shell land
+    return { s, cannon, grunt, impactX, impactY };
   };
 
   const slowed = shellInto(true);
@@ -12878,10 +12888,31 @@ function dailyState(date) {
   const burst = slowed.s.shatterBursts[0];
   check(burst.tick === slowed.s.tick + SHATTER_BURST_DELAY_TICKS, `the burst lands ${SHATTER_BURST_DELAY_TICKS} ticks later`);
   check(Math.abs(burst.damage - slowed.cannon.damageDealt * SHATTER_BURST_DAMAGE_MULT) < 1e-9, 'the burst carries 40% of the shell damage');
-  check(burst.x === 5.5 && burst.y === 4.0, 'the burst is scheduled at the impact point');
+  check(Math.abs(burst.x - slowed.impactX) < 1e-9 && Math.abs(burst.y - slowed.impactY) < 1e-9, 'the burst is scheduled at the impact point');
 
   const unslowed = shellInto(false);
   check(unslowed.s.shatterBursts.length === 0, 'a shell into an unslowed enemy schedules no burst');
+
+  // A target slowed only after the shell already landed does not burst.
+  {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    placeTower(s, 'cannon', 5, 5);
+    placeTower(s, 'frost', 5, 6);
+    const cannon = towerAt(s, 5, 5);
+    cannon.angle = 0;
+    s.phase = 'wave';
+    const grunt = stationary(1, 'grunt', 1, 5.5, 3.3);
+    grunt.hp = grunt.maxHp = 1e9;
+    s.enemies.push(grunt);
+    tick(s);
+    settle(s); // land unslowed
+    check(s.shatterBursts.length === 0, 'an unslowed landing schedules no Shatter');
+    grunt.slowUntilTick = s.tick + 1000;
+    grunt.slowFactor = 0.5;
+    for (let i = 0; i < 30; i++) tick(s);
+    check(s.shatterBursts.length === 0, 'a target slowed only after the shell landed never bursts');
+  }
 
   // The burst resolves 24 ticks later and never schedules another.
   const hpAfterShell = slowed.grunt.maxHp - slowed.grunt.hp;
@@ -12889,6 +12920,192 @@ function dailyState(date) {
   check(slowed.s.shatterBursts.length === 0, 'a burst never schedules another Shatter');
   const hpAfterBurst = slowed.grunt.maxHp - slowed.grunt.hp;
   check(Math.abs(hpAfterBurst - hpAfterShell - burst.damage) < 1e-6, 'the burst deals its damage at the impact point');
+}
+
+// --- Cannon shells (docs/CANNON-SHELLS.md §5) ----------------------------------------------------
+{
+  const settle = (s) => {
+    for (let i = 0; i < 60 && s.projectiles.length > 0; i++) tick(s);
+  };
+
+  // A shell spawns at the muzzle with the expected lifetime, and the target takes no damage on the
+  // fire tick.
+  {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    placeTower(s, 'cannon', 5, 5);
+    const cannon = towerAt(s, 5, 5);
+    cannon.angle = 0;
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const grunt = stationary(1, 'grunt', 1, 5.5, 4.0);
+    grunt.hp = grunt.maxHp = 1e9;
+    s.enemies.push(grunt);
+    const dist = Math.hypot(5.5 - 5.5, 4.0 - 5.5);
+    const expected = Math.ceil(dist / (CANNON_SHELL_SPEED / TICK_HZ));
+    tick(s);
+    check(s.projectiles.length === 1, 'the cannon launches exactly one shell on fire');
+    const p = s.projectiles[0];
+    check(p.kind === 'shell' && p.x === 5.5 && p.y === 5.5, 'the shell spawns at the muzzle (tower centre)');
+    check(p.lifetime === expected, `the shell carries the expected lifetime (${p.lifetime} vs ${expected})`);
+    check(p.towerId === cannon.id && p.damage === effectiveStats(cannon).damage, 'the shell carries the firing tower id and its damage');
+    check(grunt.hp === grunt.maxHp, 'the target takes no damage on the fire tick');
+  }
+
+  // Damage lands on the tick the shell's lifetime reaches zero.
+  {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    placeTower(s, 'cannon', 5, 5);
+    const cannon = towerAt(s, 5, 5);
+    cannon.angle = 0;
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const grunt = stationary(1, 'grunt', 1, 5.5, 4.0);
+    grunt.hp = grunt.maxHp = 1e9;
+    s.enemies.push(grunt);
+    tick(s);
+    const p = s.projectiles[0];
+    const lifetime = p.lifetime;
+    let hitTick = -1;
+    for (let i = 1; i <= lifetime; i++) {
+      tick(s);
+      if (hitTick < 0 && grunt.hp < grunt.maxHp) hitTick = i;
+    }
+    check(hitTick === lifetime, `damage lands on the tick the shell's lifetime reaches zero (tick ${hitTick} of ${lifetime})`);
+  }
+
+  // The predicted landing point leads the target by its velocity over the flight.
+  {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    placeTower(s, 'cannon', 5, 5);
+    const cannon = towerAt(s, 5, 5);
+    cannon.angle = 0;
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const grunt = stationary(1, 'grunt', 1, 5.5, 4.0);
+    grunt.hp = grunt.maxHp = 1e9;
+    s.enemies.push(grunt);
+    tick(s);
+    const p = s.projectiles[0];
+    const flightSec = p.lifetime / TICK_HZ;
+    const velX = ENEMY_STATS.grunt.speed * Math.cos(grunt.heading);
+    const velY = ENEMY_STATS.grunt.speed * Math.sin(grunt.heading);
+    check(Math.abs((p.x + p.vx * flightSec) - (grunt.x + velX * flightSec)) < 1e-9, 'the shell leads the target by its velocity along x');
+    check(Math.abs((p.y + p.vy * flightSec) - (grunt.y + velY * flightSec)) < 1e-9, 'the shell leads the target by its velocity along y');
+  }
+
+  // The lead is right: a target running at a known speed ends up at the landing point.
+  {
+    const s = allUnlocked('open-field');
+    s.economy.salvage = 1e9;
+    check(placeTower(s, 'cannon', 5, 4), 'cannon placed over the open-field lane');
+    const cannon = towerAt(s, 5, 4);
+    cannon.angle = Math.PI; // point south at the running lane
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const runner = createEnemy(1, 'runner', 1, SPAWN, EXIT);
+    runner.x = 5.5;
+    runner.y = 6.5;
+    runner.prevX = 5.5;
+    runner.prevY = 6.5;
+    runner.col = 5;
+    runner.row = 6;
+    runner.dist = 5;
+    runner.targetCol = -1;
+    runner.targetRow = -1;
+    runner.hp = runner.maxHp = 1e9;
+    s.enemies.push(runner);
+    tick(s); // move and fire
+    const p = s.projectiles[0];
+    const lifetime = p.lifetime;
+    const flightSec = lifetime / TICK_HZ;
+    const predictedX = p.x + p.vx * flightSec;
+    const predictedY = p.y + p.vy * flightSec;
+    for (let i = 0; i < lifetime; i++) tick(s);
+    check(runner.hp < runner.maxHp, 'the running target takes the hit');
+    check(Math.abs(runner.x - predictedX) < 0.02 && Math.abs(runner.y - predictedY) < 0.02,
+      'the shell lands where the runner ends up (the lead is right)');
+  }
+
+  // A Cannon sold mid-flight fizzles its shell with no damage.
+  {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    placeTower(s, 'cannon', 5, 5);
+    const cannon = towerAt(s, 5, 5);
+    cannon.angle = 0;
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const grunt = stationary(1, 'grunt', 1, 5.5, 4.0);
+    grunt.hp = grunt.maxHp = 1e9;
+    s.enemies.push(grunt);
+    tick(s);
+    check(s.projectiles.length === 1, 'the shell is in flight before the sell');
+    check(sellTower(s, 5, 5), 'the Cannon is sold mid-flight');
+    for (let i = 0; i < 30; i++) tick(s);
+    check(grunt.hp === grunt.maxHp, 'a Cannon sold mid-flight fizzles its shell with no damage');
+  }
+
+  // A mid-flight shell survives save and restore.
+  {
+    const s = allUnlocked();
+    s.economy.salvage = 1e9;
+    placeTower(s, 'cannon', 5, 5);
+    const cannon = towerAt(s, 5, 5);
+    cannon.angle = 0;
+    s.phase = 'wave';
+    s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+    const grunt = stationary(1, 'grunt', 1, 5.5, 4.0);
+    grunt.hp = grunt.maxHp = 1e9;
+    s.enemies.push(grunt);
+    tick(s);
+    check(s.projectiles.length === 1, 'the shell is in flight before the save');
+    const restored = restoreRun(JSON.parse(JSON.stringify(captureRun(s))));
+    check(restored !== null && restored.projectiles.length === 1, 'a mid-flight shell survives save and restore');
+    const op = s.projectiles[0];
+    const rp = restored.projectiles[0];
+    check(rp.x === op.x && rp.y === op.y && rp.vx === op.vx && rp.vy === op.vy && rp.lifetime === op.lifetime && rp.towerId === op.towerId,
+      'the restored shell keeps its flight state');
+    settle(s);
+    settle(restored);
+    check(grunt.hp < grunt.maxHp, 'the original run lands its shell');
+    check(restored.enemies.find((e) => e.id === grunt.id).hp < restored.enemies.find((e) => e.id === grunt.id).maxHp,
+      'the restored run lands its shell too');
+  }
+
+  // The Flak branch is byte-identical to the pre-change build.
+  {
+    const flakHash = () => {
+      const s = allUnlocked();
+      s.economy.salvage = 1e9;
+      s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+      placeTower(s, 'aa', 5, 5);
+      upgradeTower(s, 5, 5);
+      chooseBranch(s, 5, 5, 'A');
+      const aa = towerAt(s, 5, 5);
+      s.phase = 'wave';
+      const flyer = stationary(1, 'flyer', 20, 5.5, 4.0);
+      const grunt = stationary(2, 'grunt', 20, 6.0, 4.0);
+      flyer.hp = flyer.maxHp = 1e9;
+      grunt.hp = grunt.maxHp = 1e9;
+      s.enemies.push(flyer, grunt);
+      const buf = [];
+      for (let i = 0; i < 600; i++) {
+        tick(s);
+        for (const ev of s.events) {
+          if (ev.type === 'shot') buf.push(`S${ev.towerId}`);
+          else if (ev.type === 'damage') buf.push(`D${ev.id}:${ev.amount}`);
+        }
+        s.events.length = 0;
+        buf.push(`c${aa.cooldown}`);
+      }
+      return createHash('sha1').update(buf.join(';')).digest('hex');
+    };
+    const h = flakHash();
+    check(h === '03d4b93e8f59f0a5c278f7ab538adea19fee8a11', `the Flak branch is byte-identical to the pre-change build (${h.slice(0, 10)})`);
+  }
 }
 
 // --- Buttress (docs/SYNERGIES-BATCH-2.md §4) ----------------------------------------------------

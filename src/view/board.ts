@@ -1808,7 +1808,12 @@ function drawProjectiles(
     const cos = Math.cos(heading);
     const sin = Math.sin(heading);
     // The SVGs are drawn nose-up, so the sprite's rotation is the heading plus a quarter turn.
-    const size = p.kind === 'shell' ? Math.round(cell * 0.16) : Math.round(cell * 0.5);
+    // A Cannon shell is heavier and drawn larger than a Flak shell (0.22 vs 0.16 of a cell).
+    let size = Math.round(cell * 0.5);
+    if (p.kind === 'shell') {
+      const tower = state.towers.find((t) => t.id === p.towerId);
+      size = Math.round(cell * (tower !== undefined && tower.kind === 'cannon' ? 0.22 : 0.16));
+    }
     // A projectile carries no spawn tick, so it animates on the run clock; its id spreads the phases.
     const tex = frameTexture(p.kind, size, state.clock, p.id);
     if (tex !== null) {
