@@ -22,7 +22,9 @@ not count, and the one after it is taken instead.
 4. **Cannon shells** — `docs/CANNON-SHELLS.md`. The Cannon stops dealing damage invisibly: it fires a
    shell that leads the target and lands its splash a flight later, reusing the Flak shell's
    machinery. Branch `feat/cannon-shells`.
-5. **Synergy in the tower tooltip** — `docs/TOWER-SYNERGY-TOOLTIP.md`. One `Synergy: <name>` line per
+5. **Loss returns to the main menu** — `docs/LOSS-TO-MENU.md`. The Game Over button stops creating a
+   fresh Corridor run and calls the existing `exitRun()` instead. Branch `feat/loss-menu`.
+6. **Synergy in the tower tooltip** — `docs/TOWER-SYNERGY-TOOLTIP.md`. One `Synergy: <name>` line per
    synergy the tower is really in, read from a new `rowsOf` map on the memoised layout. Branch
    `feat/synergy-tooltip`.
 
