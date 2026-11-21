@@ -27,7 +27,9 @@ not count, and the one after it is taken instead.
 6. **The No-Build tile** — `docs/NO-BUILD-TILE.md`. A third tile kind: walkable floor with a faint
    crosshatch, refused by tower and wall placement, painted in the editor. Branch
    `feat/no-build-tile`.
-7. **Synergy in the tower tooltip** — `docs/TOWER-SYNERGY-TOOLTIP.md`. One `Synergy: <name>` line per
+7. **Remove the enemy facing tick** — `docs/ENEMY-FACING-TICK.md`. The white leading-edge tick goes;
+   enemies are drawn by their own art now. Branch `feat/enemy-tick`.
+8. **Synergy in the tower tooltip** — `docs/TOWER-SYNERGY-TOOLTIP.md`. One `Synergy: <name>` line per
    synergy the tower is really in, read from a new `rowsOf` map on the memoised layout. Branch
    `feat/synergy-tooltip`.
 
