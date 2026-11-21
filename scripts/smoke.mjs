@@ -177,7 +177,7 @@ import {
 } from '../src/view/bossBars.ts';
 import { backingStorePixelSize } from '../src/view/screen.ts';
 import { HELP_PAGES, pageUnlocked, lockedReason, pageById } from '../src/content/help.ts';
-import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, computeHelpScroll, HelpSession, helpIndexList, helpSearchResults, helpTopicPath, HELP_W, HELP_H, HELP_LINE_H, HELP_HEADING_H, HELP_SCROLL_LINES, helpArtLayout } from '../src/view/help.ts';
+import { computeHelpLayout, clampHelpPosition, defaultHelpPosition, helpRows, treeRowLabel, helpHitAt, pageBodyHeight, computeHelpScroll, HelpSession, helpIndexList, helpSearchResults, helpTopicPath, helpTopicCount, helpPrintDocument, helpOptionsMenu, helpOptionsHitAt, helpContextMenuLayout, helpContextHitAt, HELP_W, HELP_H, HELP_LINE_H, HELP_HEADING_H, HELP_SCROLL_LINES, helpArtLayout } from '../src/view/help.ts';
 import { parseHelpMarkdown, layoutHelpBlocks, helpMeasure, ITEM_GAP } from '../src/view/helpMarkdown.ts';
 import { nextHelpMode, contextHelpPage, contextHelpHitAt } from '../src/view/contexthelp.ts';
 import { buildAchievementGrid, gridRowCount, gridCellRect, ACH_COLUMNS, ACH_CELL, ACH_GUTTER, computeAchievementGrid, achievementGridHitAt, AchievementSession, computeDialog } from '../src/view/dialog.ts';
@@ -7976,6 +7976,129 @@ function helpFmtDps(damage, fireTicks) { return fireTicks <= 0 ? '—' : (damage
   check(session.expanded === null, 'Contents collapses the tree back to the top');
 }
 
+// --- 44j. CHM chrome: Print builds a document with the title and first body line ----------------
+{
+  const gs = pageById('getting-started');
+  const doc = helpPrintDocument(gs, new Date(0));
+  check(doc.includes(gs.title), 'print: the document contains the topic title');
+  check(doc.includes(gs.body[0]), 'print: the document contains the first body line');
+  check(doc.includes(t('window.title')), 'print: the document names the game');
+  const tower = pageById('tower-gun');
+  const towerDoc = helpPrintDocument(tower, new Date(0));
+  check(!towerDoc.includes('**') && !towerDoc.includes('|'), 'print: bold markers and table pipes are stripped');
+}
+
+// --- 44k. CHM chrome: Options opens/closes and its disabled states follow the session -----------
+{
+  const session = new HelpSession();
+  const hl = computeHelpLayout(0, 0);
+  const menu = helpOptionsMenu(hl, session);
+  check(menu.items.length === 6, 'options: the menu has six items');
+  check(menu.items.map((i) => i.action).join(',') === 'hide-tabs,back,forward,home,print,refresh',
+    'options: the menu lists Hide tabs, Back, Forward, Home, Print, Refresh');
+  const back = menu.items.find((i) => i.action === 'back');
+  const forward = menu.items.find((i) => i.action === 'forward');
+  check(!back.enabled && !forward.enabled, 'options: Back and Forward are disabled with no history');
+
+  session.optionsOpen = true;
+  check(helpOptionsHitAt(hl, session, menu.items[0].rect.x + 4, menu.items[0].rect.y + 4) === 'hide-tabs',
+    'options: an open menu resolves a click on an item');
+  session.optionsOpen = false;
+  check(helpOptionsHitAt(hl, session, menu.items[0].rect.x + 4, menu.items[0].rect.y + 4) === null,
+    'options: a closed menu resolves to null');
+
+  session.openPageId('tower-gun');
+  const menu2 = helpOptionsMenu(hl, session);
+  check(menu2.items.find((i) => i.action === 'back').enabled, 'options: Back enables after opening a page');
+  check(!menu2.items.find((i) => i.action === 'forward').enabled, 'options: Forward stays disabled at the newest page');
+}
+
+// --- 44l. CHM chrome: Locate stays enabled and expands a collapsed chapter ----------------------
+{
+  const profile = defaultProfile();
+  profile.seenEnemies.push('flyer');
+  profile.bestWave = 24;
+  const session = new HelpSession();
+  session.pageId = 'enemy-flyer'; // reached via Search/Index, so the Enemies chapter stays collapsed
+  check(session.expanded === null, 'locate: the chapter starts collapsed');
+  check(session.locateEnabled(), 'locate: stays enabled for a topic whose chapter is collapsed');
+  session.locate(profile);
+  check(session.expanded === 2, 'locate: expands the collapsed Enemies chapter');
+  check(session.navTab === 'contents', 'locate: switches to the Contents tab');
+  const rows = helpRows(profile, 2);
+  check(rows[session.treeSelected]?.kind === 'page' && rows[session.treeSelected].page.id === 'enemy-flyer',
+    'locate: selects the open topic row');
+  session.pageId = null;
+  check(!session.locateEnabled(), 'locate: disabled when there is no open topic');
+}
+
+// --- 44m. CHM chrome: tree keys move the selection, expand/collapse, and Enter opens ------------
+{
+  const profile = defaultProfile();
+  profile.bestWave = 24;
+  const session = new HelpSession();
+  session.expanded = 2;
+  const rows = helpRows(profile, 2);
+  session.treeSelected = 0;
+  session.helpTreeKey('arrowdown', profile);
+  check(session.treeSelected === 1, 'tree keys: Down moves the selection down');
+  session.helpTreeKey('arrowup', profile);
+  check(session.treeSelected === 0, 'tree keys: Up moves the selection up');
+  session.helpTreeKey('end', profile);
+  check(session.treeSelected === rows.length - 1, 'tree keys: End jumps to the last row');
+  session.helpTreeKey('home', profile);
+  check(session.treeSelected === 0, 'tree keys: Home jumps to the first row');
+
+  // Right expands a collapsed chapter and steps into its first child.
+  session.expanded = null;
+  session.treeSelected = 0;
+  session.helpTreeKey('arrowright', profile);
+  check(session.expanded === 0, 'tree keys: Right expands a chapter');
+  const afterRight = helpRows(profile, 0);
+  check(afterRight[session.treeSelected]?.kind === 'page', 'tree keys: Right steps into the chapter');
+
+  // Left walks from a page to its parent chapter, then collapses it.
+  session.helpTreeKey('arrowleft', profile);
+  check(session.treeSelected === 0, 'tree keys: Left walks to the parent chapter');
+  session.helpTreeKey('arrowleft', profile);
+  check(session.expanded === null, 'tree keys: Left collapses the expanded chapter');
+
+  // Enter opens the selected page (the Mechanics chapter is fully ungated).
+  session.expanded = 1;
+  const openRows = helpRows(profile, 1);
+  const pageIdx = openRows.findIndex((r) => r.kind === 'page');
+  session.treeSelected = pageIdx;
+  session.helpTreeKey('enter', profile);
+  check(session.pageId === openRows[pageIdx].page.id, 'tree keys: Enter opens the selected page');
+}
+
+// --- 44n. CHM chrome: the navigation-pane context menu resolves Open and Print -------------------
+{
+  const hl = computeHelpLayout(0, 0);
+  const ctx = { x: hl.treePanel.x + 8, y: hl.treePanel.y + 8 };
+  const menu = helpContextMenuLayout(hl, ctx);
+  check(menu.items.length === 2, 'context menu: two items');
+  check(menu.items.map((i) => i.action).join(',') === 'open,print', 'context menu: Open then Print');
+  check(helpContextHitAt(hl, ctx, menu.items[0].rect.x + 4, menu.items[0].rect.y + 4) === 'open',
+    'context menu: the first item resolves to Open');
+  check(helpContextHitAt(hl, ctx, menu.items[1].rect.x + 4, menu.items[1].rect.y + 4) === 'print',
+    'context menu: the second item resolves to Print');
+  check(helpContextHitAt(hl, null, menu.items[0].rect.x + 4, menu.items[0].rect.y + 4) === null,
+    'context menu: a closed menu resolves to null');
+}
+
+// --- 44o. CHM chrome: the status count is over the unlocked topics ------------------------------
+{
+  const profile = defaultProfile();
+  profile.bestWave = 24;
+  const unlocked = HELP_PAGES.filter((p) => pageUnlocked(p, profile));
+  const gun = pageById('tower-gun');
+  const count = helpTopicCount(gun, profile);
+  check(count.total === unlocked.length && count.topic === unlocked.indexOf(gun) + 1,
+    `status: the count is over unlocked topics (Topic ${count.topic} of ${count.total})`);
+  check(helpTopicCount(undefined, profile).topic === 0, 'status: no open topic reads topic 0');
+}
+
 // --- 45a. Help art previews (docs/HELP-ART.md) -----------------------------------------------
 {
   // 1. Every enemy and tower page that names art resolves to an asset that exists in the manifest.
@@ -11111,9 +11234,19 @@ function dailyState(date) {
   check(index.every((p, i) => i === 0 || index[i - 1].title.localeCompare(p.title) <= 0), 'the Index is sorted A-Z');
 
   const hits = helpSearchResults('pointer', profile);
-  check(hits.length > 0 && hits.every((p) => p.title.toLowerCase().includes('pointer')), 'Search filters on substrings');
+  check(hits.length > 0 && hits.every((p) => (p.title + ' ' + p.body.join(' ')).toLowerCase().includes('pointer')),
+    'Search matches the title and the body, not just the title');
   check(helpSearchResults('', profile).length === 0, 'an empty search returns nothing');
   check(helpSearchResults('zzzzznope', profile).length === 0, 'a nonsense search returns nothing');
+
+  // Every query word must match, case-insensitively, in the title or body.
+  const multi = helpSearchResults('TOWER damage', profile);
+  check(multi.length > 0 && multi.every((p) => {
+    const hay = (p.title + ' ' + p.body.join(' ')).toLowerCase();
+    return hay.includes('tower') && hay.includes('damage');
+  }), 'Search requires every word to match, case-insensitively');
+  check(helpSearchResults('TOWER damage', profile).length === helpSearchResults('tower damage', profile).length,
+    'Search is case-insensitive');
 
   session.openPageId(index[0].id);
   check(session.pageId === index[0].id, 'the Index selects a page');

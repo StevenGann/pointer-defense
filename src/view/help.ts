@@ -29,6 +29,7 @@ import {
 import type { Profile } from '../core/save.ts';
 import { t } from '../i18n/index.ts';
 import { isRtl, mirrorIfRtl, textX } from './direction.ts';
+import { textWidth } from './metrics.ts';
 import { ENEMY_ART_BODY, HELP_REFERENCE_CELL } from './board.ts';
 import { artSpriteSize, frameTexture } from './art.ts';
 import { ENEMY_STATS, type EnemyKind } from '../core/enemies.ts';
@@ -85,8 +86,16 @@ export { helpMeasure };
 const HELP_TREE_INDENT = 12;
 const HELP_MIN_VISIBLE = 32;
 
-export type HelpToolbarAction = 'nav' | 'back' | 'forward' | 'home' | 'print' | 'options';
+export type HelpToolbarAction = 'nav' | 'back' | 'forward' | 'home' | 'locate' | 'print' | 'options';
 export type HelpNavTab = 'contents' | 'index' | 'search';
+export type HelpOptionsAction = 'hide-tabs' | 'back' | 'forward' | 'home' | 'print' | 'refresh';
+export type HelpContextAction = 'open' | 'print';
+
+/** The row a navigation-pane context menu acts on: a Contents tree row or an Index entry. */
+export interface HelpContextTarget {
+  readonly kind: 'tree' | 'index';
+  readonly row: number;
+}
 
 export interface HelpLayout {
   window: Rect;
@@ -97,6 +106,7 @@ export interface HelpLayout {
   back: Rect;
   forward: Rect;
   home: Rect;
+  locate: Rect;
   print: Rect;
   options: Rect;
   /** Back-compat alias for the hide-nav button (the old "Contents" toolbar slot). */
@@ -140,6 +150,7 @@ export function computeHelpLayout(x: number, y: number, navW: number = HELP_NAV_
   const back = mkBtn();
   const forward = mkBtn();
   const home = mkBtn();
+  const locate = mkBtn();
   const print = mkBtn();
   const options = mkBtn();
 
@@ -164,7 +175,7 @@ export function computeHelpLayout(x: number, y: number, navW: number = HELP_NAV_
   const searchField: Rect = { x: treePanel.x + 8, y: treePanel.y + 6, w: treePanel.w - 16, h: 20 };
   const searchButton: Rect = { x: searchField.x + searchField.w - 46, y: searchField.y + 1, w: 44, h: 18 };
   const indexList: Rect = { x: treePanel.x + 4, y: treePanel.y + 4, w: treePanel.w - 8, h: navTabStrip.y - 4 - (treePanel.y + 4) };
-  const statusPanels = computeStatusBarRects(status, [0, 110]);
+  const statusPanels = computeStatusBarRects(status, [0, 110, 0]);
 
   return {
     window: win,
@@ -175,6 +186,7 @@ export function computeHelpLayout(x: number, y: number, navW: number = HELP_NAV_
     back,
     forward,
     home,
+    locate,
     print,
     options,
     contents: navToggle,
@@ -367,11 +379,16 @@ export function helpIndexList(profile: Profile): HelpPage[] {
   return HELP_PAGES.filter((p) => pageUnlocked(p, profile)).sort((a, b) => a.title.localeCompare(b.title));
 }
 
-/** The Search tab's live filter: unlocked pages whose title contains the substring (case-insensitive). */
+/** The Search tab's live filter: unlocked pages whose title and body match every query word (case-insensitive). */
 export function helpSearchResults(text: string, profile: Profile): HelpPage[] {
   const q = text.trim().toLowerCase();
   if (q === '') return [];
-  return HELP_PAGES.filter((p) => pageUnlocked(p, profile) && p.title.toLowerCase().includes(q));
+  const words = q.split(/\s+/).filter((w) => w.length > 0);
+  return HELP_PAGES.filter((p) => {
+    if (!pageUnlocked(p, profile)) return false;
+    const hay = (p.title + ' ' + p.body.join(' ')).toLowerCase();
+    return words.every((w) => hay.includes(w));
+  });
 }
 
 export type HelpHit =
@@ -404,6 +421,7 @@ export function helpHitAt(hl: HelpLayout, rows: readonly HelpRow[], x: number, y
   if (pointInRect(hl.back, x, y)) return { type: 'toolbar', action: 'back' };
   if (pointInRect(hl.forward, x, y)) return { type: 'toolbar', action: 'forward' };
   if (pointInRect(hl.home, x, y)) return { type: 'toolbar', action: 'home' };
+  if (pointInRect(hl.locate, x, y)) return { type: 'toolbar', action: 'locate' };
   if (pointInRect(hl.print, x, y)) return { type: 'toolbar', action: 'print' };
   if (pointInRect(hl.options, x, y)) return { type: 'toolbar', action: 'options' };
   if (pointInRect(hl.splitter, x, y)) return { type: 'splitter' };
@@ -463,6 +481,12 @@ export class HelpSession {
   scroll = 0;
   /** Vertical scroll offset of the Index list, in rows. */
   indexScroll = 0;
+  /** The keyboard-selected tree row index into `helpRows`, or -1 when nothing is selected. */
+  treeSelected = -1;
+  /** True while the Options dropdown is open. */
+  optionsOpen = false;
+  /** The navigation-pane context menu, when open: its anchor point and the row it targets. */
+  ctxMenu: { x: number; y: number; target: HelpContextTarget } | null = null;
 
   private history: string[] = [HELP_PAGES[0].id];
   private index = 0;
@@ -495,6 +519,8 @@ export class HelpSession {
   hide(): void {
     this.open = false;
     this.dragging = false;
+    this.optionsOpen = false;
+    this.ctxMenu = null;
   }
 
   startDrag(x: number, y: number): void {
@@ -563,6 +589,125 @@ export class HelpSession {
     this.navVisible = !this.navVisible;
   }
 
+  /** Re-render the open topic (scroll to the top) and clear the status line. */
+  refresh(): void {
+    this.scroll = 0;
+    this.status = '';
+  }
+
+  /** Close both floating menus. */
+  closeMenus(): void {
+    this.optionsOpen = false;
+    this.ctxMenu = null;
+  }
+
+  /** Whether the open topic is a page the contents tree can show (and thus Locate can find). */
+  locateEnabled(): boolean {
+    const page = this.pageId ? pageById(this.pageId) : undefined;
+    if (!page) return false;
+    return HELP_CATEGORIES.some((c) => c.id === page.category);
+  }
+
+  /**
+   * Scroll the contents tree to the open topic: expand its chapter first (so a topic reached through
+   * Search or Index is still found), switch to the Contents tab, and select its row.
+   */
+  locate(profile: Profile): void {
+    const page = this.pageId ? pageById(this.pageId) : undefined;
+    if (!page) return;
+    const chapter = HELP_CATEGORIES.findIndex((c) => c.id === page.category);
+    if (chapter < 0) return;
+    this.expanded = chapter;
+    this.navTab = 'contents';
+    const rows = helpRows(profile, chapter);
+    const idx = rows.findIndex((r) => r.kind === 'page' && r.page.id === page.id);
+    this.treeSelected = idx >= 0 ? idx : -1;
+  }
+
+  /** Move the tree keyboard selection up (-1) or down (+1), clamped to the visible rows. */
+  moveTreeSelection(dir: number, rows: readonly HelpRow[]): void {
+    if (rows.length === 0) {
+      this.treeSelected = -1;
+      return;
+    }
+    if (this.treeSelected < 0) {
+      this.treeSelected = dir < 0 ? rows.length - 1 : 0;
+      return;
+    }
+    this.treeSelected = Math.max(0, Math.min(rows.length - 1, this.treeSelected + dir));
+  }
+
+  /** Handle one Contents-tree key while the Help window owns the selection. */
+  helpTreeKey(key: string, profile: Profile): boolean {
+    const rows = helpRows(profile, this.expanded);
+    switch (key) {
+      case 'arrowup':
+        this.moveTreeSelection(-1, rows);
+        return true;
+      case 'arrowdown':
+        this.moveTreeSelection(1, rows);
+        return true;
+      case 'home':
+        this.treeSelected = rows.length > 0 ? 0 : -1;
+        return true;
+      case 'end':
+        this.treeSelected = rows.length > 0 ? rows.length - 1 : -1;
+        return true;
+      case 'arrowright':
+        return this.treeStepRight(rows, profile);
+      case 'arrowleft':
+        return this.treeStepLeft(rows);
+      case 'enter':
+        return this.treeOpenSelected(rows);
+      default:
+        return false;
+    }
+  }
+
+  private treeStepRight(rows: readonly HelpRow[], profile: Profile): boolean {
+    const row = rows[this.treeSelected];
+    if (!row) return false;
+    if (row.kind === 'chapter') {
+      if (!row.expanded) this.expanded = row.index;
+      const next = helpRows(profile, this.expanded);
+      const idx = next.findIndex((r) => r.kind === 'page' && r.chapterIndex === row.index);
+      if (idx >= 0) this.treeSelected = idx;
+      return true;
+    }
+    return true;
+  }
+
+  private treeStepLeft(rows: readonly HelpRow[]): boolean {
+    const row = rows[this.treeSelected];
+    if (!row) return false;
+    if (row.kind === 'chapter') {
+      if (row.expanded) {
+        this.expanded = null;
+        this.treeSelected = row.index;
+      }
+      return true;
+    }
+    const parent = rows.findIndex((r) => r.kind === 'chapter' && r.index === row.chapterIndex);
+    if (parent >= 0) this.treeSelected = parent;
+    return true;
+  }
+
+  private treeOpenSelected(rows: readonly HelpRow[]): boolean {
+    const row = rows[this.treeSelected];
+    if (!row) return false;
+    if (row.kind === 'chapter') {
+      this.expanded = this.expanded === row.index ? null : row.index;
+      return true;
+    }
+    if (row.locked) {
+      this.status = lockedReason(row.page.gate) ?? '';
+      return true;
+    }
+    this.status = '';
+    this.select(row.page.id);
+    return true;
+  }
+
   /** Drag the splitter to a client-relative width, clamped to 140-320 px. */
   dragSplitter(navW: number): void {
     this.navW = Math.max(HELP_NAV_MIN, Math.min(HELP_NAV_MAX, navW));
@@ -609,6 +754,9 @@ export class HelpSession {
     if (chapter >= 0) this.expanded = chapter;
     this.status = '';
     this.select(pageId);
+    const rows = helpRows(profile, this.expanded);
+    const idx = rows.findIndex((r) => r.kind === 'page' && r.page.id === pageId);
+    this.treeSelected = idx >= 0 ? idx : -1;
     return true;
   }
 
@@ -625,6 +773,85 @@ export class HelpSession {
     this.status = '';
     this.select(row.page.id);
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Floating menus and the printable document
+
+/** The vertical measure of one floating-menu item, plus its padding. */
+const MENU_ITEM_H = 18;
+const MENU_PAD_X = 8;
+const MENU_PAD_Y = 3;
+
+export interface HelpMenuItem {
+  readonly action: string;
+  readonly label: string;
+  readonly enabled: boolean;
+  readonly rect: Rect;
+}
+
+export interface HelpMenuLayout {
+  readonly rect: Rect;
+  readonly items: readonly HelpMenuItem[];
+}
+
+function menuLayout(anchorX: number, anchorY: number, entries: readonly { action: string; label: string; enabled: boolean }[], clamp: Rect): HelpMenuLayout {
+  let w = 0;
+  for (const e of entries) w = Math.max(w, textWidth(e.label, FONT_SIZE.small));
+  const menuW = w + MENU_PAD_X * 2;
+  const menuH = entries.length * MENU_ITEM_H + MENU_PAD_Y * 2;
+  const x = Math.max(clamp.x, Math.min(anchorX, clamp.x + clamp.w - menuW));
+  const y = Math.max(clamp.y, Math.min(anchorY, clamp.y + clamp.h - menuH));
+  const items: HelpMenuItem[] = entries.map((e, i) => ({
+    action: e.action,
+    label: e.label,
+    enabled: e.enabled,
+    rect: { x, y: y + MENU_PAD_Y + i * MENU_ITEM_H, w: menuW, h: MENU_ITEM_H },
+  }));
+  return { rect: { x, y, w: menuW, h: menuH }, items };
+}
+
+/** The Options dropdown, anchored under the Options button, right-aligned so it stays in the window. */
+export function helpOptionsMenu(hl: HelpLayout, session: HelpSession): HelpMenuLayout {
+  const entries: { action: HelpOptionsAction; label: string; enabled: boolean }[] = [
+    { action: 'hide-tabs', label: t('screen.help.hideTabs'), enabled: true },
+    { action: 'back', label: t('screen.help.back'), enabled: session.canBack() },
+    { action: 'forward', label: t('screen.help.forward'), enabled: session.canForward() },
+    { action: 'home', label: t('screen.help.home'), enabled: true },
+    { action: 'print', label: t('screen.help.print'), enabled: true },
+    { action: 'refresh', label: t('screen.help.refresh'), enabled: true },
+  ];
+  let w = 0;
+  for (const e of entries) w = Math.max(w, textWidth(e.label, FONT_SIZE.small));
+  const menuW = w + MENU_PAD_X * 2;
+  const anchorX = hl.options.x + hl.options.w - menuW;
+  const anchorY = hl.options.y + hl.options.h;
+  return menuLayout(anchorX, anchorY, entries, hl.window);
+}
+
+/** The two-item navigation-pane context menu, anchored at its click point and clamped to the window. */
+export function helpContextMenuLayout(hl: HelpLayout, ctx: { x: number; y: number }): HelpMenuLayout {
+  const entries: { action: HelpContextAction; label: string; enabled: boolean }[] = [
+    { action: 'open', label: t('screen.help.open'), enabled: true },
+    { action: 'print', label: t('screen.help.print'), enabled: true },
+  ];
+  return menuLayout(ctx.x, ctx.y, entries, hl.window);
+}
+
+/** The Options action under a point, or null; null when the menu is closed. */
+export function helpOptionsHitAt(hl: HelpLayout, session: HelpSession, x: number, y: number): HelpOptionsAction | null {
+  if (!session.optionsOpen) return null;
+  const menu = helpOptionsMenu(hl, session);
+  for (const item of menu.items) if (pointInRect(item.rect, x, y)) return item.action as HelpOptionsAction;
+  return null;
+}
+
+/** The context-menu action under a point, or null; null when the menu is closed. */
+export function helpContextHitAt(hl: HelpLayout, ctx: { x: number; y: number } | null, x: number, y: number): HelpContextAction | null {
+  if (!ctx) return null;
+  const menu = helpContextMenuLayout(hl, ctx);
+  for (const item of menu.items) if (pointInRect(item.rect, x, y)) return item.action as HelpContextAction;
+  return null;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -648,6 +875,33 @@ export function helpTopicPath(page: HelpPage | undefined): string {
   return cat === page.title ? page.title : t('screen.help.topicPath', { category: cat, page: page.title });
 }
 
+/** The "Topic n of N" status count: the open topic's 1-based position over the unlocked pages. */
+export function helpTopicCount(page: HelpPage | undefined, profile: Profile): { topic: number; total: number } {
+  const unlocked = HELP_PAGES.filter((p) => pageUnlocked(p, profile));
+  const topic = page ? unlocked.indexOf(page) + 1 : 0;
+  return { topic, total: unlocked.length };
+}
+
+/**
+ * The open topic rendered as a plain-text printable document: the game name, the topic title and its
+ * chapter, the body with Markdown markers stripped (bold, bullets and table pipes become readable
+ * text), and the print date. Pixi-free, so the smoke harness can assert its contents.
+ */
+export function helpPrintDocument(page: HelpPage, date: Date): string {
+  const lines: string[] = [t('window.title'), page.title, chapterTitle(page.category), ''];
+  for (const block of parseHelpMarkdown(page.body)) {
+    if (block.kind === 'table') {
+      lines.push(block.header.join('  '));
+      for (const row of block.rows) lines.push(row.map((cell) => cell.map((r) => r.text).join('')).join('  '));
+    } else {
+      const text = block.runs.map((r) => r.text).join('');
+      lines.push((block.kind === 'bullet' ? '- ' : '') + text);
+    }
+  }
+  lines.push('', date.toString());
+  return lines.join('\n');
+}
+
 export class HelpView {
   readonly root = new Container();
   private readonly g = new Graphics();
@@ -658,6 +912,11 @@ export class HelpView {
   private readonly treeTexts: Text[] = [];
   private readonly bodyTexts: Text[] = [];
   private readonly navTexts: Text[] = [];
+  private readonly menuTexts: Text[] = [];
+  private readonly reasonText: Text;
+  private readonly tooltipText: Text;
+  /** Menu / tooltip boxes, drawn above every other layer (a child added last). */
+  private readonly overlayG = new Graphics();
   private readonly pageLayer = new Container();
   private readonly pageMask = new Graphics();
   /** The sunken frame + paper fill of the art preview box, drawn in the page layer so it scrolls. */
@@ -677,11 +936,15 @@ export class HelpView {
     this.heading.anchor.set(0, 0);
     this.searchFieldText = makeText('', FONT_SIZE.small, false, PAL.text);
     this.searchFieldText.anchor.set(0, 0.5);
+    this.reasonText = makeText('', FONT_SIZE.small, false, PAL.text);
+    this.reasonText.anchor.set(0, 0.5);
+    this.tooltipText = makeText('', FONT_SIZE.small, false, 0x000000);
+    this.tooltipText.anchor.set(0, 0.5);
 
     this.artBase.anchor.set(0.5, 0.5);
     this.artTurret.anchor.set(0.5, 0.5);
 
-    this.root.addChild(this.g, this.titleText, this.statusText, this.searchFieldText);
+    this.root.addChild(this.g, this.titleText, this.statusText, this.searchFieldText, this.reasonText);
     this.pageLayer.addChild(this.heading, this.artFrame, this.tableG, this.artBase, this.artTurret);
     this.pageLayer.mask = this.pageMask;
     this.root.addChild(this.pageLayer);
@@ -698,6 +961,7 @@ export class HelpView {
       this.bodyTexts.push(t);
       this.pageLayer.addChild(t);
     }
+    this.root.addChild(this.overlayG, this.tooltipText);
   }
 
   private treeTextAt(index: number): Text {
@@ -722,6 +986,17 @@ export class HelpView {
     return t;
   }
 
+  private menuTextAt(index: number): Text {
+    let t = this.menuTexts[index];
+    if (!t) {
+      t = makeText('', FONT_SIZE.small, false, PAL.text);
+      t.anchor.set(0, 0.5);
+      this.menuTexts.push(t);
+      this.root.addChild(t);
+    }
+    return t;
+  }
+
   private bodyTextAt(index: number): Text {
     let t = this.bodyTexts[index];
     if (!t) {
@@ -736,9 +1011,12 @@ export class HelpView {
   draw(session: HelpSession, profile: Profile, hoverX: number, hoverY: number, clock: number): void {
     const g = this.g;
     g.clear();
+    this.overlayG.clear();
     if (!session.open) {
       this.titleText.text = '';
       this.statusText.text = '';
+      this.reasonText.text = '';
+      this.tooltipText.text = '';
       this.heading.text = '';
       this.searchFieldText.text = '';
       this.artFrame.clear();
@@ -748,6 +1026,7 @@ export class HelpView {
       for (const t of this.treeTexts) t.text = '';
       for (const t of this.bodyTexts) t.text = '';
       for (const t of this.navTexts) t.text = '';
+      for (const t of this.menuTexts) t.text = '';
       return;
     }
 
@@ -762,7 +1041,7 @@ export class HelpView {
     this.titleText.anchor.x = tp.anchor;
     this.titleText.position.set(tp.x, hl.title.y + Math.floor(TITLE_H / 2));
 
-    // Toolbar: six flat 24 px buttons with drawn glyphs.
+    // Toolbar: flat 24 px buttons with drawn glyphs, left to right.
     g.rect(hl.toolbar.x, hl.toolbar.y, hl.toolbar.w, hl.toolbar.h).fill(PAL.face);
     const canBack = session.canBack();
     const canForward = session.canForward();
@@ -770,7 +1049,8 @@ export class HelpView {
     this.drawToolbarGlyph(g, 'back', hl.back, canBack);
     this.drawToolbarGlyph(g, 'forward', hl.forward, canForward);
     this.drawToolbarGlyph(g, 'home', hl.home, true);
-    this.drawToolbarGlyph(g, 'print', hl.print, false);
+    this.drawToolbarGlyph(g, 'locate', hl.locate, session.locateEnabled());
+    this.drawToolbarGlyph(g, 'print', hl.print, true);
     this.drawToolbarGlyph(g, 'options', hl.options, true);
 
     // Nav pane + splitter + page pane.
@@ -813,19 +1093,28 @@ export class HelpView {
     }
     this.drawPage(hl, session, scroll.scroll, clock);
 
-    // Status bar: topic path left, Page n of m right.
-    drawStatusBar(g, hl.status, [0, 110]);
+    // Status bar: topic path left, "Topic n of N" over the unlocked pages, and the free panel for the
+    // locked-page (or print-blocked) reason.
+    drawStatusBar(g, hl.status, [0, 110, 0]);
     const path = helpTopicPath(page);
-    const pageIndex = page ? HELP_PAGES.indexOf(page) + 1 : 0;
+    const { topic: topicIndex, total: topicTotal } = helpTopicCount(page, profile);
     this.statusText.text = path;
     this.statusText.position.set(hl.statusPanels[0].x + 4, hl.status.y + Math.floor(HELP_STATUS_H / 2));
     const pageNo = this.navTextAt(30);
-    pageNo.text = t('screen.help.page', { page: pageIndex, total: HELP_PAGES.length });
+    pageNo.text = t('screen.help.topic', { topic: topicIndex, total: topicTotal });
     pageNo.style.fontWeight = 'normal';
     pageNo.style.fill = PAL.text;
     pageNo.anchor.set(0, 0.5);
     pageNo.position.set(hl.statusPanels[1].x + 4, hl.status.y + Math.floor(HELP_STATUS_H / 2));
+    this.reasonText.text = session.status;
+    this.reasonText.style.fill = PAL.text;
+    this.reasonText.position.set(hl.statusPanels[2].x + 4, hl.status.y + Math.floor(HELP_STATUS_H / 2));
     for (let i = 31; i < this.navTexts.length; i++) this.navTexts[i].text = '';
+
+    // Floating menus and the toolbar tooltip, drawn above the chrome.
+    this.drawMenus(hl, session, hoverX, hoverY);
+    if (!session.optionsOpen && !session.ctxMenu) this.drawTooltip(hl, hover, hoverX, hoverY);
+    else this.tooltipText.text = '';
   }
 
   private drawToolbarGlyph(g: Graphics, action: HelpToolbarAction, r: Rect, enabled: boolean): void {
@@ -842,6 +1131,13 @@ export class HelpView {
     } else if (action === 'home') {
       g.poly([cx, cy - 7, cx - 7, cy, cx + 7, cy]).fill(color);
       g.rect(cx - 4, cy, 8, 7).fill(color);
+    } else if (action === 'locate') {
+      // A crosshair: the "scroll the tree to this topic" glyph.
+      g.circle(cx, cy, 5).stroke({ width: 1, color });
+      g.moveTo(cx - 7, cy).lineTo(cx - 2, cy).stroke({ width: 1, color });
+      g.moveTo(cx + 2, cy).lineTo(cx + 7, cy).stroke({ width: 1, color });
+      g.moveTo(cx, cy - 7).lineTo(cx, cy - 2).stroke({ width: 1, color });
+      g.moveTo(cx, cy + 2).lineTo(cx, cy + 7).stroke({ width: 1, color });
     } else if (action === 'print') {
       g.rect(cx - 6, cy - 6, 12, 9).fill(color);
       g.rect(cx - 3, cy - 9, 6, 5).fill(color);
@@ -849,6 +1145,90 @@ export class HelpView {
       g.circle(cx, cy, 5).stroke({ width: 1, color });
       g.circle(cx, cy, 2).fill(color);
     }
+  }
+
+  private drawMenus(hl: HelpLayout, session: HelpSession, hoverX: number, hoverY: number): void {
+    const og = this.overlayG;
+    if (session.optionsOpen) {
+      const menu = helpOptionsMenu(hl, session);
+      og.rect(menu.rect.x, menu.rect.y, menu.rect.w, menu.rect.h).fill(PAL.face);
+      og.rect(menu.rect.x, menu.rect.y, menu.rect.w, menu.rect.h).stroke({ width: 1, color: PAL.dark });
+      for (let i = 0; i < menu.items.length; i++) {
+        const item = menu.items[i];
+        const hovered = pointInRect(item.rect, hoverX, hoverY) && item.enabled;
+        if (hovered) og.rect(item.rect.x, item.rect.y, item.rect.w, item.rect.h).fill(PAL.title);
+        const t = this.menuTextAt(i);
+        t.text = item.label;
+        t.style.fill = item.enabled ? (hovered ? PAL.titleInverse : PAL.text) : PAL.shadow;
+        t.position.set(item.rect.x + MENU_PAD_X, item.rect.y + Math.floor(MENU_ITEM_H / 2));
+      }
+      for (let i = menu.items.length; i < this.menuTexts.length; i++) this.menuTexts[i].text = '';
+    } else if (session.ctxMenu) {
+      const menu = helpContextMenuLayout(hl, session.ctxMenu);
+      og.rect(menu.rect.x, menu.rect.y, menu.rect.w, menu.rect.h).fill(PAL.face);
+      og.rect(menu.rect.x, menu.rect.y, menu.rect.w, menu.rect.h).stroke({ width: 1, color: PAL.dark });
+      for (let i = 0; i < menu.items.length; i++) {
+        const item = menu.items[i];
+        const hovered = pointInRect(item.rect, hoverX, hoverY);
+        if (hovered) og.rect(item.rect.x, item.rect.y, item.rect.w, item.rect.h).fill(PAL.title);
+        const t = this.menuTextAt(i);
+        t.text = item.label;
+        t.style.fill = hovered ? PAL.titleInverse : PAL.text;
+        t.position.set(item.rect.x + MENU_PAD_X, item.rect.y + Math.floor(MENU_ITEM_H / 2));
+      }
+      for (let i = menu.items.length; i < this.menuTexts.length; i++) this.menuTexts[i].text = '';
+    } else {
+      for (const t of this.menuTexts) t.text = '';
+    }
+  }
+
+  private drawTooltip(hl: HelpLayout, hover: HelpHit, hoverX: number, hoverY: number): void {
+    const og = this.overlayG;
+    let label = '';
+    if (hover?.type === 'toolbar') {
+      switch (hover.action) {
+        case 'nav':
+          label = t('screen.help.tooltip.nav');
+          break;
+        case 'back':
+          label = t('screen.help.back');
+          break;
+        case 'forward':
+          label = t('screen.help.forward');
+          break;
+        case 'home':
+          label = t('screen.help.home');
+          break;
+        case 'locate':
+          label = t('screen.help.locate');
+          break;
+        case 'print':
+          label = t('screen.help.print');
+          break;
+        case 'options':
+          label = t('screen.help.options');
+          break;
+      }
+    }
+    if (label === '') {
+      this.tooltipText.text = '';
+      return;
+    }
+    this.tooltipText.text = label;
+    const padX = 6;
+    const padY = 4;
+    const boxW = textWidth(label, FONT_SIZE.small) + padX * 2;
+    const boxH = FONT_SIZE.small + padY * 2;
+    let tx = hoverX + 14;
+    let ty = hoverY + 14;
+    const win = hl.window;
+    if (tx + boxW > win.x + win.w) tx = hoverX - 14 - boxW;
+    if (ty + boxH > win.y + win.h) ty = hoverY - 14 - boxH;
+    if (tx < win.x) tx = win.x;
+    if (ty < win.y) ty = win.y;
+    og.rect(tx, ty, boxW, boxH).fill(0xffffe1);
+    og.rect(tx, ty, boxW, boxH).stroke({ width: 1, color: 0x000000 });
+    this.tooltipText.position.set(tx + padX, ty + padY + Math.floor(FONT_SIZE.small / 2));
   }
 
   private drawContents(g: Graphics, hl: HelpLayout, rows: readonly HelpRow[], session: HelpSession, hover: HelpHit): void {
@@ -861,7 +1241,9 @@ export class HelpView {
       const row = rows[i];
       const text = this.treeTextAt(i);
       const y = hl.treePanel.y + HELP_TREE_PAD + i * HELP_TREE_ROW_H;
-      const selected = row.kind === 'page' && !row.locked && session.pageId === row.page.id;
+      const keyboardSelected = session.treeSelected === i;
+      const openPage = row.kind === 'page' && !row.locked && session.pageId === row.page.id;
+      const selected = keyboardSelected || (session.treeSelected < 0 && openPage);
       const rowHovered = i === hoverRow;
 
       if (selected) g.rect(hl.treePanel.x + 2, y, hl.treePanel.w - 4, HELP_TREE_ROW_H).fill(PAL.title);
@@ -878,7 +1260,7 @@ export class HelpView {
         g.moveTo(bxc - 2, byc).lineTo(bxc + 2, byc).stroke({ width: 1, color: PAL.dark });
         if (!row.expanded) g.moveTo(bxc, byc - 2).lineTo(bxc, byc + 2).stroke({ width: 1, color: PAL.dark });
         text.text = row.title;
-        text.style.fill = PAL.text;
+        text.style.fill = selected ? PAL.titleInverse : PAL.text;
         text.position.set(bx + 13, y + Math.floor(HELP_TREE_ROW_H / 2));
       } else {
         const px = hl.treePanel.x + 4 + HELP_TREE_INDENT;
@@ -925,6 +1307,14 @@ export class HelpView {
 
     const results = helpSearchResults(session.searchText, profile);
     let y = hl.searchField.y + hl.searchField.h + 6;
+    if (results.length === 0 && session.searchText.trim() !== '') {
+      const empty = this.treeTextAt(0);
+      empty.text = t('screen.help.searchNone');
+      empty.style.fill = PAL.shadow;
+      empty.position.set(hl.treePanel.x + 8, y + Math.floor(HELP_TREE_ROW_H / 2));
+      for (let i = 1; i < this.treeTexts.length; i++) this.treeTexts[i].text = '';
+      return;
+    }
     for (let i = 0; i < results.length; i++) {
       if (y + HELP_TREE_ROW_H > hl.navTabStrip.y) break;
       const selected = session.pageId === results[i].id;

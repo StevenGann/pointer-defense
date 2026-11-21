@@ -58,7 +58,7 @@ import { FloatingNumbersView } from './view/numbers.ts';
 import { MenuView, type OpenMenu } from './view/menu.ts';
 import { AchievementGridView, AchievementSession, achievementGridHitAt, buildAchievementGrid, computeAchievementGrid, type AchievementGridModel } from './view/dialog.ts';
 import { dialogButtonAt, DialogView, type DialogModel } from './view/dialog.ts';
-import { HelpSession, HelpView, computeHelpLayout, helpHitAt, helpNavHitAt, helpSearchRowAt, helpRows, helpIndexList, helpSearchResults, HELP_LINE_H, HELP_SCROLL_LINES } from './view/help.ts';
+import { HelpSession, HelpView, computeHelpLayout, helpHitAt, helpNavHitAt, helpSearchRowAt, helpRows, helpIndexList, helpSearchResults, helpPrintDocument, helpOptionsHitAt, helpContextHitAt, HELP_LINE_H, HELP_SCROLL_LINES } from './view/help.ts';
 import { RestoreView, RestoreSession, computeRestoreLayout, restoreHitAt, restoreDirty } from './view/restore.ts';
 import { RecordsSession, RecordsView, computeRecordsLayout, recordsHitAt, RECORDS_ROW_H } from './view/records.ts';
 import { MouseController, type Screen } from './input/mouse.ts';
@@ -104,7 +104,7 @@ import {
 } from './core/editorstore.ts';
 import { LoadDialogView, menuButtonAt, MenuScreenView, loadDialogButtonAt, computeLoadDialog, menuWindowCloseAt, menuWindowHelpAt, type MenuButtonId } from './view/menuScreen.ts';
 import { contextHelpHitAt, contextHelpPage, nextHelpMode } from './view/contexthelp.ts';
-import { HELP_PAGES, pageUnlocked } from './content/help.ts';
+import { HELP_PAGES, pageUnlocked, pageById, type HelpPage } from './content/help.ts';
 import { EditorView, editorPaletteAt, editorToggleNudgeAt, editorToolbarAt, type EditorAction, type ToggleNudge } from './view/editor.ts';
 import { MapLibraryView, NameDialogView, computeMapLibrary, computeNameDialog, mapLibraryHitAt, nameDialogButtonAt, type MapLibraryHit, type MapLibraryMode } from './view/mapLibrary.ts';
 import { MapsScreenView } from './view/mapsScreen.ts';
@@ -457,6 +457,60 @@ function helpClick(x: number, y: number): void {
   const pageId = contextHelpPage(hit);
   setHelpCursor(nextHelpMode(helpCursor, 'click'));
   if (pageId !== null) helpSession.openAt(pageId, profile, layout);
+}
+
+/** Render a topic to a plain-text document in a new window and print it; report a blocked pop-up. */
+function printHelpTopic(page: HelpPage | undefined): void {
+  if (!page) return;
+  const w = window.open('', '_blank');
+  if (!w) {
+    helpSession.status = t('screen.help.printBlocked');
+    return;
+  }
+  w.document.open('text/plain');
+  w.document.write(helpPrintDocument(page, new Date()));
+  w.document.close();
+  w.focus();
+  w.print();
+}
+
+/** Run one Options-menu action (the item is already known to be enabled). */
+function doHelpOptionsAction(action: string): void {
+  switch (action) {
+    case 'hide-tabs':
+      helpSession.toggleNav();
+      break;
+    case 'back':
+      helpSession.back();
+      break;
+    case 'forward':
+      helpSession.forward();
+      break;
+    case 'home':
+      helpSession.home();
+      break;
+    case 'print':
+      printHelpTopic(pageById(helpSession.pageId ?? ''));
+      break;
+    case 'refresh':
+      helpSession.refresh();
+      break;
+  }
+}
+
+/** Run one navigation-pane context-menu action against its remembered target row. */
+function doHelpContextAction(action: 'open' | 'print', target: { kind: 'tree' | 'index'; row: number }): void {
+  if (target.kind === 'tree') {
+    const row = helpRows(profile, helpSession.expanded)[target.row];
+    if (!row) return;
+    if (action === 'open') helpSession.clickTree(row);
+    else if (row.kind === 'page') printHelpTopic(row.page);
+  } else {
+    const page = helpIndexList(profile)[target.row];
+    if (!page) return;
+    if (action === 'open') helpSession.openPageId(page.id);
+    else printHelpTopic(page);
+  }
 }
 
 // --- Meta-game wiring ---------------------------------------------------------------------------
@@ -1286,11 +1340,47 @@ const mouse = new MouseController(app, {
   helpClick,
   helpCancel,
   helpOpen: () => helpSession.open,
+  helpTreeSelected: () => helpSession.open && helpSession.navTab === 'contents' && helpSession.treeSelected >= 0,
+  helpTreeKey: (key: string) => {
+    helpSession.helpTreeKey(key, profile);
+  },
+  helpMenuOpen: () => helpSession.optionsOpen || helpSession.ctxMenu !== null,
+  helpCloseMenu: () => helpSession.closeMenus(),
   helpPointerDown: (x: number, y: number, button: number): boolean => {
     const hl = computeHelpLayout(helpSession.x, helpSession.y, helpSession.navW);
     const rows = helpRows(profile, helpSession.expanded);
+
+    // A click anywhere closes an open floating menu first; a click on an item fires it and closes.
+    if (helpSession.optionsOpen) {
+      const action = helpOptionsHitAt(hl, helpSession, x, y);
+      helpSession.optionsOpen = false;
+      if (button === 0 && action) doHelpOptionsAction(action);
+      return pointInRect(hl.window, x, y);
+    }
+    if (helpSession.ctxMenu) {
+      const action = helpContextHitAt(hl, helpSession.ctxMenu, x, y);
+      const target = helpSession.ctxMenu.target;
+      helpSession.ctxMenu = null;
+      if (button === 0 && action) doHelpContextAction(action, target);
+      return pointInRect(hl.window, x, y);
+    }
+
     const hit = helpHitAt(hl, rows, x, y);
     if (hit === null) return false;
+
+    if (button === 2) {
+      // Right-click a Contents page row or an Index entry: open the Open/Print context menu.
+      if (helpSession.navTab === 'contents' && hit.type === 'tree' && hit.row >= 0) {
+        const row = rows[hit.row];
+        if (row.kind === 'page') helpSession.ctxMenu = { x, y, target: { kind: 'tree', row: hit.row } };
+      } else if (helpSession.navTab === 'index') {
+        const list = helpIndexList(profile);
+        const idx = helpNavHitAt(hl, 'index', list.length, x, y);
+        if (idx && idx.type === 'index') helpSession.ctxMenu = { x, y, target: { kind: 'index', row: idx.row } };
+      }
+      return true;
+    }
+
     if (button === 0) {
       switch (hit.type) {
         case 'close':
@@ -1307,13 +1397,19 @@ const mouse = new MouseController(app, {
           else if (hit.action === 'forward') helpSession.forward();
           else if (hit.action === 'home') helpSession.home();
           else if (hit.action === 'nav') helpSession.toggleNav();
+          else if (hit.action === 'locate') helpSession.locate(profile);
+          else if (hit.action === 'print') printHelpTopic(pageById(helpSession.pageId ?? ''));
+          else if (hit.action === 'options') helpSession.optionsOpen = true;
           break;
         case 'nav-tab':
           helpSession.setNavTab(hit.tab);
           break;
         case 'tree':
           if (helpSession.navTab === 'contents') {
-            if (hit.row >= 0) helpSession.clickTree(rows[hit.row]);
+            if (hit.row >= 0) {
+              helpSession.treeSelected = hit.row;
+              helpSession.clickTree(rows[hit.row]);
+            }
           } else if (helpSession.navTab === 'index') {
             const list = helpIndexList(profile);
             const idx = helpNavHitAt(hl, 'index', list.length, x, y);

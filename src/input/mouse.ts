@@ -110,6 +110,10 @@ export interface MouseContext {
   helpClick: (x: number, y: number) => void;
   helpCancel: () => void;
   helpOpen: () => boolean;
+  helpTreeSelected: () => boolean;
+  helpTreeKey: (key: string) => void;
+  helpMenuOpen: () => boolean;
+  helpCloseMenu: () => void;
   helpPointerDown: (x: number, y: number, button: number) => boolean;
   helpPointerMove: (x: number, y: number) => void;
   helpPointerUp: () => void;
@@ -474,6 +478,11 @@ export class MouseController {
         this.ctx.helpCancel();
         return;
       }
+      // A Help floating menu (Options or the context menu) closes before the window itself.
+      if (this.ctx.helpOpen() && this.ctx.helpMenuOpen()) {
+        this.ctx.helpCloseMenu();
+        return;
+      }
       const s = this.ctx.state();
       // A modal dialog or open menu closes first, then Help, achievements, Restore and Global
       // Upgrades; only with none of them open does Esc clear the selection or exit the run. Closing
@@ -536,6 +545,15 @@ export class MouseController {
       if (key === 'pagedown') {
         e.preventDefault();
         this.ctx.helpPage(1);
+        return;
+      }
+      // While a Contents tree row is selected the tree owns the keys, and no key may reach the game.
+      if (this.ctx.helpTreeSelected()) {
+        const treeKeys = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'home', 'end', 'enter'];
+        if (treeKeys.includes(key)) {
+          e.preventDefault();
+          this.ctx.helpTreeKey(key);
+        }
         return;
       }
     }
