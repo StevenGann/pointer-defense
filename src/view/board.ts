@@ -285,7 +285,7 @@ export function enemyHealthBarVisible(e: Enemy): boolean {
  * shadow lies on the floor beneath mines, walls, towers, pop-ups and enemies.
  */
 export const BOARD_LAYER_ORDER = Object.freeze([
-  'tileSprites', 'tiles', 'path', 'shadows', 'mines', 'mineArt', 'shutterSprites', 'toggles', 'synergy', 'towerSprites',
+  'tileSprites', 'tiles', 'path', 'shots', 'shadows', 'mines', 'mineArt', 'shutterSprites', 'toggles', 'synergy', 'towerSprites',
   'towers', 'auras', 'wrenches', 'pulses', 'popups', 'enemies', 'enemyBodies', 'enemyFx', 'cursorArrows', 'ghost', 'overlay',
   'projectileArt',
 ] as const);
@@ -319,6 +319,7 @@ export class BoardView {
   readonly root = new Container();
   private readonly tiles = new Graphics();
   private readonly path = new Graphics();
+  readonly shots = new Container();
   private readonly shadows = new Container();
   private readonly shadowSprites: Sprite[] = [];
   private readonly mines = new Graphics();
@@ -383,6 +384,7 @@ export class BoardView {
       tileSprites: this.tileSprites,
       tiles: this.tiles,
       path: this.path,
+      shots: this.shots,
       shadows: this.shadows,
       mines: this.mines,
       mineArt: this.mineArt,

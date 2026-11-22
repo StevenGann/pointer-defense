@@ -195,6 +195,7 @@ shake.setEnabled(profile.shakeOn);
 const chrome = new ChromeView();
 const board = new BoardView();
 const effects = new EffectsView();
+board.shots.addChild(effects.tracerRoot);
 const bossBars = new BossBarView((seen) => {
   profile.seenBossKinds = seen;
   saveProfile(profile);
