@@ -137,7 +137,7 @@ import { computeRestoreLayout, RestoreSession, restoreProgress, restoreDirty, Re
 import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES, LICENCE_IDS } from '../src/core/tree.ts';
 import { ACHIEVEMENTS } from '../src/core/achievements.ts';
 import { restartWindows, creditDefeat, restartPointsGained, checkAchievements, enterEndless, pointerDamageMult, towerCost, overclockCap, towerIntervalTicks } from '../src/core/state.ts';
-import { cheatsEnabled, setCheatsVisibleForTests, SPAWN_KINDS, spawnKindLabel } from '../src/core/cheats.ts';
+import { cheatsEnabled, setCheatsUnlocked, advanceKonami, KONAMI_SEQUENCE, SPAWN_KINDS, spawnKindLabel } from '../src/core/cheats.ts';
 import { dashRects, offsetSegment, routeOffset } from '../src/view/route.ts';
 import { enemyDrawOrder, popupCloseHit, popupCloseRect, popupWindowRect, POPUP_TITLE_H, POPUP_CLOSE_W, POPUP_CLOSE_H } from '../src/view/popupEnemy.ts';
 import { adCloseRect, wrapAdTip, adRewardLineY, adTipMaxWidth, adProgressRect, adProgressFillRect } from '../src/view/ad.ts';
@@ -306,6 +306,11 @@ function check(cond, msg) {
   console.log(`${cond ? 'ok  ' : 'FAIL'}  ${msg}`);
   if (!cond) failures++;
 }
+
+// Most of the suite uses `spawnCheatEnemy`/`toggleGodMode` as a fixture utility (route alternation,
+// run flagging, dailies), which are gated behind `cheatsEnabled()`. Open the gate up front so those
+// fixtures keep working, and let §46 close it explicitly to assert the hidden shape.
+setCheatsUnlocked(true);
 
 /** Flush pending microtasks and one macrotask turn, so queued art-invalidation callbacks run. */
 const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -8879,27 +8884,68 @@ function helpFmtDps(damage, fireTicks) { return fireTicks <= 0 ? '—' : (damage
 
 // --- 46. Cheats ------------------------------------------------------------------------------
 {
-  // The menu word exists only while the gate is open. `menuNameAt` maps the same rects the chrome
+  // The gate is closed until the Konami code unlocks it. `menuNameAt` maps the same rects the chrome
   // draws, so the word is present in both the hit-test and the label list, or in neither.
-  check(cheatsEnabled(), 'the cheats gate is open by default');
-  check(menuItems().some((m) => m.name === 'cheats'), 'the Cheats menu word is present while visible');
+  setCheatsUnlocked(false);
+  check(!cheatsEnabled(), 'the cheats gate is closed by default');
+  check(!menuItems().some((m) => m.name === 'cheats'), 'the Cheats menu word is absent while hidden');
+  check(menuItems().map((m) => m.name).join(',') === 'file,view,help', 'the hidden menu bar is File, View, Help');
+
+  // The rolling cursor: the full sequence completes, and one wrong key in the middle breaks it.
+  let cursor = 0;
+  for (const key of KONAMI_SEQUENCE) cursor = advanceKonami(cursor, key);
+  check(cursor === KONAMI_SEQUENCE.length, 'the Konami sequence advances the cursor to completion');
+
+  const wrong = [...KONAMI_SEQUENCE];
+  wrong[5] = 'arrowdown'; // ArrowRight is expected here.
+  let broken = 0;
+  for (const key of wrong) broken = advanceKonami(broken, key);
+  check(broken < KONAMI_SEQUENCE.length, 'one wrong key in the middle does not complete the sequence');
+
+  // A stray extra Up must not break the opening Up-Up pair (the restart-on-Up rule).
+  let extraUp = 0;
+  for (const key of ['arrowup', 'arrowup', 'arrowup', 'arrowdown', 'arrowdown', 'arrowleft', 'arrowright', 'arrowleft', 'arrowright', 'b', 'a']) {
+    extraUp = advanceKonami(extraUp, key);
+  }
+  check(extraUp === KONAMI_SEQUENCE.length, 'ArrowUp,ArrowUp,ArrowUp,ArrowDown,... still completes');
+
+  // b and a are case-insensitive.
+  let mixed = 0;
+  for (const key of ['arrowup', 'arrowup', 'arrowdown', 'arrowdown', 'arrowleft', 'arrowright', 'arrowleft', 'arrowright', 'B', 'A']) {
+    mixed = advanceKonami(mixed, key);
+  }
+  check(mixed === KONAMI_SEQUENCE.length, 'B and A are case-insensitive');
+
+  // Unlocking flips the gate and adds the word back between View and Help; the hit-test follows.
+  setCheatsUnlocked(true);
+  check(cheatsEnabled(), 'setCheatsUnlocked(true) opens the gate');
+  check(menuItems().some((m) => m.name === 'cheats'), 'the Cheats menu word is present while unlocked');
+  const withCheats = menuItems().map((m) => m.name);
+  check(withCheats.indexOf('view') + 1 === withCheats.indexOf('cheats'), 'Cheats sits after View');
+  check(withCheats.indexOf('cheats') + 1 === withCheats.indexOf('help'), 'Cheats sits before Help');
 
   const layout = computeLayout(1280, 800);
   const cheatIdx = menuItems().findIndex((m) => m.name === 'cheats');
   const cheatRect = menuWordRects(layout.menu)[cheatIdx];
   check(menuNameAt(layout.menu, cheatRect.x + 2, cheatRect.y + 2) === 'cheats',
-    'the Cheats word hit-rect maps to the Cheats name');
+    'the Cheats word hit-rect maps to the Cheats name while unlocked');
+  // The gate stays open for the reducer tests below.
+}
 
-  setCheatsVisibleForTests(false);
-  check(!cheatsEnabled(), 'the cheats gate closes');
-  check(!menuItems().some((m) => m.name === 'cheats'), 'the Cheats menu word is absent while hidden');
-  check(menuItems().map((m) => m.name).join(',') === 'file,view,help', 'the hidden menu bar is File, View, Help');
+// --- 46b. Cheats persistence ------------------------------------------------------------------
+{
+  // Unlocking is sticky: a profile that unlocked round-trips, and a save written before the field
+  // existed loads locked rather than being rejected.
+  const p = defaultProfile();
+  check(p.cheatsUnlocked === false, 'a fresh profile starts locked');
 
-  setCheatsVisibleForTests(true);
-  check(menuItems().some((m) => m.name === 'cheats'), 'the Cheats menu word returns when re-enabled');
-  const withCheats = menuItems().map((m) => m.name);
-  check(withCheats.indexOf('view') + 1 === withCheats.indexOf('cheats'), 'Cheats sits after View');
-  check(withCheats.indexOf('cheats') + 1 === withCheats.indexOf('help'), 'Cheats sits before Help');
+  const store = { value: null, getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
+  p.cheatsUnlocked = true;
+  saveProfile(p, store);
+  check(loadProfile(store).cheatsUnlocked === true, 'an unlocked profile round-trips through save/load');
+
+  const legacy = { getItem: () => JSON.stringify({ version: 3, specs: { cpu: 0, ram: 0, gpu: 0, disk: 0 } }), setItem: () => {} };
+  check(loadProfile(legacy).cheatsUnlocked === false, 'a save written before cheatsUnlocked loads as locked');
 }
 
 // --- 46a. Menu submenus (docs/MENU-SUBMENUS.md §6) ----------------------------------------------
@@ -9154,7 +9200,7 @@ function helpFmtDps(damage, fireTicks) { return fireTicks <= 0 ? '—' : (damage
 {
   // With the gate closed the reducers are inert and nothing is flagged, and the wave 1..100 balance
   // hash is byte-identical.
-  setCheatsVisibleForTests(false);
+  setCheatsUnlocked(false);
   const s = createRunState();
   toggleGodMode(s);
   check(!s.godMode && !s.cheatsUsed, 'God Mode is inert while cheats are hidden');
@@ -9163,7 +9209,7 @@ function helpFmtDps(damage, fireTicks) { return fireTicks <= 0 ? '—' : (damage
   check(s.enemies.length === before, 'no enemy appears while cheats are hidden');
   killAllEnemies(s);
   check(!s.cheatsUsed, 'Kill All does not flag a hidden-cheats run');
-  setCheatsVisibleForTests(true);
+  setCheatsUnlocked(true);
 
   let table = '';
   for (let w = 1; w <= 100; w++) {
