@@ -97,7 +97,7 @@ import {
   saveLibraryMap,
   replaceLibraryMap,
 } from '../src/core/editorstore.ts';
-import { computeEditorLayout, editorToolbarAt } from '../src/view/editor.ts';
+import { computeEditorLayout, editorExitAt, editorToolbarAt } from '../src/view/editor.ts';
 import { baseEnemyKind, BASTION_SHIELD_LAYERS, BASTION_SHIELD_LAYER_VALUE, createEnemy, enemyKillValue, ENEMY_STATS, ENEMY_KINDS, BOSS_KINDS, isBossKind, isBossVariant, isPopupEnemy, isFlyerKind, slowFactorFor, PACER_AURA_RADIUS, waveHpScale, waveValueScale, BREACHER_TURRET_RANGE, BREACHER_TURRET_DAMAGE, BREACHER_TURRET_INTERVAL_TICKS, CARRIER_BROOD_COUNT, CARRIER_BROOD_INTERVAL_TICKS, CARRIER_BROOD_SCATTER_TICKS, CARRIER_DEATH_BROOD_COUNT, DREADNOUGHT_PLATING, DREADNOUGHT_SLOW_RESIST, WIRECUTTER_EMP_RADIUS, WIRECUTTER_EMP_TICKS, RAM_TOWER_DPS, RAM_TURRET_DAMAGE, RAM_TURRET_RANGE } from '../src/core/enemies.ts';
 import { missileSeed, AA_SALVO_COUNT, CANNON_SHELL_SPEED } from '../src/core/projectiles.ts';
 import { rngNext } from '../src/core/rng.ts';
@@ -11314,6 +11314,46 @@ function levelFixture(name) {
     check(noOverlap, `${vw} x ${vh}: every toolbar button hit-tests with no overlap`);
     check(labelsFit, `${vw} x ${vh}: every button label stays readable`);
   }
+}
+
+// --- Editor exit (docs/EDITOR-EXIT.md) ----------------------------------------------------------
+{
+  // The Exit button's rect is inside the editor's top strip and inside the window at both sizes, and
+  // it is not overlapped by another control (the menu-bar words it shares the strip with).
+  for (const [vw, vh] of [[1024, 768], [1280, 720]]) {
+    const layout = computeLayout(vw, vh);
+    const m = createEditor();
+    const el = computeEditorLayout(layout, m);
+    const strip = el.topStrip;
+    const ex = el.exit;
+    check(
+      ex.x >= strip.x && ex.y >= strip.y && ex.x + ex.w <= strip.x + strip.w && ex.y + ex.h <= strip.y + strip.h,
+      `${vw} x ${vh}: the Exit button is inside the editor's top strip`,
+    );
+    const win = layout.window;
+    check(
+      ex.x >= win.x && ex.y >= win.y && ex.x + ex.w <= win.x + win.w && ex.y + ex.h <= win.y + win.h,
+      `${vw} x ${vh}: the Exit button is inside the window`,
+    );
+    let overlapped = false;
+    for (const r of menuWordRects(layout.menu)) {
+      if (r.x < ex.x + ex.w && ex.x < r.x + r.w && r.y < ex.y + ex.h && ex.y < r.y + r.h) overlapped = true;
+    }
+    check(!overlapped, `${vw} x ${vh}: the Exit button is not overlapped by a menu word`);
+    check(editorExitAt(layout, m, ex.x + Math.floor(ex.w / 2), ex.y + Math.floor(ex.h / 2)), `${vw} x ${vh}: the Exit button hit-tests at its centre`);
+    check(!editorExitAt(layout, m, ex.x - 1, ex.y + Math.floor(ex.h / 2)), `${vw} x ${vh}: a point just left of the Exit button is not a hit`);
+  }
+
+  // exitEditor saves the draft and leaves for the menu, never branching on runOrigin; the editor's
+  // Escape and File > Exit both reach it, so a lost test run cannot strand the editor on itself.
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const exitEditorBody = mainSrc.slice(mainSrc.indexOf('function exitEditor'), mainSrc.indexOf('function exitRun'));
+  check(exitEditorBody.includes('scheduleDraftSave(true)'), 'exitEditor writes the draft');
+  check(exitEditorBody.includes("screen = 'menu'"), 'exitEditor puts screen at menu');
+  check(!exitEditorBody.includes('runOrigin'), 'exitEditor does not branch on runOrigin');
+
+  check(mainSrc.includes("if (screen === 'editor') exitEditor();"), 'File > Exit routes the editor screen to exitEditor');
+  check(mainSrc.includes('if (libOpen) closeLibrary();\n      else exitEditor();'), 'editor: Escape leaves via exitEditor while the library keeps its own Escape');
 }
 
 // --- Run records 1: defeat, victory and Restart Windows each record once, with the right outcome, map and wave.

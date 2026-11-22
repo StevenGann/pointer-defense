@@ -1,5 +1,7 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import { bevel, FONT, FONT_SIZE, PAL, pointInRect, type Layout, type Rect } from './chrome.ts';
+import { mirrorIfRtl } from './direction.ts';
+import { textWidth } from './metrics.ts';
 import { t } from '../i18n/index.ts';
 import { COLS, ROWS } from '../core/grid.ts';
 import { hatchSegments } from './wallAppearance.ts';
@@ -37,6 +39,9 @@ const PALETTE_GAP = 6;
 const TOOLBAR_W = 88;
 const TOOLBAR_H = 26;
 const TOOLBAR_GAP = 6;
+/** The Exit button in the editor's top strip: a beveled button, 18 px tall so it fits the 22 px menu strip. */
+const EXIT_H = 18;
+const EXIT_PAD_X = 10;
 
 export interface ToggleFieldLayout {
   field: 'periodTicks' | 'openTicks' | 'phaseTicks';
@@ -49,6 +54,10 @@ export interface EditorLayout {
   palette: { tool: EditorTool; rect: Rect }[];
   toolbar: { id: EditorAction; rect: Rect }[];
   togglePanel: { rect: Rect; fields: ToggleFieldLayout[] } | null;
+  /** The editor's top strip (the menu bar), which carries the Exit button at its far end. */
+  topStrip: Rect;
+  /** The Exit button (docs/EDITOR-EXIT.md), beveled like the editor's other controls. */
+  exit: Rect;
 }
 
 export function computeEditorLayout(l: Layout, model: EditorModel): EditorLayout {
@@ -68,6 +77,17 @@ export function computeEditorLayout(l: Layout, model: EditorModel): EditorLayout
     id,
     rect: { x: toolbarX0 + i * (toolbarW + TOOLBAR_GAP), y: toolbarY, w: toolbarW, h: TOOLBAR_H },
   }));
+
+  // The Exit button sits in the editor's top strip (the menu bar) at its far end, mirroring in RTL.
+  const topStrip: Rect = l.menu;
+  const exitW = textWidth(t('menu.file.exit'), FONT_SIZE.small) + EXIT_PAD_X * 2;
+  const exitLtr: Rect = {
+    x: topStrip.x + topStrip.w - 6 - exitW,
+    y: topStrip.y + Math.floor((topStrip.h - EXIT_H) / 2),
+    w: exitW,
+    h: EXIT_H,
+  };
+  const exit: Rect = mirrorIfRtl(exitLtr, topStrip);
 
   let togglePanel: EditorLayout['togglePanel'] = null;
   const shutter = model.selectedShutter;
@@ -92,7 +112,7 @@ export function computeEditorLayout(l: Layout, model: EditorModel): EditorLayout
     togglePanel = { rect: { x, y: l.rightPanel.y + 6, w, h: 40 + 3 * 30 }, fields };
   }
 
-  return { palette, toolbar, togglePanel };
+  return { palette, toolbar, togglePanel, topStrip, exit };
 }
 
 export function editorPaletteAt(l: Layout, model: EditorModel, px: number, py: number): EditorTool | null {
@@ -120,6 +140,11 @@ export function editorToggleNudgeAt(l: Layout, model: EditorModel, px: number, p
   return null;
 }
 
+/** Whether a point is on the editor's Exit button (docs/EDITOR-EXIT.md). */
+export function editorExitAt(l: Layout, model: EditorModel, px: number, py: number): boolean {
+  return pointInRect(computeEditorLayout(l, model).exit, px, py);
+}
+
 function makeText(text: string, fill: number, bold = false, size: number = FONT_SIZE.body): Text {
   return new Text({
     text,
@@ -134,6 +159,7 @@ export class EditorView {
   private readonly toolbarTexts: Text[];
   private readonly startText: Text;
   private readonly exitText: Text;
+  private readonly exitButtonText: Text;
   private readonly statusText: Text;
   private readonly toggleTitle: Text;
   private readonly toggleValues: Text[] = [];
@@ -143,6 +169,7 @@ export class EditorView {
     this.toolbarTexts = TOOLBAR_ACTIONS.map((a) => makeText(TOOLBAR_LABELS[a], PAL.text, false, FONT_SIZE.small));
     this.startText = makeText(t('dlg.editor.start'), PAL.title, true);
     this.exitText = makeText(t('dlg.editor.exit'), PAL.maroon, true);
+    this.exitButtonText = makeText(t('menu.file.exit'), PAL.text, false, FONT_SIZE.small);
     this.statusText = makeText('', PAL.text, false, FONT_SIZE.small);
     this.toggleTitle = makeText(t('dlg.editor.shutter'), PAL.text, true, FONT_SIZE.small);
     for (let i = 0; i < 3; i++) this.toggleValues.push(makeText('', PAL.text, false, FONT_SIZE.small));
@@ -157,20 +184,26 @@ export class EditorView {
     }
     this.startText.anchor.set(0.5, 0.5);
     this.exitText.anchor.set(0.5, 0.5);
+    this.exitButtonText.anchor.set(0.5, 0.5);
     this.statusText.anchor.set(0, 0.5);
     this.toggleTitle.anchor.set(0, 0.5);
-    this.root.addChild(this.startText, this.exitText, this.statusText, this.toggleTitle);
+    this.root.addChild(this.startText, this.exitText, this.exitButtonText, this.statusText, this.toggleTitle);
     for (const t of this.toggleValues) {
       t.anchor.set(0, 0.5);
       this.root.addChild(t);
     }
   }
 
-  draw(l: Layout, model: EditorModel, hover: { tool: EditorTool | null; action: EditorAction | null }, notice = ''): void {
+  draw(l: Layout, model: EditorModel, hover: { tool: EditorTool | null; action: EditorAction | null; exit: boolean }, notice = ''): void {
     const g = this.g;
     g.clear();
     const el = computeEditorLayout(l, model);
     const cell = l.board.cell;
+
+    // The Exit button in the top strip (docs/EDITOR-EXIT.md), beveled like the editor's other controls.
+    bevel(g, el.exit, true, hover.exit ? PAL.highlight : PAL.face);
+    this.exitButtonText.text = t('menu.file.exit');
+    this.exitButtonText.position.set(el.exit.x + el.exit.w / 2, el.exit.y + el.exit.h / 2);
 
     // Board tiles.
     for (let row = 0; row < ROWS; row++) {
