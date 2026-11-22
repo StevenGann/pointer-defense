@@ -176,6 +176,11 @@ export function pointInRect(r: Rect, px: number, py: number): boolean {
   return px >= r.x && px < r.x + r.w && py >= r.y && py < r.y + r.h;
 }
 
+/** Map a device (canvas) point into the logical space the interface is laid out in (docs/UI-SCALE.md). */
+export function devicePointToLogical(x: number, y: number, uiScale: number): { x: number; y: number } {
+  return { x: x / uiScale, y: y / uiScale };
+}
+
 function hline(g: Graphics, x0: number, x1: number, y: number, color: number): void {
   g.moveTo(x0, y).lineTo(x1, y).stroke({ width: 1, color });
 }

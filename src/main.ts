@@ -32,14 +32,14 @@ import {
 import { advanceKonami, cheatsEnabled, KONAMI_SEQUENCE, setCheatsUnlocked, SPAWN_KINDS, spawnKindLabel } from './core/cheats.ts';
 import { LEVELS, type Level } from './core/levels.ts';
 import { dailyAvailable, dailyDate, dailyFor, dailyMenuLabel, DAILY_WAVES } from './core/daily.ts';
-import { addSeenEnemies, checkProfileAchievements, loadProfile, saveProfile, SPEC_KINDS, type Profile, type RunOutcome, type SpecKind } from './core/save.ts';
+import { addSeenEnemies, checkProfileAchievements, loadProfile, saveProfile, SPEC_KINDS, type Profile, type RunOutcome, type SpecKind, type UiScale } from './core/save.ts';
 import { clearRunSave, loadRunSave, saveRun } from './core/runsave.ts';
 import { appendDailyRun, appendRun, bestByMap, buildRunRecord, runTotals } from './core/runs.ts';
 import { readRememberedMap, rememberMap } from './core/mapSave.ts';
 import { buyNode, effectsFor, treeNodeById } from './core/tree.ts';
 import { achievementName } from './core/achievements.ts';
 import { unlockAchievement } from './steam.ts';
-import { ChromeView, computeLayout, FONT, PAL, pixelToWorld, pointInRect, type Layout, type MenuName } from './view/chrome.ts';
+import { ChromeView, computeLayout, devicePointToLogical, FONT, PAL, pixelToWorld, pointInRect, type Layout, type MenuName } from './view/chrome.ts';
 import { BoardView } from './view/board.ts';
 import { HudView, hudControlAt, paletteTowerAt, type HudAction } from './view/hud.ts';
 import { paletteTooltipLines, TooltipView, towerTooltipLines } from './view/tooltip.ts';
@@ -57,7 +57,7 @@ import {
 } from './view/tooltipText.ts';
 import { AdView, TrayView } from './view/ad.ts';
 import { FloatingNumbersView } from './view/numbers.ts';
-import { MenuView, type OpenMenu } from './view/menu.ts';
+import { MenuView, textSizeEntries, textSizeScale, textSizeValueLabel, type OpenMenu } from './view/menu.ts';
 import { AchievementGridView, AchievementSession, achievementGridHitAt, buildAchievementGrid, computeAchievementGrid, type AchievementGridModel } from './view/dialog.ts';
 import { dialogButtonAt, DialogView, type DialogModel } from './view/dialog.ts';
 import { HelpSession, HelpView, computeHelpLayout, helpHitAt, helpNavHitAt, helpSearchRowAt, helpRows, helpIndexList, helpSearchResults, helpPrintDocument, helpOptionsHitAt, helpContextHitAt, HELP_LINE_H, HELP_SCROLL_LINES } from './view/help.ts';
@@ -181,7 +181,7 @@ watchResolution();
 let profile: Profile = loadProfile();
 setCheatsUnlocked(profile.cheatsUnlocked);
 let state: RunState = createRunState(profile);
-let layout: Layout = computeLayout(app.screen.width, app.screen.height);
+let layout: Layout = computeLayout(app.screen.width / profile.uiScale, app.screen.height / profile.uiScale);
 
 // A run-in-progress save (docs/RUN-SAVE.md). `?nosave` disables saving entirely, for the tests and
 // for debugging, and then no save is read either so a stale Continue never appears.
@@ -261,6 +261,7 @@ root.addChild(
   tooltip.root,
   dialogView.root,
 );
+root.scale.set(profile.uiScale);
 
 sfx.setEnabled(profile.soundOn);
 sfx.setVolume(profile.volume);
@@ -373,8 +374,8 @@ function resetRunVisuals(): void {
 
 function syncViewport(): void {
   state.viewport = {
-    width: app.screen.width,
-    height: app.screen.height,
+    width: app.screen.width / profile.uiScale,
+    height: app.screen.height / profile.uiScale,
     window: { x: layout.window.x, y: layout.window.y, w: layout.window.w, h: layout.window.h },
     client: { x: layout.client.x, y: layout.client.y, w: layout.client.w, h: layout.client.h },
     boardCol: { x: layout.boardCol.x, y: layout.boardCol.y, w: layout.boardCol.w, h: layout.boardCol.h },
@@ -770,6 +771,18 @@ function doNewRun(): void {
 
 const SPAWN_PREFIX = 'spawn' + ':';
 
+/** Change the interface scale: persist, lay out in fewer logical pixels and re-scale the stage. */
+function applyUiScale(scale: UiScale): void {
+  if (profile.uiScale === scale) return;
+  profile.uiScale = scale;
+  saveProfile(profile);
+  layout = computeLayout(app.screen.width / scale, app.screen.height / scale);
+  root.scale.set(scale);
+  syncViewport();
+  helpSession.reclamp(layout);
+  hud.showNotice(textSizeValueLabel(scale));
+}
+
 function openMenu(name: MenuName | null): void {
   menu = name ? buildMenu(name) : null;
 }
@@ -783,6 +796,8 @@ function buildMenu(name: MenuName): OpenMenu {
         { id: 'separator', label: '', separator: true },
         { id: 'shake', label: profile.shakeOn ? t('menu.view.shakeOn') : t('menu.view.shakeOff') },
         { id: 'synergy', label: showSynergyLines ? t('menu.view.synergyOn') : t('menu.view.synergyOff') },
+        { id: 'separator', label: '', separator: true },
+        { id: 'text-size', label: t('menu.view.textSize'), submenu: textSizeEntries(profile.uiScale) },
         { id: 'separator', label: '', separator: true },
         { id: 'language-header', label: t('menu.view.language'), disabled: true },
         // Each language is named in its own script, so the list is readable whichever one is active.
@@ -842,6 +857,11 @@ function menuAction(id: string): void {
   const chosenLocale = LOCALES.find((l) => l.code === id);
   if (chosenLocale) {
     switchLocale(chosenLocale.code);
+    return;
+  }
+  const textScale = textSizeScale(id);
+  if (textScale !== null) {
+    applyUiScale(textScale);
     return;
   }
   switch (id) {
@@ -1369,6 +1389,7 @@ const mouse = new MouseController(app, {
   menu: () => menu,
   dialog: () => dialog,
   screen: () => screen,
+  uiScale: () => profile.uiScale,
   restartWindows: doRestartWindows,
   startEndless: () => {
     enterEndless(state);
@@ -1602,7 +1623,7 @@ let splitterDrag = false;
 
 function canvasPoint(e: PointerEvent): { x: number; y: number } {
   const rect = app.canvas.getBoundingClientRect();
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+  return devicePointToLogical(e.clientX - rect.left, e.clientY - rect.top, profile.uiScale);
 }
 
 function boardHit(x: number, y: number): { col: number; row: number; onBoard: boolean } {
@@ -2519,8 +2540,8 @@ function updateTooltip(): void {
     overHelpWindow(h.x, h.y) || // over the help viewer
     overRecordsWindow(h.x, h.y); // over the Records viewer
 
-  const viewportW = app.screen.width;
-  const viewportH = app.screen.height;
+  const viewportW = app.screen.width / profile.uiScale;
+  const viewportH = app.screen.height / profile.uiScale;
 
   // Over the Global Upgrades window: a row's detail (and its shortfall), or nothing at all, so the
   // board and HUD tooltips never show through the dialog.
@@ -2606,7 +2627,7 @@ function updateTooltip(): void {
 }
 
 app.renderer.on('resize', () => {
-  layout = computeLayout(app.screen.width, app.screen.height);
+  layout = computeLayout(app.screen.width / profile.uiScale, app.screen.height / profile.uiScale);
   syncViewport();
   helpSession.reclamp(layout);
   // shadow-resize: play in an 800×600 window.
