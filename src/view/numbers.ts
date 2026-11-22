@@ -82,4 +82,10 @@ export class FloatingNumbersView {
       this.texts[i].visible = false;
     }
   }
+
+  /** Drop every live float and hide every pooled text (docs/RUN-VISUAL-RESET.md). */
+  reset(): void {
+    this.active.length = 0;
+    for (const text of this.texts) text.visible = false;
+  }
 }

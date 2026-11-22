@@ -12808,6 +12808,111 @@ function dailyState(date) {
   check(amounts[0] === 11 && amounts[amounts.length - 1] === 50, 'the cap keeps the newest 40 (drops the oldest)');
 }
 
+// --- RUN-VISUAL-RESET: a replaced run clears stale effects and floats (docs/RUN-VISUAL-RESET.md) --
+{
+  resetArt();
+  const layout = computeLayout(1280, 800);
+  injectArtTexture('muzzle-gun', new Texture({ width: 4, height: 4 }));
+  injectArtTexture('spark-hit', new Texture({ width: 4, height: 4 }));
+  injectArtTexture('shield-arc', new Texture({ width: 4, height: 4 }));
+  injectArtTexture('death-ring', new Texture({ width: 4, height: 4 }));
+
+  const fx = new EffectsView();
+  const s = createRunState();
+  s.tick = 1000;
+  fx.addShot(createTower(1, 'gun', 3, 6), 8, 6);
+  fx.addHitSpark(1, 1);
+  fx.addShieldHit(2, 2);
+  fx.addDeath('grunt', 5, 6);
+  fx.addKnockback(7, 1, 0, 1000);
+  fx.draw(s, layout);
+
+  check(
+    fx.muzzles.length === 1 && fx.tracers.length === 1 && fx.sparks.length === 1 &&
+      fx.shieldArcs.length === 1 && fx.deaths.length === 1,
+    'run reset: a drawn frame leaves one of each effect',
+  );
+  check(fx.knockbacks.size === 1, 'run reset: the knockback map holds an offset before reset');
+  check(
+    fx.muzzleSprites[0].visible && fx.sparkSprites[0].visible &&
+      fx.shieldSprites[0].visible && fx.deathSprites[0].visible,
+    'run reset: each pooled sprite is visible before reset',
+  );
+
+  fx.reset();
+
+  check(
+    fx.muzzles.length === 0 && fx.tracers.length === 0 && fx.sparks.length === 0 &&
+      fx.shieldArcs.length === 0 && fx.deaths.length === 0,
+    'run reset: reset empties every effect list',
+  );
+  check(fx.knockbacks.size === 0, 'run reset: reset clears the knockback map');
+  check(
+    fx.g.context.instructions.length === 0 && fx.tracerG.context.instructions.length === 0,
+    'run reset: reset leaves both Graphics with no geometry',
+  );
+  check(
+    fx.muzzleSprites.every((sp) => !sp.visible) && fx.sparkSprites.every((sp) => !sp.visible) &&
+      fx.shieldSprites.every((sp) => !sp.visible) && fx.deathSprites.every((sp) => !sp.visible),
+    'run reset: reset hides every pooled effect sprite',
+  );
+
+  // A tracer born at tick 1000 does not survive a reset: a draw at tick 0 afterwards emits nothing.
+  fx.addShot(createTower(2, 'gun', 3, 6), 8, 6);
+  s.tick = 1000;
+  fx.draw(s, layout);
+  fx.reset();
+  s.tick = 0;
+  fx.draw(s, layout);
+  check(
+    fx.g.context.instructions.length === 0 && fx.tracerG.context.instructions.length === 0,
+    'run reset: a tracer born at tick 1000 does not survive a reset (tick 0 draws nothing)',
+  );
+
+  resetArt();
+}
+
+// --- RUN-VISUAL-RESET: a float born at tick 1000 does not survive a reset -----------------------
+{
+  const view = new FloatingNumbersView();
+  const layout = computeLayout(1280, 800);
+  const s = createRunState();
+  s.tick = 1000;
+  view.addDamage(4, 5, 100, false, false, 1000);
+  view.draw(s, layout);
+  check(
+    view.root.children.length === 1 && view.root.children[0].visible,
+    'run reset: a float is live before reset',
+  );
+  view.reset();
+  check(
+    view.active.length === 0 && view.root.children.every((c) => !c.visible),
+    'run reset: reset empties active and hides every pooled float',
+  );
+  s.tick = 0;
+  view.draw(s, layout);
+  check(
+    view.root.children.every((c) => !c.visible),
+    'run reset: a float born at tick 1000 does not survive a reset',
+  );
+}
+
+// --- RUN-VISUAL-RESET: the five run-install sites each call the helper --------------------------
+{
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  const body = (from, to) => mainSrc.slice(mainSrc.indexOf(from), mainSrc.indexOf(to));
+  const sites = [
+    ['doRestartWindows', body('function doRestartWindows', 'function doNewRun')],
+    ['doNewRun', body('function doNewRun', 'const SPAWN_PREFIX')],
+    ['startRun', body('function startRun', 'function bestByMapMap')],
+    ['startDaily', body('function startDaily', 'function startContinue')],
+    ['startContinue', body('function startContinue', 'function askDiscardSave')],
+  ];
+  for (const [name, src] of sites) {
+    check(src.includes('resetRunVisuals()'), `run reset: ${name} installs a run and calls resetRunVisuals()`);
+  }
+}
+
 // 6. A 900-tick determinism hash with the governor pinned to lean equals the one at full.
 {
   const hash = (pin) => {
