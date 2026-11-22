@@ -123,7 +123,7 @@ import {
   MARKED_DAMAGE_MULT,
   CLICK_SLACK,
 } from '../src/core/pointer.ts';
-import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies, allHelpUnlocked, checkProfileAchievements, rpGain, specLevelCost, MAX_RUNS } from '../src/core/save.ts';
+import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies, allHelpUnlocked, checkProfileAchievements, rpGain, specLevelCost, MAX_RUNS, UI_SCALES } from '../src/core/save.ts';
 import { appendRun, appendDailyRun, buildRunRecord, runTotals, bestByMap } from '../src/core/runs.ts';
 import { buildRecordsRows, totalsLine, bestByMapLine, computeRecordsLayout, recordsHitAt, formatRecordDate, outcomeLabel } from '../src/view/records.ts';
 import { captureRun, restoreRun, loadRunSave, saveRun, clearRunSave, hasRunSave, RUN_SAVE_KEY } from '../src/core/runsave.ts';
@@ -157,7 +157,7 @@ import {
 import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName, TOOLTIP_BLUE } from '../src/view/tooltipText.ts';
 import { drawTower, clearTowerSprites, BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRACER_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre, synergyEdgeEndpoints, synergyEdgeStyle, recoilOffset, RECOIL_DURATION_TICKS, RECOIL_PEAK_CELLS, SLOW_TINT } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
-import { computeLayout, computeWindowChromeGeom, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
+import { computeLayout, computeWindowChromeGeom, devicePointToLogical, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
 import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, statusPerfText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect, modalRect, modalMenuAt, modalMessageTop, defeatMessage } from '../src/view/hud.ts';
 import { FloatingNumbersView } from '../src/view/numbers.ts';
 import { nextQuality } from '../src/core/quality.ts';
@@ -182,7 +182,7 @@ import { parseHelpMarkdown, layoutHelpBlocks, helpMeasure, ITEM_GAP } from '../s
 import { nextHelpMode, contextHelpPage, contextHelpHitAt } from '../src/view/contexthelp.ts';
 import { buildAchievementGrid, gridRowCount, gridCellRect, ACH_COLUMNS, ACH_CELL, ACH_GUTTER, computeAchievementGrid, achievementGridHitAt, AchievementSession, computeDialog } from '../src/view/dialog.ts';
 import { computeNameDialog } from '../src/view/mapLibrary.ts';
-import { computeMenu, menuEntryAt, advanceSubmenu, SUBMENU_OPEN_MS, CHEVRON_W } from '../src/view/menu.ts';
+import { computeMenu, menuEntryAt, advanceSubmenu, SUBMENU_OPEN_MS, CHEVRON_W, textSizeEntries, textSizeId, textSizeScale, textSizeValueLabel } from '../src/view/menu.ts';
 import {
   ART_MANIFEST,
   ART_VIEWBOX,
@@ -15521,6 +15521,58 @@ const pageText = (id) => pageById(id).body.join('\n');
   const leftover = HELP_PAGES.filter((p) => p.body.some((line) => /\{[a-zA-Z0-9_]+\}/.test(line)));
   check(leftover.length === 0,
     `every rendered help line has every placeholder filled (leftover: ${leftover.map((p) => p.id).join(', ') || 'none'})`);
+}
+
+// --- 49. UI scale (docs/UI-SCALE.md) -----------------------------------------------------------
+{
+  // 49a. Scaling is exact, not approximate: a 4K window at 2x lays out exactly like a 1080p window.
+  check(JSON.stringify(computeLayout(3840 / 2, 2160 / 2)) === JSON.stringify(computeLayout(1920, 1080)),
+    'ui scale: computeLayout(3840/2, 2160/2) equals computeLayout(1920, 1080)');
+
+  // 49b. A device point maps to logical by dividing by the scale, so a click at 2x lands where the
+  // same logical point does at 1x (and therefore in the same panel).
+  const mapped = devicePointToLogical(1000, 600, 2);
+  check(mapped.x === 500 && mapped.y === 300, 'ui scale: device (1000,600) maps to logical (500,300) at 2x');
+  const at2 = devicePointToLogical(1000, 600, 2);
+  const at1 = devicePointToLogical(500, 300, 1);
+  check(at2.x === at1.x && at2.y === at1.y,
+    'ui scale: a click at device (1000,600) at 2x lands where (500,300) lands at 1x');
+}
+
+{
+  // 49c. profile.uiScale round-trips, and an older save without the field loads at 1.
+  const p = defaultProfile();
+  check(p.uiScale === 1, 'ui scale: a fresh profile defaults to 1');
+  const store = { value: null, getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
+  for (const scale of UI_SCALES) {
+    const q = defaultProfile();
+    q.uiScale = scale;
+    saveProfile(q, store);
+    check(loadProfile(store).uiScale === scale, `ui scale: ${scale} round-trips through save/load`);
+  }
+  const legacy = { getItem: () => JSON.stringify({ version: 3, specs: { cpu: 0, ram: 0, gpu: 0, disk: 0 } }), setItem: () => {} };
+  check(loadProfile(legacy).uiScale === 1, 'ui scale: a save written before uiScale loads as 1');
+}
+
+{
+  // 49d. The Text Size menu shows four values with exactly one checked, and picking another changes it.
+  const entries = textSizeEntries(1);
+  check(entries.length === 4, 'ui scale: the Text Size menu shows four values');
+  check(entries.filter((e) => e.checked).length === 1, 'ui scale: exactly one value is checked');
+  check(entries.map((e) => e.label).join(',') === '100%,125%,150%,200%',
+    'ui scale: the values are 100%, 125%, 150% and 200%');
+  check(textSizeEntries(1).find((e) => e.checked)?.id === textSizeId(1),
+    'ui scale: at 1x the 100% value is checked');
+  check(textSizeEntries(2).find((e) => e.checked)?.id === textSizeId(2),
+    'ui scale: at 2x a different value (200%) is checked');
+  for (const scale of UI_SCALES) {
+    const checked = textSizeEntries(scale).filter((e) => e.checked).map((e) => e.id);
+    check(checked.length === 1 && textSizeScale(checked[0]) === scale,
+      `ui scale: the checked entry for ${scale} resolves back to ${scale}`);
+  }
+  check(textSizeValueLabel(1.25) === '125%', 'ui scale: the value label for 1.25 is 125%');
+  check(textSizeScale('text-size-1.5') === 1.5, 'ui scale: a text-size id resolves to its scale');
+  check(textSizeScale('spawn:grunt') === null, 'ui scale: a non-text-size id resolves to null');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
