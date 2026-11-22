@@ -7,6 +7,7 @@ import {
   buySpec,
   cancelSelection,
   createRunState,
+  creditDefeat,
   currentPath,
   cursorMaintenanceStatus,
   enemyAt,
@@ -610,6 +611,27 @@ function recordRun(outcome: RunOutcome): void {
 }
 
 /**
+ * Bank a defeat's Restore Points and persist the profile (docs/DEFEAT-RP.md). The sim's `creditDefeat`
+ * is idempotent via the run's `defeatCredited` flag, so a second transition or a later Restart Windows
+ * cannot pay twice; a cheated run banks nothing. Newly unlocked achievements (reboot-50) are toasted
+ * and date-stamped like any other profile achievement.
+ */
+function creditDefeatPayout(): void {
+  const { profile: next } = creditDefeat(state, profile);
+  const newly = next.achievements.filter((id) => !profile.achievements.includes(id));
+  profile = next;
+  state.profile = next;
+  state.rp = next.rp;
+  state.rpEarned = next.rpEarned;
+  saveProfile(profile);
+  for (const id of newly) {
+    state.achievements.add(id);
+    toastAchievement(id);
+  }
+  stampEarnedDates(newly);
+}
+
+/**
  * Record a finished daily (docs/DAILY.md): one record with `outcome: 'daily'` plus the date and
  * seed, mirrored to `profile.daily` so the menu can disable the button. Idempotent — a daily already
  * recorded for its date is never appended twice.
@@ -679,10 +701,11 @@ function syncRunSave(): void {
   if (state.phase !== prevSavePhase) {
     if (state.phase === 'victory' || state.phase === 'halted') {
       if (state.daily !== null) {
-        // A daily records one attempt and never touches the normal run save.
+        // A daily records one attempt and never touches the normal run save or profile.
         recordDaily();
       } else {
         recordRun(state.phase === 'victory' ? 'victory' : 'defeat');
+        if (state.phase === 'halted') creditDefeatPayout();
         clearRunSave();
       }
     }

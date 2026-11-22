@@ -530,6 +530,10 @@ export interface RunState {
   godMode: boolean;
   /** Cheats: true the moment any cheat is used this run; the run then records nothing. */
   cheatsUsed: boolean;
+  /** True once a defeat has banked this run's Restore Points, so it never pays twice (docs/DEFEAT-RP.md). */
+  defeatCredited: boolean;
+  /** The Restore Points a defeat banked (0 for a cheated run), for the defeat dialog. */
+  defeatGained: number;
   /** Global upgrades bought this run, in purchase order. Cleared by createRunState. */
   upgrades: UpgradeId[];
   /** Emergency Patch: set once it has eaten a killing leak. */
@@ -774,6 +778,8 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     autoWaveAtTick: 0,
     godMode: false,
     cheatsUsed: false,
+    defeatCredited: false,
+    defeatGained: 0,
     upgrades: [],
     emergencyPatchSpent: false,
     buff: null,
@@ -1638,18 +1644,20 @@ export interface RestartResult {
   profile: Profile;
 }
 
+/** A defeat banks the same Restore Points a reboot would (docs/DEFEAT-RP.md). */
+export interface DefeatResult {
+  gained: number;
+  profile: Profile;
+}
+
 /** The Restore Points this run would bank on a reboot, after the RP-gain modifier and Windows Update. */
 export function restartPointsGained(s: RunState, profile: Profile): number {
   const effects = effectsFor(profile);
   return Math.max(0, Math.floor(rpGain(s.economy.earned) * effects.rpGainMult) + effects.extraSpecsPerReboot);
 }
 
-export function restartWindows(s: RunState, profile: Profile): RestartResult {
-  const next = cloneProfile(profile);
-  next.reboots += 1;
-  // A cheated run records nothing: no Restore Points, no best wave, no achievements (docs §12.4).
-  if (s.cheatsUsed) return { gained: 0, profile: next };
-  const gained = restartPointsGained(s, profile);
+/** Apply a run's banked Restore Points to a profile (shared by defeat and Restart Windows). */
+function applyBankedPoints(next: Profile, s: RunState, gained: number): void {
   next.rp += gained;
   next.rpEarned += gained;
   next.lastSalvage = s.economy.earned;
@@ -1660,6 +1668,34 @@ export function restartWindows(s: RunState, profile: Profile): RestartResult {
   if (!next.achievements.includes('reboot-50') && totalSpecLevels >= 50) {
     next.achievements.push('reboot-50');
   }
+}
+
+export function restartWindows(s: RunState, profile: Profile): RestartResult {
+  const next = cloneProfile(profile);
+  next.reboots += 1;
+  // A cheated run records nothing: no Restore Points, no best wave, no achievements (docs §12.4).
+  if (s.cheatsUsed) return { gained: 0, profile: next };
+  // A defeat already banked this run's points; Restart Windows must not pay them twice (docs/DEFEAT-RP.md).
+  if (s.defeatCredited) return { gained: 0, profile: next };
+  const gained = restartPointsGained(s, profile);
+  applyBankedPoints(next, s, gained);
+  return { gained, profile: next };
+}
+
+/**
+ * Bank a defeat's Restore Points into the profile (docs/DEFEAT-RP.md). Idempotent: the run's
+ * `defeatCredited` flag makes a second call, a reloaded lost state or a later Restart Windows a no-op.
+ * A cheated run banks nothing.
+ */
+export function creditDefeat(s: RunState, profile: Profile): DefeatResult {
+  if (s.defeatCredited) return { gained: 0, profile: cloneProfile(profile) };
+  s.defeatCredited = true;
+  s.defeatGained = 0;
+  const next = cloneProfile(profile);
+  if (s.cheatsUsed) return { gained: 0, profile: next };
+  const gained = restartPointsGained(s, profile);
+  applyBankedPoints(next, s, gained);
+  s.defeatGained = gained;
   return { gained, profile: next };
 }
 
