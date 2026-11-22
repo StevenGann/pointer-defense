@@ -118,6 +118,20 @@ export interface SynergyCluster {
   readonly leaders: readonly (readonly number[])[];
 }
 
+/** The default halo diameter, in cells, drawn under a clustered tower. Bigger than a base, so it spills out. */
+export const SYNERGY_HALO_CELLS = 1.6;
+/** The AA tower's art is small, so an all-AA cluster gets a tighter halo (docs/AA-HALO-AND-BASE-CLEANUP.md). */
+export const SYNERGY_HALO_AA_CELLS = 1.0;
+
+/**
+ * The halo diameter, in cells, for a cluster. An all-AA cluster's art is small, so it gets the
+ * tighter AA size; every other cluster keeps the default (docs/AA-HALO-AND-BASE-CLEANUP.md). Pure:
+ * no Pixi types, so the rule is testable without a canvas.
+ */
+export function synergyHaloCells(cluster: SynergyCluster): number {
+  return cluster.members.every((t) => t.kind === 'aa') ? SYNERGY_HALO_AA_CELLS : SYNERGY_HALO_CELLS;
+}
+
 export interface SynergyLayout {
   readonly edges: readonly SynergyEdge[];
   readonly clusters: readonly SynergyCluster[];
