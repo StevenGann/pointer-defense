@@ -106,7 +106,7 @@ import {
 import { LoadDialogView, menuButtonAt, MenuScreenView, loadDialogButtonAt, computeLoadDialog, menuWindowCloseAt, menuWindowHelpAt, type MenuButtonId } from './view/menuScreen.ts';
 import { contextHelpHitAt, contextHelpPage, nextHelpMode } from './view/contexthelp.ts';
 import { HELP_PAGES, pageUnlocked, pageById, type HelpPage } from './content/help.ts';
-import { EditorView, editorPaletteAt, editorToggleNudgeAt, editorToolbarAt, type EditorAction, type ToggleNudge } from './view/editor.ts';
+import { EditorView, editorExitAt, editorPaletteAt, editorToggleNudgeAt, editorToolbarAt, type EditorAction, type ToggleNudge } from './view/editor.ts';
 import { MapLibraryView, NameDialogView, computeMapLibrary, computeNameDialog, mapLibraryHitAt, nameDialogButtonAt, type MapLibraryHit, type MapLibraryMode } from './view/mapLibrary.ts';
 import { MapsScreenView } from './view/mapsScreen.ts';
 import { clampMapScroll, computeMapGrid, mapCardAt, mapFocusForId, mapGalleryKey, mapLevelAt, scrollForFocus, MAP_GRID_COLS } from './view/mapSelect.ts';
@@ -830,7 +830,8 @@ function menuAction(id: string): void {
       };
       break;
     case 'exit':
-      exitRun();
+      if (screen === 'editor') exitEditor();
+      else exitRun();
       break;
     case 'achievements':
       achievementSession.show();
@@ -1125,6 +1126,21 @@ function copyCode(): void {
   }
   showEditorNotice(t('shell.editor.codeCopied'));
   grantAchievement('map-export');
+}
+
+/** Leave the editor for the menu, saving the draft first (docs/EDITOR-EXIT.md). */
+function exitEditor(): void {
+  scheduleDraftSave(true);
+  libOpen = false;
+  libSelectedId = null;
+  saveNameOpen = false;
+  nameInput.blur();
+  nameInput.style.display = 'none';
+  dialog = null;
+  menu = null;
+  editorActionHover = null;
+  editorExitHover = false;
+  screen = 'menu';
 }
 
 /** Esc from a run: a Test run returns to the editor (drawing intact), anything else to the menu. */
@@ -1541,6 +1557,7 @@ const mouse = new MouseController(app, {
 let menuHover: MenuButtonId | null = null;
 let loadHover: 'ok' | 'cancel' | null = null;
 let editorActionHover: EditorAction | null = null;
+let editorExitHover = false;
 let painting = false;
 let splitterDrag = false;
 
@@ -1696,6 +1713,7 @@ app.canvas.addEventListener('pointermove', (e) => {
     return;
   }
   if (screen === 'editor') {
+    editorExitHover = editorExitAt(layout, editor, x, y);
     if (libOpen) {
       libHover = mapLibraryHitAt(layout, editorLib, libMode, x, y, libScroll);
     } else if (saveNameOpen) {
@@ -1803,6 +1821,10 @@ app.canvas.addEventListener('pointerdown', (e) => {
     return;
   }
   if (screen === 'editor') {
+    if (editorExitAt(layout, editor, x, y)) {
+      if (e.button === 0) exitEditor();
+      return;
+    }
     if (libOpen) {
       if (e.button !== 0) return;
       const hit = mapLibraryHitAt(layout, editorLib, libMode, x, y, libScroll);
@@ -1982,15 +2004,14 @@ window.addEventListener('keydown', (e) => {
   }
   if (screen === 'editor') {
     if (key === 'escape') {
+      // Each modal closes on its own first; the visible Exit button and File > Exit are the
+      // guaranteed ways out, so nothing can be mistaken for a dead end any more.
       if (libOpen) closeLibrary();
       else if (saveNameOpen) {
         saveNameOpen = false;
         nameInput.blur();
       } else if (dialog) dialog = null;
-      else {
-        scheduleDraftSave(true);
-        screen = 'menu';
-      }
+      else exitEditor();
       return;
     }
     if ((e.ctrlKey || e.metaKey) && key === 'z') {
@@ -2348,7 +2369,7 @@ app.ticker.add((ticker) => {
       loadInput.style.display = 'none';
     }
   } else if (screen === 'editor') {
-    editorView.draw(layout, editor, { tool: null, action: libOpen || saveNameOpen || dialog !== null ? null : editorActionHover }, editorNotice);
+    editorView.draw(layout, editor, { tool: null, action: libOpen || saveNameOpen || dialog !== null ? null : editorActionHover, exit: editorExitHover }, editorNotice);
     loadInput.style.display = 'none';
     if (libOpen) {
       mapLibraryView.draw(layout, editorLib, libMode, libSelectedId, libHover, libScroll);
