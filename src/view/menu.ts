@@ -3,7 +3,7 @@ import { bevel, FONT, FONT_SIZE, menuIndex, menuWordRects, PAL, pointInRect, typ
 import { getArtTexture } from './art.ts';
 import { textWidth } from './hud.ts';
 import { isRtl } from './direction.ts';
-import { UI_SCALES, type UiScale } from '../core/save.ts';
+import { effectiveUiScale, MIN_LOGICAL_H, MIN_LOGICAL_W, UI_SCALES, type UiScale } from '../core/save.ts';
 import { t } from '../i18n/index.ts';
 
 /**
@@ -53,12 +53,17 @@ export function textSizeValueLabel(scale: UiScale): string {
   }
 }
 
-/** The Text Size radio submenu: four values, the current scale checked (docs/UI-SCALE.md). */
-export function textSizeEntries(uiScale: UiScale): MenuEntry[] {
+/**
+ * The Text Size radio submenu (docs/UI-SCALE-FLOOR.md): the effective scale is checked, and a value
+ * that cannot leave the 1280×720 floor is disabled rather than let the player pick a broken layout.
+ */
+export function textSizeEntries(requested: UiScale, screenW: number, screenH: number): MenuEntry[] {
+  const effective = effectiveUiScale(requested, screenW, screenH);
   return UI_SCALES.map((scale) => ({
     id: textSizeId(scale),
     label: textSizeValueLabel(scale),
-    checked: scale === uiScale,
+    checked: scale === effective,
+    disabled: scale !== 1 && (screenW / scale < MIN_LOGICAL_W || screenH / scale < MIN_LOGICAL_H),
   }));
 }
 

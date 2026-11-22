@@ -66,6 +66,25 @@ export type VolumeLevel = 'low' | 'med' | 'high';
 export const UI_SCALES = [1, 1.25, 1.5, 2] as const;
 export type UiScale = (typeof UI_SCALES)[number];
 
+/** The smallest logical viewport the interface is designed for (docs/UI-SCALE-FLOOR.md). */
+export const MIN_LOGICAL_W = 1280;
+export const MIN_LOGICAL_H = 720;
+
+/**
+ * The applied interface scale: the largest value in UI_SCALES that is at most `requested` and still
+ * leaves a logical viewport of at least MIN_LOGICAL_W × MIN_LOGICAL_H, or 1 when even that cannot fit
+ * (docs/UI-SCALE-FLOOR.md). The profile keeps `requested`; this is the floor applied at consumption.
+ */
+export function effectiveUiScale(requested: UiScale, screenW: number, screenH: number): UiScale {
+  for (let i = UI_SCALES.length - 1; i >= 0; i--) {
+    const scale = UI_SCALES[i];
+    if (scale <= requested && screenW / scale >= MIN_LOGICAL_W && screenH / scale >= MIN_LOGICAL_H) {
+      return scale;
+    }
+  }
+  return 1;
+}
+
 /** The main-menu choice a returning player lands on (docs/design.md §20.1). */
 export type MenuChoice = 'play' | 'editor' | 'load';
 

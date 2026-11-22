@@ -32,7 +32,7 @@ import {
 import { advanceKonami, cheatsEnabled, KONAMI_SEQUENCE, setCheatsUnlocked, SPAWN_KINDS, spawnKindLabel } from './core/cheats.ts';
 import { LEVELS, type Level } from './core/levels.ts';
 import { dailyAvailable, dailyDate, dailyFor, dailyMenuLabel, DAILY_WAVES } from './core/daily.ts';
-import { addSeenEnemies, checkProfileAchievements, loadProfile, saveProfile, SPEC_KINDS, type Profile, type RunOutcome, type SpecKind, type UiScale } from './core/save.ts';
+import { addSeenEnemies, checkProfileAchievements, effectiveUiScale, loadProfile, saveProfile, SPEC_KINDS, type Profile, type RunOutcome, type SpecKind, type UiScale } from './core/save.ts';
 import { clearRunSave, loadRunSave, saveRun } from './core/runsave.ts';
 import { appendDailyRun, appendRun, bestByMap, buildRunRecord, runTotals } from './core/runs.ts';
 import { readRememberedMap, rememberMap } from './core/mapSave.ts';
@@ -181,7 +181,13 @@ watchResolution();
 let profile: Profile = loadProfile();
 setCheatsUnlocked(profile.cheatsUnlocked);
 let state: RunState = createRunState(profile);
-let layout: Layout = computeLayout(app.screen.width / profile.uiScale, app.screen.height / profile.uiScale);
+
+/** The applied scale, floored so the interface never lays out below its design size (docs/UI-SCALE-FLOOR.md). */
+function effectiveScale(): UiScale {
+  return effectiveUiScale(profile.uiScale, app.screen.width, app.screen.height);
+}
+
+let layout: Layout = computeLayout(app.screen.width / effectiveScale(), app.screen.height / effectiveScale());
 
 // A run-in-progress save (docs/RUN-SAVE.md). `?nosave` disables saving entirely, for the tests and
 // for debugging, and then no save is read either so a stale Continue never appears.
@@ -261,7 +267,7 @@ root.addChild(
   tooltip.root,
   dialogView.root,
 );
-root.scale.set(profile.uiScale);
+root.scale.set(effectiveScale());
 
 sfx.setEnabled(profile.soundOn);
 sfx.setVolume(profile.volume);
@@ -374,8 +380,8 @@ function resetRunVisuals(): void {
 
 function syncViewport(): void {
   state.viewport = {
-    width: app.screen.width / profile.uiScale,
-    height: app.screen.height / profile.uiScale,
+    width: app.screen.width / effectiveScale(),
+    height: app.screen.height / effectiveScale(),
     window: { x: layout.window.x, y: layout.window.y, w: layout.window.w, h: layout.window.h },
     client: { x: layout.client.x, y: layout.client.y, w: layout.client.w, h: layout.client.h },
     boardCol: { x: layout.boardCol.x, y: layout.boardCol.y, w: layout.boardCol.w, h: layout.boardCol.h },
@@ -776,11 +782,12 @@ function applyUiScale(scale: UiScale): void {
   if (profile.uiScale === scale) return;
   profile.uiScale = scale;
   saveProfile(profile);
-  layout = computeLayout(app.screen.width / scale, app.screen.height / scale);
-  root.scale.set(scale);
+  const applied = effectiveScale();
+  layout = computeLayout(app.screen.width / applied, app.screen.height / applied);
+  root.scale.set(applied);
   syncViewport();
   helpSession.reclamp(layout);
-  hud.showNotice(textSizeValueLabel(scale));
+  hud.showNotice(textSizeValueLabel(applied));
 }
 
 function openMenu(name: MenuName | null): void {
@@ -797,7 +804,7 @@ function buildMenu(name: MenuName): OpenMenu {
         { id: 'shake', label: profile.shakeOn ? t('menu.view.shakeOn') : t('menu.view.shakeOff') },
         { id: 'synergy', label: showSynergyLines ? t('menu.view.synergyOn') : t('menu.view.synergyOff') },
         { id: 'separator', label: '', separator: true },
-        { id: 'text-size', label: t('menu.view.textSize'), submenu: textSizeEntries(profile.uiScale) },
+        { id: 'text-size', label: t('menu.view.textSize'), submenu: textSizeEntries(profile.uiScale, app.screen.width, app.screen.height) },
         { id: 'separator', label: '', separator: true },
         { id: 'language-header', label: t('menu.view.language'), disabled: true },
         // Each language is named in its own script, so the list is readable whichever one is active.
@@ -1389,7 +1396,7 @@ const mouse = new MouseController(app, {
   menu: () => menu,
   dialog: () => dialog,
   screen: () => screen,
-  uiScale: () => profile.uiScale,
+  uiScale: () => effectiveScale(),
   restartWindows: doRestartWindows,
   startEndless: () => {
     enterEndless(state);
@@ -1623,7 +1630,7 @@ let splitterDrag = false;
 
 function canvasPoint(e: PointerEvent): { x: number; y: number } {
   const rect = app.canvas.getBoundingClientRect();
-  return devicePointToLogical(e.clientX - rect.left, e.clientY - rect.top, profile.uiScale);
+  return devicePointToLogical(e.clientX - rect.left, e.clientY - rect.top, effectiveScale());
 }
 
 function boardHit(x: number, y: number): { col: number; row: number; onBoard: boolean } {
@@ -2540,8 +2547,8 @@ function updateTooltip(): void {
     overHelpWindow(h.x, h.y) || // over the help viewer
     overRecordsWindow(h.x, h.y); // over the Records viewer
 
-  const viewportW = app.screen.width / profile.uiScale;
-  const viewportH = app.screen.height / profile.uiScale;
+  const viewportW = app.screen.width / effectiveScale();
+  const viewportH = app.screen.height / effectiveScale();
 
   // Over the Global Upgrades window: a row's detail (and its shortfall), or nothing at all, so the
   // board and HUD tooltips never show through the dialog.
@@ -2627,7 +2634,7 @@ function updateTooltip(): void {
 }
 
 app.renderer.on('resize', () => {
-  layout = computeLayout(app.screen.width / profile.uiScale, app.screen.height / profile.uiScale);
+  layout = computeLayout(app.screen.width / effectiveScale(), app.screen.height / effectiveScale());
   syncViewport();
   helpSession.reclamp(layout);
   // shadow-resize: play in an 800×600 window.

@@ -123,12 +123,12 @@ import {
   MARKED_DAMAGE_MULT,
   CLICK_SLACK,
 } from '../src/core/pointer.ts';
-import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies, allHelpUnlocked, checkProfileAchievements, rpGain, specLevelCost, MAX_RUNS, UI_SCALES } from '../src/core/save.ts';
+import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies, allHelpUnlocked, checkProfileAchievements, rpGain, specLevelCost, MAX_RUNS, UI_SCALES, effectiveUiScale, MIN_LOGICAL_W, MIN_LOGICAL_H } from '../src/core/save.ts';
 import { appendRun, appendDailyRun, buildRunRecord, runTotals, bestByMap } from '../src/core/runs.ts';
 import { buildRecordsRows, totalsLine, bestByMapLine, computeRecordsLayout, recordsHitAt, formatRecordDate, outcomeLabel } from '../src/view/records.ts';
 import { captureRun, restoreRun, loadRunSave, saveRun, clearRunSave, hasRunSave, RUN_SAVE_KEY } from '../src/core/runsave.ts';
 import { computeMenuScreen, menuButtonAt, computeMenuWindow, computeMenuAnim, marqueeMaskRect } from '../src/view/menuScreen.ts';
-import { computeMapGrid, clampMapScroll, scrollForFocus, mapCardAt, moveMapFocus, mapGalleryKey, mapFocusForId, mapLevelAt, MAP_CARD_W, MAP_CARD_H, MAP_CARD_GAP, MAP_GRID_COLS, MAP_SCROLL_W, MAP_NAME_SIZE, MAP_HISTORY_SIZE } from '../src/view/mapSelect.ts';
+import { computeMapGrid, clampMapScroll, scrollForFocus, mapCardAt, moveMapFocus, mapGalleryKey, mapFocusForId, mapLevelAt, mapGridMetrics, MAP_CARD_W, MAP_CARD_H, MAP_CARD_GAP, MAP_GRID_COLS, MAP_SCROLL_W, MAP_NAME_SIZE, MAP_HISTORY_SIZE } from '../src/view/mapSelect.ts';
 import { thumbnailTexture, thumbCacheSize, thumbBase } from '../src/view/mapsScreen.ts';
 import { levelThumbnail } from '../src/core/thumb.ts';
 import { MAP_SAVE_KEY, rememberMap, readRememberedMap } from '../src/core/mapSave.ts';
@@ -15556,23 +15556,55 @@ const pageText = (id) => pageById(id).body.join('\n');
 
 {
   // 49d. The Text Size menu shows four values with exactly one checked, and picking another changes it.
-  const entries = textSizeEntries(1);
+  // Every scale fits a 4K window, so the effective scale equals the requested one there.
+  const entries = textSizeEntries(1, 3840, 2160);
   check(entries.length === 4, 'ui scale: the Text Size menu shows four values');
   check(entries.filter((e) => e.checked).length === 1, 'ui scale: exactly one value is checked');
   check(entries.map((e) => e.label).join(',') === '100%,125%,150%,200%',
     'ui scale: the values are 100%, 125%, 150% and 200%');
-  check(textSizeEntries(1).find((e) => e.checked)?.id === textSizeId(1),
+  check(textSizeEntries(1, 3840, 2160).find((e) => e.checked)?.id === textSizeId(1),
     'ui scale: at 1x the 100% value is checked');
-  check(textSizeEntries(2).find((e) => e.checked)?.id === textSizeId(2),
+  check(textSizeEntries(2, 3840, 2160).find((e) => e.checked)?.id === textSizeId(2),
     'ui scale: at 2x a different value (200%) is checked');
   for (const scale of UI_SCALES) {
-    const checked = textSizeEntries(scale).filter((e) => e.checked).map((e) => e.id);
+    const checked = textSizeEntries(scale, 3840, 2160).filter((e) => e.checked).map((e) => e.id);
     check(checked.length === 1 && textSizeScale(checked[0]) === scale,
       `ui scale: the checked entry for ${scale} resolves back to ${scale}`);
   }
   check(textSizeValueLabel(1.25) === '125%', 'ui scale: the value label for 1.25 is 125%');
   check(textSizeScale('text-size-1.5') === 1.5, 'ui scale: a text-size id resolves to its scale');
   check(textSizeScale('spawn:grunt') === null, 'ui scale: a non-text-size id resolves to null');
+}
+
+{
+  // 49e. effectiveUiScale floors the applied scale at the 1280×720 logical minimum (docs/UI-SCALE-FLOOR.md).
+  check(effectiveUiScale(2, 3840, 2160) === 2, 'ui scale floor: 200% on a 4K window stays 2');
+  check(effectiveUiScale(2, 1920, 1080) === 1.5, 'ui scale floor: 200% on 1920×1080 falls to 150%');
+  check(effectiveUiScale(1.5, 2560, 1440) === 1.5, 'ui scale floor: 150% on 2560×1440 stays 1.5');
+  check(effectiveUiScale(1.5, 1600, 900) === 1.25, 'ui scale floor: 150% on 1600×900 falls to 125%');
+  check(effectiveUiScale(1, 800, 600) === 1, 'ui scale floor: 100% is always 1, even on a tiny window');
+  check(effectiveUiScale(2, 800, 600) === 1, 'ui scale floor: a screen smaller than the floor falls back to 1');
+
+  // The logical viewport at every requested scale on a screen that can hold the floor never drops
+  // below 1280×720 (a smaller screen is the "even 1 cannot fit" fallback).
+  const screens = [[1280, 720], [1600, 900], [1920, 1080], [2560, 1440], [3840, 2160]];
+  for (const requested of UI_SCALES) {
+    for (const [w, h] of screens) {
+      const s = effectiveUiScale(requested, w, h);
+      check(w / s >= MIN_LOGICAL_W - 1e-9 && h / s >= MIN_LOGICAL_H - 1e-9,
+        `ui scale floor: logical viewport at ${requested} on ${w}×${h} is at least 1280×720`);
+    }
+  }
+
+  // mapGridMetrics never reports rowsVisible < 1, even for a 200 px client height.
+  check(mapGridMetrics({ x: 0, y: 0, w: 640, h: 200 }, 12, 0).rowsVisible >= 1,
+    'ui scale floor: mapGridMetrics never reports rowsVisible < 1');
+  check(mapGridMetrics({ x: 0, y: 0, w: 640, h: 200 }, 12, 0).rowsVisible === 1,
+    'ui scale floor: a 200 px client height floors to exactly one visible row');
+  for (const h of [20, 100, 160, 200]) {
+    check(mapGridMetrics({ x: 0, y: 0, w: 640, h }, 12, 0).rowsVisible >= 1,
+      `ui scale floor: rowsVisible is at least 1 for a ${h} px client height`);
+  }
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);

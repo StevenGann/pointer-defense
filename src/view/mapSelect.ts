@@ -98,7 +98,8 @@ export function mapGridMetrics(client: Rect, count: number, firstRowRaw: number)
   const rowStep = MAP_CARD_H + MAP_CARD_GAP;
   const colStep = MAP_CARD_W + MAP_CARD_GAP;
   const rows = Math.ceil(count / MAP_GRID_COLS);
-  const rowsVisible = Math.floor((view.h + MAP_CARD_GAP) / rowStep);
+  // Never report zero visible rows: a gallery that can scroll must still fit one card (docs/UI-SCALE-FLOOR.md).
+  const rowsVisible = Math.max(1, Math.floor((view.h + MAP_CARD_GAP) / rowStep));
   const scrollMax = Math.max(0, rows - rowsVisible);
   const firstRow = clampMapScroll(firstRowRaw, scrollMax);
   const overflow = scrollMax > 0;
