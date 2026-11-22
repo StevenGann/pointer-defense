@@ -365,6 +365,12 @@ function resetRunNotified(): void {
   tooltipHoverMs = 0;
 }
 
+/** Clear stale pooled effects and floats when a run is replaced (docs/RUN-VISUAL-RESET.md). */
+function resetRunVisuals(): void {
+  effects.reset();
+  numbers.reset();
+}
+
 function syncViewport(): void {
   state.viewport = {
     width: app.screen.width,
@@ -740,6 +746,7 @@ function doRestartWindows(): void {
   clearRunSave();
   state = createRunState(profile);
   resetRunNotified();
+  resetRunVisuals();
   resetSaveTrackers();
   syncViewport();
   dialog = null;
@@ -753,6 +760,7 @@ function doRestartWindows(): void {
 function doNewRun(): void {
   state = createRunState(profile);
   resetRunNotified();
+  resetRunVisuals();
   resetSaveTrackers();
   syncViewport();
   dialog = null;
@@ -983,6 +991,7 @@ function achievementMove(dx: number, dy: number): void {
 function startRun(level: Level, origin: 'play' | 'load' | 'editor'): void {
   state = createRunState(profile, level);
   resetRunNotified();
+  resetRunVisuals();
   resetSaveTrackers();
   if (batteryLow) notifyAchievement(state, 'shadow-flat-battery');
   syncViewport();
@@ -1052,6 +1061,7 @@ function startDaily(): void {
   const { seed, level } = dailyFor(date);
   state = createRunState(profile, level, { waveLimit: DAILY_WAVES, daily: { date, seed }, seed });
   resetRunNotified();
+  resetRunVisuals();
   resetSaveTrackers();
   if (batteryLow) notifyAchievement(state, 'shadow-flat-battery');
   syncViewport();
@@ -1071,6 +1081,7 @@ function startContinue(): void {
   state = continueState;
   continueState = null;
   resetRunNotified();
+  resetRunVisuals();
   resetSaveTrackers();
   syncViewport();
   runOrigin = 'play';

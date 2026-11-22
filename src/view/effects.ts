@@ -423,6 +423,25 @@ export class EffectsView {
     }
     hideSprites(this.deathSprites, this.deaths.length);
   }
+
+  /**
+   * Drop every live effect and hide every pooled sprite (docs/RUN-VISUAL-RESET.md). The board keeps
+   * its own art; this only clears the transient combat layers so a fresh run starts on a clean board.
+   */
+  reset(): void {
+    this.muzzles.length = 0;
+    this.tracers.length = 0;
+    this.sparks.length = 0;
+    this.shieldArcs.length = 0;
+    this.deaths.length = 0;
+    this.knockbacks.clear();
+    this.g.clear();
+    this.tracerG.clear();
+    hideSprites(this.muzzleSprites, 0);
+    hideSprites(this.sparkSprites, 0);
+    hideSprites(this.shieldSprites, 0);
+    hideSprites(this.deathSprites, 0);
+  }
 }
 
 /** Hide any pooled sprites past the live effect count, so leftovers from a busier frame vanish. */
