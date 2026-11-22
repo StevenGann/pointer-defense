@@ -3,6 +3,8 @@ import { bevel, FONT, FONT_SIZE, menuIndex, menuWordRects, PAL, pointInRect, typ
 import { getArtTexture } from './art.ts';
 import { textWidth } from './hud.ts';
 import { isRtl } from './direction.ts';
+import { UI_SCALES, type UiScale } from '../core/save.ts';
+import { t } from '../i18n/index.ts';
 
 /**
  * Windows 95 dropdown menus for the File and Help menu words. Drawn in Pixi like the rest of the
@@ -27,6 +29,37 @@ export interface OpenMenu {
   entries: MenuEntry[];
   /** The id of the parent entry whose submenu flyout is open, or null. */
   submenuParentId: string | null;
+}
+
+/** The menu id for one Text Size step, e.g. 'text-size-1.5' (docs/UI-SCALE.md). */
+export function textSizeId(scale: UiScale): string {
+  return 'text-size-' + scale;
+}
+
+/** The Text Size step a menu id selects, or null when the id is not a Text Size entry. */
+export function textSizeScale(id: string): UiScale | null {
+  if (!id.startsWith('text-size-')) return null;
+  const n = Number(id.slice('text-size-'.length));
+  return (UI_SCALES as readonly number[]).includes(n) ? (n as UiScale) : null;
+}
+
+/** The value label for one Text Size step, e.g. '150%' (docs/UI-SCALE.md). */
+export function textSizeValueLabel(scale: UiScale): string {
+  switch (scale) {
+    case 1: return t('menu.view.textSize100');
+    case 1.25: return t('menu.view.textSize125');
+    case 1.5: return t('menu.view.textSize150');
+    case 2: return t('menu.view.textSize200');
+  }
+}
+
+/** The Text Size radio submenu: four values, the current scale checked (docs/UI-SCALE.md). */
+export function textSizeEntries(uiScale: UiScale): MenuEntry[] {
+  return UI_SCALES.map((scale) => ({
+    id: textSizeId(scale),
+    label: textSizeValueLabel(scale),
+    checked: scale === uiScale,
+  }));
 }
 
 const ITEM_H = 24;

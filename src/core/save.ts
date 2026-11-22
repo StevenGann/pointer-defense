@@ -61,6 +61,11 @@ export type SpecKind = 'cpu' | 'ram' | 'gpu' | 'disk';
 /** Master volume step, remembered next to the profile (docs/design.md §14). */
 export type VolumeLevel = 'low' | 'med' | 'high';
 
+/** The interface scale steps (docs/UI-SCALE.md): the interface is laid out in fewer logical pixels
+ *  and the finished stage scaled up, so text and the pointer stay readable on large screens. */
+export const UI_SCALES = [1, 1.25, 1.5, 2] as const;
+export type UiScale = (typeof UI_SCALES)[number];
+
 /** The main-menu choice a returning player lands on (docs/design.md §20.1). */
 export type MenuChoice = 'play' | 'editor' | 'load';
 
@@ -111,6 +116,8 @@ export interface Profile {
   lastChoice: MenuChoice;
   /** Whether the Cheats menu is unlocked (the Konami code); hidden until the player finds it. */
   cheatsUnlocked: boolean;
+  /** Interface scale (docs/UI-SCALE.md); older saves without the field load as 1. */
+  uiScale: UiScale;
 }
 
 export const SPEC_KINDS: readonly SpecKind[] = ['cpu', 'ram', 'gpu', 'disk'];
@@ -182,6 +189,7 @@ export function defaultProfile(): Profile {
     seenEnemies: [],
     lastChoice: 'play',
     cheatsUnlocked: false,
+    uiScale: 1,
   };
 }
 
@@ -220,6 +228,7 @@ export function cloneProfile(p: Profile): Profile {
     seenEnemies: [...p.seenEnemies],
     lastChoice: p.lastChoice,
     cheatsUnlocked: p.cheatsUnlocked,
+    uiScale: p.uiScale,
   };
 }
 
@@ -453,6 +462,9 @@ function parseProfile(raw: string): { profile: Profile; migrated: boolean } | nu
   const lastChoice: MenuChoice = o.lastChoice === 'editor' || o.lastChoice === 'load' ? o.lastChoice : 'play';
   // A save written before cheats shipped has no field; it simply loads locked rather than rejected.
   const cheatsUnlocked = typeof o.cheatsUnlocked === 'boolean' ? o.cheatsUnlocked : false;
+  // Interface scale (docs/UI-SCALE.md): an older save without the field loads at 1.
+  const uiScale: UiScale =
+    typeof o.uiScale === 'number' && (UI_SCALES as readonly number[]).includes(o.uiScale) ? (o.uiScale as UiScale) : 1;
   // Cross-run achievement counters, migration-safe: absent on older saves, so they default empty.
   const mapsCleared = Array.isArray(o.mapsCleared)
     ? [...new Set(o.mapsCleared.filter((m): m is string => typeof m === 'string'))]
@@ -467,7 +479,7 @@ function parseProfile(raw: string): { profile: Profile; migrated: boolean } | nu
   // The last daily's result (docs/DAILY.md); an older save without the field simply has none played.
   const daily = parseDaily(o.daily);
 
-  const profile: Profile = { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, achievementDates, mapsCleared, lifetimeBossKillsByPointer, bestWave, reboots, runs, daily, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice, cheatsUnlocked };
+  const profile: Profile = { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, achievementDates, mapsCleared, lifetimeBossKillsByPointer, bestWave, reboots, runs, daily, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice, cheatsUnlocked, uiScale };
   return { profile, migrated: rawTree.includes('early-access') };
 }
 

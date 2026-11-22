@@ -94,6 +94,7 @@ export interface MouseContext {
   menu: () => OpenMenu | null;
   dialog: () => DialogModel | null;
   screen: () => Screen;
+  uiScale: () => number;
   restartWindows: () => void;
   startEndless: () => void;
   newRun: () => void;
@@ -198,7 +199,8 @@ export class MouseController {
 
   private localPoint(e: PointerEvent): { x: number; y: number } {
     const rect = this.canvas.getBoundingClientRect();
-    return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const s = this.ctx.uiScale();
+    return { x: (e.clientX - rect.left) / s, y: (e.clientY - rect.top) / s };
   }
 
   private onMove = (e: PointerEvent): void => {

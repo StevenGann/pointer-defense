@@ -62,7 +62,7 @@ import { FLYER_OFF_KIND_DAMAGE,
 } from '../src/core/state.ts';
 import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, isMortar, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE, MINE_BLAST_RADIUS, CURSOR_CLICK_DAMAGE_FACTOR, repairHealRate, repairRadius, MAX_TIER, TIERS, kindMaxTier, COMBAT_KINDS, BRANCH_TIER } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
-import { AA_HOLD_CAP, AA_HOLD_WINDOW, AA_MIN_CLUSTER, buildSynergyLayout, leads, spotterGrant, SPOTTER_CAP, SYNERGIES, CHILL_SLOW_FACTOR, CHILL_SLOW_TICKS, SHATTER_BURST_DELAY_TICKS, SHATTER_BURST_SPLASH, SHATTER_BURST_DAMAGE_MULT, BUTTRESS_GROUP_CAP, isBulwark } from '../src/core/synergy.ts';
+import { AA_HOLD_CAP, AA_HOLD_WINDOW, AA_MIN_CLUSTER, buildSynergyLayout, leads, spotterGrant, SPOTTER_CAP, SYNERGIES, SYNERGY_HALO_CELLS, SYNERGY_HALO_AA_CELLS, synergyHaloCells, CHILL_SLOW_FACTOR, CHILL_SLOW_TICKS, SHATTER_BURST_DELAY_TICKS, SHATTER_BURST_SPLASH, SHATTER_BURST_DAMAGE_MULT, BUTTRESS_GROUP_CAP, isBulwark } from '../src/core/synergy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { WAVE_COUNT, EARLY_CALL_FLOOR, buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, FLYER_FLIGHT_MEMBER_TICKS, FLYER_FLIGHT_SIZE, flyerSwarmFactor, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers, WAVE_ENEMY_CAP } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
@@ -123,7 +123,7 @@ import {
   MARKED_DAMAGE_MULT,
   CLICK_SLACK,
 } from '../src/core/pointer.ts';
-import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies, allHelpUnlocked, checkProfileAchievements, rpGain, specLevelCost, MAX_RUNS } from '../src/core/save.ts';
+import { loadProfile, saveProfile, defaultProfile, prefersReducedMotion, addSeenEnemies, allHelpUnlocked, checkProfileAchievements, rpGain, specLevelCost, MAX_RUNS, UI_SCALES } from '../src/core/save.ts';
 import { appendRun, appendDailyRun, buildRunRecord, runTotals, bestByMap } from '../src/core/runs.ts';
 import { buildRecordsRows, totalsLine, bestByMapLine, computeRecordsLayout, recordsHitAt, formatRecordDate, outcomeLabel } from '../src/view/records.ts';
 import { captureRun, restoreRun, loadRunSave, saveRun, clearRunSave, hasRunSave, RUN_SAVE_KEY } from '../src/core/runsave.ts';
@@ -157,7 +157,7 @@ import {
 import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText, targetModeDisplay, targetLockReason, pointerTooltipLines, fmtClickDamage, paletteTooltipLines, lockedPaletteLine, cursorTooltipLines, cursorUpgradeTooltipLines, cursorBranchTooltipLines, repairUpgradeTooltipLines, branchName, TOOLTIP_BLUE } from '../src/view/tooltipText.ts';
 import { drawTower, clearTowerSprites, BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRACER_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre, synergyEdgeEndpoints, synergyEdgeStyle, recoilOffset, RECOIL_DURATION_TICKS, RECOIL_PEAK_CELLS, SLOW_TINT } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
-import { computeLayout, computeWindowChromeGeom, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
+import { computeLayout, computeWindowChromeGeom, devicePointToLogical, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
 import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, statusPerfText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect, modalRect, modalMenuAt, modalMessageTop, defeatMessage } from '../src/view/hud.ts';
 import { FloatingNumbersView } from '../src/view/numbers.ts';
 import { nextQuality } from '../src/core/quality.ts';
@@ -182,7 +182,7 @@ import { parseHelpMarkdown, layoutHelpBlocks, helpMeasure, ITEM_GAP } from '../s
 import { nextHelpMode, contextHelpPage, contextHelpHitAt } from '../src/view/contexthelp.ts';
 import { buildAchievementGrid, gridRowCount, gridCellRect, ACH_COLUMNS, ACH_CELL, ACH_GUTTER, computeAchievementGrid, achievementGridHitAt, AchievementSession, computeDialog } from '../src/view/dialog.ts';
 import { computeNameDialog } from '../src/view/mapLibrary.ts';
-import { computeMenu, menuEntryAt, advanceSubmenu, SUBMENU_OPEN_MS, CHEVRON_W } from '../src/view/menu.ts';
+import { computeMenu, menuEntryAt, advanceSubmenu, SUBMENU_OPEN_MS, CHEVRON_W, textSizeEntries, textSizeId, textSizeScale, textSizeValueLabel } from '../src/view/menu.ts';
 import {
   ART_MANIFEST,
   ART_VIEWBOX,
@@ -7069,6 +7069,63 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     'tower base split: wall overlays are parented in towerBases');
 }
 
+// --- 37i.4 invalidateArt also empties the base layer and every pooled tower sprite (docs/AA-HALO-AND-BASE-CLEANUP.md) ---
+{
+  resetArt();
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 3, 6);
+  placeTower(s, 'wall', 5, 6);
+  const view = new BoardView();
+  view.draw(s, computeLayout(1280, 800), 0, { col: 0, row: 0, onBoard: false, x: 0, y: 0 });
+  check(view.towerBaseSprites.length === 2 && view.towerTurretSprites.length === 2 &&
+    view.towerMarkSprites.length === 2 && view.wallOverlaySprites.length === 2,
+    'bases: a gun and a wall pool two of each tower sprite');
+  view.invalidateArt();
+  check(view.towerBases.children.length === 0, 'invalidateArt: towerBases has zero children');
+  check(view.towerSprites.children.length === 0, 'invalidateArt: towerSprites has zero children');
+  check(view.towerBaseSprites.length === 0 && view.towerTurretSprites.length === 0 &&
+    view.towerMarkSprites.length === 0 && view.wallOverlaySprites.length === 0,
+    'invalidateArt: all four pooled tower-sprite arrays are empty');
+  resetArt();
+}
+
+// --- 37i.5 deleting a tower hides every pooled sprite past the new count (docs/AA-HALO-AND-BASE-CLEANUP.md) ---
+{
+  resetArt();
+  injectArtTexture('gun-base', new Texture({ width: 4, height: 4 }));
+  injectArtTexture('gun-turret', new Texture({ width: 4, height: 4 }));
+  injectArtTexture('gun-marksman', new Texture({ width: 4, height: 4 }));
+  injectArtTexture('wall-t1', new Texture({ width: 4, height: 4 }));
+  injectArtTexture('wall-bulwark', new Texture({ width: 4, height: 4 }));
+
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  check(placeTower(s, 'gun', 3, 6), 'delete: place a branched gun');
+  check(placeTower(s, 'wall', 5, 6), 'delete: place a bulwark wall');
+  check(placeTower(s, 'gun', 7, 6), 'delete: place a third tower');
+  towerAt(s, 3, 6).branch = 'A';
+  towerAt(s, 5, 6).branch = 'A';
+  const view = new BoardView();
+  const layout = computeLayout(1280, 800);
+  const hover = { col: 0, row: 0, onBoard: false, x: 0, y: 0 };
+  view.draw(s, layout, 0, hover);
+
+  check(view.towerBaseSprites[2].visible, 'delete: three towers draw three base sprites');
+  check(view.towerTurretSprites[2].visible, 'delete: three towers draw three turret sprites');
+  check(view.towerMarkSprites[0].visible, 'delete: a branched gun draws its mark');
+  check(view.wallOverlaySprites[0].visible, 'delete: a bulwark wall draws its overlay');
+
+  check(sellTower(s, 5, 6), 'delete: sell the middle tower');
+  view.draw(s, layout, 0, hover);
+
+  check(!view.towerBaseSprites[2].visible, 'delete: no base sprite past the new count');
+  check(!view.towerTurretSprites[2].visible, 'delete: no turret sprite past the new count');
+  check(!view.towerMarkSprites[2].visible, 'delete: no mark sprite past the new count');
+  check(view.wallOverlaySprites.every((sp) => !sp.visible), 'delete: no wall overlay past the new count');
+  resetArt();
+}
+
 {
   // 39h. A boss variant death shakes like a boss (4 px), and a boss variant leak costs its integrity.
   check(shakeImpulseFor({ type: 'kill', kind: 'grunt-boss' }).amplitude === SHAKE_AMPLITUDE.bossDeath,
@@ -13366,6 +13423,29 @@ function dailyState(date) {
   check(ordered, 'in a ring, every leader precedes its follower in the sorted member order');
 }
 
+// 3a. Per-row halo size: an all-AA cluster is drawn at the tighter AA size, everything else at the
+// default (docs/AA-HALO-AND-BASE-CLEANUP.md). The rule is keyed on member kinds, never on damage.
+{
+  const aa = allUnlocked();
+  aa.economy.salvage = 1e9;
+  placeTower(aa, 'aa', 5, 5);
+  placeTower(aa, 'aa', 5, 6);
+  const aaCluster = buildSynergyLayout(aa.towers).clusters[0];
+  check(aaCluster !== undefined && aaCluster.members.length === 2, 'an adjacent AA pair forms a cluster');
+  check(synergyHaloCells(aaCluster) === SYNERGY_HALO_AA_CELLS,
+    `an all-AA cluster uses the AA halo size (${synergyHaloCells(aaCluster)})`);
+  check(SYNERGY_HALO_AA_CELLS === 1.0, 'the AA halo size is 1.0 cells');
+
+  // No other kind forms a cluster today, so the default branch is exercised with a hand-built
+  // cluster of two Guns (the helper keys on member kinds, not the producing row).
+  const gunA = createTower(1, 'gun', 5, 5);
+  const gunB = createTower(2, 'gun', 5, 6);
+  const gunCluster = { members: [gunA, gunB], color: 0xffffff, leaders: [[], []] };
+  check(synergyHaloCells(gunCluster) === SYNERGY_HALO_CELLS,
+    `a non-AA cluster keeps the default halo size (${synergyHaloCells(gunCluster)})`);
+  check(SYNERGY_HALO_CELLS === 1.6, 'the default halo size stays 1.6 cells');
+}
+
 // 4. Propagation: a chain of five fires all five on one tick, in one lead-order pass.
 {
   const s = allUnlocked();
@@ -15441,6 +15521,58 @@ const pageText = (id) => pageById(id).body.join('\n');
   const leftover = HELP_PAGES.filter((p) => p.body.some((line) => /\{[a-zA-Z0-9_]+\}/.test(line)));
   check(leftover.length === 0,
     `every rendered help line has every placeholder filled (leftover: ${leftover.map((p) => p.id).join(', ') || 'none'})`);
+}
+
+// --- 49. UI scale (docs/UI-SCALE.md) -----------------------------------------------------------
+{
+  // 49a. Scaling is exact, not approximate: a 4K window at 2x lays out exactly like a 1080p window.
+  check(JSON.stringify(computeLayout(3840 / 2, 2160 / 2)) === JSON.stringify(computeLayout(1920, 1080)),
+    'ui scale: computeLayout(3840/2, 2160/2) equals computeLayout(1920, 1080)');
+
+  // 49b. A device point maps to logical by dividing by the scale, so a click at 2x lands where the
+  // same logical point does at 1x (and therefore in the same panel).
+  const mapped = devicePointToLogical(1000, 600, 2);
+  check(mapped.x === 500 && mapped.y === 300, 'ui scale: device (1000,600) maps to logical (500,300) at 2x');
+  const at2 = devicePointToLogical(1000, 600, 2);
+  const at1 = devicePointToLogical(500, 300, 1);
+  check(at2.x === at1.x && at2.y === at1.y,
+    'ui scale: a click at device (1000,600) at 2x lands where (500,300) lands at 1x');
+}
+
+{
+  // 49c. profile.uiScale round-trips, and an older save without the field loads at 1.
+  const p = defaultProfile();
+  check(p.uiScale === 1, 'ui scale: a fresh profile defaults to 1');
+  const store = { value: null, getItem() { return this.value; }, setItem(_k, v) { this.value = v; } };
+  for (const scale of UI_SCALES) {
+    const q = defaultProfile();
+    q.uiScale = scale;
+    saveProfile(q, store);
+    check(loadProfile(store).uiScale === scale, `ui scale: ${scale} round-trips through save/load`);
+  }
+  const legacy = { getItem: () => JSON.stringify({ version: 3, specs: { cpu: 0, ram: 0, gpu: 0, disk: 0 } }), setItem: () => {} };
+  check(loadProfile(legacy).uiScale === 1, 'ui scale: a save written before uiScale loads as 1');
+}
+
+{
+  // 49d. The Text Size menu shows four values with exactly one checked, and picking another changes it.
+  const entries = textSizeEntries(1);
+  check(entries.length === 4, 'ui scale: the Text Size menu shows four values');
+  check(entries.filter((e) => e.checked).length === 1, 'ui scale: exactly one value is checked');
+  check(entries.map((e) => e.label).join(',') === '100%,125%,150%,200%',
+    'ui scale: the values are 100%, 125%, 150% and 200%');
+  check(textSizeEntries(1).find((e) => e.checked)?.id === textSizeId(1),
+    'ui scale: at 1x the 100% value is checked');
+  check(textSizeEntries(2).find((e) => e.checked)?.id === textSizeId(2),
+    'ui scale: at 2x a different value (200%) is checked');
+  for (const scale of UI_SCALES) {
+    const checked = textSizeEntries(scale).filter((e) => e.checked).map((e) => e.id);
+    check(checked.length === 1 && textSizeScale(checked[0]) === scale,
+      `ui scale: the checked entry for ${scale} resolves back to ${scale}`);
+  }
+  check(textSizeValueLabel(1.25) === '125%', 'ui scale: the value label for 1.25 is 125%');
+  check(textSizeScale('text-size-1.5') === 1.5, 'ui scale: a text-size id resolves to its scale');
+  check(textSizeScale('spawn:grunt') === null, 'ui scale: a non-text-size id resolves to null');
 }
 
 console.log(failures === 0 ? '\nPASS' : `\nFAIL (${failures})`);
