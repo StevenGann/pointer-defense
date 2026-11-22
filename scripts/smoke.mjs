@@ -1739,6 +1739,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   const s = createRunState();
   s.economy.earned = 20000; // floor(2.2 * sqrt(20000 / 900)) = floor(10.37) = 10
   s.wave = 52;
+  s.phase = 'halted'; // only a defeat pays — creditDefeat guards on the phase
   const before = defaultProfile();
   const rpBefore = before.rp;
   const expected = restartPointsGained(s, before);
@@ -1759,6 +1760,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   // A cheated defeat banks nothing and does not move lastSalvage.
   const cs = createRunState();
   cs.cheatsUsed = true;
+  cs.phase = 'halted';
   cs.economy.earned = 20000;
   const cbefore = defaultProfile();
   cbefore.lastSalvage = 123;
