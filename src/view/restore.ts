@@ -99,6 +99,24 @@ export interface RestoreTreeRow {
   price: string;
 }
 
+/** Indents that keep a tree row's text clear of its expander, checkbox and guide line. */
+const TREE_TIER_TEXT_X = 26;
+const TREE_NODE_TEXT_X = 46;
+const TREE_PRICE_TEXT_INSET = 6;
+
+/** The horizontal text anchor for each tree row field (docs/TREE-TEXT-ANCHORS.md §The fix). */
+export const TREE_TEXT_ANCHOR = { tier: 0, node: 0, price: 1 } as const;
+
+/** The x of a tree row's label: tier headers sit 26 px in, node names 46 px in. */
+export function treeRowTextX(row: RestoreTreeRow): number {
+  return row.rect.x + (row.kind === 'tier' ? TREE_TIER_TEXT_X : TREE_NODE_TEXT_X);
+}
+
+/** The x of a tree row's price, right-aligned (anchor 1) 6 px inside the row. */
+export function treePriceTextX(row: RestoreTreeRow): number {
+  return row.rect.x + row.rect.w - TREE_PRICE_TEXT_INSET;
+}
+
 export interface RestoreLayout {
   window: Rect;
   titleBar: Rect;
@@ -196,7 +214,7 @@ export function computeRestoreLayout(l: Layout, profile: Profile, s: RunState, s
 function buildTreeRows(area: Rect, profile: Profile, session: RestoreSession): RestoreTreeRow[] {
   const rows: RestoreTreeRow[] = [];
   const nodes = visibleNodes(profile);
-  let y = area.y;
+  let y = area.y + 4;
   for (let tier = 1; tier <= 5; tier++) {
     const unlocked = treeTierUnlocked(profile.rpEarned, tier as 1 | 2 | 3 | 4 | 5);
     const tierNodes = nodes.filter((n) => n.tier === tier);
@@ -553,7 +571,8 @@ export class RestoreView {
           : t('dlg.restore.tier', { tier: row.tier });
         tierText.style.fontWeight = 'bold';
         tierText.style.fill = row.locked ? PAL.shadow : PAL.title;
-        tierText.position.set(row.rect.x + 26, row.rect.y + Math.floor(TREE_ROW_H / 2));
+        tierText.anchor.set(TREE_TEXT_ANCHOR.tier, 0.5);
+        tierText.position.set(treeRowTextX(row), row.rect.y + Math.floor(TREE_ROW_H / 2));
         const ex = row.expander!;
         bevel(g, ex, true, PAL.face);
         g.rect(ex.x, ex.y, ex.w, ex.h).stroke({ width: 1, color: PAL.dark });
@@ -576,14 +595,14 @@ export class RestoreView {
         t.text = node.name;
         t.style.fontWeight = 'normal';
         t.style.fill = row.owned ? PAL.shadow : PAL.text;
-        t.position.set(row.rect.x + 46, row.rect.y + Math.floor(TREE_ROW_H / 2));
+        t.anchor.set(TREE_TEXT_ANCHOR.node, 0.5);
+        t.position.set(treeRowTextX(row), row.rect.y + Math.floor(TREE_ROW_H / 2));
         const price = this.rowTextAt(ti++);
         price.text = row.price;
         price.style.fontWeight = 'normal';
         price.style.fill = row.canBuy ? PAL.text : PAL.shadow;
-        price.anchor.set(1, 0.5);
-        price.position.set(row.rect.x + row.rect.w - 4, row.rect.y + Math.floor(TREE_ROW_H / 2));
-        price.anchor.set(0, 0.5);
+        price.anchor.set(TREE_TEXT_ANCHOR.price, 0.5);
+        price.position.set(treePriceTextX(row), row.rect.y + Math.floor(TREE_ROW_H / 2));
       }
     }
     if (firstNodeY >= 0 && lastNodeY > firstNodeY) dottedLine(g, guideX, firstNodeY, guideX, lastNodeY, PAL.shadow);
