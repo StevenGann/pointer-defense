@@ -1688,6 +1688,8 @@ export function restartWindows(s: RunState, profile: Profile): RestartResult {
  * A cheated run banks nothing.
  */
 export function creditDefeat(s: RunState, profile: Profile): DefeatResult {
+  // Only a defeat pays: a victory banked nothing before this change and still banks nothing.
+  if (s.phase !== 'halted') return { gained: 0, profile: cloneProfile(profile) };
   if (s.defeatCredited) return { gained: 0, profile: cloneProfile(profile) };
   s.defeatCredited = true;
   s.defeatGained = 0;
