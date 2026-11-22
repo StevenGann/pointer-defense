@@ -29,7 +29,7 @@ import {
   towerAt,
   type RunState,
 } from './core/state.ts';
-import { SPAWN_KINDS, spawnKindLabel } from './core/cheats.ts';
+import { advanceKonami, cheatsEnabled, KONAMI_SEQUENCE, setCheatsUnlocked, SPAWN_KINDS, spawnKindLabel } from './core/cheats.ts';
 import { LEVELS, type Level } from './core/levels.ts';
 import { dailyAvailable, dailyDate, dailyFor, dailyMenuLabel, DAILY_WAVES } from './core/daily.ts';
 import { addSeenEnemies, checkProfileAchievements, loadProfile, saveProfile, SPEC_KINDS, type Profile, type RunOutcome, type SpecKind } from './core/save.ts';
@@ -112,6 +112,7 @@ import { MapLibraryView, NameDialogView, computeMapLibrary, computeNameDialog, m
 import { MapsScreenView } from './view/mapsScreen.ts';
 import { clampMapScroll, computeMapGrid, mapCardAt, mapFocusForId, mapGalleryKey, mapLevelAt, scrollForFocus, MAP_GRID_COLS } from './view/mapSelect.ts';
 import { t, currentLocaleName } from './i18n/index.ts';
+import { secondsToTicks } from './core/time.ts';
 import { switchLocale } from './i18n/activate.ts';
 import { LOCALES } from './i18n/locales.ts';
 import pkg from '../package.json';
@@ -178,6 +179,7 @@ function watchResolution(): void {
 watchResolution();
 
 let profile: Profile = loadProfile();
+setCheatsUnlocked(profile.cheatsUnlocked);
 let state: RunState = createRunState(profile);
 let layout: Layout = computeLayout(app.screen.width, app.screen.height);
 
@@ -298,6 +300,8 @@ function buyGlobalUpgrade(id: UpgradeId): void {
 let screen: Screen =
   continueState !== null ? 'menu' : profile.lastChoice === 'editor' ? 'editor' : profile.lastChoice === 'load' ? 'menu' : 'maps';
 let runOrigin: 'play' | 'load' | 'editor' = 'play';
+// The rolling Konami cursor: how far into the sequence the player has typed (docs/KONAMI-CHEATS.md).
+let konamiCursor = 0;
 // The map-selection gallery (docs/MAP-SELECT.md): focus is a LEVELS index, remembered by map id.
 // Scroll is view state only: it is never persisted and resets to the focused row whenever the gallery
 // opens. `mapsThumbDrag` is true while the pointer drags the scrollbar thumb.
@@ -1982,6 +1986,18 @@ function typingTarget(target: EventTarget | null): boolean {
 window.addEventListener('keydown', (e) => {
   if (e.repeat) return;
   if (typingTarget(e.target)) return;
+  // The Konami code runs on every screen but only while the gate is still closed; once unlocked it
+  // never listens again, and a focused text field (save-name, seed, load) never feeds it.
+  if (!cheatsEnabled()) {
+    konamiCursor = advanceKonami(konamiCursor, e.key);
+    if (konamiCursor >= KONAMI_SEQUENCE.length) {
+      profile.cheatsUnlocked = true;
+      saveProfile(profile);
+      setCheatsUnlocked(true);
+      konamiCursor = 0;
+      hud.showNotice(t('menu.cheats'), secondsToTicks(2));
+    }
+  }
   const key = e.key.toLowerCase();
   if (screen === 'menu') {
     if (helpCursor && key === 'escape') {

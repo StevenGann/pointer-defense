@@ -109,6 +109,8 @@ export interface Profile {
   seenEnemies: EnemyKind[];
   /** The main-menu button the player last used; the boot lands here, Play for a fresh profile. */
   lastChoice: MenuChoice;
+  /** Whether the Cheats menu is unlocked (the Konami code); hidden until the player finds it. */
+  cheatsUnlocked: boolean;
 }
 
 export const SPEC_KINDS: readonly SpecKind[] = ['cpu', 'ram', 'gpu', 'disk'];
@@ -179,6 +181,7 @@ export function defaultProfile(): Profile {
     seenBossKinds: [],
     seenEnemies: [],
     lastChoice: 'play',
+    cheatsUnlocked: false,
   };
 }
 
@@ -216,6 +219,7 @@ export function cloneProfile(p: Profile): Profile {
     seenBossKinds: [...p.seenBossKinds],
     seenEnemies: [...p.seenEnemies],
     lastChoice: p.lastChoice,
+    cheatsUnlocked: p.cheatsUnlocked,
   };
 }
 
@@ -447,6 +451,8 @@ function parseProfile(raw: string): { profile: Profile; migrated: boolean } | nu
     ? [...new Set(o.seenEnemies.filter((k): k is EnemyKind => typeof k === 'string' && isEnemyKind(k as EnemyKind)))]
     : [];
   const lastChoice: MenuChoice = o.lastChoice === 'editor' || o.lastChoice === 'load' ? o.lastChoice : 'play';
+  // A save written before cheats shipped has no field; it simply loads locked rather than rejected.
+  const cheatsUnlocked = typeof o.cheatsUnlocked === 'boolean' ? o.cheatsUnlocked : false;
   // Cross-run achievement counters, migration-safe: absent on older saves, so they default empty.
   const mapsCleared = Array.isArray(o.mapsCleared)
     ? [...new Set(o.mapsCleared.filter((m): m is string => typeof m === 'string'))]
@@ -461,7 +467,7 @@ function parseProfile(raw: string): { profile: Profile; migrated: boolean } | nu
   // The last daily's result (docs/DAILY.md); an older save without the field simply has none played.
   const daily = parseDaily(o.daily);
 
-  const profile: Profile = { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, achievementDates, mapsCleared, lifetimeBossKillsByPointer, bestWave, reboots, runs, daily, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice };
+  const profile: Profile = { version: SAVE_VERSION, specs, rp, rpEarned, tree, lastSalvage, achievements, achievementDates, mapsCleared, lifetimeBossKillsByPointer, bestWave, reboots, runs, daily, soundOn, volume, autoWave, shakeOn, seenBossKinds, seenEnemies, lastChoice, cheatsUnlocked };
   return { profile, migrated: rawTree.includes('early-access') };
 }
 
