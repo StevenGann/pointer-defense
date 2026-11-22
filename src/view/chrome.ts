@@ -324,7 +324,7 @@ export class ChromeView {
   readonly arrowIcon = new Sprite();
   readonly controlGlyphs: Sprite[] = [new Sprite(), new Sprite(), new Sprite(), new Sprite()];
   private readonly titleText: Text;
-  private readonly menuTexts: Text[];
+  private menuTexts: Text[];
 
   constructor() {
     this.root.addChild(this.frame, this.glyphs);
@@ -341,7 +341,22 @@ export class ChromeView {
     });
     this.titleText.anchor.set(0, 0.5);
     this.root.addChild(this.titleText);
-    this.menuTexts = menuItems().map(
+    this.menuTexts = [];
+    this.syncMenuTexts();
+  }
+
+  /**
+   * Keep one Text per menu word. The Cheats word appears the moment the gate opens (docs/KONAMI-CHEATS.md),
+   * so the set is rebuilt only when the count changes rather than every frame.
+   */
+  private syncMenuTexts(): void {
+    const items = menuItems();
+    if (items.length === this.menuTexts.length) return;
+    for (const t of this.menuTexts) {
+      this.root.removeChild(t);
+      t.destroy();
+    }
+    this.menuTexts = items.map(
       (item) => new Text({ text: item.label, style: { fontFamily: FONT, fontSize: FONT_SIZE.body, fill: PAL.text } }),
     );
     for (const t of this.menuTexts) {
@@ -383,6 +398,7 @@ export class ChromeView {
 
     // Menu bar.
     g.rect(l.menu.x, l.menu.y, l.menu.w, l.menu.h).fill(PAL.face);
+    this.syncMenuTexts();
     const rects = menuWordRects(l.menu);
     for (let i = 0; i < rects.length; i++) {
       const r = rects[i];
