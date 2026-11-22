@@ -309,6 +309,7 @@ export const zh: Catalogue = {
   'dlg.restore.progress': '距离下一个还原点的进度',
   'dlg.restore.tier': '等级 {tier}',
   'dlg.restore.tierLocked': '等级 {tier} — 达到 {level} 级解锁',
+  'dlg.restore.treeCost': '{cost} 还原点',
 
   'dlg.records.title': '记录',
   'dlg.records.emptyRuns': '局数 0',

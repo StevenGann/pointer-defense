@@ -287,6 +287,7 @@ export const ru = {
   'dlg.restore.progress': 'Прогресс до следующей точки',
   'dlg.restore.tier': 'Уровень {tier}',
   'dlg.restore.tierLocked': 'Уровень {tier} — заблокирован до уровня {level}',
+  'dlg.restore.treeCost': '{cost} Точки восстановления',
 
   'dlg.records.title': 'Рекорды',
   'dlg.records.emptyRuns': 'Забегов 0',

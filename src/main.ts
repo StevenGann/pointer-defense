@@ -61,7 +61,7 @@ import { MenuView, type OpenMenu } from './view/menu.ts';
 import { AchievementGridView, AchievementSession, achievementGridHitAt, buildAchievementGrid, computeAchievementGrid, type AchievementGridModel } from './view/dialog.ts';
 import { dialogButtonAt, DialogView, type DialogModel } from './view/dialog.ts';
 import { HelpSession, HelpView, computeHelpLayout, helpHitAt, helpNavHitAt, helpSearchRowAt, helpRows, helpIndexList, helpSearchResults, helpPrintDocument, helpOptionsHitAt, helpContextHitAt, HELP_LINE_H, HELP_SCROLL_LINES } from './view/help.ts';
-import { RestoreView, RestoreSession, computeRestoreLayout, restoreHitAt, restoreDirty } from './view/restore.ts';
+import { RestoreView, RestoreSession, computeRestoreLayout, restoreHitAt, restoreDirty, treeNodeTooltipLines } from './view/restore.ts';
 import { RecordsSession, RecordsView, computeRecordsLayout, recordsHitAt, RECORDS_ROW_H } from './view/records.ts';
 import { MouseController, type Screen } from './input/mouse.ts';
 import { EffectsView } from './view/effects.ts';
@@ -2524,6 +2524,22 @@ function updateTooltip(): void {
       }
       return;
     }
+  }
+
+  // Over the Restore dialog's Tree tab: a hovered node row shows its tooltip; anything else clears the
+  // tooltip and returns, so a board or HUD tooltip can never show through the dialog. Tier rows get no
+  // tooltip — their whole label is already on screen (docs/TREE-TOOLTIPS.md).
+  if (!suppressed && restoreSession.open && restoreSession.tab === 'tree') {
+    const hit = restoreHitAt(computeRestoreLayout(layout, profile, state, restoreSession), h.x, h.y);
+    if (hit !== null && hit.type === 'node') {
+      const node = treeNodeById(hit.id);
+      if (node) {
+        tooltip.update({ key: 'tree' + ':' + hit.id, lines: treeNodeTooltipLines(node, profile) }, h.x, h.y, viewportW, viewportH);
+        return;
+      }
+    }
+    tooltip.update({ key: null, lines: [] }, h.x, h.y, viewportW, viewportH);
+    return;
   }
 
   if (!suppressed) {

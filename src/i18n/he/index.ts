@@ -300,6 +300,7 @@ export const he: Catalogue = {
   'dlg.restore.progress': 'התקדמות לנקודה הבאה',
   'dlg.restore.tier': 'דרגה {tier}',
   'dlg.restore.tierLocked': 'דרגה {tier} — נעולה עד רמה {level}',
+  'dlg.restore.treeCost': '{cost} נקודות שחזור',
   'dlg.records.title': 'רשומות',
   'dlg.records.emptyRuns': 'ריצות 0',
   'dlg.records.totals': 'ריצות {runs} · ניצחונות {wins} · הפסדים {defeats} · הפעלות מחדש {reboots} · הגל הטוב ביותר {bestWave}',

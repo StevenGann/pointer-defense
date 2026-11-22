@@ -24,6 +24,7 @@ import {
 } from './chrome.ts';
 import {
   canBuy,
+  hasNode,
   TIER_UNLOCK_LEVEL,
   treeTierUnlocked,
   TREE_NODES,
@@ -35,6 +36,7 @@ import { restartPointsGained, type RunState } from '../core/state.ts';
 import { t } from '../i18n/index.ts';
 import { formatNumber } from '../core/format.ts';
 import { mirrorIfRtl, textX } from './direction.ts';
+import { TOOLTIP_BLUE, type TooltipLine } from './tooltipText.ts';
 
 /**
  * The Restore dialog (docs/VISUAL-PASS.md §3): a System Properties property sheet, 620 x 420, with
@@ -115,6 +117,20 @@ export function treeRowTextX(row: RestoreTreeRow): number {
 /** The x of a tree row's price, right-aligned (anchor 1) 6 px inside the row. */
 export function treePriceTextX(row: RestoreTreeRow): number {
   return row.rect.x + row.rect.w - TREE_PRICE_TEXT_INSET;
+}
+
+/**
+ * Tooltip lines for a tree node row: the name as a blue header, the description, then the Restore
+ * Point price — or `Owned` once the profile already owns the node. Pixi-free so the smoke harness can
+ * assert it (docs/TREE-TOOLTIPS.md).
+ */
+export function treeNodeTooltipLines(node: TreeNode, profile: Profile): TooltipLine[] {
+  const owned = hasNode(profile, node.id);
+  return [
+    [{ text: node.name, color: TOOLTIP_BLUE }],
+    node.description,
+    owned ? t('dlg.upgrades.rowOwned') : t('dlg.restore.treeCost', { cost: formatNumber(node.cost) }),
+  ];
 }
 
 export interface RestoreLayout {

@@ -320,6 +320,7 @@ export const uk: Catalogue = {
   'dlg.restore.progress': 'Прогрес до наступної точки',
   'dlg.restore.tier': 'Рівень {tier}',
   'dlg.restore.tierLocked': 'Рівень {tier} — заблоковано до рівня {level}',
+  'dlg.restore.treeCost': '{cost} Точки відновлення',
 
   'dlg.records.title': 'Рекорди',
   'dlg.records.emptyRuns': 'Забігів 0',

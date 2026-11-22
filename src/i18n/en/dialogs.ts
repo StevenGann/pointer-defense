@@ -40,6 +40,7 @@ export const dialogs = {
   'dlg.restore.progress': 'Progress to the next point',
   'dlg.restore.tier': 'Tier {tier}',
   'dlg.restore.tierLocked': 'Tier {tier} — locked until level {level}',
+  'dlg.restore.treeCost': '{cost} Restore Points',
 
   // Records.
   'dlg.records.title': 'Records',

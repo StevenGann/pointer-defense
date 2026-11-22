@@ -133,7 +133,7 @@ import { thumbnailTexture, thumbCacheSize, thumbBase } from '../src/view/mapsScr
 import { levelThumbnail } from '../src/core/thumb.ts';
 import { MAP_SAVE_KEY, rememberMap, readRememberedMap } from '../src/core/mapSave.ts';
 import { computeUpgradesLayout, UpgradesSession, upgradesStatusText, upgradesEmptyLines, upgradesHitAt, pressUpgradesOk, UPGRADE_ROW_H } from '../src/view/upgrades.ts';
-import { computeRestoreLayout, RestoreSession, restoreProgress, restoreDirty, RestoreView, TREE_TEXT_ANCHOR, treeRowTextX, treePriceTextX } from '../src/view/restore.ts';
+import { computeRestoreLayout, RestoreSession, restoreProgress, restoreDirty, restoreHitAt, RestoreView, treeNodeTooltipLines, TREE_TEXT_ANCHOR, treeRowTextX, treePriceTextX } from '../src/view/restore.ts';
 import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES, LICENCE_IDS } from '../src/core/tree.ts';
 import { ACHIEVEMENTS } from '../src/core/achievements.ts';
 import { restartWindows, creditDefeat, restartPointsGained, checkAchievements, enterEndless, pointerDamageMult, towerCost, overclockCap, towerIntervalTicks } from '../src/core/state.ts';
@@ -12474,6 +12474,82 @@ function dailyState(date) {
   }
   check(named === nodeRows.length && priceTexts === nodeRows.length,
     `tree text: every drawn node name and price is anchor-checked (${named}/${nodeRows.length} names, ${priceTexts}/${nodeRows.length} prices)`);
+}
+
+// --- Tree tooltips (docs/TREE-TOOLTIPS.md) ------------------------------------------------------
+{
+  setLocale(en, 'en');
+  clearTextWidthCache();
+  setDirection('ltr');
+
+  const profile = defaultProfile();
+  profile.rpEarned = 70; // unlock all five tiers
+  profile.rp = 10000;
+  const s = createRunState(profile);
+  const session = new RestoreSession();
+  session.show(profile);
+  session.setTab('tree');
+  session.expanded = 1;
+
+  // 1. A known node's tooltip is the blue name header, the description, then the price line.
+  const node = treeNodeById('loose-change');
+  const lines = treeNodeTooltipLines(node, profile);
+  check(lines.length === 3, 'tree tooltip: three lines (name, description, price)');
+  check(Array.isArray(lines[0]) && lines[0][0].text === node.name && lines[0][0].color === TOOLTIP_BLUE,
+    'tree tooltip: the node name is a blue header segment');
+  check(tooltipText(lines[1]) === node.description, 'tree tooltip: line 2 is the node description');
+  check(tooltipText(lines[2]) === `${formatNumber(node.cost)} Restore Points`,
+    `tree tooltip: line 3 is the Restore Point price (${tooltipText(lines[2])})`);
+
+  // 2. An owned node's third line is Owned, not a price.
+  const ownedProfile = defaultProfile();
+  ownedProfile.tree = ['loose-change'];
+  const ownedLines = treeNodeTooltipLines(node, ownedProfile);
+  check(tooltipText(ownedLines[2]) === 'Owned', `tree tooltip: an owned node reads Owned (${tooltipText(ownedLines[2])})`);
+
+  // 3. restoreHitAt on a node row midpoint returns that node; the tier header expander is a tier hit.
+  const layout = computeLayout(1280, 720);
+  const rl = computeRestoreLayout(layout, profile, s, session);
+  const nodeRows = rl.treeRows.filter((r) => r.kind === 'node');
+  const tierRow = rl.treeRows.find((r) => r.kind === 'tier');
+  const mid = (rect) => ({ x: rect.x + Math.floor(rect.w / 2), y: rect.y + Math.floor(rect.h / 2) });
+  const nodeHit = restoreHitAt(rl, mid(nodeRows[0].rect).x, mid(nodeRows[0].rect).y);
+  check(nodeHit !== null && nodeHit.type === 'node' && nodeHit.id === nodeRows[0].node.id,
+    `tree tooltip: a node row midpoint hits node "${nodeRows[0].node.id}"`);
+  const tierHit = restoreHitAt(rl, tierRow.expander.x + Math.floor(tierRow.expander.w / 2), tierRow.expander.y + Math.floor(tierRow.expander.h / 2));
+  check(tierHit !== null && tierHit.type === 'tier', 'tree tooltip: the tier header expander is a tier hit, not a node');
+
+  // 4. The tooltip key changes between two nodes and empties over the status bar.
+  const keyFor = (x, y) => {
+    const hit = restoreHitAt(rl, x, y);
+    return hit !== null && hit.type === 'node' ? 'tree:' + hit.id : null;
+  };
+  const k1 = keyFor(mid(nodeRows[0].rect).x, mid(nodeRows[0].rect).y);
+  const k2 = keyFor(mid(nodeRows[1].rect).x, mid(nodeRows[1].rect).y);
+  check(k1 === 'tree:' + nodeRows[0].node.id && k2 === 'tree:' + nodeRows[1].node.id && k1 !== k2,
+    'tree tooltip: the tooltip key changes when the hover moves between two nodes');
+  check(keyFor(mid(rl.statusBar).x, mid(rl.statusBar).y) === null,
+    'tree tooltip: the tooltip key empties over the status bar');
+
+  // 5. The new key is present in all seven catalogues, and its rendered form fits the smallest window.
+  const codes = ['en', 'es', 'fr', 'ru', 'uk', 'zh-Hans', 'he'];
+  let present = true;
+  for (const code of codes) {
+    const mod = await import(`../src/i18n/${code}/index.ts`);
+    const cat = mod[Object.keys(mod)[0]];
+    if (cat['dlg.restore.treeCost'] === undefined) present = false;
+    setLocale(cat, code);
+    clearTextWidthCache();
+    setDirection(code === 'he' ? 'rtl' : 'ltr');
+    const line = t('dlg.restore.treeCost', { cost: 90 });
+    const w = Math.ceil(textWidth(line, FONT_SIZE.body));
+    check(w + 12 <= 640, `fit: ${code} · dlg.restore.treeCost (${w}px + 12px padding > 640)`);
+  }
+  check(present, 'tree tooltip: dlg.restore.treeCost is present in all seven catalogues');
+
+  setLocale(en, 'en');
+  clearTextWidthCache();
+  setDirection('ltr');
 }
 
 // --- Visual pass 5: Help Contents/Index/Search, splitter clamp and Back/Forward ---------------

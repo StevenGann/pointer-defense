@@ -310,6 +310,7 @@ export const es: Catalogue = {
   'dlg.restore.progress': 'Progreso hacia el siguiente punto',
   'dlg.restore.tier': 'Rango {tier}',
   'dlg.restore.tierLocked': 'Rango {tier} — bloqueado hasta el nivel {level}',
+  'dlg.restore.treeCost': '{cost} puntos de restauración',
 
   'dlg.records.title': 'Récords',
   'dlg.records.emptyRuns': 'Partidas 0',

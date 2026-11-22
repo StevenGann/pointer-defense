@@ -296,6 +296,7 @@ export const fr: Catalogue = {
   'dlg.restore.progress': 'Progression vers le point suivant',
   'dlg.restore.tier': 'Palier {tier}',
   'dlg.restore.tierLocked': "Palier {tier} — verrouillé jusqu'au niveau {level}",
+  'dlg.restore.treeCost': '{cost} points de restauration',
   'dlg.records.title': 'Records',
   'dlg.records.emptyRuns': 'Parties 0',
   'dlg.records.totals': 'Parties {runs} · Victoires {wins} · Défaites {defeats} · Redémarrages {reboots} · Meilleure vague {bestWave}',
