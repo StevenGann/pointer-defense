@@ -1673,7 +1673,10 @@ nameInput.addEventListener('input', () => {
 nameInput.addEventListener('keydown', (e) => {
   const key = e.key.toLowerCase();
   if (key === 'enter') confirmSaveName();
-  else if (key === 'escape') exitEditor();
+  else if (key === 'escape') {
+    saveNameOpen = false;
+    nameInput.blur();
+  }
 });
 
 // The Help viewer's Search text field: an invisible HTML input overlaid on the sunken field, so
@@ -2001,9 +2004,13 @@ window.addEventListener('keydown', (e) => {
   }
   if (screen === 'editor') {
     if (key === 'escape') {
-      // The library keeps its own Escape (it is a panel with a visible close); every other editor
-      // state — even an open dialog or the save-name box — leaves for the menu on one press.
+      // Each modal closes on its own first; the visible Exit button and File > Exit are the
+      // guaranteed ways out, so nothing can be mistaken for a dead end any more.
       if (libOpen) closeLibrary();
+      else if (saveNameOpen) {
+        saveNameOpen = false;
+        nameInput.blur();
+      } else if (dialog) dialog = null;
       else exitEditor();
       return;
     }

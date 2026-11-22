@@ -11353,7 +11353,14 @@ function levelFixture(name) {
   check(!exitEditorBody.includes('runOrigin'), 'exitEditor does not branch on runOrigin');
 
   check(mainSrc.includes("if (screen === 'editor') exitEditor();"), 'File > Exit routes the editor screen to exitEditor');
-  check(mainSrc.includes('if (libOpen) closeLibrary();\n      else exitEditor();'), 'editor: Escape leaves via exitEditor while the library keeps its own Escape');
+  check(
+    mainSrc.includes('if (libOpen) closeLibrary();') && mainSrc.includes('else exitEditor();'),
+    'editor: Escape leaves via exitEditor while the library keeps its own Escape',
+  );
+  check(
+    mainSrc.includes('else if (dialog) dialog = null;\n      else exitEditor();'),
+    'editor: a dialog closes on Escape before the editor is left',
+  );
 }
 
 // --- Run records 1: defeat, victory and Restart Windows each record once, with the right outcome, map and wave.
