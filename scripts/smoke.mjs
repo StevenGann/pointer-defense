@@ -133,7 +133,7 @@ import { thumbnailTexture, thumbCacheSize, thumbBase } from '../src/view/mapsScr
 import { levelThumbnail } from '../src/core/thumb.ts';
 import { MAP_SAVE_KEY, rememberMap, readRememberedMap } from '../src/core/mapSave.ts';
 import { computeUpgradesLayout, UpgradesSession, upgradesStatusText, upgradesEmptyLines, upgradesHitAt, pressUpgradesOk, UPGRADE_ROW_H } from '../src/view/upgrades.ts';
-import { computeRestoreLayout, RestoreSession, restoreProgress, restoreDirty, RestoreView } from '../src/view/restore.ts';
+import { computeRestoreLayout, RestoreSession, restoreProgress, restoreDirty, RestoreView, TREE_TEXT_ANCHOR, treeRowTextX, treePriceTextX } from '../src/view/restore.ts';
 import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES, LICENCE_IDS } from '../src/core/tree.ts';
 import { ACHIEVEMENTS } from '../src/core/achievements.ts';
 import { restartWindows, checkAchievements, enterEndless, pointerDamageMult, towerCost, overclockCap, towerIntervalTicks } from '../src/core/state.ts';
@@ -12131,6 +12131,95 @@ function dailyState(date) {
   check(restoreCopy(restoreTexts), 'the Restore Point tab still draws its own copy');
   check(!['Name', 'Level', 'Effect', 'CPU', 'RAM', 'GPU', 'Disk'].some((w) => restoreTexts.includes(w)),
     'the Restore Point tab shows no Specs list copy');
+}
+
+// --- Visual pass 4c: tree text anchors (docs/TREE-TEXT-ANCHORS.md) ----------------------------
+{
+  // 1. The placement helper reports the documented anchors: left for labels, right for prices.
+  check(TREE_TEXT_ANCHOR.tier === 0 && TREE_TEXT_ANCHOR.node === 0,
+    'tree text: tier labels and node names are left-anchored (0)');
+  check(TREE_TEXT_ANCHOR.price === 1, 'tree text: prices are right-anchored (1)');
+
+  const profile = defaultProfile();
+  profile.rpEarned = 70; // unlock all five tiers
+  profile.rp = 10000;
+  const s = createRunState(profile);
+  const session = new RestoreSession();
+  session.show(profile);
+  session.setTab('tree');
+
+  // buildTreeRows lists one expanded tier at a time, so walk each tier to assemble every row.
+  const rowsFor = (vw) => {
+    const layout = computeLayout(vw, 720);
+    const all = [];
+    for (let tier = 1; tier <= 5; tier++) {
+      session.expanded = tier;
+      all.push(...computeRestoreLayout(layout, profile, s, session).treeRows);
+    }
+    return all;
+  };
+
+  // 2. At every width the dialog supports, each node price's left edge stays inside the tab body.
+  for (const vw of [640, 800, 1280, 1920]) {
+    const layout = computeLayout(vw, 720);
+    const rl = computeRestoreLayout(layout, profile, s, session);
+    const rows = rowsFor(vw);
+    let priced = 0;
+    for (const row of rows) {
+      if (row.kind !== 'node') continue;
+      priced++;
+      const left = treePriceTextX(row) - textWidth(row.price, FONT_SIZE.small);
+      check(left >= rl.tabBody.x,
+        `tree text: the ${row.node.id} price stays inside the tab body at ${vw}px (left ${left} >= ${rl.tabBody.x})`);
+    }
+    check(priced > 0, `tree text: node rows were built at ${vw}px`);
+  }
+
+  // 3. A node name and a tier label never share an x (indented by different amounts).
+  {
+    const rows = rowsFor(1280);
+    const tierX = new Set(rows.filter((r) => r.kind === 'tier').map((r) => treeRowTextX(r)));
+    const nodeX = new Set(rows.filter((r) => r.kind === 'node').map((r) => treeRowTextX(r)));
+    check([...tierX].every((x) => !nodeX.has(x)), 'tree text: no tier label shares an x with a node name');
+    check(tierX.size === 1 && nodeX.size === 1 && [...nodeX][0] - [...tierX][0] === 20,
+      'tree text: tier labels and node names each use one x, 20 px apart');
+  }
+
+  // The first tier row starts 4 px below the tab body so the expander does not touch the border.
+  {
+    const layout = computeLayout(1280, 720);
+    session.expanded = 1;
+    const rl = computeRestoreLayout(layout, profile, s, session);
+    check(rl.treeRows[0].rect.y === rl.tabBody.y + 4, 'tree text: the first tree row starts 4 px below the tab body top');
+  }
+
+  // 4. Drawing the Specs tab (which leaves level digits at anchor 0.5) then the Tree tab leaves every
+  // node name at anchor 0 and every price at anchor 1 — the anchors the helper documents.
+  const view = new RestoreView();
+  const layout = computeLayout(1280, 720);
+  session.expanded = 1;
+  session.setTab('specs');
+  view.draw(true, profile, s, layout, session);
+  session.setTab('tree');
+  view.draw(true, profile, s, layout, session);
+  const rl = computeRestoreLayout(layout, profile, s, session);
+  const nodeRows = rl.treeRows.filter((r) => r.kind === 'node');
+  const names = new Set(nodeRows.map((r) => r.node.name));
+  const prices = new Set(nodeRows.map((r) => r.price));
+  let named = 0;
+  let priceTexts = 0;
+  for (const c of view.root.children) {
+    if (typeof c.text !== 'string' || c.text === '') continue;
+    if (names.has(c.text)) {
+      named++;
+      check(c.anchor.x === TREE_TEXT_ANCHOR.node, `tree text: node name "${c.text}" is anchor ${TREE_TEXT_ANCHOR.node}`);
+    } else if (prices.has(c.text)) {
+      priceTexts++;
+      check(c.anchor.x === TREE_TEXT_ANCHOR.price, `tree text: price "${c.text}" is anchor ${TREE_TEXT_ANCHOR.price}`);
+    }
+  }
+  check(named === nodeRows.length && priceTexts === nodeRows.length,
+    `tree text: every drawn node name and price is anchor-checked (${named}/${nodeRows.length} names, ${priceTexts}/${nodeRows.length} prices)`);
 }
 
 // --- Visual pass 5: Help Contents/Index/Search, splitter clamp and Back/Forward ---------------
