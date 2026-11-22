@@ -118,6 +118,8 @@ export interface RunSave {
   autoWaveAtTick: number;
   godMode: boolean;
   cheatsUsed: boolean;
+  defeatCredited: boolean;
+  defeatGained: number;
   upgrades: readonly UpgradeId[];
   emergencyPatchSpent: boolean;
   buff: { kind: BuffKind; until: number } | null;
@@ -255,6 +257,8 @@ export function captureRun(state: RunState): RunSave {
     autoWaveAtTick: state.autoWaveAtTick,
     godMode: state.godMode,
     cheatsUsed: state.cheatsUsed,
+    defeatCredited: state.defeatCredited,
+    defeatGained: state.defeatGained,
     upgrades: state.upgrades,
     emergencyPatchSpent: state.emergencyPatchSpent,
     buff: state.buff,
@@ -939,7 +943,10 @@ export function restoreRun(save: unknown, profile: Profile = defaultProfile()): 
   const autoWaveAtTick = int(save.autoWaveAtTick);
   const godMode = bool(save.godMode);
   const cheatsUsed = bool(save.cheatsUsed);
-  if (weakPointHits === null || adsDismissed === null || leaksByWavePairs === null || flyerLeaksByWavePairs === null || calledEarly === null || clearedWaveNoLeaks === null || bossKilledByPointer === null || weakPointKills === null || critHits === null || salvagePeak === null || soldTower === null || earlyCallsInARow === null || clearedFlawlessWave === null || milestoneBossByPointer === null || wallDamageTaken === null || paused === null || speed === null || onboarding === null || placedFirstTower === null || autoWave === null || autoWaveAtTick === null || godMode === null || cheatsUsed === null) return null;
+  // Older v:1 saves predate the defeat payout, so a missing flag defaults to false/0.
+  const defeatCredited = save.defeatCredited === undefined ? false : bool(save.defeatCredited);
+  const defeatGained = save.defeatGained === undefined ? 0 : int(save.defeatGained);
+  if (weakPointHits === null || adsDismissed === null || leaksByWavePairs === null || flyerLeaksByWavePairs === null || calledEarly === null || clearedWaveNoLeaks === null || bossKilledByPointer === null || weakPointKills === null || critHits === null || salvagePeak === null || soldTower === null || earlyCallsInARow === null || clearedFlawlessWave === null || milestoneBossByPointer === null || wallDamageTaken === null || paused === null || speed === null || onboarding === null || placedFirstTower === null || autoWave === null || autoWaveAtTick === null || godMode === null || cheatsUsed === null || defeatCredited === null || defeatGained === null) return null;
 
   const upgradesRaw = strArray(save.upgrades);
   if (upgradesRaw === null) return null;
@@ -1112,6 +1119,8 @@ export function restoreRun(save: unknown, profile: Profile = defaultProfile()): 
     autoWaveAtTick,
     godMode,
     cheatsUsed,
+    defeatCredited,
+    defeatGained,
     upgrades,
     emergencyPatchSpent,
     buff,

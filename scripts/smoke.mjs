@@ -136,7 +136,7 @@ import { computeUpgradesLayout, UpgradesSession, upgradesStatusText, upgradesEmp
 import { computeRestoreLayout, RestoreSession, restoreProgress, restoreDirty, RestoreView, TREE_TEXT_ANCHOR, treeRowTextX, treePriceTextX } from '../src/view/restore.ts';
 import { effectsFor, treeNodeById, treeTierUnlocked, canBuy, hasNode, buyNode, visibleNodes, TREE_NODES, LICENCE_IDS } from '../src/core/tree.ts';
 import { ACHIEVEMENTS } from '../src/core/achievements.ts';
-import { restartWindows, checkAchievements, enterEndless, pointerDamageMult, towerCost, overclockCap, towerIntervalTicks } from '../src/core/state.ts';
+import { restartWindows, creditDefeat, restartPointsGained, checkAchievements, enterEndless, pointerDamageMult, towerCost, overclockCap, towerIntervalTicks } from '../src/core/state.ts';
 import { cheatsEnabled, setCheatsVisibleForTests, SPAWN_KINDS, spawnKindLabel } from '../src/core/cheats.ts';
 import { dashRects, offsetSegment, routeOffset } from '../src/view/route.ts';
 import { enemyDrawOrder, popupCloseHit, popupCloseRect, popupWindowRect, POPUP_TITLE_H, POPUP_CLOSE_W, POPUP_CLOSE_H } from '../src/view/popupEnemy.ts';
@@ -158,7 +158,7 @@ import { towerTooltipLines, upgradeTooltipLines, branchTooltipLines, tooltipText
 import { drawTower, clearTowerSprites, BoardView, BOARD_LAYER_ORDER, SHADOW_ALPHA, SHADOW_OFFSET, SHADOW_OFFSET_FLYER, SHADOW_OFFSET_FLYER_BOSS, SHADOW_OFFSET_FLYER_BOSS_SCALE, SHADOW_TINT, shadowOffsetFor, shadowVisibleFor, staticLayerKey, routeKey, enemyHealthBarVisible, shadowDrawnFor, ENEMY_COLOR, SHIELD_COLOR, TRACER_COLOR, TRANSITION_TICKS, CURSOR_ARROW_PX, cursorRingCentre, cursorLeashCentre, synergyEdgeEndpoints, synergyEdgeStyle, recoilOffset, RECOIL_DURATION_TICKS, RECOIL_PEAK_CELLS, SLOW_TINT } from '../src/view/board.ts';
 import { branchMarkSpec, healthBarRect, pipRect, pipUsesBottomCorner } from '../src/view/branchMarks.ts';
 import { computeLayout, computeWindowChromeGeom, pixelToWorld, worldToPixel, TITLE_H, CONTROL_BOX_W, CONTROL_BOX_H, FONT_SIZE, menuItems, menuNameAt, menuWordRects } from '../src/view/chrome.ts';
-import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, statusPerfText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect, modalRect, modalMenuAt, modalMessageTop } from '../src/view/hud.ts';
+import { computeHud, computeRightPanel, hudControlAt, hudButtonAt, textWidth, HudView, speedStatusText, statusPerfText, READOUT_FONT_SIZE, salvageReadoutText, waveLabel, victoryButtonAt, victoryButtons, victoryModalRect, modalRect, modalMenuAt, modalMessageTop, defeatMessage } from '../src/view/hud.ts';
 import { FloatingNumbersView } from '../src/view/numbers.ts';
 import { nextQuality } from '../src/core/quality.ts';
 import { dailyFor, dailyLevel, dailySeed, dailyMenuLabel, dailyAvailable, DAILY_WAVES, hashDaily } from '../src/core/daily.ts';
@@ -1727,6 +1727,70 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   const s2 = createRunState(profile);
   check(s2.wave === 0 && s2.phase === 'build', 'the reboot resets the run');
   check(s2.rp === 10 && s2.rpEarned === 10, 'the fresh run carries the banked RP and level');
+}
+
+// --- 14b. A defeat banks the same Restore Points a reboot would, exactly once (docs/DEFEAT-RP.md).
+{
+  const s = createRunState();
+  s.economy.earned = 20000; // floor(2.2 * sqrt(20000 / 900)) = floor(10.37) = 10
+  s.wave = 52;
+  const before = defaultProfile();
+  const rpBefore = before.rp;
+  const expected = restartPointsGained(s, before);
+  const { gained, profile } = creditDefeat(s, before);
+  check(gained === expected, `creditDefeat banks floor(2.2*sqrt(earned/900)) = ${gained}`);
+  check(profile.rp === rpBefore + gained, 'banked Restore Points land in rp');
+  check(profile.rpEarned === gained, 'the prestige level rises to match');
+  check(profile.lastSalvage === 20000, 'lastSalvage records the run for Restore Point');
+  check(profile.bestWave === 52, 'bestWave records the run wave');
+  check(profile.reboots === 0, 'a defeat does not increment the reboot counter');
+  check(s.defeatGained === gained, 'the defeat dialog carries the banked amount');
+
+  // A second payout for the same run adds nothing.
+  const again = creditDefeat(s, profile);
+  check(again.gained === 0, 'a second creditDefeat banks nothing');
+  check(again.profile.rp === profile.rp, 'the second payout leaves the balance untouched');
+
+  // A cheated defeat banks nothing and does not move lastSalvage.
+  const cs = createRunState();
+  cs.cheatsUsed = true;
+  cs.economy.earned = 20000;
+  const cbefore = defaultProfile();
+  cbefore.lastSalvage = 123;
+  const crpBefore = cbefore.rp;
+  const cresult = creditDefeat(cs, cbefore);
+  check(cresult.gained === 0, 'a cheated defeat banks nothing');
+  check(cresult.profile.rp === crpBefore, 'a cheated defeat does not move rp');
+  check(cresult.profile.lastSalvage === 123, 'a cheated defeat does not move lastSalvage');
+  check(cs.defeatGained === 0, 'a cheated defeat reports 0 banked');
+
+  // Restart Windows after a defeat does not grant the points a second time.
+  const after = profile.rp;
+  const restart = restartWindows(s, profile);
+  check(restart.gained === 0, 'Restart Windows after a defeat banks nothing');
+  check(restart.profile.rp === after, 'Restart Windows after a defeat does not re-credit rp');
+  check(restart.profile.reboots === 1, 'Restart Windows still increments the reboot counter');
+
+  // The defeat dialog's reported number equals what was banked (profile.rp - rpBefore).
+  const ds = createRunState();
+  ds.wave = 7;
+  ds.economy.earned = 20000;
+  const dp = defaultProfile();
+  const dBefore = dp.rp;
+  const { profile: dProfile } = creditDefeat(ds, dp);
+  check(ds.defeatGained === dProfile.rp - dBefore, 'the dialog number equals profile.rp - rpBefore');
+  const msg = defeatMessage(ds);
+  check(msg.includes(String(ds.defeatGained)), 'the defeat dialog reports the banked number');
+
+  // A cheated defeat shows the "records nothing" wording, never a number.
+  const cheatedMsg = defeatMessage(cs);
+  check(!cheatedMsg.includes('Restore Points'), 'a cheated defeat does not report a banked number');
+
+  // A victory pays nothing and a daily defeat keeps its own path: the transition handler credits only
+  // a non-daily defeat (docs/DEFEAT-RP.md §The rule).
+  const mainSrc = readFileSync(new URL('../src/main.ts', import.meta.url), 'utf8');
+  check(mainSrc.includes("if (state.phase === 'halted') creditDefeatPayout();"), 'only a halted (defeat) run credits its points');
+  check(mainSrc.includes('recordDaily();'), 'a daily defeat records via recordDaily, never creditDefeatPayout');
 }
 
 // --- 15. An achievement unlocks once and only once ---------------------------------------------

@@ -615,6 +615,13 @@ function restartRect(m: Rect): Rect {
   return { x: m.x + Math.floor((m.w - w) / 2), y: m.y + m.h - h - 10, w, h };
 }
 
+/** The defeat modal message: the wave the lane broke, then what was banked (or that cheats record nothing). */
+export function defeatMessage(s: RunState): string {
+  const broke = t('hud.gameOverMessage', { wave: s.wave });
+  const banked = s.cheatsUsed ? t('shell.notice.cheats') : t('dlg.restore.payout', { points: s.defeatGained });
+  return `${broke}\n${banked}`;
+}
+
 export function modalMenuAt(l: Layout, s: RunState, px: number, py: number): boolean {
   if (s.phase !== 'halted') return false;
   return pointInRect(restartRect(modalRect(l)), px, py);
@@ -1315,7 +1322,7 @@ export class HudView {
     this.modalTitle.text = t('hud.gameOver');
     this.modalTitle.position.set(m.x + 6, m.y + 2 + 10);
 
-    this.modalMessage.text = t('hud.gameOverMessage', { wave: s.wave });
+    this.modalMessage.text = defeatMessage(s);
     this.modalMessage.style.wordWrap = true;
     this.modalMessage.style.wordWrapWidth = m.w - 24;
     this.modalMessage.position.set(m.x + 12, modalMessageTop(m));
