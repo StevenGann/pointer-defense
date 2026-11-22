@@ -285,7 +285,7 @@ export function enemyHealthBarVisible(e: Enemy): boolean {
  * shadow lies on the floor beneath mines, walls, towers, pop-ups and enemies.
  */
 export const BOARD_LAYER_ORDER = Object.freeze([
-  'tileSprites', 'tiles', 'path', 'shots', 'shadows', 'mines', 'mineArt', 'shutterSprites', 'toggles', 'synergy', 'towerSprites',
+  'tileSprites', 'tiles', 'path', 'shadows', 'mines', 'mineArt', 'shutterSprites', 'toggles', 'synergy', 'towerBases', 'shots', 'towerSprites',
   'towers', 'auras', 'wrenches', 'pulses', 'popups', 'enemies', 'enemyBodies', 'enemyFx', 'cursorArrows', 'ghost', 'overlay',
   'projectileArt',
 ] as const);
@@ -339,6 +339,7 @@ export class BoardView {
   private readonly wrenches = new Container();
   private readonly wrenchSprites: Sprite[] = [];
   private readonly pulses = new Graphics();
+  private readonly towerBases = new Container();
   private readonly towerSprites = new Container();
   private readonly towerBaseSprites: Sprite[] = [];
   private readonly towerTurretSprites: Sprite[] = [];
@@ -391,6 +392,7 @@ export class BoardView {
       shutterSprites: this.shutterSprites,
       toggles: this.toggles,
       synergy: this.synergyLayer,
+      towerBases: this.towerBases,
       towerSprites: this.towerSprites,
       towers: this.towers,
       auras: this.auras,
@@ -559,7 +561,7 @@ export class BoardView {
       s = new Sprite();
       s.anchor.set(0.5, 0.5);
       this.towerBaseSprites.push(s);
-      this.towerSprites.addChild(s);
+      this.towerBases.addChild(s);
     }
     s.visible = true;
     return s;
@@ -598,7 +600,7 @@ export class BoardView {
       s = new Sprite();
       s.anchor.set(0.5, 0.5);
       this.wallOverlaySprites.push(s);
-      this.towerSprites.addChild(s);
+      this.towerBases.addChild(s);
     }
     s.visible = true;
     return s;

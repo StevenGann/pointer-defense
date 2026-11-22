@@ -7019,9 +7019,9 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
 {
   const li = (n) => BOARD_LAYER_ORDER.indexOf(n);
   check(
-    li('shots') > li('path') && li('shots') < li('shadows') &&
+    li('shots') > li('path') && li('shots') > li('shadows') && li('shots') > li('mines') &&
       li('shots') < li('towerSprites') && li('shots') < li('enemies') && li('shots') < li('popups'),
-    'tracer layer: shots sorts after path and before shadows, towerSprites, enemies and popups',
+    'tracer layer: shots sorts after path, shadows and mines, and before towerSprites, enemies and popups',
   );
 
   const board = new BoardView();
@@ -7043,6 +7043,30 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
 
   board.shots.addChild(fx.tracerRoot);
   check(fx.tracerRoot.parent === board.shots, 'tracer layer: tracerRoot is a child of the board shots layer');
+}
+
+// --- 37i.3 Tower base split: tracers slip between the plinth and the barrel (docs/TOWER-BASE-SPLIT.md) ---
+{
+  const li = (n) => BOARD_LAYER_ORDER.indexOf(n);
+  check(
+    li('path') < li('towerBases') && li('towerBases') < li('shots') && li('shots') < li('towerSprites') &&
+      li('towerSprites') < li('towers') && li('towers') < li('enemies'),
+    'tower base split: path < towerBases < shots < towerSprites < towers < enemies',
+  );
+
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 3, 6);
+  placeTower(s, 'wall', 5, 6);
+  const view = new BoardView();
+  const hover = { col: 0, row: 0, onBoard: false, x: 0, y: 0 };
+  view.draw(s, computeLayout(1280, 800), 0, hover);
+
+  check(view.towerBaseSprites[0].parent === view.towerBases, 'tower base split: a base sprite is parented in towerBases');
+  check(view.towerTurretSprites[0].parent === view.towerSprites, 'tower base split: a turret sprite stays in towerSprites');
+  check(view.towerMarkSprites[0].parent === view.towerSprites, 'tower base split: a branch-mark sprite stays in towerSprites');
+  check(view.wallOverlaySprites[0].parent === view.towerBases && view.wallOverlaySprites[1].parent === view.towerBases,
+    'tower base split: wall overlays are parented in towerBases');
 }
 
 {
@@ -13753,7 +13777,7 @@ function dailyState(date) {
 {
   const order = BOARD_LAYER_ORDER;
   check(Object.isFrozen(BOARD_LAYER_ORDER), 'the board layer list is frozen');
-  check(order.indexOf('synergy') === order.indexOf('towerSprites') - 1, 'synergy sits directly below towerSprites');
+  check(order.indexOf('synergy') < order.indexOf('towerSprites'), 'synergy sits below towerSprites');
   check(order.indexOf('synergy') > order.indexOf('path'), 'synergy sits above the path');
   check(order.indexOf('synergy') > order.indexOf('shadows'), 'synergy sits above the enemy shadows');
 }
