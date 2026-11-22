@@ -1,9 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- A cyan reticle: four corner brackets tightening. Frame 1. -->
-  <g fill="#00e5ff">
-    <polygon points="4,4 12,4 12,7 7,7 7,12 4,12"/>
-    <polygon points="28,4 20,4 20,7 25,7 25,12 28,12"/>
-    <polygon points="4,28 12,28 12,25 7,25 7,20 4,20"/>
-    <polygon points="28,28 20,28 20,25 25,25 25,20 28,20"/>
+  <!-- Override aura, frame 1 of 4: the tower is under manual override. Four corner brackets step
+     inward and back (1.5, 3, 4.5, 3 units from the edge) while a tick on each side follows them:
+     a gate closing on the tower. Mechanical, with hard corners and a dark edge. -->
+  <g fill="#00e5ff" stroke="#00303c" stroke-width="0.9" stroke-linejoin="miter">
+  <path d="M3 3 H11 V5.4 H5.4 V11 H3 Z"/><path d="M29 3 H21 V5.4 H26.6 V11 H29 Z"/>
+  <path d="M3 29 H11 V26.6 H5.4 V21 H3 Z"/><path d="M29 29 H21 V26.6 H26.6 V21 H29 Z"/>
+  </g>
+  <g fill="#00e5ff" stroke="#00303c" stroke-width="0.7">
+  <rect x="15" y="2.2" width="2" height="3.4"/><rect x="15" y="26.4" width="2" height="3.4"/>
+  <rect x="2.2" y="15" width="3.4" height="2"/><rect x="26.4" y="15" width="3.4" height="2"/>
   </g>
 </svg>

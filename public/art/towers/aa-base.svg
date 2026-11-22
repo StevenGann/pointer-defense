@@ -1,27 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <defs>
-    <linearGradient id="plinth" x1="5" y1="5" x2="27" y2="27" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#9dbcd9"/>
-      <stop offset="0.5" stop-color="#5a7d9a"/>
-      <stop offset="1" stop-color="#2f4a5e"/>
-    </linearGradient>
-    <radialGradient id="turntable" cx="13" cy="13" r="7" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#4a6a84"/>
-      <stop offset="1" stop-color="#274154"/>
-    </radialGradient>
+  <linearGradient id="pad" x1="5" y1="5" x2="27" y2="27" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#a9c3d8"/>
+    <stop offset="0.5" stop-color="#5a7d9a"/>
+    <stop offset="1" stop-color="#2c4558"/>
+  </linearGradient>
+  <linearGradient id="deck" x1="8" y1="8" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#86a6c0"/>
+    <stop offset="0.5" stop-color="#5a7d9a"/>
+    <stop offset="1" stop-color="#34526a"/>
+  </linearGradient>
   </defs>
-  <!-- A square plinth with a raised deck plate and a fast-traverse turntable. -->
-  <rect x="5" y="5" width="22" height="22" fill="url(#plinth)" stroke="#000000" stroke-width="1"/>
-  <rect x="8.5" y="8.5" width="15" height="15" fill="#5a7d9a"/>
-  <path d="M8.5 23.5 V8.5 H23.5" fill="none" stroke="#bcd2e6" stroke-width="1"/>
-  <path d="M23.5 8.5 V23.5 H8.5" fill="none" stroke="#274154" stroke-width="1"/>
-  <!-- Corner bolts. -->
-  <g fill="#274154">
-    <circle cx="7" cy="7" r="0.9"/><circle cx="25" cy="7" r="0.9"/>
-    <circle cx="7" cy="25" r="0.9"/><circle cx="25" cy="25" r="0.9"/>
+  <!-- AA: a cruciform flak mount. Four outrigger legs run to jack pads at the corners, so the
+     silhouette is an X with square feet and cannot be taken for the Gun's solid square. -->
+  <!-- Outrigger legs: black under-stroke, then the steel beam, then a top-left light line. -->
+  <g stroke-linecap="butt">
+  <path d="M7.5 7.5 L24.5 24.5 M24.5 7.5 L7.5 24.5" stroke="#000000" stroke-width="4.6"/>
+  <path d="M7.5 7.5 L24.5 24.5 M24.5 7.5 L7.5 24.5" stroke="#3c5a72" stroke-width="2.8"/>
+  <path d="M7.2 8.4 L15 16.2 M23.8 7.2 L16.6 14.4" stroke="#a9c3d8" stroke-width="0.7" opacity="0.8"/>
   </g>
-  <!-- The twin-barrel turret ring, with the traverse track hint of a fast-turning mount. -->
-  <circle cx="16" cy="16" r="6" fill="url(#turntable)" stroke="#000000" stroke-width="0.8"/>
-  <circle cx="16" cy="16" r="4.2" fill="none" stroke="#bcd2e6" stroke-width="0.6" opacity="0.5"/>
-  <path d="M11.4 14.8 A4.8 4.8 0 0 1 14.8 11.4" fill="none" stroke="#bcd2e6" stroke-width="0.8" stroke-linecap="round" opacity="0.7"/>
+  <!-- Jack pads. -->
+  <rect x="5" y="5" width="5" height="5" fill="url(#pad)" stroke="#000000" stroke-width="1"/><circle cx="7.5" cy="7.5" r="0.9" fill="#101418"/><circle cx="7.23" cy="7.23" r="0.36" fill="#ffffff" opacity="0.7"/>
+  <rect x="22" y="5" width="5" height="5" fill="url(#pad)" stroke="#000000" stroke-width="1"/><circle cx="24.5" cy="7.5" r="0.9" fill="#101418"/><circle cx="24.23" cy="7.23" r="0.36" fill="#ffffff" opacity="0.7"/>
+  <rect x="5" y="22" width="5" height="5" fill="url(#pad)" stroke="#000000" stroke-width="1"/><circle cx="7.5" cy="24.5" r="0.9" fill="#101418"/><circle cx="7.23" cy="24.23" r="0.36" fill="#ffffff" opacity="0.7"/>
+  <rect x="22" y="22" width="5" height="5" fill="url(#pad)" stroke="#000000" stroke-width="1"/><circle cx="24.5" cy="24.5" r="0.9" fill="#101418"/><circle cx="24.23" cy="24.23" r="0.36" fill="#ffffff" opacity="0.7"/>
+  <!-- The octagonal deck. -->
+  <polygon points="12.6,7.8 19.4,7.8 24.2,12.6 24.2,19.4 19.4,24.2 12.6,24.2 7.8,19.4 7.8,12.6" fill="url(#deck)" stroke="#000000" stroke-width="1" stroke-linejoin="round"/>
+  <path d="M8.8 19 V13 L13 8.8 H19" fill="none" stroke="#cfe0ee" stroke-width="0.7" opacity="0.8"/>
+  <path d="M23.2 13 V19 L19 23.2 H13" fill="none" stroke="#1c3040" stroke-width="0.7" opacity="0.8"/>
+  <!-- The fast-traverse ring: a toothed track round the turntable. -->
+  <circle cx="16" cy="16" r="6.3" fill="#243a4c" stroke="#000000" stroke-width="0.8"/>
+  <circle cx="16" cy="16" r="5.1" fill="none" stroke="#7da3c2" stroke-width="1.2" stroke-dasharray="0.8 1.2"/>
+  <path d="M11.3 14.6 A4.9 4.9 0 0 1 14.6 11.3" fill="none" stroke="#cfe0ee" stroke-width="0.7" stroke-linecap="round" opacity="0.7"/>
 </svg>

@@ -1,26 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
-  <!-- Placeholder icon for the wide-reticle global upgrade (docs/GLOBAL-UPGRADES.md §7.2): the artist
-       replaces this file. Never drawn at more than 18 px in the list. -->
-  <!-- Raised Win95 tile in the grey palette, the same frame every upgrade icon uses. -->
-  <rect x="0.5" y="0.5" width="43" height="43" fill="#c0c0c0"/>
-  <rect x="0" y="0" width="44" height="1" fill="#ffffff"/>
-  <rect x="0" y="0" width="1" height="44" fill="#ffffff"/>
-  <rect x="0" y="1" width="44" height="1" fill="#dfdfdf"/>
-  <rect x="1" y="0" width="1" height="44" fill="#dfdfdf"/>
-  <rect x="0" y="43" width="44" height="1" fill="#000000"/>
-  <rect x="43" y="0" width="1" height="44" fill="#000000"/>
-  <rect x="0" y="42" width="44" height="1" fill="#808080"/>
-  <rect x="42" y="0" width="1" height="44" fill="#808080"/>
-  <!-- Reticle: an outer ring with four ticks and a centre dot. -->
-  <g fill="none" stroke="#000000" stroke-width="2">
-    <circle cx="22" cy="22" r="13"/>
-    <path d="M22 3v7M22 34v7M3 22h7M34 22h7"/>
-  </g>
-  <g fill="none" stroke="#c0c0c0" stroke-width="1">
-    <circle cx="22" cy="22" r="11"/>
-  </g>
-  <g fill="none" stroke="#000000" stroke-width="1">
-    <circle cx="22" cy="22" r="6"/>
-  </g>
-  <circle cx="22" cy="22" r="2" fill="#000080"/>
+  <!-- Wide Reticle: a gunsight with a second, wider ring pushed out by four arrows. -->
+  <!-- The frame: a raised Windows 95 button, the same one every achievement icon uses. -->
+  <defs><linearGradient id="ff" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#cecece"/><stop offset="1" stop-color="#b4b4b4"/></linearGradient></defs>
+  <rect x="0" y="0" width="44" height="44" fill="url(#ff)"/>
+  <path d="M0 0 H44 V1 H1 V44 H0 Z" fill="#ffffff"/>
+  <path d="M1 1 H43 V2 H2 V43 H1 Z" fill="#dfdfdf"/>
+  <path d="M44 0 V44 H0 V43 H43 V0 Z" fill="#000000"/>
+  <path d="M43 1 V43 H1 V42 H42 V1 Z" fill="#808080"/>
+  <!-- The wider ring, dashed: the new reach. -->
+  <circle cx="22" cy="22" r="14.6" fill="none" stroke="#000000" stroke-width="2.6" stroke-dasharray="5 2.64"/>
+  <circle cx="22" cy="22" r="14.6" fill="none" stroke="#ff5a40" stroke-width="1.2" stroke-dasharray="5 2.64"/>
+  <polygon transform="rotate(0 22 22)" points="22,3.4 25,7.6 19,7.6" fill="#d00000" stroke="#000000" stroke-width="0.6" stroke-linejoin="miter"/><polygon transform="rotate(90 22 22)" points="22,3.4 25,7.6 19,7.6" fill="#d00000" stroke="#000000" stroke-width="0.6" stroke-linejoin="miter"/><polygon transform="rotate(180 22 22)" points="22,3.4 25,7.6 19,7.6" fill="#d00000" stroke="#000000" stroke-width="0.6" stroke-linejoin="miter"/><polygon transform="rotate(270 22 22)" points="22,3.4 25,7.6 19,7.6" fill="#d00000" stroke="#000000" stroke-width="0.6" stroke-linejoin="miter"/>
+  <!-- The sight. -->
+  <circle cx="22" cy="22" r="8" fill="#e8f0f4" fill-opacity="0.55" stroke="#000000" stroke-width="2.4"/>
+  <circle cx="22" cy="22" r="8" fill="none" stroke="#7c878e" stroke-width="0.8"/>
+  <path d="M22 11 V19 M22 25 V33 M11 22 H19 M25 22 H33" stroke="#000000" stroke-width="1.6"/>
+  <rect x="21" y="21" width="2" height="2" fill="#d00000"/>
 </svg>

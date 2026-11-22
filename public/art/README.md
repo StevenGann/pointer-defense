@@ -81,21 +81,21 @@ The **Pop-up** enemy is a Windows window and stays runtime (it is chrome, not ar
 
 | File | Represents |
 |---|---|
-| `gun-base.svg` | small square plinth |
-| `gun-turret.svg` | the gun's barrel (rotates, 720°/s) |
-| `cannon-base.svg` | round plinth |
-| `cannon-turret.svg` | the cannon's thick barrel (rotates, 90°/s) |
-| `laser-base.svg` | long bar plinth |
-| `laser-turret.svg` | the laser's beam barrel (rotates, 150°/s) |
-| `aa-base.svg` | steel-blue square plinth |
-| `aa-turret.svg` | the AA's twin barrels (rotates, 540°/s) |
-| `taser-base.svg` | diamond plinth |
-| `taser-turret.svg` | the taser's coil (a static turret; the tower never turns) |
-| `frost-base.svg` | hexagon plinth |
-| `frost-turret.svg` | the frost's snow cross (a static turret; the tower never turns) |
-| `beacon-base.svg` | ring with a dot |
-| `cursor-base.svg` | grey plinth with a cursor-shaped cap |
-| `repair-base.svg` | ring with a white cross |
+| `gun-base.svg` | square armoured plinth: four bolted frame plates round a sunk deck and a ball-race |
+| `gun-turret.svg` | one slim barrel in a perforated jacket, a boxy receiver and an ammunition box (rotates, 720°/s) |
+| `cannon-base.svg` | round cast plinth: a bolted flange in four segments round a traverse pit |
+| `cannon-turret.svg` | a short thick tube with a muzzle ring, two recoil cylinders, an octagonal casemate and a counterweight (rotates, 90°/s) |
+| `laser-base.svg` | long bar plinth: a heat-sink bank at each end, steel end caps, a power bus |
+| `laser-turret.svg` | two rails round a beam channel, three focusing collars, a crystal tip, a hexagonal lamp house (rotates, 150°/s) |
+| `aa-base.svg` | steel-blue cruciform flak mount: four outrigger legs to square jack pads, an octagonal deck |
+| `aa-turret.svg` | twin autocannon 3.5 units either side of the pivot, on a wide yoke with a ring sight and two ammunition drums (rotates, 540°/s) |
+| `taser-base.svg` | diamond plinth in four facets, a ribbed insulator deck, a ceramic stand-off at each point |
+| `taser-turret.svg` | a Tesla coil from above: copper winding, steel top-load, four discharge prongs (a static turret; the tower never turns) |
+| `frost-base.svg` | hexagon plinth in six facets, with a sunk reservoir |
+| `frost-turret.svg` | a cryo emitter: six faceted ice spikes round a hexagonal nozzle (a static turret; the tower never turns) |
+| `beacon-base.svg` | segmented brass ring on four steel struts, with a Fresnel lamp in the middle |
+| `cursor-base.svg` | grey digitiser pad with a sunk tracking well and the arrow resting on it |
+| `repair-base.svg` | green cog ring under a white cross (the teeth tell it from the Beacon's ring by shape) |
 
 Beacon, Cursor and Repair ship only a base — the loader treats a missing turret as "no rotation".
 The Wall is the one tower with no base plinth here: its face and overlays live in [`wall/`](#wall)
@@ -139,14 +139,14 @@ the old `towers/wall-base.svg` white template worked — so leave the tier faces
 
 | File | Represents |
 |---|---|
-| `wall-t1.svg` | the tier-1 face plate |
-| `wall-t2.svg` | the tier-2 face plate |
-| `wall-t3.svg` | the tier-3 face plate |
-| `wall-t4.svg` | a reserved tier-4 face plate (placeholder copy) |
-| `wall-t5.svg` | a reserved tier-5 face plate (placeholder copy) |
-| `wall-bulwark.svg` | the Bulwark branch's raised inner rim (an overlay) |
-| `wall-mesh.svg` | the Mesh branch's crosshatch (an overlay) |
-| `wall-repairing.svg` | the diagonal repair hatch (an overlay) |
+| `wall-t1.svg` | the tier-1 face plate: one sheet, one seam, two tacks |
+| `wall-t2.svg` | the tier-2 face plate: an inset panel line and four corner rivets |
+| `wall-t3.svg` | the tier-3 face plate: a sunk panel, rivets and a cross-brace |
+| `wall-t4.svg` | a reserved tier-4 face plate: a double frame with eight rivets |
+| `wall-t5.svg` | a reserved tier-5 face plate: chevron ribs pointing in from all four sides |
+| `wall-bulwark.svg` | the Bulwark branch's raised armour rim, bolted at the corners (an overlay) |
+| `wall-mesh.svg` | the Mesh branch's expanded metal, in 8-unit diamonds so it survives at 16 px (an overlay) |
+| `wall-repairing.svg` | a hazard-tape border and a spanner, drawn while a repair runs (an overlay) |
 | `wall-damaged-1.svg` | damage overlay, stage 1 (the top third of HP): one stepped crack in from the left edge and one loose pixel |
 | `wall-damaged-2.svg` | damage overlay, stage 2 (the middle third of HP): the stage-1 crack runs on and puts out two branches |
 | `wall-damaged-3.svg` | damage overlay, stage 3 (the bottom third of HP): cracks to three edges, three dropped-out blocks, a darker face |
@@ -158,9 +158,11 @@ files clip to the 3..29 square to stay clear of the bevel the engine draws.
 
 A wall draws one tier face (tinted) and up to two overlays: a branch mark, then a damage stage — or
 the repair hatch in place of both while a repair runs. The damage stage is chosen from the HP fraction
-in integer thirds, so a wall sitting exactly on a third line never flickers between two stages. These
-are placeholder files that reproduce the old code-drawn look; an artist may add per-tier detail and
-richer damage without touching the code.
+in integer thirds, so a wall sitting exactly on a third line never flickers between two stages.
+
+The tier faces are **white templates**: the engine multiplies them by the live button grey, so their
+detail is engraved in pale grey (`#ececec` to `#b4b4b4`) and can never be lighter than the face. Keep
+tier detail inside 8..24 so the Bulwark rim (5..8) and the bevel stay clear of it.
 
 ### `board/`
 
@@ -202,16 +204,21 @@ are tinted to the live colour, and the tint is noted per asset.
 
 | File | Represents |
 |---|---|
-| `cursor-arrow.svg` | the white pointer, tip at the top-left |
-| `offline-wrench.svg` | the red crossed mark on an offline tower |
-| `shutter-open.svg` | the open gate leaf's faint outline (white, tinted grey-to-warm as the close nears) |
-| `shutter-closed.svg` | the closed gate leaf: a solid grey tile |
+| `cursor-arrow.svg` | the white pointer with a hard black edge, tip on the top-left origin |
+| `cursor-help.svg` | the context-help pointer: the arrow with a question mark at its heel |
+| `offline-wrench.svg` | the mark on an offline tower: a red spanner crossed out by a red bar, an X at half a cell |
+| `shutter-open.svg` | the open gate leaf: a frame with the curtain rolled up along the top (white, tinted grey-to-warm as the close nears) |
+| `shutter-closed.svg` | the closed gate leaf: a five-slat roller shutter with a sill and a lift handle |
 | `check.svg` | the tick used by the HUD checkbox and the menu check (white, tinted to the text colour) |
 | `glyph-minimize.svg` | the window minimize glyph |
 | `glyph-maximize.svg` | the window maximize glyph |
 | `glyph-close.svg` | the window close glyph |
+| `glyph-help.svg` | the window help glyph (a drawn question mark, not text) |
 | `arrow-left.svg` | the title-bar left arrow |
 | `arrow-right.svg` | the mirrored right arrow (reserved) |
+| `synergy-halo.svg` | 64×64: a square docking pad with corner brackets and coupling tabs, drawn under each tower of a cluster (white, tinted to the synergy colour) |
+| `synergy-link.svg` | 64×24: a bolted coupling block on a bus bar, between two peer towers (white, tinted) |
+| `synergy-link-spotter.svg` | 64×24: three chevrons between two rails, pointing +x at the receiver of a one-way gift (white, tinted) |
 
 The Cursor tower's own plinth is `towers/cursor-base.svg`; `cursor-arrow.svg` here is the flying
 cursor and the OS pointer.

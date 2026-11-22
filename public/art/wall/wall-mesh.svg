@@ -1,7 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Mesh: a crosshatch over the tier face (both diagonal families). -->
-  <g fill="none" stroke="#808080" stroke-width="1">
-    <path d="M24 0 L32 8 M20 0 L32 12 M16 0 L32 16 M12 0 L32 20 M8 0 L32 24 M4 0 L32 28 M0 0 L32 32 M0 4 L28 32 M0 8 L24 32 M0 12 L20 32 M0 16 L16 32 M0 20 L12 32 M0 24 L8 32"/>
-    <path d="M0 4 L4 0 M0 8 L8 0 M0 12 L12 0 M0 16 L16 0 M0 20 L20 0 M0 24 L24 0 M0 28 L28 0 M0 32 L32 0 M4 32 L32 4 M8 32 L32 8 M12 32 L32 12 M16 32 L32 16 M20 32 L32 20 M24 32 L32 24 M28 32 L32 28"/>
+  <defs><clipPath id="in"><rect x="3" y="3" width="26" height="26"/></clipPath></defs>
+  <!-- Mesh: expanded metal over the tier face. The diamonds are 8 units across so the pattern
+     survives at 16 px; a white copy one unit down and right cuts each strand into the face. The
+     whole overlay clips to 3..29, clear of the bevel the engine draws. -->
+  <g clip-path="url(#in)" fill="none">
+  <path transform="translate(1 1)" stroke="#ffffff" stroke-width="1.2" d="M-32 0 L0 32 M-32 32 L0 0 M-24 0 L8 32 M-24 32 L8 0 M-16 0 L16 32 M-16 32 L16 0 M-8 0 L24 32 M-8 32 L24 0 M0 0 L32 32 M0 32 L32 0 M8 0 L40 32 M8 32 L40 0 M16 0 L48 32 M16 32 L48 0 M24 0 L56 32 M24 32 L56 0 M32 0 L64 32 M32 32 L64 0 M40 0 L72 32 M40 32 L72 0 M48 0 L80 32 M48 32 L80 0 M56 0 L88 32 M56 32 L88 0 M64 0 L96 32 M64 32 L96 0"/>
+  <path stroke="#707070" stroke-width="1.2" d="M-32 0 L0 32 M-32 32 L0 0 M-24 0 L8 32 M-24 32 L8 0 M-16 0 L16 32 M-16 32 L16 0 M-8 0 L24 32 M-8 32 L24 0 M0 0 L32 32 M0 32 L32 0 M8 0 L40 32 M8 32 L40 0 M16 0 L48 32 M16 32 L48 0 M24 0 L56 32 M24 32 L56 0 M32 0 L64 32 M32 32 L64 0 M40 0 L72 32 M40 32 L72 0 M48 0 L80 32 M48 32 L80 0 M56 0 L88 32 M56 32 L88 0 M64 0 L96 32 M64 32 L96 0"/>
   </g>
+  <!-- A welded node where the strands cross at the centre. -->
+  <rect x="14.5" y="14.5" width="3" height="3" fill="#505050"/>
 </svg>

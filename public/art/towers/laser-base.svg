@@ -1,18 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <defs>
-    <linearGradient id="bar" x1="0" y1="10" x2="0" y2="22" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ff8c66"/>
-      <stop offset="0.45" stop-color="#ff3300"/>
-      <stop offset="1" stop-color="#8a1c00"/>
-    </linearGradient>
+  <linearGradient id="bar" x1="0" y1="10" x2="0" y2="22" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#ff8c66"/>
+    <stop offset="0.45" stop-color="#ff3300"/>
+    <stop offset="1" stop-color="#8a1c00"/>
+  </linearGradient>
+  <linearGradient id="cap" x1="0" y1="10" x2="0" y2="22" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#8a949b"/>
+    <stop offset="0.5" stop-color="#4a5359"/>
+    <stop offset="1" stop-color="#1c2226"/>
+  </linearGradient>
   </defs>
-  <!-- A long bar plinth with cooling fins on both ends. -->
+  <!-- Laser: a long bar plinth. A heat-sink bank at each end, steel end caps, and a power bus
+     running into the emitter mount. -->
   <rect x="3" y="10" width="26" height="12" fill="url(#bar)" stroke="#000000" stroke-width="1"/>
-  <g stroke="#5a1200" stroke-width="1">
-    <line x1="5.5" y1="11.5" x2="5.5" y2="20.5"/><line x1="7.5" y1="11.5" x2="7.5" y2="20.5"/><line x1="9.5" y1="11.5" x2="9.5" y2="20.5"/>
-    <line x1="22.5" y1="11.5" x2="22.5" y2="20.5"/><line x1="24.5" y1="11.5" x2="24.5" y2="20.5"/><line x1="26.5" y1="11.5" x2="26.5" y2="20.5"/>
-  </g>
-  <line x1="4" y1="11.2" x2="28" y2="11.2" stroke="#ffd0c0" stroke-width="0.8" opacity="0.7"/>
+  <line x1="4" y1="11" x2="28" y2="11" stroke="#ffd8c8" stroke-width="0.7" opacity="0.8"/>
+  <line x1="4" y1="21" x2="28" y2="21" stroke="#4c1000" stroke-width="0.7" opacity="0.8"/>
+  <!-- End caps. -->
+  <rect x="3" y="10" width="2.2" height="12" fill="url(#cap)" stroke="#000000" stroke-width="1"/>
+  <rect x="26.8" y="10" width="2.2" height="12" fill="url(#cap)" stroke="#000000" stroke-width="1"/>
+  <!-- Heat sinks: each fin is a dark slot with a lit edge. -->
+  <rect x="5.9" y="11.4" width="0.9" height="9.2" fill="#4c1000"/><rect x="6.800000000000001" y="11.4" width="0.5" height="9.2" fill="#ffa080" opacity="0.6"/><rect x="7.7" y="11.4" width="0.9" height="9.2" fill="#4c1000"/><rect x="8.6" y="11.4" width="0.5" height="9.2" fill="#ffa080" opacity="0.6"/><rect x="9.5" y="11.4" width="0.9" height="9.2" fill="#4c1000"/><rect x="10.4" y="11.4" width="0.5" height="9.2" fill="#ffa080" opacity="0.6"/><rect x="11.3" y="11.4" width="0.9" height="9.2" fill="#4c1000"/><rect x="12.200000000000001" y="11.4" width="0.5" height="9.2" fill="#ffa080" opacity="0.6"/>
+  <rect x="19.4" y="11.4" width="0.9" height="9.2" fill="#4c1000"/><rect x="20.299999999999997" y="11.4" width="0.5" height="9.2" fill="#ffa080" opacity="0.6"/><rect x="21.2" y="11.4" width="0.9" height="9.2" fill="#4c1000"/><rect x="22.099999999999998" y="11.4" width="0.5" height="9.2" fill="#ffa080" opacity="0.6"/><rect x="23" y="11.4" width="0.9" height="9.2" fill="#4c1000"/><rect x="23.9" y="11.4" width="0.5" height="9.2" fill="#ffa080" opacity="0.6"/><rect x="24.799999999999997" y="11.4" width="0.9" height="9.2" fill="#4c1000"/><rect x="25.699999999999996" y="11.4" width="0.5" height="9.2" fill="#ffa080" opacity="0.6"/>
+  <!-- Power bus. -->
+  <path d="M12.6 16 H19.4" stroke="#000000" stroke-width="2.6"/>
+  <path d="M12.6 16 H19.4" stroke="#ffcc00" stroke-width="1"/>
   <!-- The emitter mount. -->
-  <circle cx="16" cy="16" r="5" fill="#7a1800" stroke="#000000" stroke-width="0.8"/>
+  <circle cx="16" cy="16" r="5" fill="#701600" stroke="#000000" stroke-width="0.8"/>
+  <circle cx="16" cy="16" r="3.9" fill="none" stroke="#b83410" stroke-width="1" stroke-dasharray="1 1.04"/>
 </svg>

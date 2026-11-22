@@ -1,23 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
-  <!-- Placeholder icon for the compound-interest global upgrade (docs/GLOBAL-UPGRADES.md §7.2): the artist
-       replaces this file. Never drawn at more than 18 px in the list. -->
-  <!-- Raised Win95 tile in the grey palette, the same frame every upgrade icon uses. -->
-  <rect x="0.5" y="0.5" width="43" height="43" fill="#c0c0c0"/>
-  <rect x="0" y="0" width="44" height="1" fill="#ffffff"/>
-  <rect x="0" y="0" width="1" height="44" fill="#ffffff"/>
-  <rect x="0" y="1" width="44" height="1" fill="#dfdfdf"/>
-  <rect x="1" y="0" width="1" height="44" fill="#dfdfdf"/>
-  <rect x="0" y="43" width="44" height="1" fill="#000000"/>
-  <rect x="43" y="0" width="1" height="44" fill="#000000"/>
-  <rect x="0" y="42" width="44" height="1" fill="#808080"/>
-  <rect x="42" y="0" width="1" height="44" fill="#808080"/>
-  <!-- Three rising bars with a coin on the tallest. -->
-  <g fill="#000080" stroke="#000000" stroke-width="1">
-    <rect x="9.5" y="25.5" width="6" height="10"/>
-    <rect x="18.5" y="19.5" width="6" height="16"/>
-    <rect x="27.5" y="12.5" width="6" height="23"/>
-  </g>
-  <circle cx="30.5" cy="8.5" r="4.5" fill="#c0c0c0" stroke="#000000" stroke-width="1"/>
-  <path d="M31 5.5v6M29 7h3a1.5 1.5 0 0 1 0 3h-2a1.5 1.5 0 0 0 0 3h3" fill="none" stroke="#000000" stroke-width="0.8"/>
-  <rect x="6" y="35" width="32" height="2" fill="#000000"/>
+  <!-- Compound Interest: a coin with a second coin behind it, and a green arrow climbing: money that earns money. -->
+  <!-- The frame: a raised Windows 95 button, the same one every achievement icon uses. -->
+  <defs><linearGradient id="ff" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#cecece"/><stop offset="1" stop-color="#b4b4b4"/></linearGradient><linearGradient id="a1" x1="8" y1="16" x2="27" y2="36" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff0a0"/><stop offset="0.5" stop-color="#e0a800"/><stop offset="1" stop-color="#7a5400"/></linearGradient><linearGradient id="a2" x1="18" y1="8" x2="36" y2="27" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff0a0"/><stop offset="0.5" stop-color="#e0a800"/><stop offset="1" stop-color="#7a5400"/></linearGradient></defs>
+  <rect x="0" y="0" width="44" height="44" fill="url(#ff)"/>
+  <path d="M0 0 H44 V1 H1 V44 H0 Z" fill="#ffffff"/>
+  <path d="M1 1 H43 V2 H2 V43 H1 Z" fill="#dfdfdf"/>
+  <path d="M44 0 V44 H0 V43 H43 V0 Z" fill="#000000"/>
+  <path d="M43 1 V43 H1 V42 H42 V1 Z" fill="#808080"/>
+  <circle cx="27" cy="17" r="10" fill="url(#a2)" stroke="#000000" stroke-width="1.2"/><circle cx="27" cy="17" r="7.8" fill="none" stroke="#7a5400" stroke-width="0.8"/><path d="M19.6 15.6 A7.8 7.8 0 0 1 25.6 9.6" fill="none" stroke="#ffffff" stroke-width="0.8" stroke-linecap="round" opacity="0.8"/>
+  <circle cx="17" cy="26" r="10.6" fill="url(#a1)" stroke="#000000" stroke-width="1.2"/><circle cx="17" cy="26" r="8.4" fill="none" stroke="#7a5400" stroke-width="0.8"/><path d="M9 24.6 A8.4 8.4 0 0 1 15.6 18" fill="none" stroke="#ffffff" stroke-width="0.8" stroke-linecap="round" opacity="0.8"/>
+  <!-- The stamp on the front coin: a pointer. -->
+  <polygon points="14,20 14,31.4 16.8,28.8 18.6,33 20.6,32.2 18.8,28 22.4,28" fill="#7a5400" stroke="#4a3000" stroke-width="0.5" stroke-linejoin="miter"/>
+  <!-- The arrow. -->
+  <path d="M27 37 L35.4 27.6" stroke="#000000" stroke-width="4.6"/>
+  <polygon points="39.4,23 38.6,32.6 30.6,25.4" fill="#00a000" stroke="#000000" stroke-width="1.1" stroke-linejoin="miter"/>
+  <path d="M27 37 L35 28" stroke="#00a000" stroke-width="2.4"/>
 </svg>

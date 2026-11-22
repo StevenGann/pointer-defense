@@ -1,11 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- A hexagon plinth cut like an ice crystal: six facets, lit from the top-left. -->
-  <polygon points="16,16 3.5,9.5 16,3" fill="#a6dcf4"/>
-  <polygon points="16,16 16,3 28.5,9.5" fill="#6cbde4"/>
+  <!-- Frost: a hexagon plinth cut like an ice crystal. Six facets lit from the top-left, a frosted
+     inner step, and a coolant port at each corner. -->
+  <polygon points="16,16 3.5,9.5 16,3" fill="#a2d8f0"/>
+  <polygon points="16,16 16,3 28.5,9.5" fill="#6ab8de"/>
   <polygon points="16,16 28.5,9.5 28.5,22.5" fill="#3399cc"/>
-  <polygon points="16,16 28.5,22.5 16,29" fill="#1c6a94"/>
-  <polygon points="16,16 16,29 3.5,22.5" fill="#2884b4"/>
-  <polygon points="16,16 3.5,22.5 3.5,9.5" fill="#58b0dc"/>
+  <polygon points="16,16 28.5,22.5 16,29" fill="#1c6890"/>
+  <polygon points="16,16 16,29 3.5,22.5" fill="#2880ae"/>
+  <polygon points="16,16 3.5,22.5 3.5,9.5" fill="#56acd8"/>
   <polygon points="16,3 28.5,9.5 28.5,22.5 16,29 3.5,22.5 3.5,9.5" fill="none" stroke="#000000" stroke-width="1" stroke-linejoin="round"/>
-  <polygon points="16,6 25.8,11 25.8,21 16,26 6.2,21 6.2,11" fill="none" stroke="#ffffff" stroke-width="0.7" opacity="0.4"/>
+  <!-- The inner step: a lit edge on the top-left, a cut edge on the bottom-right. -->
+  <path d="M6.4 21 V11 L16 6" fill="none" stroke="#ffffff" stroke-width="0.7" opacity="0.7"/>
+  <path d="M16 6 L25.6 11 V21 L16 26 L6.4 21" fill="none" stroke="#0c4466" stroke-width="0.7" opacity="0.7"/>
+  <!-- Sunk reservoir under the emitter. -->
+  <polygon points="16,9.6 21.54,12.8 21.54,19.2 16,22.4 10.46,19.2 10.46,12.8" fill="#12506e" stroke="#000000" stroke-width="0.8" stroke-linejoin="round"/>
+  <polygon points="16,11.1 20.24,13.55 20.24,18.45 16,20.9 11.76,18.45 11.76,13.55" fill="none" stroke="#56acd8" stroke-width="0.6" opacity="0.8"/>
+  <!-- Coolant ports. -->
+  <g fill="#0c3048"><circle cx="16" cy="5.4" r="0.8"/><circle cx="25.18" cy="10.7" r="0.8"/><circle cx="25.18" cy="21.3" r="0.8"/><circle cx="16" cy="26.6" r="0.8"/><circle cx="6.82" cy="21.3" r="0.8"/><circle cx="6.82" cy="10.7" r="0.8"/></g>
 </svg>

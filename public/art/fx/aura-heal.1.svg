@@ -1,11 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Three green plus signs rising and fading. Frame 1. -->
-  <g fill="#00c040" opacity="0.75">
-    <rect x="8.5" y="14" width="3" height="10"/>
-    <rect x="5" y="17.5" width="10" height="3"/>
-    <rect x="14.5" y="11" width="3" height="10"/>
-    <rect x="11" y="14.5" width="10" height="3"/>
-    <rect x="20.5" y="14" width="3" height="10"/>
-    <rect x="17" y="17.5" width="10" height="3"/>
-  </g>
+  <!-- Heal aura, frame 1 of 4: a Repair tower is mending this one. Three green crosses rise in
+     three columns, each a step out of phase, shrinking and fading as they climb. -->
+  <g opacity="0.9"><path d="M5.43 15.8 H7.57 V17.93 H9.7 V20.07 H7.57 V22.2 H5.43 V20.07 H3.3 V17.93 H5.43 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M6.03 16.7 V17.93 M4.2 18.53 H5.43" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
+  <g opacity="0.35"><path d="M15.13 4.4 H16.87 V6.13 H18.6 V7.87 H16.87 V9.6 H15.13 V7.87 H13.4 V6.13 H15.13 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M15.73 5.3 V6.13 M14.3 6.73 H15.13" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
+  <g opacity="0.65"><path d="M24.53 10.1 H26.47 V12.03 H28.4 V13.97 H26.47 V15.9 H24.53 V13.97 H22.6 V12.03 H24.53 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M25.13 11 V12.03 M23.5 12.63 H24.53" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
 </svg>

@@ -1,26 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
-  <!-- Placeholder icon for the chain-reaction global upgrade (docs/GLOBAL-UPGRADES.md §7.2): the artist
-       replaces this file. Never drawn at more than 18 px in the list. -->
-  <!-- Raised Win95 tile in the grey palette, the same frame every upgrade icon uses. -->
-  <rect x="0.5" y="0.5" width="43" height="43" fill="#c0c0c0"/>
-  <rect x="0" y="0" width="44" height="1" fill="#ffffff"/>
-  <rect x="0" y="0" width="1" height="44" fill="#ffffff"/>
-  <rect x="0" y="1" width="44" height="1" fill="#dfdfdf"/>
-  <rect x="1" y="0" width="1" height="44" fill="#dfdfdf"/>
-  <rect x="0" y="43" width="44" height="1" fill="#000000"/>
-  <rect x="43" y="0" width="1" height="44" fill="#000000"/>
-  <rect x="0" y="42" width="44" height="1" fill="#808080"/>
-  <rect x="42" y="0" width="1" height="44" fill="#808080"/>
-  <!-- Three linked nodes with a bolt through the chain. -->
-  <g fill="#c0c0c0" stroke="#000000" stroke-width="1">
-    <circle cx="11" cy="13" r="5"/>
-    <circle cx="33" cy="13" r="5"/>
-    <circle cx="22" cy="32" r="5"/>
-  </g>
-  <g stroke="#000000" stroke-width="2">
-    <path d="M16 13h12"/>
-    <path d="M13.5 17.5 19 27.5"/>
-    <path d="M30.5 17.5 25 27.5"/>
-  </g>
-  <path d="M23 6l-4 6h3l-1 5 5-7h-3z" fill="#000080" stroke="#000000" stroke-width="0.6"/>
+  <!-- Chain Reaction: one blast sets off the next. Three detonations in a row, each smaller than the last, joined by a burning fuse. -->
+  <!-- The frame: a raised Windows 95 button, the same one every achievement icon uses. -->
+  <defs><linearGradient id="ff" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#cecece"/><stop offset="1" stop-color="#b4b4b4"/></linearGradient></defs>
+  <rect x="0" y="0" width="44" height="44" fill="url(#ff)"/>
+  <path d="M0 0 H44 V1 H1 V44 H0 Z" fill="#ffffff"/>
+  <path d="M1 1 H43 V2 H2 V43 H1 Z" fill="#dfdfdf"/>
+  <path d="M44 0 V44 H0 V43 H43 V0 Z" fill="#000000"/>
+  <path d="M43 1 V43 H1 V42 H42 V1 Z" fill="#808080"/>
+  <path d="M12 14 Q22 16 25 24 Q28 32 35 34" fill="none" stroke="#000000" stroke-width="2.8"/>
+  <path d="M12 14 Q22 16 25 24 Q28 32 35 34" fill="none" stroke="#ffcc00" stroke-width="1.2" stroke-dasharray="2 1.6"/>
+  <polygon points="13.5,5.1 15.37,9.98 20.15,7.85 18.02,12.63 22.9,14.5 18.02,16.37 20.15,21.15 15.37,19.02 13.5,23.9 11.63,19.02 6.85,21.15 8.98,16.37 4.1,14.5 8.98,12.63 6.85,7.85 11.63,9.98" fill="#ff5a00" stroke="#000000" stroke-width="1.1" stroke-linejoin="miter"/><polygon points="13.5,8.3 14.72,11.55 17.89,10.11 16.45,13.28 19.7,14.5 16.45,15.72 17.89,18.89 14.72,17.45 13.5,20.7 12.28,17.45 9.11,18.89 10.55,15.72 7.3,14.5 10.55,13.28 9.11,10.11 12.28,11.55" fill="#ffcc00"/><polygon points="14.8,11.37 14.7,13.3 16.63,13.2 15.19,14.5 16.63,15.8 14.7,15.7 14.8,17.63 13.5,16.19 12.2,17.63 12.3,15.7 10.37,15.8 11.81,14.5 10.37,13.2 12.3,13.3 12.2,11.37 13.5,12.81" fill="#ffffff"/>
+  <polygon points="27.37,18.54 27.94,22.17 31.54,21.41 29.37,24.37 32.46,26.37 28.83,26.94 29.59,30.54 26.63,28.37 24.63,31.46 24.06,27.83 20.46,28.59 22.63,25.63 19.54,23.63 23.17,23.06 22.41,19.46 25.37,21.63" fill="#ff5a00" stroke="#000000" stroke-width="1.1" stroke-linejoin="miter"/><polygon points="26.91,20.74 27.27,23.15 29.65,22.63 28.21,24.59 30.26,25.91 27.85,26.27 28.37,28.65 26.41,27.21 25.09,29.26 24.73,26.85 22.35,27.37 23.79,25.41 21.74,24.09 24.15,23.73 23.63,21.35 25.59,22.79" fill="#ffcc00"/><polygon points="27.35,23.04 27,24.35 28.34,24.57 27.16,25.25 27.96,26.35 26.65,26 26.43,27.34 25.75,26.16 24.65,26.96 25,25.65 23.66,25.43 24.84,24.75 24.04,23.65 25.35,24 25.57,22.66 26.25,23.84" fill="#ffffff"/>
+  <polygon points="35,30 35.88,32.29 38.11,31.29 37.11,33.52 39.4,34.4 37.11,35.28 38.11,37.51 35.88,36.51 35,38.8 34.12,36.51 31.89,37.51 32.89,35.28 30.6,34.4 32.89,33.52 31.89,31.29 34.12,32.29" fill="#ff5a00" stroke="#000000" stroke-width="1.1" stroke-linejoin="miter"/><polygon points="35,31.5 35.57,33.02 37.05,32.35 36.38,33.83 37.9,34.4 36.38,34.97 37.05,36.45 35.57,35.78 35,37.3 34.43,35.78 32.95,36.45 33.62,34.97 32.1,34.4 33.62,33.83 32.95,32.35 34.43,33.02" fill="#ffcc00"/><polygon points="35.61,32.94 35.56,33.84 36.46,33.79 35.79,34.4 36.46,35.01 35.56,34.96 35.61,35.86 35,35.19 34.39,35.86 34.44,34.96 33.54,35.01 34.21,34.4 33.54,33.79 34.44,33.84 34.39,32.94 35,33.61" fill="#ffffff"/>
 </svg>

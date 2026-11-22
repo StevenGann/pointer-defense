@@ -1,21 +1,37 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <defs>
-    <linearGradient id="barrel" x1="14" y1="0" x2="18" y2="0" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#6fdada"/>
-      <stop offset="0.45" stop-color="#00a0a0"/>
-      <stop offset="1" stop-color="#004a4a"/>
+  <linearGradient id="barrel" x1="14.4" y1="0" x2="17.6" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#aeb8bf"/>
+      <stop offset="0.4" stop-color="#5d686f"/>
+      <stop offset="1" stop-color="#1f262b"/>
     </linearGradient>
-    <radialGradient id="head" cx="14.4" cy="14.4" r="6" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#7fe6e6"/>
-      <stop offset="0.6" stop-color="#009090"/>
-      <stop offset="1" stop-color="#004a4a"/>
-    </radialGradient>
+  <linearGradient id="body" x1="12" y1="11" x2="20" y2="21" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#5fcaca"/>
+    <stop offset="0.45" stop-color="#009090"/>
+    <stop offset="1" stop-color="#004848"/>
+  </linearGradient>
   </defs>
-  <!-- Points north. The pivot is the centre of the box. -->
-  <rect x="14" y="4" width="4" height="12" fill="url(#barrel)" stroke="#000000" stroke-width="1"/>
-  <rect x="13.2" y="2.8" width="5.6" height="2.8" fill="#1c2a2a" stroke="#000000" stroke-width="0.8"/>
-  <rect x="13.9" y="3.5" width="1.7" height="0.8" fill="#6a8a8a"/>
-  <line x1="14" y1="9.5" x2="18" y2="9.5" stroke="#003838" stroke-width="0.8"/>
-  <circle cx="16" cy="16" r="4.6" fill="url(#head)" stroke="#000000" stroke-width="1"/>
-  <circle cx="16" cy="16" r="1.5" fill="#003838"/>
+  <!-- Points north; the pivot is the centre of the box. One slim barrel in a perforated cooling
+     jacket, a boxy receiver, and an ammunition box on the left. -->
+  <rect x="14.6" y="4" width="2.8" height="9" fill="url(#barrel)" stroke="#000000" stroke-width="0.9"/>
+  <!-- Cooling holes in the jacket. -->
+  <g fill="#0c1114">
+  <rect x="15.5" y="5.6" width="1" height="1.2"/><rect x="15.5" y="7.6" width="1" height="1.2"/><rect x="15.5" y="9.6" width="1" height="1.2"/>
+  </g>
+  <!-- Flash hider. -->
+  <rect x="14" y="2.6" width="4" height="2.2" fill="#1c2226" stroke="#000000" stroke-width="0.8"/>
+  <rect x="14.6" y="3.1" width="1.2" height="0.7" fill="#7c878e"/>
+  <!-- Ammunition box, with its belt feed. -->
+  <rect x="9.8" y="13.6" width="3.2" height="5.6" fill="#2a4a4a" stroke="#000000" stroke-width="0.8"/>
+  <path d="M10.5 15 H12.2 M10.5 16.4 H12.2 M10.5 17.8 H12.2" stroke="#c8a030" stroke-width="0.7"/>
+  <!-- Receiver: a chamfered box around the pivot. -->
+  <polygon points="13.4,11.4 18.6,11.4 20,12.8 20,20.6 12,20.6 12,12.8" fill="url(#body)" stroke="#000000" stroke-width="1" stroke-linejoin="round"/>
+  <path d="M12.9 19.8 V13.2 L13.8 12.3 H18" fill="none" stroke="#b4f0f0" stroke-width="0.7" opacity="0.75"/>
+  <line x1="12.6" y1="18.6" x2="19.4" y2="18.6" stroke="#003434" stroke-width="0.7"/>
+  <!-- Rear grip. -->
+  <rect x="14.4" y="20.6" width="3.2" height="1.8" fill="#1c2226" stroke="#000000" stroke-width="0.7"/>
+  <!-- Pivot cap. -->
+  <circle cx="16" cy="15.6" r="2.3" fill="#00585a" stroke="#000000" stroke-width="0.8"/>
+  <circle cx="16" cy="15.6" r="0.9" fill="#0c1114"/>
+  <circle cx="15.2" cy="14.8" r="0.5" fill="#b4f0f0" opacity="0.8"/>
 </svg>

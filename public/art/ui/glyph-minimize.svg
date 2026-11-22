@@ -1,4 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- The minimize control glyph: a short horizontal bar. -->
-  <rect x="6" y="13" width="20" height="6" fill="#000000"/>
+  <!-- Window minimize glyph: the short bar, low and to the left. 4 units is 2 px at 16 px. -->
+  <rect x="6" y="22" width="14" height="4" fill="#000000"/>
 </svg>

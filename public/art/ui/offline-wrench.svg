@@ -1,7 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- The red crossed mark on an offline tower. -->
-  <g stroke="#d00000" stroke-width="10" stroke-linecap="round">
-    <line x1="2" y1="2" x2="30" y2="30"/>
-    <line x1="30" y1="2" x2="2" y2="30"/>
+  <!-- The mark on an offline tower. At half a cell it is a red X; up close one arm is a spanner
+     and the other is the bar that crosses it out. Red is the engine's offline colour. -->
+  <!-- The bar, bottom-left to top-right. -->
+  <g transform="rotate(45 16 16)">
+  <rect x="13" y="0.5" width="6" height="31" fill="#d00000" stroke="#000000" stroke-width="1.4"/>
+  <rect x="14.2" y="2" width="1.2" height="28" fill="#ff7060"/>
+  </g>
+  <!-- The spanner, head at the top-left. -->
+  <g transform="rotate(-45 16 16)">
+  <path d="M13.6 6.4 V0.8 H10.4 V7.4 Q10.4 11 13 12.2 V28.4 Q13 31.4 16 31.4 Q19 31.4 19 28.4 V12.2 Q21.6 11 21.6 7.4 V0.8 H18.4 V6.4 Z" fill="#d00000" stroke="#000000" stroke-width="1.4" stroke-linejoin="round"/>
+  <path d="M14.4 13 V28" stroke="#ff7060" stroke-width="1.2" fill="none"/>
+  <circle cx="16" cy="27.6" r="1.2" fill="#5a0000"/>
   </g>
 </svg>

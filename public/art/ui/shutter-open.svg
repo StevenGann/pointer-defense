@@ -1,4 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- An open gate leaf: a white outline the engine tints (grey to warm) as the close nears. -->
-  <rect x="0.5" y="0.5" width="31" height="31" fill="none" stroke="#ffffff" stroke-width="1"/>
+  <!-- An open gate leaf: the shutter is rolled up, so what shows is its frame and the curtain
+     gathered along the top. White: the engine tints it grey, then warm as the close nears. -->
+  <path fill-rule="evenodd" d="M0 0 H32 V32 H0 Z M1 1 V31 H31 V1 Z" fill="#ffffff"/>
+  <!-- The rolled curtain: three slats, each shorter-lived than the last. -->
+  <rect x="1" y="1" width="30" height="2" fill="#ffffff"/>
+  <rect x="1" y="4" width="30" height="1" fill="#ffffff" opacity="0.7"/>
+  <rect x="1" y="6" width="30" height="1" fill="#ffffff" opacity="0.4"/>
+  <!-- Guide rails: a short stub down each side, and the sill stops in the bottom corners. -->
+  <path d="M1 8 H3 V14 H1 Z M29 8 H31 V14 H29 Z" fill="#ffffff" opacity="0.7"/>
+  <path d="M1 28 H5 V31 H1 Z M27 28 H31 V31 H27 Z" fill="#ffffff" opacity="0.7"/>
 </svg>

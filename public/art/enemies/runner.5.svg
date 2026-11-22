@@ -25,9 +25,11 @@
   <!-- Spine and a top-edge highlight. -->
   <line x1="9" y1="16" x2="18.5" y2="16" stroke="#16242f" stroke-width="1" opacity="0.55" stroke-linecap="round"/>
   <line x1="10" y1="11.4" x2="23" y2="15" stroke="#d6e6ef" stroke-width="1" opacity="0.7" stroke-linecap="round"/>
+  <!-- A nose-cap seam, and two intake louvres on the lit facet. -->
+  <line x1="25.4" y1="14.9" x2="25.4" y2="17.1" stroke="#16242f" stroke-width="0.7" opacity="0.7"/>
+  <path d="M12.2 12.9 L15 13.7 M14.6 12.4 L17.4 13.2" fill="none" stroke="#16242f" stroke-width="0.7" stroke-linecap="round" opacity="0.6"/>
   <!-- One eye, looking where it runs. -->
   <circle cx="21.2" cy="16" r="2" fill="#0e1a24"/>
-  <circle cx="21.4" cy="16" r="1.4" fill="#e6f4ff"/>
+  <circle cx="21.4" cy="16" r="1.4" fill="#bfe6ff"/>
   <circle cx="21.9" cy="16" r="0.7" fill="#000000"/>
-  <circle cx="21" cy="15.4" r="0.35" fill="#ffffff"/>
 </svg>

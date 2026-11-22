@@ -1,21 +1,48 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <defs>
-    <linearGradient id="tube" x1="11" y1="0" x2="21" y2="0" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#d86a6a"/>
-      <stop offset="0.4" stop-color="#9a1010"/>
-      <stop offset="1" stop-color="#3c0000"/>
+  <linearGradient id="tube" x1="11.5" y1="0" x2="20.5" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#aeb8bf"/>
+      <stop offset="0.4" stop-color="#5d686f"/>
+      <stop offset="1" stop-color="#1f262b"/>
     </linearGradient>
-    <radialGradient id="breech" cx="14" cy="14" r="8" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#e07a7a"/>
-      <stop offset="0.6" stop-color="#8a0808"/>
-      <stop offset="1" stop-color="#3c0000"/>
-    </radialGradient>
+  <linearGradient id="cyl" x1="9.6" y1="0" x2="11.8" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#aeb8bf"/>
+      <stop offset="0.4" stop-color="#5d686f"/>
+      <stop offset="1" stop-color="#1f262b"/>
+    </linearGradient>
+  <linearGradient id="cyr" x1="20.2" y1="0" x2="22.4" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#aeb8bf"/>
+      <stop offset="0.4" stop-color="#5d686f"/>
+      <stop offset="1" stop-color="#1f262b"/>
+    </linearGradient>
+  <linearGradient id="house" x1="9" y1="10" x2="23" y2="24" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#cc6a6a"/>
+    <stop offset="0.45" stop-color="#8c0a0a"/>
+    <stop offset="1" stop-color="#3c0000"/>
+  </linearGradient>
   </defs>
-  <!-- Points north. A short, thick tube with a muzzle ring and one reinforcing band. -->
-  <rect x="11.5" y="5" width="9" height="11" fill="url(#tube)" stroke="#000000" stroke-width="1"/>
-  <rect x="10.4" y="2.8" width="11.2" height="3.6" rx="0.8" fill="#2a0c0c" stroke="#000000" stroke-width="0.8"/>
-  <rect x="11.4" y="3.5" width="3" height="0.9" fill="#a05050"/>
-  <rect x="11.5" y="9.6" width="9" height="1.6" fill="#3c0000"/>
-  <circle cx="16" cy="16" r="6.2" fill="url(#breech)" stroke="#000000" stroke-width="1"/>
-  <circle cx="16" cy="16" r="2.2" fill="#2a0000" stroke="#000000" stroke-width="0.6"/>
+  <!-- Points north. A short, thick tube with a muzzle ring and a reinforcing band, two recoil
+     cylinders alongside it, and a heavy octagonal casemate with a counterweight at the back. -->
+  <!-- Recoil cylinders. -->
+  <rect x="9.8" y="7.6" width="2" height="6" fill="url(#cyl)" stroke="#000000" stroke-width="0.8"/>
+  <rect x="20.2" y="7.6" width="2" height="6" fill="url(#cyr)" stroke="#000000" stroke-width="0.8"/>
+  <!-- The tube. -->
+  <rect x="11.6" y="4.6" width="8.8" height="9" fill="url(#tube)" stroke="#000000" stroke-width="1"/>
+  <rect x="11.6" y="8.6" width="8.8" height="1.7" fill="#14191c" opacity="0.85"/>
+  <line x1="12.2" y1="8.5" x2="15" y2="8.5" stroke="#aeb8bf" stroke-width="0.5"/>
+  <!-- Muzzle ring. -->
+  <rect x="10.4" y="2.6" width="11.2" height="3.4" fill="#1c2226" stroke="#000000" stroke-width="0.9"/>
+  <rect x="11.2" y="3.2" width="3.4" height="0.8" fill="#8a949b"/>
+  <!-- Counterweight. -->
+  <rect x="12.6" y="21" width="6.8" height="3.2" fill="#2a0c0c" stroke="#000000" stroke-width="0.9"/>
+  <line x1="13.4" y1="22" x2="18.6" y2="22" stroke="#7a3030" stroke-width="0.6"/>
+  <!-- The casemate. -->
+  <polygon points="12.6,10 19.4,10 22.6,13.2 22.6,18.8 19.4,22 12.6,22 9.4,18.8 9.4,13.2" fill="url(#house)" stroke="#000000" stroke-width="1" stroke-linejoin="round"/>
+  <path d="M10.4 18.4 V13.6 L13 11 H18.8" fill="none" stroke="#f0b0b0" stroke-width="0.7" opacity="0.75"/>
+  <path d="M21.6 13.8 V18.4 L19 21 H13.2" fill="none" stroke="#1e0000" stroke-width="0.7" opacity="0.75"/>
+  <!-- The hatch on the pivot, with its hinge and handle. -->
+  <circle cx="16" cy="16" r="3.1" fill="#6a0404" stroke="#000000" stroke-width="0.8"/>
+  <path d="M13.8 14.6 A2.6 2.6 0 0 1 15 13.6" fill="none" stroke="#f0b0b0" stroke-width="0.6" stroke-linecap="round" opacity="0.8"/>
+  <rect x="15" y="15.4" width="2" height="1.2" fill="#1e0000"/>
+  <rect x="15.2" y="18.6" width="1.6" height="1" fill="#1e0000"/>
 </svg>

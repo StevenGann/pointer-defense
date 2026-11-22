@@ -1,19 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
-  <!-- Placeholder icon for the structural-warranty global upgrade (docs/GLOBAL-UPGRADES.md §7.2): the artist
-       replaces this file. Never drawn at more than 18 px in the list. -->
-  <!-- Raised Win95 tile in the grey palette, the same frame every upgrade icon uses. -->
-  <rect x="0.5" y="0.5" width="43" height="43" fill="#c0c0c0"/>
-  <rect x="0" y="0" width="44" height="1" fill="#ffffff"/>
-  <rect x="0" y="0" width="1" height="44" fill="#ffffff"/>
-  <rect x="0" y="1" width="44" height="1" fill="#dfdfdf"/>
-  <rect x="1" y="0" width="1" height="44" fill="#dfdfdf"/>
-  <rect x="0" y="43" width="44" height="1" fill="#000000"/>
-  <rect x="43" y="0" width="1" height="44" fill="#000000"/>
-  <rect x="0" y="42" width="44" height="1" fill="#808080"/>
-  <rect x="42" y="0" width="1" height="44" fill="#808080"/>
-  <!-- A shield with a wrench across it. -->
-  <path d="M22 5 34 10v11c0 8-5 13-12 17-7-4-12-9-12-17V10z" fill="#c0c0c0" stroke="#000000" stroke-width="1.5"/>
-  <g fill="#808080" stroke="#000000" stroke-width="1">
-    <path d="M27 12a6 6 0 0 0-8 7l-7 7 3 3 7-7a6 6 0 0 0 7-8l-3 3-3-3z"/>
-  </g>
+  <!-- Structural Warranty: a riveted steel shield, split into a lit half and a shaded half, with a green tick across it. -->
+  <!-- The frame: a raised Windows 95 button, the same one every achievement icon uses. -->
+  <defs><linearGradient id="ff" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#cecece"/><stop offset="1" stop-color="#b4b4b4"/></linearGradient></defs>
+  <rect x="0" y="0" width="44" height="44" fill="url(#ff)"/>
+  <path d="M0 0 H44 V1 H1 V44 H0 Z" fill="#ffffff"/>
+  <path d="M1 1 H43 V2 H2 V43 H1 Z" fill="#dfdfdf"/>
+  <path d="M44 0 V44 H0 V43 H43 V0 Z" fill="#000000"/>
+  <path d="M43 1 V43 H1 V42 H42 V1 Z" fill="#808080"/>
+  <path d="M22 5 L37 9.6 V20 Q37 32 22 39.4 Q7 32 7 20 V9.6 Z" fill="#30485c" stroke="#000000" stroke-width="1.3" stroke-linejoin="miter"/>
+  <path d="M22 8 L34.2 11.8 V20 Q34.2 30 22 36.2 Z" fill="#4a6c88"/>
+  <path d="M22 8 L9.8 11.8 V20 Q9.8 30 22 36.2 Z" fill="#7da3c2"/>
+  <path d="M22 8 V36.2" stroke="#1c3040" stroke-width="0.8"/>
+  <path d="M11.2 19.6 V12.8 L21 9.8" fill="none" stroke="#e2eef8" stroke-width="0.9" opacity="0.9"/>
+  <g fill="#1c3040"><rect x="12" y="14" width="1.6" height="1.6"/><rect x="30.4" y="14" width="1.6" height="1.6"/><rect x="21.2" y="32" width="1.6" height="1.6"/></g>
+  <!-- The tick. -->
+  <polygon points="12.6,21.4 16.4,17.8 20.4,22 28.6,12.6 32.6,16 20.8,29.6" fill="#30d060" stroke="#000000" stroke-width="1.2" stroke-linejoin="miter"/>
+  <path d="M14.6 21.4 L16.4 19.8 L20.4 24 L28.8 14.6" fill="none" stroke="#d8ffe0" stroke-width="0.8"/>
 </svg>

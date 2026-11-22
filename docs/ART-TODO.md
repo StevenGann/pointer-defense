@@ -1,16 +1,12 @@
 # Artist to-do — art still drawn by the engineer
 
-Status: 57 SVGs. Written 2026-11-21 against `main` at `e8d94fb`.
+Status: **0 outstanding.** All 57 SVGs on the 2026-11-21 list were redrawn the same day, in the art
+pass that also reworked the nine older tower pairs and touched up the seven base enemies. Nothing under
+`public/art/` is an engineer placeholder any more.
 
-Everything under `public/art/` is meant to be yours. This page lists the files whose **current
-drawing is still mine** — I made them to unblock a feature, and no artist pass has replaced them yet.
-The other **470** SVGs in the tree already carry an artist change as their last edit (enemies and every
-boss, the nine tower bases and turrets except the AA, the board tiles, branch marks, most of `fx/`, the
-achievement icons, projectiles and mines), so they are not listed here.
-
-How the list was derived: `git log` on each file, and the file is on this page when its **last** commit
-touched it is one of mine rather than one of yours. It is mechanical, so a file drops off the moment
-your replacement lands.
+How the list is derived: `git log` on each file, and a file is on this page when its **last** commit is
+an engineer's rather than an artist's. It is mechanical, so add a file back here the next time one is
+drawn to unblock a feature.
 
 ## How to hand a file back
 
@@ -26,106 +22,72 @@ your replacement lands.
 - Auras animate as four files (`aura-x.svg` plus `.1`, `.2`, `.3`) with a sibling `.json`. You can
   redraw the shapes freely; if you change the frame count, keep the numbers contiguous from 1.
 
-## Priority order
+## What replaced each placeholder
 
-1. **AA tower** — on screen every run, and the AA is the newest tower.
-2. **Wall faces and overlays** — every wall the player builds.
-3. **Synergy indicator** — new feature; currently reads as my geometry, and it is the piece players
-   stare at to understand that two towers are linked.
-4. **Global upgrade icons** — 15 icons in the right-hand HUD panel.
-5. **Auras** — four floating status effects around towers.
-6. **UI glyphs** — small chrome marks; several are already close to final.
-7. **The two placeholders** — fallbacks that only appear if a real file is missing.
+### AA tower — `towers/` (2 files, 32×32)
 
-## 1. AA tower — `towers/` (2 files, 32×32)
+| File | What it is now |
+|---|---|
+| `aa-base.svg` | a cruciform flak mount: four outrigger legs to square jack pads, an octagonal deck, a toothed traverse ring. The X silhouette cannot be taken for the Gun's square |
+| `aa-turret.svg` | twin autocannon 3.5 units either side of the pivot (where the twin muzzle flash is drawn), conical flash hiders, a wide yoke with a ring sight, an ammunition drum behind each gun |
 
-| File | What it is now | What it wants |
-|---|---|---|
-| `aa-base.svg` | square plinth with a raised deck plate and a fast-traverse turntable | a turret mount that reads as anti-aircraft at a glance, and sits under a barrel that swings fast |
-| `aa-turret.svg` | points north; two elevated autocannon barrels on a shared yoke | twin barrels that stay legible when rotated and at 2× boss scale; the AA is the busiest sprite on the board |
+### Wall — `wall/` (8 files, 32×32)
 
-## 2. Wall — `wall/` (8 files, 32×32)
+| File | What it is now |
+|---|---|
+| `wall-t1.svg` | one sheet, one seam, two tacks |
+| `wall-t2.svg` | an inset panel line and four corner rivets |
+| `wall-t3.svg` | a sunk panel, rivets and a cross-brace |
+| `wall-t4.svg` | reserved: a double frame with eight rivets |
+| `wall-t5.svg` | reserved: chevron ribs pointing in from all four sides |
+| `wall-bulwark.svg` | a raised, bolted armour rim at 5..8; the middle stays clear |
+| `wall-mesh.svg` | expanded metal in 8-unit diamonds, each strand cut in with a white copy; clipped to 3..29 |
+| `wall-repairing.svg` | a hazard-tape border and a spanner: "cordoned off", not "more damage" |
 
-The wall is a Windows button: the engine draws the bevel and outline, and **tints** the tier face to
-the live raised / pressed / disabled grey. So the faces are light templates, and the branch and damage
-detail rides on top.
+The tier faces are still white templates; their detail is engraved in pale grey because the tint can
+only darken.
 
-| File | What it is now | What it wants |
-|---|---|---|
-| `wall-t1.svg` | plain face, tinted by the engine | the cheapest-looking wall; the one players build most |
-| `wall-t2.svg` | plain face | slightly sturdier plating |
-| `wall-t3.svg` | plain face | the top of the everyday ladder |
-| `wall-t4.svg` | plain face (reserved tier) | reserved — draw it if the ladder grows |
-| `wall-t5.svg` | plain face (reserved tier) | reserved |
-| `wall-bulwark.svg` | inner raised rim, light top-left / dark bottom-right | a rim that reads as extra armour without hiding the tinted face |
-| `wall-mesh.svg` | crosshatch over the face | a mesh pattern that survives at 16 px |
-| `wall-repairing.svg` | diagonal hatch, drawn while a repair runs | a hatch that reads as "under repair", not as damage |
+### Synergy indicator — `ui/` (3 files)
 
-Damage stages (`wall-damaged-1..3`) are already yours and must keep the rule that each stage contains
-the one before.
+| File | What it is now |
+|---|---|
+| `synergy-halo.svg` (64×64) | a square docking pad: a floor tint, a bracket on each corner, a coupling tab on each side. Not a ring, so not a range circle |
+| `synergy-link.svg` (64×24) | a bolted coupling block on a bus bar, the same from both sides; everything that matters is in x = 22..42 |
+| `synergy-link-spotter.svg` (64×24) | three chevrons between two thin rails, pointing +x: one-way by shape, not by colour |
 
-## 3. Synergy indicator — `ui/` (3 files)
+### Global upgrades — `upgrades/` (14 icons and the fallback, 44×44)
 
-New in the last two days, and the piece players look at to understand a pairing.
+All in the achievement icons' frame and drawing style. `autoloader` a magazine and a reload arrow ·
+`ballistic-telemetry` a plotted arc on a sheet · `bounty-board` a cork board with a wanted poster ·
+`bulk-requisition` three crates · `chain-reaction` three linked detonations · `compound-interest` two
+coins and a climbing arrow · `coolant` a Frost-blue canister · `double-buffer` two stacked windows ·
+`emergency-patch` a plaster over a crack · `salvage-contract` a signed sheet with a coin seal ·
+`shutter-licence` a roller shutter with a lock plate · `structural-warranty` a steel shield with a
+tick · `system-tray` a taskbar tray holding windows · `wide-reticle` a gunsight with a wider ring.
 
-| File | What it is now | What it wants |
-|---|---|---|
-| `synergy-halo.svg` (64×64) | a translucent ring at r=21 with faint corner ticks, drawn under every tower in a cluster | a floor tint that says "paired" and cannot be mistaken for a range ring. Tinted with the synergy colour; keep it white and translucent |
-| `synergy-link.svg` (64×24) | a bar with a bright core and a centre pip, drawn between two adjacent towers, rotated for north/south pairs | a connector that reads when only ~8 px of it is visible between two bases |
-| `synergy-link-spotter.svg` (64×24) | a chevroned rail, drawn from a Marksman to the tower it gifts range to | the same idea, but evidently one-way: it must differ from the peer link by **shape**, not only by colour (deuteranopia rule) |
+### Tower auras — `fx/` (16 files: 4 families × 4 frames, 32×32)
 
-## 4. Global upgrades — `upgrades/` (15 files, 44×44)
+| Family | What it is now |
+|---|---|
+| `aura-beacon` | twelve brass studs round the tile; every fourth is lit and long, and the lit set steps clockwise |
+| `aura-emp` | broken violet scan lines that slip sideways each frame, with one tear that jumps rows |
+| `aura-heal` | three outlined green crosses rising in three columns, a step out of phase, shrinking as they fade |
+| `aura-override` | four hard-cornered cyan brackets stepping inward and back, with a tick on each side |
 
-All fifteen are placeholders I generated from the upgrade names, in the Win95 tile frame the HUD draws
-around them. They are the icons beside each global upgrade in the right-hand panel.
+### UI glyphs — `ui/` (12 files, 32×32)
 
-`autoloader` · `ballistic-telemetry` · `bounty-board` · `bulk-requisition` · `chain-reaction` ·
-`compound-interest` · `coolant` · `double-buffer` · `emergency-patch` · `salvage-contract` ·
-`shutter-licence` · `structural-warranty` · `system-tray` · `wide-reticle`
+| File | What it is now |
+|---|---|
+| `cursor-arrow.svg` | the classic pointer with mitred corners, built from two fills so the tip sits exactly on the origin |
+| `cursor-help.svg` | the pointer, smaller, with an outlined question mark at its heel |
+| `check.svg` | a tick cut on a 7×7 grid (4-unit steps) |
+| `glyph-minimize.svg`, `glyph-maximize.svg`, `glyph-close.svg`, `glyph-help.svg` | the four control glyphs on a 2-unit grid, square-ended; the question mark is a path, not text |
+| `arrow-left.svg`, `arrow-right.svg` | a white block arrow and its mirror |
+| `offline-wrench.svg` | a red spanner crossed out by a red bar: an X at half a cell, a spanner up close |
+| `shutter-open.svg` | the frame with the curtain rolled up along the top (white, tinted) |
+| `shutter-closed.svg` | a five-slat roller shutter with a sill and a lift handle |
 
-Each should read as its name at 28 px: a magazine with a reload arrow, a plotted trajectory, a
-noticeboard, a crate stack, a chain of detonations, a coin with a second coin behind it, a coolant
-canister, two stacked frames, a bandage with a cross, a contract with a coin, a shutter with a keyhole,
-a shield with a tick, a tray with windows on it, a reticle with a wider ring.
+### Fallbacks — 2 files
 
-## 5. Tower auras — `fx/` (16 files: 4 families × 4 frames, 32×32)
-
-Drawn under or over a tower while a status is live. Frame 0 plus `.1`, `.2`, `.3`, each with a `.json`
-holding the fps and loop mode.
-
-| Family | What it is now | What it wants |
-|---|---|---|
-| `aura-beacon` | a gold ring, fading to transparent at the centre | a command aura that shows which towers are in range |
-| `aura-emp` | violet static, broken arcs round the rim | a jamming field that reads as interference, not as damage |
-| `aura-heal` | three green plus signs rising and fading | repair in progress; should read at 0.5 s glance |
-| `aura-override` | a cyan reticle, four corner brackets tightening | the override buff: mechanical, precise, not magical |
-
-## 6. UI glyphs — `ui/` (12 files, 32×32)
-
-| File | What it is now | What it wants |
-|---|---|---|
-| `cursor-arrow.svg` | the classic white pointer, tip at top-left | the game's own pointer; it is also the OS cursor, so it must read at 16 px |
-| `cursor-help.svg` | the pointer with a question-mark badge at its heel | the context-help pointer used by the `?` box |
-| `check.svg` | a white tick, tinted to the text colour | a tick that stays crisp at 9 px |
-| `glyph-minimize.svg` | a short horizontal bar | Windows 95 control glyph, 1 px weight |
-| `glyph-maximize.svg` | an outlined square with a filled top bar | ditto |
-| `glyph-close.svg` | a black X | ditto |
-| `glyph-help.svg` | a black question mark, same weight as the X | ditto |
-| `arrow-left.svg` | the title-bar system-menu icon, white left arrow | a 16 px system-menu arrow |
-| `arrow-right.svg` | mirrored arrow, reserved | unused today; draw it only if the mirror ships |
-| `offline-wrench.svg` | a red crossed wrench | marks a tower that lost its beacon; must read at half a cell |
-| `shutter-open.svg` | a white outline, tinted grey→warm as closing nears | the open gate leaf, so the tint carries the warning |
-| `shutter-closed.svg` | a solid grey tile with a darker edge | the closed gate; it is a wall for a moment, and should look like one |
-
-## 7. Fallbacks — 2 files
-
-| File | What it is now | What it wants |
-|---|---|---|
-| `achievements/_placeholder.svg` (44×44) | the beveled Win95 tile with no glyph | shown only if an achievement icon is missing; leave it plain |
-| `upgrades/_upgrade-placeholder.svg` (44×44) | "not drawn yet" tile | ditto for the global upgrades |
-
-## Already yours — no action
-
-For the record, so nobody re-lists them: all seven enemy kinds and their bosses (including animations),
-the nine tower pairs other than the AA, `board/`, `branches/`, the fire effects, projectiles, mines,
-the achievement icons, and the wall damage stages. 470 files in total.
+`achievements/_placeholder.svg` and `upgrades/_upgrade-placeholder.svg` are the standard frame, a sunken
+panel and a drawn question mark. Plain on purpose; the old `<text>` element is gone.

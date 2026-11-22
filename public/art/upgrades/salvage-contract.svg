@@ -1,25 +1,22 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
-  <!-- Placeholder icon for the salvage-contract global upgrade (docs/GLOBAL-UPGRADES.md §7.2): the artist
-       replaces this file. Never drawn at more than 18 px in the list. -->
-  <!-- Raised Win95 tile in the grey palette, the same frame every upgrade icon uses. -->
-  <rect x="0.5" y="0.5" width="43" height="43" fill="#c0c0c0"/>
-  <rect x="0" y="0" width="44" height="1" fill="#ffffff"/>
-  <rect x="0" y="0" width="1" height="44" fill="#ffffff"/>
-  <rect x="0" y="1" width="44" height="1" fill="#dfdfdf"/>
-  <rect x="1" y="0" width="1" height="44" fill="#dfdfdf"/>
-  <rect x="0" y="43" width="44" height="1" fill="#000000"/>
-  <rect x="43" y="0" width="1" height="44" fill="#000000"/>
-  <rect x="0" y="42" width="44" height="1" fill="#808080"/>
-  <rect x="42" y="0" width="1" height="44" fill="#808080"/>
-  <!-- A signed contract page with a dollar sign and a line of writing. -->
-  <path d="M9 5h18l8 8v26H9z" fill="#ffffff" stroke="#000000" stroke-width="1"/>
-  <path d="M27 5v8h8" fill="#dfdfdf" stroke="#000000" stroke-width="1"/>
-  <g stroke="#000000" stroke-width="1">
-    <path d="M22 17v16" />
-    <path d="M26 20h-6a3 3 0 0 0 0 6h4a3 3 0 0 1 0 6h-6" fill="none"/>
-  </g>
-  <g fill="#808080">
-    <rect x="13" y="30" width="5" height="1"/>
-    <rect x="13" y="33" width="9" height="1"/>
-  </g>
+  <!-- Salvage Contract: a signed sheet with a dog-eared corner, and a gold coin for a seal. -->
+  <!-- The frame: a raised Windows 95 button, the same one every achievement icon uses. -->
+  <defs><linearGradient id="ff" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#cecece"/><stop offset="1" stop-color="#b4b4b4"/></linearGradient><linearGradient id="au" x1="24" y1="24" x2="37" y2="37" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff0a0"/><stop offset="0.5" stop-color="#e0a800"/><stop offset="1" stop-color="#7a5400"/></linearGradient></defs>
+  <rect x="0" y="0" width="44" height="44" fill="url(#ff)"/>
+  <path d="M0 0 H44 V1 H1 V44 H0 Z" fill="#ffffff"/>
+  <path d="M1 1 H43 V2 H2 V43 H1 Z" fill="#dfdfdf"/>
+  <path d="M44 0 V44 H0 V43 H43 V0 Z" fill="#000000"/>
+  <path d="M43 1 V43 H1 V42 H42 V1 Z" fill="#808080"/>
+  <path d="M9 6 H28 L35 13 V38 H9 Z" fill="#f8f4e4" stroke="#000000" stroke-width="1.2" stroke-linejoin="miter"/>
+  <path d="M28 6 V13 H35 Z" fill="#c8c0a0" stroke="#000000" stroke-width="1" stroke-linejoin="miter"/>
+  <path d="M10.2 37 V7.2 H27" fill="none" stroke="#ffffff" stroke-width="0.8"/>
+  <!-- Heading and clauses. -->
+  <rect x="12.6" y="10" width="11" height="2.4" fill="#000080"/>
+  <path d="M12.6 16 H31 M12.6 19.4 H31 M12.6 22.8 H27 M12.6 26.2 H23" stroke="#606060" stroke-width="1"/>
+  <!-- The signature. -->
+  <path d="M12.6 33.4 Q14.4 29 16 32.4 Q17.4 35 18.6 31.6 Q19.6 29.6 20.8 33 L23.4 32.4" fill="none" stroke="#000080" stroke-width="1"/>
+  <!-- The seal, with two ribbon tails. -->
+  <path d="M26.6 33 L24.6 40 L28 38 L30 41 L31.4 33 Z" fill="#d00000" stroke="#000000" stroke-width="0.9" stroke-linejoin="miter"/>
+  <circle cx="30.6" cy="30.4" r="6.6" fill="url(#au)" stroke="#000000" stroke-width="1.2"/><circle cx="30.6" cy="30.4" r="4.4" fill="none" stroke="#7a5400" stroke-width="0.8"/><path d="M26.6 29 A4.4 4.4 0 0 1 29.2 26.4" fill="none" stroke="#ffffff" stroke-width="0.8" stroke-linecap="round" opacity="0.8"/>
+  <path d="M30.6 26.8 V34 M28.6 28.6 H32 Q33.2 28.6 33.2 29.5 Q33.2 30.4 32 30.4 H29.2 Q28 30.4 28 31.3 Q28 32.2 29.2 32.2 H32.6" fill="none" stroke="#5a3c00" stroke-width="1"/>
 </svg>

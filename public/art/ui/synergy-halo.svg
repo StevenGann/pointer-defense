@@ -1,37 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
-  <!--
-    Synergy halo — drawn UNDER a tower base for every tower in a synergy cluster.
-
-    The artist owns this file. It is rasterised once at the tower's drawn size, tinted with the
-    synergy's colour by the engine, and never recoloured in the art: keep it white or pale grey so a
-    tint reads as the synergy colour rather than as a filter over an existing colour.
-
-    The engine draws it centred on the tower at about 1.6 cells across; the middle is covered by the
-    tower's own base (roughly r=18 of this 64 px box). The ring sits at r=21, just outside the base,
-    and is deliberately translucent: it is a hint that two towers are paired, not a range indicator.
-  -->
-  <defs>
-    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="52%" stop-color="#ffffff" stop-opacity="0"/>
-      <stop offset="72%" stop-color="#ffffff" stop-opacity="0.16"/>
-      <stop offset="88%" stop-color="#ffffff" stop-opacity="0.08"/>
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
-    </radialGradient>
-  </defs>
-
-  <circle cx="32" cy="32" r="30" fill="url(#glow)"/>
-
-  <!-- A soft under-stroke, then a thin ring on top. Both are held back in opacity so the halo reads
-       as a tint on the floor rather than as a second range circle. -->
-  <circle cx="32" cy="32" r="21" fill="none" stroke="#ffffff" stroke-opacity="0.16" stroke-width="7"/>
-  <circle cx="32" cy="32" r="21" fill="none" stroke="#ffffff" stroke-opacity="0.45" stroke-width="2.5"
-          stroke-dasharray="6 4" stroke-linecap="round"/>
-
-  <!-- Four short ticks at the diagonals, just outside the ring. -->
-  <g stroke="#ffffff" stroke-opacity="0.35" stroke-width="2" stroke-linecap="round">
-    <line x1="46" y1="18" x2="49" y2="15"/>
-    <line x1="18" y1="18" x2="15" y2="15"/>
-    <line x1="46" y1="46" x2="49" y2="49"/>
-    <line x1="18" y1="46" x2="15" y2="49"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Synergy halo: drawn UNDER a tower base for every tower in a synergy cluster, at about 1.6
+     cells across, and tinted with the synergy's colour. Keep it white: the tint is the colour.
+  
+     It is a docking pad, not a ring, so it cannot be taken for a range circle. The tower's own
+     base covers the middle (about 12..52 of this 64 box); what shows is a square floor tint just
+     outside the base, a solid bracket on each corner, and a coupling tab on each side that meets
+     the neighbour's tab. Black survives the tint, so the brackets carry a thin dark edge. -->
+  <rect x="7" y="7" width="50" height="50" fill="#ffffff" opacity="0.2"/>
+  <rect x="9.5" y="9.5" width="45" height="45" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.5" stroke-dasharray="3 3"/>
+  <!-- Corner brackets. -->
+  <g fill="#ffffff" stroke="#000000" stroke-width="0.8" stroke-opacity="0.55" stroke-linejoin="miter" opacity="0.9">
+  <path d="M5 5 H18 V9 H9 V18 H5 Z"/>
+  <path d="M59 5 V18 H55 V9 H46 V5 Z"/>
+  <path d="M5 59 V46 H9 V55 H18 V59 Z"/>
+  <path d="M59 59 H46 V55 H55 V46 H59 Z"/>
+  </g>
+  <!-- Coupling tabs: one on each side, pointing out at the neighbouring pad. -->
+  <g fill="#ffffff" opacity="0.75">
+  <path d="M27 5 H37 V2 H27 Z"/><path d="M27 59 H37 V62 H27 Z"/>
+  <path d="M5 27 V37 H2 V27 Z"/><path d="M59 27 V37 H62 V27 Z"/>
   </g>
 </svg>

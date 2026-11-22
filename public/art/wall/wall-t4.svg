@@ -1,4 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Tier-4 wall face (reserved): a plain button template the engine tints to the live grey. -->
+  <!-- Tier-4 wall face (reserved tier; white template, tinted by the engine). Tier 3 with a second
+     frame: a double-walled panel with a rivet on each edge as well as each corner. -->
   <rect x="2" y="2" width="28" height="28" fill="#ffffff"/>
+  <rect x="8" y="8" width="16" height="16" fill="#ececec"/>
+  <rect x="8.5" y="8.5" width="15" height="15" fill="none" stroke="#b4b4b4" stroke-width="1"/>
+  <rect x="11.5" y="11.5" width="9" height="9" fill="none" stroke="#d2d2d2" stroke-width="1"/>
+  <path d="M9 9 L12 12 M23 9 L20 12 M9 23 L12 20 M23 23 L20 20" fill="none" stroke="#d2d2d2" stroke-width="1"/>
+  <rect x="14" y="14" width="4" height="4" fill="#b4b4b4"/><rect x="14" y="14" width="3" height="3" fill="#ffffff"/>
+  <rect x="9" y="9" width="2" height="2" fill="#b4b4b4"/><rect x="9" y="9" width="1" height="1" fill="#ffffff"/><rect x="21" y="9" width="2" height="2" fill="#b4b4b4"/><rect x="21" y="9" width="1" height="1" fill="#ffffff"/><rect x="9" y="21" width="2" height="2" fill="#b4b4b4"/><rect x="9" y="21" width="1" height="1" fill="#ffffff"/><rect x="21" y="21" width="2" height="2" fill="#b4b4b4"/><rect x="21" y="21" width="1" height="1" fill="#ffffff"/><rect x="15" y="9" width="2" height="2" fill="#b4b4b4"/><rect x="15" y="9" width="1" height="1" fill="#ffffff"/><rect x="15" y="21" width="2" height="2" fill="#b4b4b4"/><rect x="15" y="21" width="1" height="1" fill="#ffffff"/><rect x="9" y="15" width="2" height="2" fill="#b4b4b4"/><rect x="9" y="15" width="1" height="1" fill="#ffffff"/><rect x="21" y="15" width="2" height="2" fill="#b4b4b4"/><rect x="21" y="15" width="1" height="1" fill="#ffffff"/>
 </svg>

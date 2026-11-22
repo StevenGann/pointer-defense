@@ -1,4 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Tier-5 wall face (reserved): a plain button template the engine tints to the live grey. -->
+  <!-- Tier-5 wall face (reserved tier; white template, tinted by the engine). The heaviest plate:
+     the double frame of tier 4 with chevron ribs pointing in from all four sides. -->
   <rect x="2" y="2" width="28" height="28" fill="#ffffff"/>
+  <rect x="8" y="8" width="16" height="16" fill="#ececec"/>
+  <rect x="8.5" y="8.5" width="15" height="15" fill="none" stroke="#b4b4b4" stroke-width="1"/>
+  <path d="M12 10.5 L16 13.5 L20 10.5 M12 21.5 L16 18.5 L20 21.5 M10.5 12 L13.5 16 L10.5 20 M21.5 12 L18.5 16 L21.5 20" fill="none" stroke="#b4b4b4" stroke-width="1.2" stroke-linejoin="miter"/>
+  <rect x="14.5" y="14.5" width="3" height="3" fill="#b4b4b4"/><rect x="14.5" y="14.5" width="2" height="2" fill="#ffffff"/>
+  <rect x="9" y="9" width="2" height="2" fill="#b4b4b4"/><rect x="9" y="9" width="1" height="1" fill="#ffffff"/><rect x="21" y="9" width="2" height="2" fill="#b4b4b4"/><rect x="21" y="9" width="1" height="1" fill="#ffffff"/><rect x="9" y="21" width="2" height="2" fill="#b4b4b4"/><rect x="9" y="21" width="1" height="1" fill="#ffffff"/><rect x="21" y="21" width="2" height="2" fill="#b4b4b4"/><rect x="21" y="21" width="1" height="1" fill="#ffffff"/>
 </svg>

@@ -1,34 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="24" viewBox="0 0 64 24">
-  <!--
-    Synergy link — the bar drawn between two adjacent, synergizing towers.
-
-    The artist owns this file. The engine draws it horizontally at the midpoint between the two
-    tower centres, rotated 90° for a north/south pair, tinted with the synergy's colour and scaled so
-    its width matches the gap between the two bases. Keep the art white/pale: the tint is the
-    synergy colour, and a coloured source would multiply into mud.
-
-    The middle 60% is all that is reliably visible — the outer ends tuck under the tower bases — so
-    keep the shape symmetrical and readable in the centre band. The gradient fades the ends so the
-    bar does not look cut off where a base covers it.
-  -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 24">
   <defs>
-    <linearGradient id="fade" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0"/>
-      <stop offset="18%" stop-color="#ffffff" stop-opacity="1"/>
-      <stop offset="82%" stop-color="#ffffff" stop-opacity="1"/>
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="core" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.35"/>
-      <stop offset="50%" stop-color="#ffffff" stop-opacity="1"/>
-      <stop offset="100%" stop-color="#ffffff" stop-opacity="0.35"/>
-    </linearGradient>
+  <linearGradient id="fade" x1="0" y1="0" x2="64" y2="0" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+    <stop offset="0.2" stop-color="#ffffff" stop-opacity="1"/>
+    <stop offset="0.8" stop-color="#ffffff" stop-opacity="1"/>
+    <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+  </linearGradient>
   </defs>
-
-  <!-- Soft outer bar, then a brighter core: two strokes read as a glow without a blur filter. -->
-  <rect x="0" y="4" width="64" height="16" rx="8" fill="url(#fade)" opacity="0.45"/>
-  <rect x="4" y="8.5" width="56" height="7" rx="3.5" fill="url(#core)"/>
-
-  <!-- Centre pip: marks the midpoint, and gives the eye something to land on at small sizes. -->
-  <circle cx="32" cy="12" r="4" fill="#ffffff" opacity="0.9"/>
+  <!-- Synergy link: the coupling drawn between two adjacent, synergising towers. Drawn horizontal,
+     rotated for a north/south pair, tinted with the synergy colour: keep it white. Only the middle
+     ~8 px shows between two bases, so everything that matters is in x = 22..42: a bolted coupling
+     block, the same from both sides because the two towers are peers. The bus bar fades out at
+     the ends, where a base covers it. -->
+  <rect x="0" y="8" width="64" height="8" fill="url(#fade)" opacity="0.55"/>
+  <rect x="0" y="10.5" width="64" height="3" fill="url(#fade)"/>
+  <!-- The coupling block: two flanges and a square collar. -->
+  <g fill="#ffffff" stroke="#000000" stroke-width="1" stroke-linejoin="miter">
+  <rect x="23.5" y="5.5" width="4" height="13"/>
+  <rect x="36.5" y="5.5" width="4" height="13"/>
+  <rect x="27.5" y="3.5" width="9" height="17"/>
+  </g>
+  <rect x="30" y="10" width="4" height="4" fill="#000000" opacity="0.7"/>
 </svg>

@@ -1,13 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Bulwark: an inner raised rim over the tier face. Light top-left, dark bottom-right. -->
-  <g fill="none" stroke-width="1">
-    <path d="M5 5.5 H27" stroke="#ffffff"/>
-    <path d="M5 6.5 H27" stroke="#dfdfdf"/>
-    <path d="M5 25.5 H27" stroke="#808080"/>
-    <path d="M5 26.5 H27" stroke="#404040"/>
-    <path d="M5.5 5 V27" stroke="#ffffff"/>
-    <path d="M6.5 5 V27" stroke="#dfdfdf"/>
-    <path d="M25.5 5 V27" stroke="#808080"/>
-    <path d="M26.5 5 V27" stroke="#404040"/>
-  </g>
+  <!-- Bulwark: a raised armour rim over the tier face, bolted at the corners. Light on the top and
+     left, dark on the bottom and right, like every bevel in the chrome. The middle stays clear so
+     the tinted face shows. -->
+  <path d="M5 5 H27 V7 H7 V27 H5 Z" fill="#ffffff"/>
+  <path d="M27 5 V27 H5 V25 H25 V5 Z" fill="#404040"/>
+  <path d="M6 6 H26 V7 H7 V26 H6 Z" fill="#dfdfdf"/>
+  <path d="M26 6 V26 H6 V25 H25 V6 Z" fill="#808080"/>
+  <!-- The rim's inner edge reverses: it drops back down to the face. -->
+  <path d="M7 7 H25 V8 H8 V25 H7 Z" fill="#808080"/>
+  <path d="M25 7 V25 H7 V24 H24 V7 Z" fill="#ffffff"/>
+  <!-- Corner bolts. -->
+  <g fill="#404040"><rect x="8" y="8" width="2" height="2"/><rect x="22" y="8" width="2" height="2"/><rect x="8" y="22" width="2" height="2"/><rect x="22" y="22" width="2" height="2"/></g>
+  <g fill="#ffffff"><rect x="8" y="8" width="1" height="1"/><rect x="22" y="8" width="1" height="1"/><rect x="8" y="22" width="1" height="1"/><rect x="22" y="22" width="1" height="1"/></g>
 </svg>

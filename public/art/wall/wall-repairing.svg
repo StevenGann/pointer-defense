@@ -1,5 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Repairing: a diagonal hatch over the whole face, drawn while the repair job runs. -->
-  <path fill="none" stroke="#808080" stroke-width="1"
-        d="M24 0 L32 8 M20 0 L32 12 M16 0 L32 16 M12 0 L32 20 M8 0 L32 24 M4 0 L32 28 M0 0 L32 32 M0 4 L28 32 M0 8 L24 32 M0 12 L20 32 M0 16 L16 32 M0 20 L12 32 M0 24 L8 32"/>
+  <defs>
+  <clipPath id="band"><path fill-rule="evenodd" d="M3 3 H29 V29 H3 Z M7 7 V25 H25 V7 Z"/></clipPath>
+  </defs>
+  <!-- Repairing: a hazard-tape border round the face while the repair job runs. A border reads as
+     "cordoned off", where a hatch across the whole face read as more damage. The spanner in the
+     middle says what the work is. -->
+  <g clip-path="url(#band)">
+  <rect x="3" y="3" width="26" height="26" fill="#ffcc00"/>
+  <path d="M-32 32 L0 0 L3 0 L-29 32 Z M-26 32 L6 0 L9 0 L-23 32 Z M-20 32 L12 0 L15 0 L-17 32 Z M-14 32 L18 0 L21 0 L-11 32 Z M-8 32 L24 0 L27 0 L-5 32 Z M-2 32 L30 0 L33 0 L1 32 Z M4 32 L36 0 L39 0 L7 32 Z M10 32 L42 0 L45 0 L13 32 Z M16 32 L48 0 L51 0 L19 32 Z M22 32 L54 0 L57 0 L25 32 Z M28 32 L60 0 L63 0 L31 32 Z" fill="#000000"/>
+  </g>
+  <path fill-rule="evenodd" d="M3 3 H29 V29 H3 Z M7 7 V25 H25 V7 Z" fill="none" stroke="#000000" stroke-width="0.8"/>
+  <!-- Open-ended spanner, head at the top-left. -->
+  <g transform="rotate(-45 16 16)">
+  <path d="M14.6 11.6 V8.4 H13 V12.4 Q13 14.2 14.8 14.6 V22.6 Q14.8 23.8 16 23.8 Q17.2 23.8 17.2 22.6 V14.6 Q19 14.2 19 12.4 V8.4 H17.4 V11.6 Z" fill="#e8e8e8" stroke="#000000" stroke-width="1" stroke-linejoin="round"/>
+  <line x1="15.5" y1="15.4" x2="15.5" y2="22" stroke="#ffffff" stroke-width="0.6"/>
+  </g>
 </svg>

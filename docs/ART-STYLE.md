@@ -53,11 +53,12 @@ volume. Small accents in other colours are fine when they carry meaning (an eye,
 |---|---|---|
 | `#008080` | Gun (teal) | Square |
 | `#800000` | Cannon (maroon) | Circle |
+| `#5a7d9a` | AA (steel blue) | Cruciform: four outrigger legs with square jack pads |
 | `#ff3300` | Laser (orange-red) | Long bar |
 | `#808000` | Taser (olive, with yellow `#ffff00` for electricity) | Diamond |
 | `#3399cc` | Frost (ice blue) | Hexagon |
 | `#ffcc00` | Beacon (gold) | Ring with a lamp |
-| `#00a000` | Repair (green) | Ring with a white cross |
+| `#00a000` | Repair (green) | Cog ring with a white cross |
 | `#9a9a9a` | Cursor (grey) | Square with the arrow cursor |
 | white | Wall | See section 5 |
 
@@ -144,7 +145,7 @@ Do not bake any of these into a file.
 | Slow arc | A pale blue arc | Frost is on this enemy |
 | Route | A light grey dashed line, 3 px | The live path |
 | Offline mark | A grey wash and a red cross | Tower at 0 HP |
-| Repair hatch | Diagonal lines on a wall | Repair in progress |
+| Repair hatch | A hazard-tape border on a wall (`wall/wall-repairing.svg`) | Repair in progress |
 | Fully-upgraded pip | A 4×4 green square in the top-right corner (bottom-right when a health bar shows) | Nothing left to buy |
 | Flyer shadow | A dark ellipse under the Flyer | Height |
 | Muzzle flash, tracers, sparks | Between tower and target | Firing |
@@ -185,10 +186,15 @@ the pip lands there.
   clockwise.
 - **Put a hub on the pivot.** Each rotating turret has a round head at (16,16). It hides the join
   when the barrel turns.
-- **The barrel is the character.** Gun: a slim barrel with a dark muzzle. Cannon: a short thick tube
-  with a muzzle ring. Laser: a slim emitter with a crystal tip.
+- **The barrel is the character.** Gun: a slim jacketed barrel on a boxy receiver. Cannon: a short
+  thick tube with a muzzle ring and recoil cylinders. Laser: two rails with a crystal tip. AA: twin
+  barrels set wide on a yoke, with ammunition drums behind.
+- **Hardware, not toys.** Barrels, hubs and mechanisms are gunmetal (`#aeb8bf` / `#5d686f` /
+  `#1f262b`); the identity colour is the painted armour around them. Prefer a seam, a bolt or a vent
+  to a glossy highlight, and keep speculars small. Enemy eyes are lenses: a dark socket, an ice-blue
+  iris, a black pupil, at most one small glint.
 - **Taser and Frost turrets never turn.** Draw them with no front: the Taser is a coil seen from
-  above, the Frost is a six-arm snowflake.
+  above, the Frost is a six-spike cryo emitter.
 - **Beacon, Cursor, Repair and Wall have no turret file.**
 - **Do not draw the tile** under a tower. The board draws it.
 

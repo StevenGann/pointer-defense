@@ -1,4 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Tier-2 wall face: a plain button template the engine tints to the live grey. -->
+  <!-- Tier-2 wall face (white template, tinted by the engine). Sturdier: an inset panel line and a
+     rivet in each corner. -->
   <rect x="2" y="2" width="28" height="28" fill="#ffffff"/>
+  <rect x="8.5" y="8.5" width="15" height="15" fill="none" stroke="#d2d2d2" stroke-width="1"/>
+  <path d="M9.5 22.5 V9.5 H22.5" fill="none" stroke="#ececec" stroke-width="1"/>
+  <rect x="10.5" y="10.5" width="2" height="2" fill="#b4b4b4"/><rect x="10.5" y="10.5" width="1" height="1" fill="#ffffff"/><rect x="19.5" y="10.5" width="2" height="2" fill="#b4b4b4"/><rect x="19.5" y="10.5" width="1" height="1" fill="#ffffff"/><rect x="10.5" y="19.5" width="2" height="2" fill="#b4b4b4"/><rect x="10.5" y="19.5" width="1" height="1" fill="#ffffff"/><rect x="19.5" y="19.5" width="2" height="2" fill="#b4b4b4"/><rect x="19.5" y="19.5" width="1" height="1" fill="#ffffff"/>
 </svg>

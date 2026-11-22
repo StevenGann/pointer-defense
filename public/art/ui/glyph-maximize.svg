@@ -1,5 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- The maximize control glyph: an outlined square with a filled top bar. -->
-  <rect x="5" y="6" width="22" height="20" fill="none" stroke="#000000" stroke-width="2"/>
-  <rect x="5" y="6" width="22" height="5" fill="#000000"/>
+  <!-- Window maximize glyph: a 1 px outlined box with a 2 px title bar (at 16 px). -->
+  <path fill-rule="evenodd" d="M5 5 H27 V27 H5 Z M7 11 V25 H25 V11 Z" fill="#000000"/>
 </svg>

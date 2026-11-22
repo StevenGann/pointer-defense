@@ -1,31 +1,38 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <defs>
-    <linearGradient id="ring" x1="4" y1="4" x2="28" y2="28" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#fff2a0"/>
-      <stop offset="0.5" stop-color="#ffcc00"/>
-      <stop offset="1" stop-color="#a87800"/>
-    </linearGradient>
-    <radialGradient id="lamp" cx="14.6" cy="14.6" r="5.5" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="0.5" stop-color="#ffe870"/>
-      <stop offset="1" stop-color="#d89800"/>
-    </radialGradient>
-    <radialGradient id="glow" cx="16" cy="16" r="10" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#fff2a0" stop-opacity="0.7"/>
-      <stop offset="1" stop-color="#ffcc00" stop-opacity="0"/>
-    </radialGradient>
+  <linearGradient id="ring" x1="4" y1="4" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#fff0a0"/>
+    <stop offset="0.5" stop-color="#ffcc00"/>
+    <stop offset="1" stop-color="#9a6c00"/>
+  </linearGradient>
+  <radialGradient id="lamp" cx="14.4" cy="14.4" r="6" gradientUnits="userSpaceOnUse">
+    <stop offset="0" stop-color="#ffffff"/>
+    <stop offset="0.45" stop-color="#ffe460"/>
+    <stop offset="1" stop-color="#c88800"/>
+  </radialGradient>
+  <radialGradient id="glow" cx="16" cy="16" r="10.5" gradientUnits="userSpaceOnUse">
+    <stop offset="0.3" stop-color="#fff0a0" stop-opacity="0.55"/>
+    <stop offset="1" stop-color="#ffcc00" stop-opacity="0"/>
+  </radialGradient>
   </defs>
-  <!-- A ring with a lamp in the middle. The tile shows through the gap. -->
-  <circle cx="16" cy="16" r="10" fill="url(#glow)"/>
-  <g stroke="#6a4c00" stroke-width="1.2">
-    <line x1="16" y1="16" x2="8.2" y2="8.2"/><line x1="16" y1="16" x2="23.8" y2="8.2"/>
-    <line x1="16" y1="16" x2="8.2" y2="23.8"/><line x1="16" y1="16" x2="23.8" y2="23.8"/>
-  </g>
+  <!-- Beacon: a segmented brass ring carried on four steel struts, with a Fresnel lamp in the
+     middle. The tile shows through the gap. -->
+  <circle cx="16" cy="16" r="10.5" fill="url(#glow)"/>
+  <!-- Struts. -->
+  <g stroke="#000000" stroke-width="2.4"><path d="M8 8 L24 24 M24 8 L8 24"/></g>
+  <g stroke="#6c767d" stroke-width="1.1"><path d="M8 8 L24 24 M24 8 L8 24"/></g>
+  <path d="M8.2 7.6 L13 12.4 M23.4 8 L19.4 12" stroke="#c8d0d6" stroke-width="0.5"/>
+  <!-- The ring: black edge, brass face, eight segment joints, and a pin on each axis. -->
   <circle cx="16" cy="16" r="12.5" fill="none" stroke="#000000" stroke-width="4.6"/>
   <circle cx="16" cy="16" r="12.5" fill="none" stroke="url(#ring)" stroke-width="3"/>
-  <g fill="#6a4c00">
-    <circle cx="16" cy="3.5" r="0.8"/><circle cx="28.5" cy="16" r="0.8"/>
-    <circle cx="16" cy="28.5" r="0.8"/><circle cx="3.5" cy="16" r="0.8"/>
-  </g>
-  <circle cx="16" cy="16" r="4.6" fill="url(#lamp)" stroke="#000000" stroke-width="0.9"/>
+  <path d="M5.4 12.4 A11.3 11.3 0 0 1 12.4 5.4" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-linecap="round" opacity="0.8"/>
+  <g stroke="#5a4000" stroke-width="0.6"><line x1="20.29" y1="5.65" x2="21.28" y2="3.25"/><line x1="26.35" y1="11.71" x2="28.75" y2="10.72"/><line x1="26.35" y1="20.29" x2="28.75" y2="21.28"/><line x1="20.29" y1="26.35" x2="21.28" y2="28.75"/><line x1="11.71" y1="26.35" x2="10.72" y2="28.75"/><line x1="5.65" y1="20.29" x2="3.25" y2="21.28"/><line x1="5.65" y1="11.71" x2="3.25" y2="10.72"/><line x1="11.71" y1="5.65" x2="10.72" y2="3.25"/></g>
+  <circle cx="16" cy="3.5" r="0.8" fill="#3c2a00"/><circle cx="15.76" cy="3.26" r="0.32" fill="#fff0a0" opacity="0.7"/><circle cx="28.5" cy="16" r="0.8" fill="#3c2a00"/><circle cx="28.26" cy="15.76" r="0.32" fill="#fff0a0" opacity="0.7"/>
+  <circle cx="16" cy="28.5" r="0.8" fill="#3c2a00"/><circle cx="15.76" cy="28.26" r="0.32" fill="#fff0a0" opacity="0.7"/><circle cx="3.5" cy="16" r="0.8" fill="#3c2a00"/><circle cx="3.26" cy="15.76" r="0.32" fill="#fff0a0" opacity="0.7"/>
+  <!-- The lamp: a dark collar, a glass dome, and the rings of the lens. -->
+  <circle cx="16" cy="16" r="5.4" fill="#3a3220" stroke="#000000" stroke-width="0.9"/>
+  <circle cx="16" cy="16" r="4.2" fill="url(#lamp)" stroke="#000000" stroke-width="0.6"/>
+  <circle cx="16" cy="16" r="2.9" fill="none" stroke="#b47800" stroke-width="0.5" opacity="0.8"/>
+  <circle cx="16" cy="16" r="1.6" fill="none" stroke="#b47800" stroke-width="0.5" opacity="0.8"/>
+  <circle cx="14.6" cy="14.5" r="0.8" fill="#ffffff"/>
 </svg>

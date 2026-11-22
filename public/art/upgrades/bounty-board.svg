@@ -1,20 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44">
-  <!-- Placeholder icon for the bounty-board global upgrade (docs/GLOBAL-UPGRADES.md §7.2): the artist
-       replaces this file. Never drawn at more than 18 px in the list. -->
-  <!-- Raised Win95 tile in the grey palette, the same frame every upgrade icon uses. -->
-  <rect x="0.5" y="0.5" width="43" height="43" fill="#c0c0c0"/>
-  <rect x="0" y="0" width="44" height="1" fill="#ffffff"/>
-  <rect x="0" y="0" width="1" height="44" fill="#ffffff"/>
-  <rect x="0" y="1" width="44" height="1" fill="#dfdfdf"/>
-  <rect x="1" y="0" width="1" height="44" fill="#dfdfdf"/>
-  <rect x="0" y="43" width="44" height="1" fill="#000000"/>
-  <rect x="43" y="0" width="1" height="44" fill="#000000"/>
-  <rect x="0" y="42" width="44" height="1" fill="#808080"/>
-  <rect x="42" y="0" width="1" height="44" fill="#808080"/>
-  <!-- A pinned notice with a dollar amount, two pins at the corners. -->
-  <rect x="8.5" y="9.5" width="27" height="26" fill="#ffffff" stroke="#000000" stroke-width="1"/>
-  <rect x="8.5" y="9.5" width="27" height="6" fill="#000080" stroke="#000000" stroke-width="1"/>
-  <circle cx="12" cy="12.5" r="1.5" fill="#c0c0c0" stroke="#000000" stroke-width="0.8"/>
-  <circle cx="32" cy="12.5" r="1.5" fill="#c0c0c0" stroke="#000000" stroke-width="0.8"/>
-  <path d="M22 19v12M26 21h-6a2.5 2.5 0 0 0 0 5h4a2.5 2.5 0 0 1 0 5h-6" fill="none" stroke="#000000" stroke-width="1.4"/>
+  <!-- Bounty Board: a cork noticeboard in a wooden frame. The big notice is a wanted poster for a Grunt, with a coin for the reward. -->
+  <!-- The frame: a raised Windows 95 button, the same one every achievement icon uses. -->
+  <defs><linearGradient id="ff" x1="0" y1="0" x2="44" y2="44" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#cecece"/><stop offset="1" stop-color="#b4b4b4"/></linearGradient><linearGradient id="wood" x1="5" y1="6" x2="39" y2="38" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#b07840"/><stop offset="0.5" stop-color="#7a4c20"/><stop offset="1" stop-color="#402408"/></linearGradient><linearGradient id="au" x1="25" y1="22" x2="35" y2="33" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff0a0"/><stop offset="0.5" stop-color="#e0a800"/><stop offset="1" stop-color="#7a5400"/></linearGradient></defs>
+  <rect x="0" y="0" width="44" height="44" fill="url(#ff)"/>
+  <path d="M0 0 H44 V1 H1 V44 H0 Z" fill="#ffffff"/>
+  <path d="M1 1 H43 V2 H2 V43 H1 Z" fill="#dfdfdf"/>
+  <path d="M44 0 V44 H0 V43 H43 V0 Z" fill="#000000"/>
+  <path d="M43 1 V43 H1 V42 H42 V1 Z" fill="#808080"/>
+  <rect x="5" y="6" width="34" height="32" fill="url(#wood)" stroke="#000000" stroke-width="1.2"/>
+  <rect x="8" y="9" width="28" height="26" fill="#c89858" stroke="#000000" stroke-width="0.8"/>
+  <g fill="#a87838"><rect x="10" y="12" width="1.4" height="1.4"/><rect x="31" y="30" width="1.4" height="1.4"/><rect x="29" y="11" width="1.4" height="1.4"/><rect x="12" y="31" width="1.4" height="1.4"/><rect x="24" y="31.6" width="1.4" height="1.4"/></g>
+  <!-- The wanted poster. -->
+  <g transform="rotate(-4 17 22)">
+  <rect x="10" y="12" width="14" height="19" fill="#f8f4e4" stroke="#000000" stroke-width="0.9"/>
+  <circle cx="17" cy="19.4" r="4.4" fill="#35506a" stroke="#000000" stroke-width="0.9"/>
+  <circle cx="17" cy="19.4" r="1.9" fill="#bfe6ff" stroke="#0e1a24" stroke-width="0.7"/>
+  <circle cx="17" cy="19.4" r="0.7" fill="#000000"/>
+  <path d="M12 26.4 H22 M12 28.6 H19" stroke="#606060" stroke-width="0.9"/>
+  </g>
+  <circle cx="17" cy="12.4" r="1.5" fill="#d00000" stroke="#000000" stroke-width="0.6"/><circle cx="16.5" cy="11.9" r="0.5" fill="#ffffff"/>
+  <!-- A smaller note and the reward. -->
+  <rect x="26.4" y="11.6" width="7.6" height="8" fill="#fff8a0" stroke="#000000" stroke-width="0.8"/>
+  <path d="M28 14.6 H32.4 M28 16.8 H31" stroke="#606060" stroke-width="0.8"/>
+  <circle cx="30.2" cy="12" r="1.5" fill="#000080" stroke="#000000" stroke-width="0.6"/><circle cx="29.7" cy="11.5" r="0.5" fill="#ffffff"/>
+  <circle cx="30" cy="27.6" r="5" fill="url(#au)" stroke="#000000" stroke-width="1.2"/><circle cx="30" cy="27.6" r="2.8" fill="none" stroke="#7a5400" stroke-width="0.8"/><path d="M27.6 26.2 A2.8 2.8 0 0 1 28.6 25.2" fill="none" stroke="#ffffff" stroke-width="0.8" stroke-linecap="round" opacity="0.8"/>
 </svg>

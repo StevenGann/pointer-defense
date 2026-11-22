@@ -3,7 +3,7 @@
     {
       "name": "achievements/_placeholder",
       "frames": 1,
-      "rev": "2a4711d9aa"
+      "rev": "34bec4891d"
     },
     {
       "name": "achievements/aa-flak",
@@ -701,7 +701,7 @@
         "randomStart": true,
         "when": "moving"
       },
-      "rev": "eb8718980e"
+      "rev": "2e6c821ab7"
     },
     {
       "name": "enemies/armoured-boss",
@@ -727,7 +727,7 @@
         "randomStart": true,
         "when": "moving"
       },
-      "rev": "9f7542081d"
+      "rev": "a5ee7e7a48"
     },
     {
       "name": "enemies/breacher-boss",
@@ -753,7 +753,7 @@
         "randomStart": true,
         "when": "moving"
       },
-      "rev": "581ba5a755"
+      "rev": "f441347b31"
     },
     {
       "name": "enemies/flyer-boss",
@@ -779,7 +779,7 @@
         "randomStart": true,
         "when": "moving"
       },
-      "rev": "a61ebe3e5d"
+      "rev": "4baf71035b"
     },
     {
       "name": "enemies/grunt-boss",
@@ -805,7 +805,7 @@
         "randomStart": true,
         "when": "moving"
       },
-      "rev": "8e90616f78"
+      "rev": "e93d821f35"
     },
     {
       "name": "enemies/runner-boss",
@@ -831,7 +831,7 @@
         "randomStart": true,
         "when": "moving"
       },
-      "rev": "ca79d4fd12"
+      "rev": "9b40256a98"
     },
     {
       "name": "enemies/saboteur-boss",
@@ -857,7 +857,7 @@
         "randomStart": true,
         "when": "moving"
       },
-      "rev": "dc2c2c6001"
+      "rev": "c44f7f9ac2"
     },
     {
       "name": "enemies/shielded-boss",
@@ -883,7 +883,7 @@
         "randomStart": true,
         "when": "always"
       },
-      "rev": "92610bca96"
+      "rev": "7f843d4a4a"
     },
     {
       "name": "fx/aura-emp",
@@ -896,7 +896,7 @@
         "randomStart": true,
         "when": "always"
       },
-      "rev": "99f98ed161"
+      "rev": "811fb0ac53"
     },
     {
       "name": "fx/aura-heal",
@@ -909,7 +909,7 @@
         "randomStart": true,
         "when": "always"
       },
-      "rev": "f93a54ec0c"
+      "rev": "64dea3798f"
     },
     {
       "name": "fx/aura-override",
@@ -922,7 +922,7 @@
         "randomStart": true,
         "when": "always"
       },
-      "rev": "7ece53971a"
+      "rev": "673faab2ff"
     },
     {
       "name": "fx/death-ring",
@@ -1264,232 +1264,232 @@
     {
       "name": "towers/aa-base",
       "frames": 1,
-      "rev": "8872cb9881"
+      "rev": "3d0b503c90"
     },
     {
       "name": "towers/aa-turret",
       "frames": 1,
-      "rev": "6ff308ade9"
+      "rev": "b0468cc645"
     },
     {
       "name": "towers/beacon-base",
       "frames": 1,
-      "rev": "bbc658ec51"
+      "rev": "f4e4f518dd"
     },
     {
       "name": "towers/cannon-base",
       "frames": 1,
-      "rev": "0242743761"
+      "rev": "49ed87954a"
     },
     {
       "name": "towers/cannon-turret",
       "frames": 1,
-      "rev": "e94c53257e"
+      "rev": "4f001a4c55"
     },
     {
       "name": "towers/cursor-base",
       "frames": 1,
-      "rev": "17ff7d1177"
+      "rev": "655c57d8a5"
     },
     {
       "name": "towers/frost-base",
       "frames": 1,
-      "rev": "4492d5e79a"
+      "rev": "8cb5bf975c"
     },
     {
       "name": "towers/frost-turret",
       "frames": 1,
-      "rev": "f1484f9282"
+      "rev": "7c03ba63e6"
     },
     {
       "name": "towers/gun-base",
       "frames": 1,
-      "rev": "31740bc76e"
+      "rev": "4554485abc"
     },
     {
       "name": "towers/gun-turret",
       "frames": 1,
-      "rev": "0626c0e697"
+      "rev": "4d9ccbe619"
     },
     {
       "name": "towers/laser-base",
       "frames": 1,
-      "rev": "aa4b33bbf1"
+      "rev": "14445e0ffc"
     },
     {
       "name": "towers/laser-turret",
       "frames": 1,
-      "rev": "4256dafd83"
+      "rev": "d929027a5f"
     },
     {
       "name": "towers/repair-base",
       "frames": 1,
-      "rev": "6a12b76aaf"
+      "rev": "cca192ea3a"
     },
     {
       "name": "towers/taser-base",
       "frames": 1,
-      "rev": "aa3957d653"
+      "rev": "d51a1662e6"
     },
     {
       "name": "towers/taser-turret",
       "frames": 1,
-      "rev": "10730cc912"
+      "rev": "685c3af35c"
     },
     {
       "name": "ui/arrow-left",
       "frames": 1,
-      "rev": "381a358f90"
+      "rev": "f6e0255691"
     },
     {
       "name": "ui/arrow-right",
       "frames": 1,
-      "rev": "2bc9d3f4ff"
+      "rev": "c698bee58b"
     },
     {
       "name": "ui/check",
       "frames": 1,
-      "rev": "504dca6c57"
+      "rev": "f32ac282f2"
     },
     {
       "name": "ui/cursor-arrow",
       "frames": 1,
-      "rev": "a96d2bdd81"
+      "rev": "334ad98eb6"
     },
     {
       "name": "ui/cursor-help",
       "frames": 1,
-      "rev": "c9eb4029a0"
+      "rev": "5014145b42"
     },
     {
       "name": "ui/glyph-close",
       "frames": 1,
-      "rev": "af19bb5a37"
+      "rev": "0ca7a00dff"
     },
     {
       "name": "ui/glyph-help",
       "frames": 1,
-      "rev": "ad5725cccf"
+      "rev": "711b512497"
     },
     {
       "name": "ui/glyph-maximize",
       "frames": 1,
-      "rev": "a3617af6e5"
+      "rev": "e397160520"
     },
     {
       "name": "ui/glyph-minimize",
       "frames": 1,
-      "rev": "e15be0cb70"
+      "rev": "4f7b4d81aa"
     },
     {
       "name": "ui/offline-wrench",
       "frames": 1,
-      "rev": "7f9557c244"
+      "rev": "11af2e07cb"
     },
     {
       "name": "ui/shutter-closed",
       "frames": 1,
-      "rev": "4b7f6fb0d9"
+      "rev": "d20e1c8bcc"
     },
     {
       "name": "ui/shutter-open",
       "frames": 1,
-      "rev": "a92530c987"
+      "rev": "9b06623828"
     },
     {
       "name": "ui/synergy-halo",
       "frames": 1,
-      "rev": "64357f2416"
+      "rev": "e9b3e4928b"
     },
     {
       "name": "ui/synergy-link",
       "frames": 1,
-      "rev": "918cb1ef7e"
+      "rev": "3b5ed3b6d4"
     },
     {
       "name": "ui/synergy-link-spotter",
       "frames": 1,
-      "rev": "7d83402390"
+      "rev": "2fbebfe144"
     },
     {
       "name": "upgrades/_upgrade-placeholder",
       "frames": 1,
-      "rev": "950da9994b"
+      "rev": "edbfc9d232"
     },
     {
       "name": "upgrades/autoloader",
       "frames": 1,
-      "rev": "4a43795bdf"
+      "rev": "5ccc6b53d5"
     },
     {
       "name": "upgrades/ballistic-telemetry",
       "frames": 1,
-      "rev": "dc2d7faf8c"
+      "rev": "6599958cbb"
     },
     {
       "name": "upgrades/bounty-board",
       "frames": 1,
-      "rev": "1e1bc9b793"
+      "rev": "e5ecc01d7b"
     },
     {
       "name": "upgrades/bulk-requisition",
       "frames": 1,
-      "rev": "0fe0be0e4f"
+      "rev": "9d69cc958a"
     },
     {
       "name": "upgrades/chain-reaction",
       "frames": 1,
-      "rev": "b24510dc44"
+      "rev": "4536854b67"
     },
     {
       "name": "upgrades/compound-interest",
       "frames": 1,
-      "rev": "915f5ed297"
+      "rev": "836b053708"
     },
     {
       "name": "upgrades/coolant",
       "frames": 1,
-      "rev": "cac31611ee"
+      "rev": "cb905e143a"
     },
     {
       "name": "upgrades/double-buffer",
       "frames": 1,
-      "rev": "f8cde37ab4"
+      "rev": "a6c203c6ac"
     },
     {
       "name": "upgrades/emergency-patch",
       "frames": 1,
-      "rev": "da1e3495d9"
+      "rev": "9cf67cf405"
     },
     {
       "name": "upgrades/salvage-contract",
       "frames": 1,
-      "rev": "857c516aab"
+      "rev": "0e042c82c0"
     },
     {
       "name": "upgrades/shutter-licence",
       "frames": 1,
-      "rev": "32b9791bf0"
+      "rev": "fc0a5e78c1"
     },
     {
       "name": "upgrades/structural-warranty",
       "frames": 1,
-      "rev": "cbae23c20f"
+      "rev": "e68926838a"
     },
     {
       "name": "upgrades/system-tray",
       "frames": 1,
-      "rev": "fc0157388e"
+      "rev": "54c6e48c0e"
     },
     {
       "name": "upgrades/wide-reticle",
       "frames": 1,
-      "rev": "6936f58de8"
+      "rev": "0047b6e62b"
     },
     {
       "name": "wall/wall-bulwark",
       "frames": 1,
-      "rev": "2cff09ff6d"
+      "rev": "cb23ad20a3"
     },
     {
       "name": "wall/wall-damaged-1",
@@ -1509,37 +1509,37 @@
     {
       "name": "wall/wall-mesh",
       "frames": 1,
-      "rev": "3a5107f844"
+      "rev": "45326685f3"
     },
     {
       "name": "wall/wall-repairing",
       "frames": 1,
-      "rev": "a45ab2136b"
+      "rev": "df9f0213fa"
     },
     {
       "name": "wall/wall-t1",
       "frames": 1,
-      "rev": "f3826fb11e"
+      "rev": "07237aa1d7"
     },
     {
       "name": "wall/wall-t2",
       "frames": 1,
-      "rev": "738ad1ae2a"
+      "rev": "500a64b37b"
     },
     {
       "name": "wall/wall-t3",
       "frames": 1,
-      "rev": "d861ce0be6"
+      "rev": "4b459e4bfa"
     },
     {
       "name": "wall/wall-t4",
       "frames": 1,
-      "rev": "890e3c9ae6"
+      "rev": "a398566b92"
     },
     {
       "name": "wall/wall-t5",
       "frames": 1,
-      "rev": "ea24275b21"
+      "rev": "56e96814bc"
     }
   ]
 }
