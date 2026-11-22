@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Muzzle flash: frame 5 of 6, the last. Frame 4 again, half faded. -->
+  <g opacity="0.5">
+  <g transform="rotate(90 16 16)">
+        <circle cx="16" cy="10.2" r="4.4" fill="none" stroke="#7a1800" stroke-width="2" opacity="0.5"/>
+    <circle cx="16" cy="10.2" r="4.4" fill="none" stroke="#ff6a40" stroke-width="1"/>
+    <polygon points="16,7.4 16.7,9.5 18.8,10.2 16.7,10.9 16,13 15.3,10.9 13.2,10.2 15.3,9.5" fill="#ffb499" stroke="#7a1800" stroke-width="0.8" stroke-linejoin="round"/>
+  </g>
+  </g>
+</svg>

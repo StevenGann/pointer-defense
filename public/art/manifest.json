@@ -28,7 +28,7 @@
     {
       "name": "achievements/beacon-buff",
       "frames": 1,
-      "rev": "23c5ad0cc9"
+      "rev": "f2769eeb2c"
     },
     {
       "name": "achievements/beacon-field",
@@ -238,7 +238,7 @@
     {
       "name": "achievements/maxed-branch",
       "frames": 1,
-      "rev": "1efe6ab4d9"
+      "rev": "b8c59302f7"
     },
     {
       "name": "achievements/maze-100",
@@ -263,7 +263,7 @@
     {
       "name": "achievements/no-sell",
       "frames": 1,
-      "rev": "305bcdece9"
+      "rev": "cd3aecd2f6"
     },
     {
       "name": "achievements/no-spend-wave",
@@ -273,12 +273,12 @@
     {
       "name": "achievements/no-upgrade-wave",
       "frames": 1,
-      "rev": "9aca0572de"
+      "rev": "189857b0e0"
     },
     {
       "name": "achievements/one-kind",
       "frames": 1,
-      "rev": "869c4d96a1"
+      "rev": "e3637a8a41"
     },
     {
       "name": "achievements/overclock-max",
@@ -543,7 +543,7 @@
     {
       "name": "achievements/two-kinds",
       "frames": 1,
-      "rev": "02a8e0a7ee"
+      "rev": "e5f2d287f8"
     },
     {
       "name": "achievements/two-reboots",
@@ -553,7 +553,7 @@
     {
       "name": "achievements/upgrade-first",
       "frames": 1,
-      "rev": "08bb460ffc"
+      "rev": "76eef72e26"
     },
     {
       "name": "achievements/wall-only-wave",
@@ -692,68 +692,68 @@
     },
     {
       "name": "enemies/armoured",
-      "frames": 6,
+      "frames": 12,
       "anim": {
-        "fps": 8,
+        "fps": 16,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
       },
-      "rev": "2e6c821ab7"
+      "rev": "841bf9fd8c"
     },
     {
       "name": "enemies/armoured-boss",
-      "frames": 24,
+      "frames": 48,
       "anim": {
-        "fps": 12,
+        "fps": 24,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
       },
-      "rev": "42a46f4922"
+      "rev": "629a955666"
     },
     {
       "name": "enemies/breacher",
-      "frames": 6,
+      "frames": 12,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
       },
-      "rev": "a5ee7e7a48"
+      "rev": "66e19c7713"
     },
     {
       "name": "enemies/breacher-boss",
-      "frames": 24,
+      "frames": 48,
       "anim": {
-        "fps": 12,
+        "fps": 24,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": true,
         "when": "always"
       },
-      "rev": "7e147314ff"
+      "rev": "3f159df424"
     },
     {
       "name": "enemies/flyer",
-      "frames": 6,
+      "frames": 11,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "pingpong",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
       },
-      "rev": "f441347b31"
+      "rev": "6f4ec8fbad"
     },
     {
       "name": "enemies/flyer-boss",
@@ -770,33 +770,7 @@
     },
     {
       "name": "enemies/grunt",
-      "frames": 8,
-      "anim": {
-        "fps": 12,
-        "loop": "loop",
-        "hold": 0,
-        "holdAfter": 0,
-        "randomStart": true,
-        "when": "moving"
-      },
-      "rev": "4baf71035b"
-    },
-    {
-      "name": "enemies/grunt-boss",
-      "frames": 32,
-      "anim": {
-        "fps": 16,
-        "loop": "loop",
-        "hold": 0,
-        "holdAfter": 0,
-        "randomStart": true,
-        "when": "moving"
-      },
-      "rev": "2cb14c493e"
-    },
-    {
-      "name": "enemies/runner",
-      "frames": 8,
+      "frames": 16,
       "anim": {
         "fps": 24,
         "loop": "loop",
@@ -805,7 +779,33 @@
         "randomStart": true,
         "when": "moving"
       },
-      "rev": "e93d821f35"
+      "rev": "3bd6ff37a5"
+    },
+    {
+      "name": "enemies/grunt-boss",
+      "frames": 64,
+      "anim": {
+        "fps": 32,
+        "loop": "loop",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "moving"
+      },
+      "rev": "56a2d01798"
+    },
+    {
+      "name": "enemies/runner",
+      "frames": 16,
+      "anim": {
+        "fps": 48,
+        "loop": "loop",
+        "hold": 0,
+        "holdAfter": 0,
+        "randomStart": true,
+        "when": "moving"
+      },
+      "rev": "2c52d758f1"
     },
     {
       "name": "enemies/runner-boss",
@@ -848,85 +848,85 @@
     },
     {
       "name": "enemies/shielded",
-      "frames": 8,
+      "frames": 16,
       "anim": {
-        "fps": 10,
+        "fps": 20,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
       },
-      "rev": "c44f7f9ac2"
+      "rev": "a5c9745d22"
     },
     {
       "name": "enemies/shielded-boss",
-      "frames": 32,
+      "frames": 64,
       "anim": {
-        "fps": 15,
+        "fps": 30,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": true,
         "when": "moving"
       },
-      "rev": "08c88b587a"
+      "rev": "ba08e934cf"
     },
     {
       "name": "fx/aura-beacon",
-      "frames": 4,
+      "frames": 12,
       "anim": {
-        "fps": 6,
+        "fps": 12,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": true,
         "when": "always"
       },
-      "rev": "7f843d4a4a"
+      "rev": "428abb61d3"
     },
     {
       "name": "fx/aura-emp",
-      "frames": 4,
+      "frames": 8,
       "anim": {
-        "fps": 6,
+        "fps": 12,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": true,
         "when": "always"
       },
-      "rev": "811fb0ac53"
+      "rev": "dec460035c"
     },
     {
       "name": "fx/aura-heal",
-      "frames": 4,
+      "frames": 18,
       "anim": {
-        "fps": 6,
+        "fps": 18,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": true,
         "when": "always"
       },
-      "rev": "64dea3798f"
+      "rev": "a0505f43e7"
     },
     {
       "name": "fx/aura-override",
-      "frames": 4,
+      "frames": 16,
       "anim": {
-        "fps": 6,
+        "fps": 16,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": true,
         "when": "always"
       },
-      "rev": "673faab2ff"
+      "rev": "387ba53857"
     },
     {
       "name": "fx/death-ring",
-      "frames": 3,
+      "frames": 6,
       "anim": {
         "fps": 8,
         "loop": "loop",
@@ -935,85 +935,85 @@
         "randomStart": true,
         "when": "always"
       },
-      "rev": "d53710b1dc"
+      "rev": "cc72bc782d"
     },
     {
       "name": "fx/muzzle-aa",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "a348de8767"
+      "rev": "988f17df8c"
     },
     {
       "name": "fx/muzzle-aa-flak",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "5e129c4337"
+      "rev": "5e22babda9"
     },
     {
       "name": "fx/muzzle-aa-missile",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "3b3237b0e6"
+      "rev": "83d9a03d07"
     },
     {
       "name": "fx/muzzle-cannon",
-      "frames": 4,
+      "frames": 8,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "084d24b6e0"
+      "rev": "f2e5b34542"
     },
     {
       "name": "fx/muzzle-cannon-minesweeper",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "b85d882677"
+      "rev": "a3a23ec2d9"
     },
     {
       "name": "fx/muzzle-cannon-mortar",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "dc89702fef"
+      "rev": "3bc86f2b6d"
     },
     {
       "name": "fx/muzzle-cursor",
@@ -1037,163 +1037,163 @@
     },
     {
       "name": "fx/muzzle-frost",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "555bf0c371"
+      "rev": "b495ab219b"
     },
     {
       "name": "fx/muzzle-frost-deep-freeze",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "de5d5ee611"
+      "rev": "cac967002a"
     },
     {
       "name": "fx/muzzle-frost-shard",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "00764dfcd7"
+      "rev": "52dd295ca1"
     },
     {
       "name": "fx/muzzle-gun",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "ff9cfcd5b9"
+      "rev": "cd5e539d1b"
     },
     {
       "name": "fx/muzzle-gun-marksman",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "2292c52c9c"
+      "rev": "c08c6e448a"
     },
     {
       "name": "fx/muzzle-gun-repeater",
-      "frames": 2,
+      "frames": 4,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "4896157c1a"
+      "rev": "a79a8aada2"
     },
     {
       "name": "fx/muzzle-laser",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "a547eabcc4"
+      "rev": "049e3ad826"
     },
     {
       "name": "fx/muzzle-laser-focus",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "f7818eeba3"
+      "rev": "0c1df93bc9"
     },
     {
       "name": "fx/muzzle-laser-prism",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "8a1c6236da"
+      "rev": "984cafaf57"
     },
     {
       "name": "fx/muzzle-taser",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "48396e71c9"
+      "rev": "26608c25a3"
     },
     {
       "name": "fx/muzzle-taser-arc",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "b6688b5f86"
+      "rev": "5ed7549285"
     },
     {
       "name": "fx/muzzle-taser-overload",
-      "frames": 3,
+      "frames": 6,
       "anim": {
-        "fps": 30,
+        "fps": 60,
         "loop": "once",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": false,
         "when": "always"
       },
-      "rev": "9dca564c28"
+      "rev": "beadd9b398"
     },
     {
       "name": "fx/shield-arc",
-      "frames": 2,
+      "frames": 4,
       "anim": {
         "fps": 8,
         "loop": "loop",
@@ -1202,7 +1202,7 @@
         "randomStart": true,
         "when": "always"
       },
-      "rev": "3b7a9b7bf7"
+      "rev": "aa87310758"
     },
     {
       "name": "fx/spark-hit",
@@ -1219,16 +1219,16 @@
     },
     {
       "name": "mines/mine-armed",
-      "frames": 4,
+      "frames": 12,
       "anim": {
-        "fps": 6,
+        "fps": 18,
         "loop": "loop",
         "hold": 0,
         "holdAfter": 0,
         "randomStart": true,
         "when": "always"
       },
-      "rev": "9966a3f9c9"
+      "rev": "0a7ee54d69"
     },
     {
       "name": "mines/mine-unarmed",

@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Sergeant (grunt-boss), frame 11 of 32. Generated: every moving part is a function of the frame. -->
+  <!-- In-between: every moving part sits halfway between its neighbouring frames. -->
+  <!-- Sergeant (grunt-boss), frame 11 of 64. Generated: every moving part is a function of the frame. -->
   <defs>
     <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#fff0a0"/>
@@ -33,12 +34,12 @@
   <!-- The armour collar: a heavy riveted ring the dome sits in. Its rivets grind round 60 degrees a loop. -->
   <circle cx="16" cy="16" r="13.2" fill="url(#collar)" stroke="#000000" stroke-width="1.2"/>
   <g fill="url(#rivet)" stroke="#000000" stroke-width="0.5">
-    <circle cx="27.37" cy="20.28" r="0.9"/>
-    <circle cx="17.98" cy="27.99" r="0.9"/>
-    <circle cx="6.61" cy="23.71" r="0.9"/>
-    <circle cx="4.63" cy="11.72" r="0.9"/>
-    <circle cx="14.02" cy="4.01" r="0.9"/>
-    <circle cx="25.39" cy="8.29" r="0.9"/>
+    <circle cx="27.95" cy="18.18" r="0.9"/>
+    <circle cx="20.09" cy="27.44" r="0.9"/>
+    <circle cx="8.14" cy="25.26" r="0.9"/>
+    <circle cx="4.04" cy="13.82" r="0.9"/>
+    <circle cx="11.91" cy="4.56" r="0.9"/>
+    <circle cx="23.86" cy="6.74" r="0.9"/>
   </g>
   <circle cx="16" cy="16" r="11.1" fill="none" stroke="#0b141c" stroke-width="0.9"/>
   <!-- The dome, lit from the top-left like the Grunt's. -->
@@ -52,7 +53,7 @@
     <line x1="22" y1="8.9" x2="23.2" y2="8.1" stroke-width="0.5"/>
   </g>
   <!-- The face sways as it waddles: stripes, eye and scowling brow move together; the pupil leads. -->
-  <g transform="translate(1.2 0.23)">
+  <g transform="translate(-1.06 0.21)">
     <!-- Sergeant's stripes: three gold chevrons. -->
     <g fill="none" stroke-linejoin="miter">
       <g stroke="#000000" stroke-width="2.2">
@@ -69,7 +70,7 @@
     <!-- The eye: socket, an ember iris like the marker Boss's, pupil, glints. -->
     <circle cx="16" cy="14.6" r="5" fill="#0b141c"/>
     <circle cx="16" cy="14.6" r="3.85" fill="url(#ember)"/>
-    <circle cx="16.6" cy="14.6" r="1.6" fill="#000000"/>
+    <circle cx="15.47" cy="14.6" r="1.6" fill="#000000"/>
     <circle cx="14.6" cy="13.2" r="0.85" fill="#ffffff"/>
     <circle cx="17.6" cy="16.2" r="0.4" fill="#ffffff" opacity="0.5"/>
     <!-- A heavy brow plate in a V, so it always scowls. -->
@@ -80,5 +81,4 @@
   <path d="M11.8 5.3 V1.69 L14.15 3.41 L16 0.9 L17.85 3.41 L20.2 1.69 V5.3 Z" fill="url(#gold)" stroke="#000000" stroke-width="0.8" stroke-linejoin="round"/>
   <line x1="12.3" y1="4.3" x2="19.7" y2="4.3" stroke="#a07000" stroke-width="0.6"/>
   <circle cx="16" cy="3.4" r="0.7" fill="#c02000" stroke="#000000" stroke-width="0.3"/>
-  <path d="M16 2.9 L16.11 3.29 L16.5 3.4 L16.11 3.51 L16 3.9 L15.89 3.51 L15.5 3.4 L15.89 3.29 Z" fill="#ffffff"/>
 </svg>

@@ -1,8 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Muzzle flash: in-between 1 of 6. Frame 0 fading out over frame 2 fading in, so the
+       sequence has a step on every simulation tick. -->
+  <g opacity="0.6">
   <g transform="rotate(90 16 16)">
-    <!-- Frame 1: a six-point sparkle over a band of mist. -->
-    <path d="M8.5 19.5 Q16 15.5 23.5 19.5" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" opacity="0.75"/>
+        <polygon points="16,8 18.6,13 16,18 13.4,13" fill="#bfe9ff" stroke="#0c4466" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="16,9.6 17.4,13 16,13" fill="#ffffff"/>
+  </g>
+  </g>
+  <g opacity="0.6">
+  <g transform="rotate(90 16 16)">
+        <path d="M8.5 19.5 Q16 15.5 23.5 19.5" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" opacity="0.75"/>
     <polygon points="16,2.5 17.2,7.92 22.5,6.25 18.4,10 22.5,13.75 17.2,12.08 16,17.5 14.8,12.08 9.5,13.75 13.6,10 9.5,6.25 14.8,7.92" fill="#bfe9ff" stroke="#0c4466" stroke-width="0.8" stroke-linejoin="round"/>
     <circle cx="16" cy="10" r="1.7" fill="#ffffff"/>
+  </g>
   </g>
 </svg>

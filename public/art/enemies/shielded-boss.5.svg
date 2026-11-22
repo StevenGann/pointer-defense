@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Bastion (shielded-boss), frame 5 of 32. Generated: every moving part is a function of the frame. -->
+  <!-- In-between: every moving part sits halfway between its neighbouring frames. -->
+  <!-- Bastion (shielded-boss), frame 5 of 64. Generated: every moving part is a function of the frame. -->
   <defs>
     <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#fff0a0"/>
@@ -25,25 +26,25 @@
   <polygon points="16,1.9 28.21,8.95 28.21,23.05 16,30.1 3.79,23.05 3.79,8.95" fill="#9fd0ea" fill-opacity="0.16" stroke="#000000" stroke-width="2.6" stroke-linejoin="round"/>
   <polygon points="16,1.9 28.21,8.95 28.21,23.05 16,30.1 3.79,23.05 3.79,8.95" fill="none" stroke="#5d86a3" stroke-width="1.3" stroke-linejoin="round"/>
   <!-- Layer two: an inner frame that turns 60 degrees a loop. -->
-  <polygon points="23.49,6.88 27.64,17.92 20.16,27.04 8.51,25.12 4.36,14.08 11.84,4.96" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
-  <polygon points="23.49,6.88 27.64,17.92 20.16,27.04 8.51,25.12 4.36,14.08 11.84,4.96" fill="none" stroke="#4a7392" stroke-width="0.8" stroke-linejoin="round"/>
+  <polygon points="22.71,6.3 27.75,16.96 21.05,26.66 9.29,25.7 4.25,15.04 10.96,5.33" fill="none" stroke="#000000" stroke-width="1.5" stroke-linejoin="round"/>
+  <polygon points="22.71,6.3 27.75,16.96 21.05,26.66 9.29,25.7 4.25,15.04 10.96,5.33" fill="none" stroke="#4a7392" stroke-width="0.8" stroke-linejoin="round"/>
   <g fill="#2f4b62" stroke="#000000" stroke-width="0.4">
-    <circle cx="23.49" cy="6.88" r="0.7"/>
-    <circle cx="27.64" cy="17.92" r="0.7"/>
-    <circle cx="20.16" cy="27.04" r="0.7"/>
-    <circle cx="8.51" cy="25.12" r="0.7"/>
-    <circle cx="4.36" cy="14.08" r="0.7"/>
-    <circle cx="11.84" cy="4.96" r="0.7"/>
+    <circle cx="22.71" cy="6.3" r="0.7"/>
+    <circle cx="27.75" cy="16.96" r="0.7"/>
+    <circle cx="21.05" cy="26.66" r="0.7"/>
+    <circle cx="9.29" cy="25.7" r="0.7"/>
+    <circle cx="4.25" cy="15.04" r="0.7"/>
+    <circle cx="10.96" cy="5.33" r="0.7"/>
   </g>
   <!-- Layer three: a dashed energy ring running the other way. -->
-  <circle cx="16" cy="16" r="9.9" fill="none" stroke="#8fbcd6" stroke-width="0.9" stroke-dasharray="2.07 1.38" stroke-dashoffset="-1.62" opacity="0.75"/>
+  <circle cx="16" cy="16" r="9.9" fill="none" stroke="#8fbcd6" stroke-width="0.9" stroke-dasharray="2.07 1.38" stroke-dashoffset="-0.81" opacity="0.75"/>
   <!-- Emitter nodes on every vertex; a charge chases round them once a loop. -->
   <circle cx="16" cy="1.9" r="1.55" fill="#2f4b62" stroke="#000000" stroke-width="0.6"/>
-  <circle cx="16" cy="1.9" r="0.47" fill="#6189a6"/>
+  <circle cx="16" cy="1.9" r="0.92" fill="#b2cadc"/>
   <circle cx="28.21" cy="8.95" r="1.55" fill="#2f4b62" stroke="#000000" stroke-width="0.6"/>
-  <circle cx="28.21" cy="8.95" r="1.19" fill="#e4f3fe"/>
+  <circle cx="28.21" cy="8.95" r="0.64" fill="#7fa1ba"/>
   <circle cx="28.21" cy="23.05" r="1.55" fill="#2f4b62" stroke="#000000" stroke-width="0.6"/>
-  <circle cx="28.21" cy="23.05" r="0.46" fill="#5e87a4"/>
+  <circle cx="28.21" cy="23.05" r="0.45" fill="#5d86a3"/>
   <circle cx="16" cy="30.1" r="1.55" fill="#2f4b62" stroke="#000000" stroke-width="0.6"/>
   <circle cx="16" cy="30.1" r="0.45" fill="#5d86a3"/>
   <circle cx="3.79" cy="23.05" r="1.55" fill="#2f4b62" stroke="#000000" stroke-width="0.6"/>
@@ -61,8 +62,8 @@
   </g>
   <!-- The visor, with two ember eyes that sweep it twice a loop. -->
   <rect x="9.8" y="13.4" width="12.4" height="4.6" rx="2" fill="#0a141c" stroke="#000000" stroke-width="0.6"/>
-  <circle cx="11.61" cy="15.9" r="1.25" fill="url(#ember)"/>
-  <circle cx="17.61" cy="15.9" r="1.25" fill="url(#ember)"/>
+  <circle cx="11.77" cy="15.9" r="1.25" fill="url(#ember)"/>
+  <circle cx="17.77" cy="15.9" r="1.25" fill="url(#ember)"/>
   <!-- The brow plate cuts a V into the visor. -->
   <path d="M9.2 11.2 L16 12.8 L22.8 11.2 L22.8 12.6 L16 14.4 L9.2 12.6 Z" fill="#152431" stroke="#000000" stroke-width="0.6" stroke-linejoin="round"/>
   <path d="M12.3 8 V4.72 L14.37 6.28 L16 4 L17.63 6.28 L19.7 4.72 V8 Z" fill="url(#gold)" stroke="#000000" stroke-width="0.8" stroke-linejoin="round"/>

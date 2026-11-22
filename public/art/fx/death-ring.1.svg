@@ -1,9 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Frame 1: the ring cracks into six plates and the shards tumble. -->
-  <circle cx="16" cy="16" r="12" fill="none" stroke="#ffffff" stroke-width="2" stroke-dasharray="9.57 3"/>
+  <!-- Death ring: in-between 1 of 6. Frame 0 fading out over frame 2 fading in, so the
+       sequence has a step on every simulation tick. -->
+  <g opacity="0.6">
+    <circle cx="16" cy="16" r="12" fill="none" stroke="#ffffff" stroke-width="2.4"/>
+  <circle cx="16" cy="16" r="10.6" fill="none" stroke="#b0b0b0" stroke-width="0.6"/>
+  <g fill="#ffffff">
+    <polygon points="20.5,16 23.5,14.2 26,16 23.5,17.8"/><polygon points="20.5,16 23.5,14.2 26,16 23.5,17.8" transform="rotate(120 16 16)"/><polygon points="20.5,16 23.5,14.2 26,16 23.5,17.8" transform="rotate(240 16 16)"/>
+  </g>
+  </g>
+  <g opacity="0.6">
+    <circle cx="16" cy="16" r="12" fill="none" stroke="#ffffff" stroke-width="2" stroke-dasharray="9.57 3"/>
   <g fill="#ffffff">
     <polygon points="20.5,16 23.5,14.2 26,16 23.5,17.8" transform="rotate(50 23.2 16)"/>
     <polygon points="20.5,16 23.5,14.2 26,16 23.5,17.8" transform="rotate(120 16 16) rotate(50 23.2 16)"/>
     <polygon points="20.5,16 23.5,14.2 26,16 23.5,17.8" transform="rotate(240 16 16) rotate(50 23.2 16)"/>
+  </g>
   </g>
 </svg>

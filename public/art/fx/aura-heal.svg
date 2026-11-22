@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Heal aura, frame 0 of 4: a Repair tower is mending this one. Three green crosses rise in
-     three columns, each a step out of phase, shrinking and fading as they climb. -->
-  <g opacity="1"><path d="M5.33 21.5 H7.67 V23.83 H10 V26.17 H7.67 V28.5 H5.33 V26.17 H3 V23.83 H5.33 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M5.93 22.4 V23.83 M3.9 24.43 H5.33" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
-  <g opacity="0.65"><path d="M15.03 10.1 H16.97 V12.03 H18.9 V13.97 H16.97 V15.9 H15.03 V13.97 H13.1 V12.03 H15.03 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M15.63 11 V12.03 M14 12.63 H15.03" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
-  <g opacity="0.9"><path d="M24.43 15.8 H26.57 V17.93 H28.7 V20.07 H26.57 V22.2 H24.43 V20.07 H22.3 V17.93 H24.43 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M25.03 16.7 V17.93 M23.2 18.53 H24.43" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
+  <!-- Heal aura, frame 0 of 18: a Repair tower is mending this one. Three green crosses rise in
+     three columns, a third of a loop apart. Each pops in low, climbs on an ease-out, shrinks and
+     fades out before the top, so the loop has no seam. -->
+  <g opacity="0.74"><path d="M15.1 6.89 H16.9 V8.69 H18.7 V10.49 H16.9 V12.29 H15.1 V10.49 H13.3 V8.69 H15.1 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M15.7 7.79 V8.69 M14.2 9.29 H15.1" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
+  <g opacity="1"><path d="M24.43 13.34 H26.57 V15.47 H28.7 V17.61 H26.57 V19.74 H24.43 V17.61 H22.3 V15.47 H24.43 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M25.03 14.24 V15.47 M23.2 16.07 H24.43" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
 </svg>

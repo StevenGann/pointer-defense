@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Heal aura, frame 15 of 18: a Repair tower is mending this one. Three green crosses rise in
+     three columns, a third of a loop apart. Each pops in low, climbs on an ease-out, shrinks and
+     fades out before the top, so the loop has no seam. -->
+  <g opacity="0.37"><path d="M5.68 5 H7.32 V6.63 H8.95 V8.27 H7.32 V9.9 H5.68 V8.27 H4.05 V6.63 H5.68 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M6.28 5.9 V6.63 M4.95 7.23 H5.68" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
+  <g opacity="1"><path d="M15.02 9.71 H16.98 V11.67 H18.95 V13.64 H16.98 V15.61 H15.02 V13.64 H13.05 V11.67 H15.02 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M15.62 10.61 V11.67 M13.95 12.27 H15.02" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
+  <g opacity="1"><path d="M24.35 17.72 H26.65 V20.02 H28.95 V22.32 H26.65 V24.62 H24.35 V22.32 H22.05 V20.02 H24.35 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M24.95 18.62 V20.02 M22.95 20.62 H24.35" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
+</svg>

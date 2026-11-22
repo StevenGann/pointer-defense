@@ -65,14 +65,14 @@ coins and a climbing arrow · `coolant` a Frost-blue canister · `double-buffer`
 `shutter-licence` a roller shutter with a lock plate · `structural-warranty` a steel shield with a
 tick · `system-tray` a taskbar tray holding windows · `wide-reticle` a gunsight with a wider ring.
 
-### Tower auras — `fx/` (16 files: 4 families × 4 frames, 32×32)
+### Tower auras — `fx/` (4 families, 8 to 18 frames each, 32×32)
 
 | Family | What it is now |
 |---|---|
-| `aura-beacon` | twelve brass studs round the tile; every fourth is lit and long, and the lit set steps clockwise |
-| `aura-emp` | broken violet scan lines that slip sideways each frame, with one tear that jumps rows |
-| `aura-heal` | three outlined green crosses rising in three columns, a step out of phase, shrinking as they fade |
-| `aura-override` | four hard-cornered cyan brackets stepping inward and back, with a tick on each side |
+| `aura-beacon` | twelve brass studs round the tile, with a three-crested wave of light running clockwise (12 frames) |
+| `aura-emp` | broken violet scan lines that slip sideways each frame, with one tear that jumps rows (8 frames) |
+| `aura-heal` | three outlined green crosses rising in three columns a third of a loop apart, shrinking as they fade (18 frames) |
+| `aura-override` | four hard-cornered cyan brackets closing and opening on a cosine, with a tick on each side (16 frames) |
 
 ### UI glyphs — `ui/` (12 files, 32×32)
 

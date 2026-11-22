@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Muzzle flash: in-between 3 of 6. Frame 2 fading out over frame 4 fading in, so the
+       sequence has a step on every simulation tick. -->
+  <g opacity="0.6">
+  <g transform="rotate(90 16 16)">
+        <g transform="translate(12.5 0) scale(0.62 1) translate(-16 0)">
+    <polygon points="16,1.2 17.9,7.6 22.4,5 19.2,10.4 16,12.8 12.8,10.4 9.6,5 14.1,7.6" fill="#ff9a2e" stroke="#5a1400" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="16,4.6 17.2,9.4 16,11.6 14.8,9.4" fill="#ffffff"/>
+    </g>
+    <g transform="translate(19.5 0) scale(0.62 1) translate(-16 0)">
+    <polygon points="16,1.2 17.9,7.6 22.4,5 19.2,10.4 16,12.8 12.8,10.4 9.6,5 14.1,7.6" fill="#ff9a2e" stroke="#5a1400" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="16,4.6 17.2,9.4 16,11.6 14.8,9.4" fill="#ffffff"/>
+    </g>
+  </g>
+  </g>
+  <g opacity="0.6">
+  <g transform="rotate(90 16 16)">
+        <g fill="#4a4a4a" stroke="#1a1a1a" stroke-width="0.8">
+      <circle cx="12.3" cy="6.4" r="3.3"/><circle cx="19.7" cy="6.4" r="3.3"/>
+    </g>
+    <circle cx="11.4" cy="5.4" r="1.1" fill="#8a8a8a"/><circle cx="18.8" cy="5.4" r="1.1" fill="#8a8a8a"/>
+    <polygon points="12.50,8.70 13.55,10.20 12.50,11.70 11.45,10.20" fill="#ff9a2e" stroke="#5a1400" stroke-width="0.6"/>
+    <polygon points="19.50,8.70 20.55,10.20 19.50,11.70 18.45,10.20" fill="#ff9a2e" stroke="#5a1400" stroke-width="0.6"/>
+  </g>
+  </g>
+</svg>

@@ -1,10 +1,18 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Muzzle flash: in-between 1 of 6. Frame 0 fading out over frame 2 fading in, so the
+       sequence has a step on every simulation tick. -->
+  <g opacity="0.6">
   <g transform="rotate(90 16 16)">
-    <!-- Frame 1: the full hexagon, cut into three facets. -->
-    <polygon points="16,2 22.93,6 22.93,14 16,18 9.07,14 9.07,6" fill="#8fd0f0" stroke="#0c4466" stroke-width="0.8" stroke-linejoin="round"/>
+        <polygon points="16,7 18.6,8.5 18.6,11.5 16,13 13.4,11.5 13.4,8.5" fill="#ffffff" stroke="#0c4466" stroke-width="0.8" stroke-linejoin="round"/>
+  </g>
+  </g>
+  <g opacity="0.6">
+  <g transform="rotate(90 16 16)">
+        <polygon points="16,2 22.93,6 22.93,14 16,18 9.07,14 9.07,6" fill="#8fd0f0" stroke="#0c4466" stroke-width="0.8" stroke-linejoin="round"/>
     <polygon points="16,10 9.07,6 16,2 22.93,6" fill="#e8f8ff"/>
     <polygon points="16,10 9.07,6 9.07,14 16,18" fill="#bfe9ff"/>
     <polygon points="16,2 22.93,6 22.93,14 16,18 9.07,14 9.07,6" fill="none" stroke="#0c4466" stroke-width="0.8" stroke-linejoin="round"/>
     <path d="M16 10 L16 18 M16 10 L9.07 6 M16 10 L22.93 6" fill="none" stroke="#3399cc" stroke-width="0.7"/>
+  </g>
   </g>
 </svg>

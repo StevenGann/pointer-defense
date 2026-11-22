@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Muzzle flash: in-between 3 of 6. Frame 2 fading out over frame 4 fading in, so the
+       sequence has a step on every simulation tick. -->
+  <g opacity="0.6">
+  <g transform="rotate(90 16 16)">
+        <g transform="translate(12.5 0) scale(0.62 1) translate(-16 0)">
+    <polygon points="16,1.2 17.9,7.6 22.4,5 19.2,10.4 16,12.8 12.8,10.4 9.6,5 14.1,7.6" fill="#ffd75e" stroke="#7a4a00" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="16,4.6 17.2,9.4 16,11.6 14.8,9.4" fill="#ffffff"/>
+    </g>
+    <g transform="translate(19.5 0) scale(0.62 1) translate(-16 0)">
+    <polygon points="16,1.2 17.9,7.6 22.4,5 19.2,10.4 16,12.8 12.8,10.4 9.6,5 14.1,7.6" fill="#ffd75e" stroke="#7a4a00" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="16,4.6 17.2,9.4 16,11.6 14.8,9.4" fill="#ffffff"/>
+    </g>
+  </g>
+  </g>
+  <g opacity="0.6">
+  <g transform="rotate(90 16 16)">
+        <g transform="translate(12.5 0) scale(0.62 1) translate(-16 0)">
+    <circle cx="16" cy="10.4" r="2.2" fill="none" stroke="#6a6a6a" stroke-width="1" opacity="0.6"/>
+    <polygon points="16,0.8 17,6.4 16,9 15,6.4" fill="#ffd75e" stroke="#7a4a00" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="22.60,3.00 23.72,4.60 22.60,6.20 21.48,4.60" fill="#ffd75e" stroke="#7a4a00" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="9.40,3.00 10.52,4.60 9.40,6.20 8.28,4.60" fill="#ffd75e" stroke="#7a4a00" stroke-width="0.8" stroke-linejoin="round"/>
+    </g>
+    <g transform="translate(19.5 0) scale(0.62 1) translate(-16 0)">
+    <circle cx="16" cy="10.4" r="2.2" fill="none" stroke="#6a6a6a" stroke-width="1" opacity="0.6"/>
+    <polygon points="16,0.8 17,6.4 16,9 15,6.4" fill="#ffd75e" stroke="#7a4a00" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="22.60,3.00 23.72,4.60 22.60,6.20 21.48,4.60" fill="#ffd75e" stroke="#7a4a00" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="9.40,3.00 10.52,4.60 9.40,6.20 8.28,4.60" fill="#ffd75e" stroke="#7a4a00" stroke-width="0.8" stroke-linejoin="round"/>
+    </g>
+  </g>
+  </g>
+</svg>

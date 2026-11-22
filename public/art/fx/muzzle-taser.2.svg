@@ -1,8 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <g transform="rotate(90 16 16)">
-    <!-- Frame 2: a thin last bolt. -->
-    <path d="M16 21 L14 18 L17.5 15.5 L14 11 L18.5 7.5 L16 2.5" fill="none" stroke="#4c4c00" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M16 21 L14 18 L17.5 15.5 L14 11 L18.5 7.5 L16 2.5" fill="none" stroke="#ffff00" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M16 21 L14 18 L17.5 15.5 L14 11 L18.5 7.5 L16 2.5" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Frame 1: the bolt jumps and lands. -->
+    <path d="M16 21 L19 17.5 L14 13.5 L19.5 10 L14.5 6 L17 3" fill="none" stroke="#4c4c00" stroke-width="3.3" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 21 L19 17.5 L14 13.5 L19.5 10 L14.5 6 L17 3" fill="none" stroke="#ffff00" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 21 L19 17.5 L14 13.5 L19.5 10 L14.5 6 L17 3" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <polygon points="17.00,0.40 17.73,2.27 19.60,3.00 17.73,3.73 17.00,5.60 16.27,3.73 14.40,3.00 16.27,2.27" fill="#ffffff" stroke="#4c4c00" stroke-width="0.6" stroke-linejoin="round"/>
   </g>
 </svg>

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Muzzle flash: in-between 3 of 6. Frame 2 fading out over frame 4 fading in, so the
+       sequence has a step on every simulation tick. -->
+  <g opacity="0.6">
+  <g transform="rotate(90 16 16)">
+        <polygon points="16,0.6 17.3,8.9 23.5,10.2 17.3,11.5 16,15.5 14.7,11.5 8.5,10.2 14.7,8.9" fill="#ff3300" stroke="#7a1800" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="16,4 16.8,9.4 20,10.2 16.8,11 16,13.4 15.2,11 12,10.2 15.2,9.4" fill="#ffb499"/>
+    <circle cx="16" cy="10.2" r="1.7" fill="#ffffff"/>
+  </g>
+  </g>
+  <g opacity="0.6">
+  <g transform="rotate(90 16 16)">
+        <circle cx="16" cy="10.2" r="4.4" fill="none" stroke="#7a1800" stroke-width="2" opacity="0.5"/>
+    <circle cx="16" cy="10.2" r="4.4" fill="none" stroke="#ff6a40" stroke-width="1"/>
+    <polygon points="16,7.4 16.7,9.5 18.8,10.2 16.7,10.9 16,13 15.3,10.9 13.2,10.2 15.3,9.5" fill="#ffb499" stroke="#7a1800" stroke-width="0.8" stroke-linejoin="round"/>
+  </g>
+  </g>
+</svg>

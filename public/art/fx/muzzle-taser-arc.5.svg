@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Muzzle flash: frame 5 of 6, the last. Frame 4 again, half faded. -->
+  <g opacity="0.5">
+  <g transform="rotate(90 16 16)">
+        <path d="M16 10 L12 8 L11.5 4.5 L8.5 2" fill="none" stroke="#4c4c00" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 10 L12 8 L11.5 4.5 L8.5 2" fill="none" stroke="#ffff00" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 10 L12 8 L11.5 4.5 L8.5 2" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 10 L19.5 7 L21.5 5 L23.5 2" fill="none" stroke="#4c4c00" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 10 L19.5 7 L21.5 5 L23.5 2" fill="none" stroke="#ffff00" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 10 L19.5 7 L21.5 5 L23.5 2" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="16" cy="10" r="1.4" fill="#ffffff" stroke="#4c4c00" stroke-width="0.6"/>
+  </g>
+  </g>
+</svg>

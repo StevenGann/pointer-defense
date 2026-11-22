@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Muzzle flash: frame 5 of 6, the last. Frame 4 again, half faded. -->
+  <g opacity="0.5">
+  <g transform="rotate(90 16 16)">
+        <circle cx="16" cy="10.8" r="8.4" fill="none" stroke="#5a5a5a" stroke-width="2.4" stroke-dasharray="4.6 2" opacity="0.7"/>
+    <circle cx="16" cy="10.8" r="8.4" fill="none" stroke="#c8c8c8" stroke-width="1.2" stroke-dasharray="4.6 2"/>
+    <circle cx="16" cy="10.8" r="2" fill="#9a9a9a" opacity="0.8"/>
+  </g>
+  </g>
+</svg>

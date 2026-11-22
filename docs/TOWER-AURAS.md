@@ -15,10 +15,10 @@ sprite size, cycling while the status holds.
 
 | Asset | Status | Placeholder look |
 |---|---|---|
-| `fx/aura-heal` | a Repair tower is healing this tower | three green plus signs rising and fading, 4 frames, loop |
-| `fx/aura-beacon` | this tower is inside a Beacon's aura | a gold ring, gold at the rim fading to transparent at the centre, pulsing, 4 frames, loop |
-| `fx/aura-override` | Manual Override is on, a target is marked, and this tower is in range of it | a cyan reticle: four corner brackets tightening, 4 frames, loop |
-| `fx/aura-emp` | the tower is disabled — Wirecutter EMP or Blue Screen | violet static: broken arcs flickering around the rim, 4 frames, loop |
+| `fx/aura-heal` | a Repair tower is healing this tower | three outlined green crosses rising in three columns a third of a loop apart, shrinking and fading, 18 frames at 18 fps, loop |
+| `fx/aura-beacon` | this tower is inside a Beacon's aura | twelve brass studs round the tile with a three-crested wave of light running clockwise, 12 frames at 12 fps, loop |
+| `fx/aura-override` | Manual Override is on, a target is marked, and this tower is in range of it | a cyan reticle: four corner brackets closing and opening on a cosine, 16 frames at 16 fps, loop |
+| `fx/aura-emp` | the tower is disabled — Wirecutter EMP or Blue Screen | violet static: broken scan lines slipping sideways, 8 frames at 12 fps, loop |
 
 - 32x32 viewBox, fills not hairlines, per `public/art/README.md`.
 - Each asset ships its frames plus a `.json` with `fps`, `loop: "loop"`, `randomStart: true`, so a

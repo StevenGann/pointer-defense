@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Shield arc: frame 3 of 4, the last. Frame 2 again, half faded. -->
+  <g opacity="0.5">
+    <path d="M25.5 16 A9.5 9.5 0 1 1 16 6.5" fill="none" stroke="#005a5a" stroke-width="2.6" stroke-linecap="round" stroke-dasharray="5 3.6" opacity="0.6"/>
+  <path d="M25.5 16 A9.5 9.5 0 1 1 16 6.5" fill="none" stroke="#00d0d0" stroke-width="1.4" stroke-linecap="round" stroke-dasharray="5 3.6"/>
+  <path d="M22 16 A6 6 0 1 1 16 10" fill="none" stroke="#00d0d0" stroke-width="1" stroke-linecap="round" opacity="0.45"/>
+  </g>
+</svg>

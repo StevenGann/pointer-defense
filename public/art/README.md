@@ -63,8 +63,12 @@ All seven share the boss accents: **ember eyes** (the marker Boss's orange iris)
 fixed boss wears the marker Boss's front-view crown; a boss that turns with its heading wears a
 **coronet**, a crown seen from above, so it still reads as a crown at any angle.
 
-Each boss has **4× the frames of its base type** (32 for the Sergeant, Pacer and Bastion; 24 for the
-rest) and several motions on different rhythms. The Sergeant, for example, waddles twice a loop while its
+Each boss has a long loop (24 or 32 key frames) with several motions on different rhythms. The four
+slowest loops (Sergeant, Bastion, Dreadnought and Ram) also carry an in-between after every key frame,
+with every moving part halfway between its neighbours, and play at double the old fps: 64 frames for
+the Sergeant and Bastion, 48 for the Dreadnought and Ram. The base enemies' walk cycles are generated
+the same way, as a function of the frame number: 16 frames for the Grunt, Runner and Shielded, 12 for
+the Armoured and Breacher, 11 pingponged for the Flyer. The Sergeant, for example, waddles twice a loop while its
 collar grinds round, it blinks once and its crown jewel glints once. The Ram plays `when: "always"`: its
 drill keeps spinning while it chews through a tower.
 
@@ -183,16 +187,22 @@ enemy's colour and nine near-identical files would be worse than one.
 
 | File | Represents |
 |---|---|
-| `muzzle-gun.svg` | a yellow three-tongue flash at the barrel tip (3 frames: ignition, flash, sparks and a smoke ring) |
-| `muzzle-cannon.svg` | an orange fireball (4 frames: white-hot ball, fireball, flame ring, smoke) |
-| `muzzle-frost.svg` | an ice sparkle (3 frames: one crystal, a six-point sparkle over mist, snow) |
-| `muzzle-laser.svg` | a lens flare on the crystal tip (3 frames: small star, long flare, afterglow ring) |
-| `muzzle-taser.svg` | a yellow bolt from the coil (3 frames, a different bolt in each, so it flickers) |
-| `muzzle-aa.svg` | the gun flash twice, one for each barrel (3 frames) |
+| `muzzle-gun.svg` | a yellow three-tongue flash at the barrel tip (3 key frames: ignition, flash, sparks and a smoke ring) |
+| `muzzle-cannon.svg` | an orange fireball (4 key frames: white-hot ball, fireball, flame ring, smoke) |
+| `muzzle-frost.svg` | an ice sparkle (3 key frames: one crystal, a six-point sparkle over mist, snow) |
+| `muzzle-laser.svg` | a lens flare on the crystal tip (3 key frames: small star, long flare, afterglow ring) |
+| `muzzle-taser.svg` | a yellow bolt from the coil (3 key frames, a different bolt in each, so it flickers) |
+| `muzzle-aa.svg` | the gun flash twice, one for each barrel (3 key frames) |
 | `muzzle-cursor.svg` | six rays round the click point (a still: the engine draws frame 0 only, at half a cell) |
 | `spark-hit.svg` | a four-point star that bursts and scatters (4 frames, one per tick) |
-| `shield-arc.svg` | the 270-degree cyan arc (2 frames: the bright arc, then a wider broken ripple) |
-| `death-ring.svg` | the ring with three shards (3 frames: whole, cracked into six plates, slivers); white, tinted to the enemy's colour; the ring radius is 12 and the engine scales from it |
+| `shield-arc.svg` | the 270-degree cyan arc (2 key frames: the bright arc, then a wider broken ripple) |
+| `death-ring.svg` | the ring with three shards (3 key frames: whole, cracked into six plates, slivers); white, tinted to the enemy's colour; the ring radius is 12 and the engine scales from it |
+
+**Key frames and in-betweens.** The muzzle flashes, the shield arc and the death ring ship twice the
+frames listed: every key frame (an even number, `muzzle-gun.svg`, `.2`, `.4`) is followed by an
+in-between (an odd number) that cross-fades it into the next, so the sequence steps on every
+simulation tick. The flash JSONs run at 60 fps to keep the old duration. If you redraw a key frame,
+redraw or regenerate the odd frame on each side of it.
 
 Every branch has its own fire effect as well; the full list is under "Fire effects, mines and
 projectiles" below.
@@ -245,7 +255,7 @@ Every tower that fires something has a fire-effect file: the muzzle flash at the
   only, at half a cell, on the click point.
 - **Timing**: a single-frame file flashes for two simulation ticks. Give the asset numbered frames
   (`muzzle-gun.1.svg`, `muzzle-gun.2.svg`, …) and it plays the whole sequence instead — see
-  "Animating an asset" for the `.json` fps/hold rules. A 4-frame, 30 fps flash lives about 133 ms.
+  "Animating an asset" for the `.json` fps/hold rules. An 8-frame, 60 fps flash lives about 133 ms.
 
 Ordnance and mines have their own files, rotated or not by the renderer:
 
@@ -256,7 +266,7 @@ Ordnance and mines have their own files, rotated or not by the renderer:
   frames at 20 fps flicker the motor flame; the body is the same in every frame.
 - `mines/mine-armed.svg` and `mines/mine-unarmed.svg` — not rotated. The armed file's lamp should read
   as live; the unarmed one is drawn at half alpha by the renderer, so do not bake the dimness in.
-  Both are a spiked steel ball drawn at half a cell. The armed mine has four frames at 6 fps that
+  Both are a spiked steel ball drawn at half a cell. The armed mine has twelve frames at 18 fps that
   blink its red lamp; the body is the same in every frame and in both files, so arming does not pop.
 
 Mines and projectiles animate on the fps clock, like towers (see the support matrix in

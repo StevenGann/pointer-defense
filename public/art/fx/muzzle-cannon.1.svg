@@ -1,10 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Muzzle flash: in-between 1 of 8. Frame 0 fading out over frame 2 fading in, so the
+       sequence has a step on every simulation tick. -->
+  <g opacity="0.6">
   <g transform="rotate(90 16 16)">
-    <!-- Frame 1: the fireball. -->
-    <defs><g id="f"><circle cx="16" cy="7" r="5.6"/><circle cx="11.6" cy="9.6" r="3"/><circle cx="20.4" cy="9.6" r="3"/><circle cx="16" cy="2.8" r="2.4"/></g></defs>
-    <use href="#f" fill="#5a1400" stroke="#5a1400" stroke-width="1.8" stroke-linejoin="round"/>
-    <use href="#f" fill="#ff9a2e"/>
+        <circle cx="16" cy="9.2" r="3.6" fill="#ff9a2e" stroke="#5a1400" stroke-width="0.9"/>
+    <circle cx="16" cy="9.2" r="2" fill="#ffffff"/>
+  </g>
+  </g>
+  <g opacity="0.6">
+  <g transform="rotate(90 16 16)">
+        <defs><g id="b-f"><circle cx="16" cy="7" r="5.6"/><circle cx="11.6" cy="9.6" r="3"/><circle cx="20.4" cy="9.6" r="3"/><circle cx="16" cy="2.8" r="2.4"/></g></defs>
+    <use href="#b-f" fill="#5a1400" stroke="#5a1400" stroke-width="1.8" stroke-linejoin="round"/>
+    <use href="#b-f" fill="#ff9a2e"/>
     <circle cx="16" cy="7.4" r="3.6" fill="#ffe28a"/>
     <circle cx="16" cy="8" r="1.9" fill="#ffffff"/>
+  </g>
   </g>
 </svg>

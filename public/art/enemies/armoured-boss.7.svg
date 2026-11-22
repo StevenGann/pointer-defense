@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Dreadnought (armoured-boss), frame 7 of 24. Generated: every moving part is a function of the frame. -->
+  <!-- In-between: every moving part sits halfway between its neighbouring frames. -->
+  <!-- Dreadnought (armoured-boss), frame 7 of 48. Generated: every moving part is a function of the frame. -->
   <defs>
     <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#fff0a0"/>
@@ -48,14 +49,14 @@
   <!-- Tier three: the inner plate. Each stomp presses it in like a Windows 95 button: the bevel
        flips and everything on it drops down-right. -->
   <rect x="9.4" y="9.4" width="13.2" height="13.2" fill="#406080"/>
-  <path d="M9.4 22.6 V9.4 H22.6" fill="none" stroke="#4c6174" stroke-width="1"/>
-  <path d="M22.6 9.4 V22.6 H9.4" fill="none" stroke="#677e93" stroke-width="1"/>
-  <g transform="translate(0.6 0.6)">
+  <path d="M9.4 22.6 V9.4 H22.6" fill="none" stroke="#314355" stroke-width="1"/>
+  <path d="M22.6 9.4 V22.6 H9.4" fill="none" stroke="#829cb2" stroke-width="1"/>
+  <g transform="translate(0.9 0.9)">
     <!-- The V-scowl view slit, with two slanted ember eyes that squint on the stomp. -->
     <polygon points="11,13 16,14.8 21,13 21,17.8 11,17.8" fill="#070d12" stroke="#000000" stroke-width="0.6" stroke-linejoin="round"/>
     <g fill="#ff8a1e">
-    <polygon points="11.52,15.34 14.32,15.58 14.32,16.6 11.52,16.2"/>
-    <polygon points="19.12,15.34 16.32,15.58 16.32,16.6 19.12,16.2"/>
+    <polygon points="11.65,15.41 14.45,15.65 14.45,16.6 11.65,16.2"/>
+    <polygon points="19.25,15.41 16.45,15.65 16.45,16.6 19.25,16.2"/>
     </g>
     <g fill="#162636">
       <rect x="12.6" y="19.2" width="6.8" height="0.7"/>
@@ -64,14 +65,14 @@
   </g>
   <!-- Corner brackets, clamping in on each stomp. -->
   <g fill="url(#bracket)" stroke="#000000" stroke-width="0.7" stroke-linejoin="round">
-    <polygon points="2.56,2.56 9.36,2.56 9.36,5.36 5.36,5.36 5.36,9.36 2.56,9.36"/>
-    <circle cx="4.06" cy="4.06" r="0.85" fill="url(#rivet)" stroke-width="0.4"/>
-    <polygon points="29.44,2.56 22.64,2.56 22.64,5.36 26.64,5.36 26.64,9.36 29.44,9.36"/>
-    <circle cx="27.94" cy="4.06" r="0.85" fill="url(#rivet)" stroke-width="0.4"/>
-    <polygon points="2.56,29.44 9.36,29.44 9.36,26.64 5.36,26.64 5.36,22.64 2.56,22.64"/>
-    <circle cx="4.06" cy="27.94" r="0.85" fill="url(#rivet)" stroke-width="0.4"/>
-    <polygon points="29.44,29.44 22.64,29.44 22.64,26.64 26.64,26.64 26.64,22.64 29.44,22.64"/>
-    <circle cx="27.94" cy="27.94" r="0.85" fill="url(#rivet)" stroke-width="0.4"/>
+    <polygon points="2.74,2.74 9.54,2.74 9.54,5.54 5.54,5.54 5.54,9.54 2.74,9.54"/>
+    <circle cx="4.24" cy="4.24" r="0.85" fill="url(#rivet)" stroke-width="0.4"/>
+    <polygon points="29.26,2.74 22.46,2.74 22.46,5.54 26.46,5.54 26.46,9.54 29.26,9.54"/>
+    <circle cx="27.76" cy="4.24" r="0.85" fill="url(#rivet)" stroke-width="0.4"/>
+    <polygon points="2.74,29.26 9.54,29.26 9.54,26.46 5.54,26.46 5.54,22.46 2.74,22.46"/>
+    <circle cx="4.24" cy="27.76" r="0.85" fill="url(#rivet)" stroke-width="0.4"/>
+    <polygon points="29.26,29.26 22.46,29.26 22.46,26.46 26.46,26.46 26.46,22.46 29.26,22.46"/>
+    <circle cx="27.76" cy="27.76" r="0.85" fill="url(#rivet)" stroke-width="0.4"/>
   </g>
   <path d="M11.8 5.4 V1.63 L14.15 3.42 L16 0.8 L17.85 3.42 L20.2 1.63 V5.4 Z" fill="url(#gold)" stroke="#000000" stroke-width="0.8" stroke-linejoin="round"/>
   <line x1="12.3" y1="4.4" x2="19.7" y2="4.4" stroke="#a07000" stroke-width="0.6"/>

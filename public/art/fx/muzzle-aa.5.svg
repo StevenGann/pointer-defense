@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Muzzle flash: frame 5 of 6, the last. Frame 4 again, half faded. -->
+  <g opacity="0.5">
+  <g transform="rotate(90 16 16)">
+        <g transform="translate(12.5 0) scale(0.62 1) translate(-16 0)">
+    <circle cx="16" cy="10.4" r="2.2" fill="none" stroke="#6a6a6a" stroke-width="1" opacity="0.6"/>
+    <polygon points="16,0.8 17,6.4 16,9 15,6.4" fill="#ffd75e" stroke="#7a4a00" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="22.60,3.00 23.72,4.60 22.60,6.20 21.48,4.60" fill="#ffd75e" stroke="#7a4a00" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="9.40,3.00 10.52,4.60 9.40,6.20 8.28,4.60" fill="#ffd75e" stroke="#7a4a00" stroke-width="0.8" stroke-linejoin="round"/>
+    </g>
+    <g transform="translate(19.5 0) scale(0.62 1) translate(-16 0)">
+    <circle cx="16" cy="10.4" r="2.2" fill="none" stroke="#6a6a6a" stroke-width="1" opacity="0.6"/>
+    <polygon points="16,0.8 17,6.4 16,9 15,6.4" fill="#ffd75e" stroke="#7a4a00" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="22.60,3.00 23.72,4.60 22.60,6.20 21.48,4.60" fill="#ffd75e" stroke="#7a4a00" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="9.40,3.00 10.52,4.60 9.40,6.20 8.28,4.60" fill="#ffd75e" stroke="#7a4a00" stroke-width="0.8" stroke-linejoin="round"/>
+    </g>
+  </g>
+  </g>
+</svg>

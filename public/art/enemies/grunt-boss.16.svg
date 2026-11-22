@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Sergeant (grunt-boss), frame 16 of 32. Generated: every moving part is a function of the frame. -->
+  <!-- Sergeant (grunt-boss), frame 16 of 64. Generated: every moving part is a function of the frame. -->
   <defs>
     <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#fff0a0"/>
@@ -33,12 +33,12 @@
   <!-- The armour collar: a heavy riveted ring the dome sits in. Its rivets grind round 60 degrees a loop. -->
   <circle cx="16" cy="16" r="13.2" fill="url(#collar)" stroke="#000000" stroke-width="1.2"/>
   <g fill="url(#rivet)" stroke="#000000" stroke-width="0.5">
-    <circle cx="26.52" cy="22.07" r="0.9"/>
-    <circle cx="16" cy="28.15" r="0.9"/>
-    <circle cx="5.48" cy="22.07" r="0.9"/>
-    <circle cx="5.48" cy="9.92" r="0.9"/>
-    <circle cx="16" cy="3.85" r="0.9"/>
-    <circle cx="26.52" cy="9.92" r="0.9"/>
+    <circle cx="27.74" cy="19.14" r="0.9"/>
+    <circle cx="19.14" cy="27.74" r="0.9"/>
+    <circle cx="7.41" cy="24.59" r="0.9"/>
+    <circle cx="4.26" cy="12.86" r="0.9"/>
+    <circle cx="12.86" cy="4.26" r="0.9"/>
+    <circle cx="24.59" cy="7.41" r="0.9"/>
   </g>
   <circle cx="16" cy="16" r="11.1" fill="none" stroke="#0b141c" stroke-width="0.9"/>
   <!-- The dome, lit from the top-left like the Grunt's. -->
@@ -80,4 +80,5 @@
   <path d="M11.8 5.3 V1.69 L14.15 3.41 L16 0.9 L17.85 3.41 L20.2 1.69 V5.3 Z" fill="url(#gold)" stroke="#000000" stroke-width="0.8" stroke-linejoin="round"/>
   <line x1="12.3" y1="4.3" x2="19.7" y2="4.3" stroke="#a07000" stroke-width="0.6"/>
   <circle cx="16" cy="3.4" r="0.7" fill="#c02000" stroke="#000000" stroke-width="0.3"/>
+  <path d="M16 2.7 L16.15 3.25 L16.7 3.4 L16.15 3.55 L16 4.1 L15.85 3.55 L15.3 3.4 L15.85 3.25 Z" fill="#ffffff"/>
 </svg>

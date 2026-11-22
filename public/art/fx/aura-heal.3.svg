@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Heal aura, frame 3 of 4: a Repair tower is mending this one. Three green crosses rise in
-     three columns, each a step out of phase, shrinking and fading as they climb. -->
-  <g opacity="0.35"><path d="M5.63 4.4 H7.37 V6.13 H9.1 V7.87 H7.37 V9.6 H5.63 V7.87 H3.9 V6.13 H5.63 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M6.23 5.3 V6.13 M4.8 6.73 H5.63" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
-  <g opacity="0.9"><path d="M14.93 15.8 H17.07 V17.93 H19.2 V20.07 H17.07 V22.2 H14.93 V20.07 H12.8 V17.93 H14.93 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M15.53 16.7 V17.93 M13.7 18.53 H14.93" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
-  <g opacity="1"><path d="M24.33 21.5 H26.67 V23.83 H29 V26.17 H26.67 V28.5 H24.33 V26.17 H22 V23.83 H24.33 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M24.93 22.4 V23.83 M22.9 24.43 H24.33" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
+  <!-- Heal aura, frame 3 of 18: a Repair tower is mending this one. Three green crosses rise in
+     three columns, a third of a loop apart. Each pops in low, climbs on an ease-out, shrinks and
+     fades out before the top, so the loop has no seam. -->
+  <g opacity="1"><path d="M5.35 17.72 H7.65 V20.02 H9.95 V22.32 H7.65 V24.62 H5.35 V22.32 H3.05 V20.02 H5.35 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M5.95 18.62 V20.02 M3.95 20.62 H5.35" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
+  <g opacity="0.37"><path d="M15.18 5 H16.82 V6.63 H18.45 V8.27 H16.82 V9.9 H15.18 V8.27 H13.55 V6.63 H15.18 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M15.78 5.9 V6.63 M14.45 7.23 H15.18" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
+  <g opacity="1"><path d="M24.52 9.71 H26.48 V11.67 H28.45 V13.64 H26.48 V15.61 H24.52 V13.64 H22.55 V11.67 H24.52 Z" fill="#30d060" stroke="#003c10" stroke-width="1" stroke-linejoin="miter"/><path d="M25.12 10.61 V11.67 M23.45 12.27 H24.52" stroke="#d8ffe0" stroke-width="0.6" fill="none"/></g>
 </svg>

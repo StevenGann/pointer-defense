@@ -1,13 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <!-- Override aura, frame 2 of 4: the tower is under manual override. Four corner brackets step
-     inward and back (1.5, 3, 4.5, 3 units from the edge) while a tick on each side follows them:
-     a gate closing on the tower. Mechanical, with hard corners and a dark edge. -->
+  <!-- Override aura, frame 2 of 16: the tower is under manual override. Four corner brackets close
+     in by 3 units and open again on a cosine, slowing at both ends, while a tick on each side
+     follows them: a gate closing on the tower. Mechanical, with hard corners and a dark edge. -->
   <g fill="#00e5ff" stroke="#00303c" stroke-width="0.9" stroke-linejoin="miter">
-  <path d="M4.5 4.5 H12.5 V6.9 H6.9 V12.5 H4.5 Z"/><path d="M27.5 4.5 H19.5 V6.9 H25.1 V12.5 H27.5 Z"/>
-  <path d="M4.5 27.5 H12.5 V25.1 H6.9 V19.5 H4.5 Z"/><path d="M27.5 27.5 H19.5 V25.1 H25.1 V19.5 H27.5 Z"/>
+  <path d="M1.94 1.94 H9.94 V4.34 H4.34 V9.94 H1.94 Z"/><path d="M30.06 1.94 H22.06 V4.34 H27.66 V9.94 H30.06 Z"/>
+  <path d="M1.94 30.06 H9.94 V27.66 H4.34 V22.06 H1.94 Z"/><path d="M30.06 30.06 H22.06 V27.66 H27.66 V22.06 H30.06 Z"/>
   </g>
   <g fill="#00e5ff" stroke="#00303c" stroke-width="0.7">
-  <rect x="15" y="3.4" width="2" height="3.4"/><rect x="15" y="25.2" width="2" height="3.4"/>
-  <rect x="3.4" y="15" width="3.4" height="2"/><rect x="25.2" y="15" width="3.4" height="2"/>
+  <rect x="15" y="1.35" width="2" height="3.4"/><rect x="15" y="27.25" width="2" height="3.4"/>
+  <rect x="1.35" y="15" width="3.4" height="2"/><rect x="27.25" y="15" width="3.4" height="2"/>
   </g>
 </svg>

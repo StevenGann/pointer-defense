@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <g transform="rotate(90 16 16)">
-    <!-- Frame 2: the block opens to an outline and three chips. -->
-    <polygon points="16,0.8 23.97,5.4 23.97,14.6 16,19.2 8.03,14.6 8.03,5.4" fill="none" stroke="#0c4466" stroke-width="2.2" stroke-linejoin="round" opacity="0.5"/>
-    <polygon points="16,0.8 23.97,5.4 23.97,14.6 16,19.2 8.03,14.6 8.03,5.4" fill="none" stroke="#bfe9ff" stroke-width="1.1" stroke-linejoin="round"/>
-    <g fill="#ffffff" stroke="#0c4466" stroke-width="0.6" stroke-linejoin="round">
-      <polygon points="16.00,5.30 17.19,7.00 16.00,8.70 14.81,7.00"/><polygon points="12.60,10.90 13.65,12.40 12.60,13.90 11.55,12.40"/><polygon points="19.40,10.90 20.45,12.40 19.40,13.90 18.35,12.40"/>
-    </g>
+    <!-- Frame 1: the full hexagon, cut into three facets. -->
+    <polygon points="16,2 22.93,6 22.93,14 16,18 9.07,14 9.07,6" fill="#8fd0f0" stroke="#0c4466" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="16,10 9.07,6 16,2 22.93,6" fill="#e8f8ff"/>
+    <polygon points="16,10 9.07,6 9.07,14 16,18" fill="#bfe9ff"/>
+    <polygon points="16,2 22.93,6 22.93,14 16,18 9.07,14 9.07,6" fill="none" stroke="#0c4466" stroke-width="0.8" stroke-linejoin="round"/>
+    <path d="M16 10 L16 18 M16 10 L9.07 6 M16 10 L22.93 6" fill="none" stroke="#3399cc" stroke-width="0.7"/>
   </g>
 </svg>

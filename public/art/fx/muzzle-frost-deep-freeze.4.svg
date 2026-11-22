@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <g transform="rotate(90 16 16)">
+    <!-- Frame 2: the block opens to an outline and three chips. -->
+    <polygon points="16,0.8 23.97,5.4 23.97,14.6 16,19.2 8.03,14.6 8.03,5.4" fill="none" stroke="#0c4466" stroke-width="2.2" stroke-linejoin="round" opacity="0.5"/>
+    <polygon points="16,0.8 23.97,5.4 23.97,14.6 16,19.2 8.03,14.6 8.03,5.4" fill="none" stroke="#bfe9ff" stroke-width="1.1" stroke-linejoin="round"/>
+    <g fill="#ffffff" stroke="#0c4466" stroke-width="0.6" stroke-linejoin="round">
+      <polygon points="16.00,5.30 17.19,7.00 16.00,8.70 14.81,7.00"/><polygon points="12.60,10.90 13.65,12.40 12.60,13.90 11.55,12.40"/><polygon points="19.40,10.90 20.45,12.40 19.40,13.90 18.35,12.40"/>
+    </g>
+  </g>
+</svg>

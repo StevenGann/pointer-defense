@@ -1,8 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Muzzle flash: in-between 1 of 6. Frame 0 fading out over frame 2 fading in, so the
+       sequence has a step on every simulation tick. -->
+  <g opacity="0.6">
   <g transform="rotate(90 16 16)">
-    <!-- Frame 1: the full flare, long along the beam. -->
-    <polygon points="16,0.6 17.3,8.9 23.5,10.2 17.3,11.5 16,15.5 14.7,11.5 8.5,10.2 14.7,8.9" fill="#ff3300" stroke="#7a1800" stroke-width="0.8" stroke-linejoin="round"/>
+        <polygon points="16,6.6 16.9,9.3 19.6,10.2 16.9,11.1 16,13.8 15.1,11.1 12.4,10.2 15.1,9.3" fill="#ff9a7a" stroke="#7a1800" stroke-width="0.8" stroke-linejoin="round"/>
+    <circle cx="16" cy="10.2" r="1.3" fill="#fff4c8"/>
+  </g>
+  </g>
+  <g opacity="0.6">
+  <g transform="rotate(90 16 16)">
+        <polygon points="16,0.6 17.3,8.9 23.5,10.2 17.3,11.5 16,15.5 14.7,11.5 8.5,10.2 14.7,8.9" fill="#ff3300" stroke="#7a1800" stroke-width="0.8" stroke-linejoin="round"/>
     <polygon points="16,4 16.8,9.4 20,10.2 16.8,11 16,13.4 15.2,11 12,10.2 15.2,9.4" fill="#ffb499"/>
     <circle cx="16" cy="10.2" r="1.7" fill="#ffffff"/>
+  </g>
   </g>
 </svg>

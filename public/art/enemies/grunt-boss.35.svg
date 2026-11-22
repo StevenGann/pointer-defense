@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- In-between: every moving part sits halfway between its neighbouring frames. -->
+  <!-- Sergeant (grunt-boss), frame 35 of 64. Generated: every moving part is a function of the frame. -->
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff0a0"/>
+      <stop offset="1" stop-color="#c08a00"/>
+    </linearGradient>
+    <radialGradient id="goldr" cx="0.35" cy="0.35" r="0.8">
+      <stop offset="0" stop-color="#fff6c0"/>
+      <stop offset="0.6" stop-color="#e0b030"/>
+      <stop offset="1" stop-color="#8a6000"/>
+    </radialGradient>
+    <radialGradient id="ember" cx="0.4" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#ffe9a8"/>
+      <stop offset="0.5" stop-color="#ff8a1e"/>
+      <stop offset="1" stop-color="#8a2000"/>
+    </radialGradient>
+    <linearGradient id="collar" x1="4" y1="4" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6c88a2"/>
+      <stop offset="0.5" stop-color="#2a4258"/>
+      <stop offset="1" stop-color="#111d28"/>
+    </linearGradient>
+    <radialGradient id="shell" cx="12" cy="11" r="15" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7a9db6"/>
+      <stop offset="0.45" stop-color="#35506a"/>
+      <stop offset="1" stop-color="#18283a"/>
+    </radialGradient>
+    <radialGradient id="rivet" cx="0.35" cy="0.35" r="0.75">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#8a8f94"/>
+    </radialGradient>
+  </defs>
+  <!-- The armour collar: a heavy riveted ring the dome sits in. Its rivets grind round 60 degrees a loop. -->
+  <circle cx="16" cy="16" r="13.2" fill="url(#collar)" stroke="#000000" stroke-width="1.2"/>
+  <g fill="url(#rivet)" stroke="#000000" stroke-width="0.5">
+    <circle cx="26.21" cy="22.59" r="0.9"/>
+    <circle cx="15.41" cy="28.13" r="0.9"/>
+    <circle cx="5.19" cy="21.55" r="0.9"/>
+    <circle cx="5.79" cy="9.41" r="0.9"/>
+    <circle cx="16.59" cy="3.87" r="0.9"/>
+    <circle cx="26.81" cy="10.45" r="0.9"/>
+  </g>
+  <circle cx="16" cy="16" r="11.1" fill="none" stroke="#0b141c" stroke-width="0.9"/>
+  <!-- The dome, lit from the top-left like the Grunt's. -->
+  <circle cx="16" cy="16" r="10.6" fill="url(#shell)" stroke="#000000" stroke-width="1"/>
+  <path d="M7.02 13.59 A9.3 9.3 0 0 1 13.59 7.02" fill="none" stroke="#a9c4d6" stroke-width="1" stroke-linecap="round" opacity="0.75"/>
+  <path d="M24.98 18.41 A9.3 9.3 0 0 1 18.41 24.98" fill="none" stroke="#0e1a24" stroke-width="1" stroke-linecap="round" opacity="0.55"/>
+  <!-- An old scar across the dome, stitched shut. -->
+  <g stroke="#9fb8c9" stroke-linecap="round" opacity="0.8">
+    <line x1="21" y1="6.6" x2="23.6" y2="10" stroke-width="0.8"/>
+    <line x1="21.3" y1="7.9" x2="22.5" y2="7.1" stroke-width="0.5"/>
+    <line x1="22" y1="8.9" x2="23.2" y2="8.1" stroke-width="0.5"/>
+  </g>
+  <!-- The face sways as it waddles: stripes, eye and scowling brow move together; the pupil leads. -->
+  <g transform="translate(-0.71 0.14)">
+    <!-- Sergeant's stripes: three gold chevrons. -->
+    <g fill="none" stroke-linejoin="miter">
+      <g stroke="#000000" stroke-width="2.2">
+      <polyline points="13,21.9 16,20.2 19,21.9"/>
+      <polyline points="13,23.5 16,21.8 19,23.5"/>
+      <polyline points="13,25.1 16,23.4 19,25.1"/>
+      </g>
+      <g stroke="#e9b52c" stroke-width="1.2">
+      <polyline points="13,21.9 16,20.2 19,21.9"/>
+      <polyline points="13,23.5 16,21.8 19,23.5"/>
+      <polyline points="13,25.1 16,23.4 19,25.1"/>
+      </g>
+    </g>
+    <!-- The eye: socket, an ember iris like the marker Boss's, pupil, glints. -->
+    <circle cx="16" cy="14.6" r="5" fill="#0b141c"/>
+    <circle cx="16" cy="14.6" r="3.85" fill="url(#ember)"/>
+    <circle cx="15.64" cy="14.6" r="1.6" fill="#000000"/>
+    <circle cx="14.6" cy="13.2" r="0.85" fill="#ffffff"/>
+    <circle cx="17.6" cy="16.2" r="0.4" fill="#ffffff" opacity="0.5"/>
+    <!-- A heavy brow plate in a V, so it always scowls. -->
+    <path d="M9.4 8.8 L16 10.8 L22.6 8.8 L22.6 10.4 L16 12.6 L9.4 10.4 Z" fill="#1b2c3b" stroke="#000000" stroke-width="0.8" stroke-linejoin="round"/>
+    <line x1="10" y1="9.15" x2="15.6" y2="10.85" stroke="#7a9db6" stroke-width="0.6" opacity="0.8" stroke-linecap="round"/>
+  </g>
+  <!-- The crown sits on the collar and does not sway; its jewel glints once a loop. -->
+  <path d="M11.8 5.3 V1.69 L14.15 3.41 L16 0.9 L17.85 3.41 L20.2 1.69 V5.3 Z" fill="url(#gold)" stroke="#000000" stroke-width="0.8" stroke-linejoin="round"/>
+  <line x1="12.3" y1="4.3" x2="19.7" y2="4.3" stroke="#a07000" stroke-width="0.6"/>
+  <circle cx="16" cy="3.4" r="0.7" fill="#c02000" stroke="#000000" stroke-width="0.3"/>
+</svg>

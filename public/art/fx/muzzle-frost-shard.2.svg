@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <g transform="rotate(90 16 16)">
-    <!-- Frame 2: further out. -->
-    <g stroke="#bfe9ff" stroke-width="1.1" stroke-linecap="round" opacity="0.5"><line x1="16" y1="10.6" x2="16" y2="15"/><line x1="10.2" y1="12" x2="12" y2="15.8"/><line x1="21.8" y1="12" x2="20" y2="15.8"/></g>
+    <!-- Frame 1: in flight, with a trail. -->
+    <g stroke="#bfe9ff" stroke-width="1.1" stroke-linecap="round" opacity="0.7"><line x1="16" y1="14" x2="16" y2="17.5"/><line x1="12.4" y1="15.6" x2="13.6" y2="18.2"/><line x1="19.6" y1="15.6" x2="18.4" y2="18.2"/></g>
     <g fill="#e8f8ff" stroke="#0c4466" stroke-width="0.8" stroke-linejoin="round">
-      <polygon points="0,-5.5 1.7,1 0,3.2 -1.7,1" transform="translate(8.6 8) rotate(-26)"/>
-      <polygon points="0,-5.5 1.7,1 0,3.2 -1.7,1" transform="translate(23.4 8) rotate(26)"/>
-      <polygon points="0,-5.5 1.7,1 0,3.2 -1.7,1" transform="translate(16 6)"/>
+      <polygon points="0,-5.5 1.7,1 0,3.2 -1.7,1" transform="translate(10.6 11.4) rotate(-26)"/>
+      <polygon points="0,-5.5 1.7,1 0,3.2 -1.7,1" transform="translate(21.4 11.4) rotate(26)"/>
+      <polygon points="0,-5.5 1.7,1 0,3.2 -1.7,1" transform="translate(16 8.6)"/>
     </g>
   </g>
 </svg>

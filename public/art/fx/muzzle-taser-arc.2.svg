@@ -1,12 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <g transform="rotate(90 16 16)">
-    <!-- Frame 2: the side branches linger. -->
-    <path d="M16 10 L12 8 L11.5 4.5 L8.5 2" fill="none" stroke="#4c4c00" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M16 10 L12 8 L11.5 4.5 L8.5 2" fill="none" stroke="#ffff00" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M16 10 L12 8 L11.5 4.5 L8.5 2" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M16 10 L19.5 7 L21.5 5 L23.5 2" fill="none" stroke="#4c4c00" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M16 10 L19.5 7 L21.5 5 L23.5 2" fill="none" stroke="#ffff00" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M16 10 L19.5 7 L21.5 5 L23.5 2" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="16" cy="10" r="1.4" fill="#ffffff" stroke="#4c4c00" stroke-width="0.6"/>
+    <!-- Frame 1: all three branches. -->
+    <path d="M16 10 L11 7.5 L12.5 4.5 L8.5 2" fill="none" stroke="#4c4c00" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 10 L11 7.5 L12.5 4.5 L8.5 2" fill="none" stroke="#ffff00" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 10 L11 7.5 L12.5 4.5 L8.5 2" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 10 L20.5 8 L20 4.5 L23.5 2" fill="none" stroke="#4c4c00" stroke-width="2.9" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 10 L20.5 8 L20 4.5 L23.5 2" fill="none" stroke="#ffff00" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 10 L20.5 8 L20 4.5 L23.5 2" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 21 L18 17 L14.5 13.5 L16 10 L14.5 6 L17 4 L15.5 1.5" fill="none" stroke="#4c4c00" stroke-width="3.1" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 21 L18 17 L14.5 13.5 L16 10 L14.5 6 L17 4 L15.5 1.5" fill="none" stroke="#ffff00" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M16 21 L18 17 L14.5 13.5 L16 10 L14.5 6 L17 4 L15.5 1.5" fill="none" stroke="#ffffff" stroke-width="0.6" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="16" cy="10" r="1.6" fill="#ffffff" stroke="#4c4c00" stroke-width="0.6"/>
   </g>
 </svg>

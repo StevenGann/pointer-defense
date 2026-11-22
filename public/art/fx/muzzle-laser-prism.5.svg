@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Muzzle flash: frame 5 of 6, the last. Frame 4 again, half faded. -->
+  <g opacity="0.5">
+  <g transform="rotate(90 16 16)">
+        <polygon points="16,0.6 16.9,5.4 15.1,5.4" fill="#ffd75e" stroke="#7a1800" stroke-width="0.8" stroke-linejoin="round" transform="rotate(-34 16 10.6)"/>
+    <polygon points="16,0.6 16.9,5.4 15.1,5.4" fill="#c05cff" stroke="#7a1800" stroke-width="0.8" stroke-linejoin="round" transform="rotate(34 16 10.6)"/>
+    <polygon points="16,0.6 16.9,5.4 15.1,5.4" fill="#ff3300" stroke="#7a1800" stroke-width="0.8" stroke-linejoin="round"/>
+    <polygon points="16,8.8 17.4,11.4 14.6,11.4" fill="#ffb499" stroke="#7a1800" stroke-width="0.8" stroke-linejoin="round"/>
+  </g>
+  </g>
+</svg>
