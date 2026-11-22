@@ -222,7 +222,7 @@ import {
   setArtIdleScheduler,
   IDLE_STARVED_MS,
 } from '../src/view/art.ts';
-import { Texture } from 'pixi.js';
+import { Container, Graphics, Texture } from 'pixi.js';
 import { readdirSync, existsSync, readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
@@ -7006,6 +7006,36 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
   s.tick = 10 + 6;
   fx.draw(s, layout);
   check(fx.tracers.length === 0, 'effects: the tracer pool compacts to empty');
+}
+
+// --- 37i.2 Tracer layer: shots below the turrets (docs/TRACER-LAYER.md) -------------------------
+{
+  const li = (n) => BOARD_LAYER_ORDER.indexOf(n);
+  check(
+    li('shots') > li('path') && li('shots') < li('shadows') &&
+      li('shots') < li('towerSprites') && li('shots') < li('enemies') && li('shots') < li('popups'),
+    'tracer layer: shots sorts after path and before shadows, towerSprites, enemies and popups',
+  );
+
+  const board = new BoardView();
+  check(
+    board.shots instanceof Container && board.root.children.indexOf(board.shots) === li('shots'),
+    'tracer layer: the shots layer is a board child at its BOARD_LAYER_ORDER index',
+  );
+
+  const fx = new EffectsView();
+  check(fx.root.children.indexOf(fx.tracerRoot) === -1, 'tracer layer: tracerRoot is not a child of effects.root');
+  check(
+    fx.tracerRoot instanceof Container && fx.tracerRoot.children.length === 1 &&
+      fx.tracerRoot.children[0] instanceof Graphics,
+    'tracer layer: tracerRoot holds a single tracer Graphics',
+  );
+  for (const name of ['muzzleLayer', 'sparkLayer', 'shieldLayer', 'deathLayer']) {
+    check(fx.root.children.indexOf(fx[name]) !== -1, `tracer layer: ${name} stays a child of effects.root`);
+  }
+
+  board.shots.addChild(fx.tracerRoot);
+  check(fx.tracerRoot.parent === board.shots, 'tracer layer: tracerRoot is a child of the board shots layer');
 }
 
 {

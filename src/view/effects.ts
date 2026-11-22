@@ -140,6 +140,8 @@ function compactByLife<T extends { born: number; life: number }>(arr: T[], now: 
 
 export class EffectsView {
   readonly root = new Container();
+  readonly tracerRoot = new Container();
+  private readonly tracerG = new Graphics();
   private readonly g = new Graphics();
   private readonly muzzleLayer = new Container();
   private readonly sparkLayer = new Container();
@@ -159,8 +161,10 @@ export class EffectsView {
   readonly deathSprites: Sprite[] = [];
 
   constructor() {
-    // Tracers stay procedural (their geometry is state). Sprite layers sit above them in the same
-    // order the old single-Graphics draw painted: muzzles, sparks, shield arcs, deaths.
+    // Tracers draw into their own Graphics so main.ts can parent tracerRoot under the board's shots
+    // layer (docs/TRACER-LAYER.md). The procedural fallback Graphics and the sprite layers stay in
+    // effects.root: muzzles, sparks, shield arcs, deaths.
+    this.tracerRoot.addChild(this.tracerG);
     this.root.addChild(this.g, this.muzzleLayer, this.sparkLayer, this.shieldLayer, this.deathLayer);
   }
 
@@ -281,6 +285,8 @@ export class EffectsView {
 
     const g = this.g;
     g.clear();
+    const tg = this.tracerG;
+    tg.clear();
     const cell = layout.board.cell;
 
     for (const t of this.tracers) {
@@ -288,7 +294,7 @@ export class EffectsView {
       const a = 1 - age / TRACER_TICKS;
       const p0 = worldToPixel(layout, t.x0, t.y0);
       const p1 = worldToPixel(layout, t.x1, t.y1);
-      g.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).stroke({ width: 2, color: t.color, alpha: a });
+      tg.moveTo(p0.x, p0.y).lineTo(p1.x, p1.y).stroke({ width: 2, color: t.color, alpha: a });
     }
 
     for (let i = 0; i < this.muzzles.length; i++) {
