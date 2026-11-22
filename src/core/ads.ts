@@ -1,9 +1,9 @@
 import type { RunState } from './state.ts';
 import { earn, recordKill } from './economy.ts';
 import { secondsToTicks } from './time.ts';
-import { createTower, recomputeAuras } from './towers.ts';
+import { createTower, recomputeAuras, type TowerKind } from './towers.ts';
 import { COLS, ROWS, tileAt } from './grid.ts';
-import { buildField, isSealed } from './pathfield.ts';
+import { buildField, isSealed, towerPenalty } from './pathfield.ts';
 import { rngNext } from './rng.ts';
 import { buffKillMult } from './upgrades.ts';
 import { AD_TIPS, type AdTipId } from '../content/adTips.ts';
@@ -290,7 +290,12 @@ function placeFreeGun(s: RunState): void {
   const tower = createTower(s.nextId++, 'gun', pick.col, pick.row);
   tower.placedTick = s.clock;
   s.towers.push(tower);
-  s.field = buildField(s.grid, s.blocked, exit);
+  const kinds = new Map<number, TowerKind>();
+  for (const t of s.towers) kinds.set(t.row * COLS + t.col, t.kind);
+  s.field = buildField(s.grid, s.blocked, exit, (idx) => {
+    const kind = kinds.get(idx);
+    return kind === undefined ? 0 : towerPenalty(kind);
+  });
   recomputeAuras(s.towers, s.clock);
 }
 

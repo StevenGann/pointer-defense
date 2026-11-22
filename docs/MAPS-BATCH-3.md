@@ -12,7 +12,7 @@ game produced, not what the sketch intended.
 |---|---|--:|--:|--:|--:|
 | `comb` | The Comb | 168 | 70 | 72 | 72 |
 | `shelves` | The Shelves | 155 | 73 | 46 | 85 |
-| `pinwheel` | The Pinwheel | 198 | 28 | 94 | 47 (42 unique) |
+| `pinwheel` | The Pinwheel | 198 | 30 | 94 | 47 (42 unique) |
 | `twin-halls` | Twin Halls | 206 | 28 | 126 | 34 |
 | `ziggurat` | The Ziggurat | 174 | 30 | 29 | 66 |
 | `gauntlet` | The Gauntlet | 196 | 30 | 87 | 44 |
@@ -21,6 +21,10 @@ game produced, not what the sketch intended.
 Two long serpentines (70 and 73 tiles), four in the high twenties or thirty, and one dense brawl map.
 Buildable tiles run from 128 to 206, all seven pass `validateLevel`, and every one has a proven
 `canPlace` — the map is playable, not merely legal.
+
+The `route` column is the drawn route length under weighted pathing (docs/WEIGHTED-PATHING.md): the
+Pinwheel's route grew from 28 to 30 edges when the field began pushing creeps one tile off the inside
+of its L-blocks.
 
 None uses authored routes and none uses toggles: these are terrain maps, and the player's own walls
 do the mazing on top.

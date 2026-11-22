@@ -66,7 +66,7 @@ import { AA_HOLD_CAP, AA_HOLD_WINDOW, AA_MIN_CLUSTER, buildSynergyLayout, leads,
 import { formatNumber } from '../src/core/format.ts';
 import { WAVE_COUNT, EARLY_CALL_FLOOR, buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, FLYER_FLIGHT_MEMBER_TICKS, FLYER_FLIGHT_SIZE, flyerSwarmFactor, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers, WAVE_ENEMY_CAP } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
-import { buildField, buildRouteField, pathTiles, stepToward } from '../src/core/pathfield.ts';
+import { buildField, buildPlainField, buildRouteField, pathTiles, stepToward, towerPenalty, WALL_PENALTY, BASE_COST, PENALTY_CAP } from '../src/core/pathfield.ts';
 import { COLS, ROWS, tileAt } from '../src/core/grid.ts';
 import { LEVELS, DEFAULT_LEVEL, createGrid, levelById, levelRoutes, toggleIndex, toggleOpenAt, validateLevel, MAX_TOGGLES } from '../src/core/levels.ts';
 import { encodeLevel, decodeCode, encodeBytes, CODEC_PREFIX } from '../src/core/codec.ts';
@@ -533,7 +533,9 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   // recorded from that build (commit 3cb9f15) with exactly this fixture. The Cannon now lands damage
   // a flight later, but this fixture has no Cannon, so the hash is unchanged. It was re-baselined once
   // more for the ground pathing tie-break (docs/PATHING-TIEBREAK.md): the open-field fixture has
-  // downhill ties, so the momentum-then-parity rule moves ground enemies to different tiles.
+  // downhill ties, so the momentum-then-parity rule moves ground enemies to different tiles. It was
+  // re-baselined again for weighted pathing (docs/WEIGHTED-PATHING.md): enemies genuinely walk
+  // differently now, hugging walls and towers less, so every ground tile the fixture touches moved.
   const nonFlyerFixture = () => {
     const s = stateOnLevel('open-field');
     s.economy.salvage = 10000;
@@ -553,7 +555,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     return createHash('sha1').update(buf.join(';')).digest('hex');
   };
   const fixtureHash = nonFlyerFixture();
-  check(fixtureHash === '91e682f18a605e301839c5e85cb43f60febf9409',
+  check(fixtureHash === '380abc42d01f9ae7bba100e1f90b7b8ba741909e',
     `flyer flight: a non-flyer fixture run is byte-identical to the pre-flight build (${fixtureHash.slice(0, 10)})`);
 
   // 6. The same seed reproduces identical flyer flight; a different seed flies differently.
@@ -595,11 +597,13 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   }
 }
 
-// --- 5e. Authored levels: walkable ends, expected route length, sealing, mazing, cycling -------
+// --- 5e. Authored levels: walkable ends, route length ceiling, sealing, mazing, cycling --------
 {
-  // Every level loads with a walkable start and exit and a route of the documented length.
-  const ROUTE_TOLERANCE = 2;
-  const ROUTE_LENGTHS = { corridor: 48, dumbbell: 28, 'open-field': 22, turnstile: 20, fork: 22, ladder: 25, moat: 27, hourglass: 27, trident: 20, switchyard: 28, comb: 70, shelves: 73, pinwheel: 28, 'twin-halls': 28, ziggurat: 30, gauntlet: 30, quarry: 30 };
+  // Every level loads with a walkable start and exit. Weighted pathing (docs/WEIGHTED-PATHING.md)
+  // may push a route away from walls, so the route length is checked against a ceiling rather than a
+  // fixed table: the pre-weighted tile count of each map, times 1.35. No map may exceed it, and none
+  // may seal.
+  const BEFORE_ROUTE_LENGTHS = { corridor: 48, dumbbell: 28, 'open-field': 22, turnstile: 20, fork: 22, ladder: 25, moat: 27, hourglass: 27, trident: 20, switchyard: 28, comb: 71, shelves: 74, pinwheel: 29, 'twin-halls': 29, ziggurat: 31, gauntlet: 31, quarry: 31 };
   for (const level of LEVELS) {
     const grid = createGrid(level);
     const field = buildField(grid, new Set(), level.exits[0]);
@@ -608,9 +612,10 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     check(field[spawnIdx] >= 0, `${level.id}: spawn is walkable at load`);
     check(field[exitIdx] === 0, `${level.id}: exit is walkable at load`);
     const route = pathTiles(field, level.starts[0]);
-    const expected = ROUTE_LENGTHS[level.id];
-    check(Math.abs(route.length - expected) <= ROUTE_TOLERANCE,
-      `${level.id}: route is ${route.length} tiles (expected ~${expected})`);
+    const before = BEFORE_ROUTE_LENGTHS[level.id];
+    const ceiling = Math.ceil(before * 1.35);
+    check(route.length <= ceiling,
+      `${level.id}: weighted route is ${route.length} tiles, within 135% of ${before} (ceiling ${ceiling})`);
   }
 
   // Sealing a level's only route is refused: a tower on the spawn or exit tile never goes down.
@@ -660,7 +665,9 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
   // implicit route (or to wave balance) trips this byte-identity check. The Cannon now lands damage
   // a flight later, but this fixture places only a Gun, so the hash is unchanged. It was re-baselined
   // for the ground pathing tie-break (docs/PATHING-TIEBREAK.md): each of these four fields has
-  // downhill ties, so the momentum-then-parity rule moves ground enemies to different tiles.
+  // downhill ties, so the momentum-then-parity rule moves ground enemies to different tiles. It was
+  // re-baselined again for weighted pathing (docs/WEIGHTED-PATHING.md): enemies genuinely walk
+  // differently now, keeping off walls and towers.
   const simulate = (id) => {
     const s = stateOnLevel(id);
     s.economy.salvage = 10000;
@@ -685,7 +692,7 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     h ^= table.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
-  check((h >>> 0).toString(16) === '818cfcb5', `no-route levels unchanged (wave hash ${(h >>> 0).toString(16)})`);
+  check((h >>> 0).toString(16) === '51e8a9cb', `no-route levels unchanged (wave hash ${(h >>> 0).toString(16)})`);
 }
 
 // --- 5h. Ground pathing tie-break (docs/PATHING-TIEBREAK.md §5) ---------------------------------
@@ -782,6 +789,113 @@ check(formatNumber(12_345_678) === '12.3M', `formatNumber(12345678) = ${formatNu
     s.enemies.push(createEnemy(1, 'grunt', 1, SPAWN, EXIT));
     for (let i = 0; i < 600; i++) tick(s);
     check(s.rng === seed, 'pathing tie-break: ground pathing draws no rng');
+  }
+}
+
+// --- 5i. Weighted pathing (docs/WEIGHTED-PATHING.md §5) -----------------------------------------
+{
+  // The cost field equals a hand-built reference: a five-tile vertical corridor at column 10, walls on
+  // both sides (cols 9 and 11), the exit at the bottom (10,9). Each interior tile is entered from two
+  // wall neighbours, so its entry cost is BASE_COST + 2*WALL_PENALTY = 16, and the costs walk 16, 32,
+  // 48 up from the exit; the top tile (10,5) has a third wall neighbour above, so it steps 19.
+  {
+    const tiles = new Array(COLS * ROWS).fill('blocked');
+    for (let r = 5; r <= 9; r++) tiles[r * COLS + 10] = 'buildable';
+    const grid = { cols: COLS, rows: ROWS, tiles };
+    const exit = { col: 10, row: 9 };
+    const field = buildField(grid, new Set(), exit);
+    check(field[9 * COLS + 10] === 0, 'weighted field: the exit reads cost 0');
+    check(field[8 * COLS + 10] === 16, `weighted field: a tile between two walls costs 16 (${field[8 * COLS + 10]})`);
+    check(field[7 * COLS + 10] === 32 && field[6 * COLS + 10] === 48 && field[5 * COLS + 10] === 67,
+      'weighted field: the corridor climbs 16 per tile (32/48), the top step 19 (67)');
+  }
+
+  // A Frost seated on a buildable tile beside the corridor adds 14 to that tile's entry cost instead
+  // of the wall's 3, so (10,8) is entered for 27 rather than 16.
+  {
+    const tiles = new Array(COLS * ROWS).fill('blocked');
+    for (let r = 5; r <= 9; r++) tiles[r * COLS + 10] = 'buildable';
+    tiles[8 * COLS + 11] = 'buildable'; // the Frost's seat, beside (10,8)
+    const grid = { cols: COLS, rows: ROWS, tiles };
+    const exit = { col: 10, row: 9 };
+    const frostIdx = 8 * COLS + 11;
+    const field = buildField(grid, new Set([frostIdx]), exit, (idx) => (idx === frostIdx ? towerPenalty('frost') : 0));
+    check(field[8 * COLS + 10] === 27, `weighted field: a Frost beside the corridor costs 27 to enter (${field[8 * COLS + 10]})`);
+    check(field[7 * COLS + 10] === 43 && field[6 * COLS + 10] === 59 && field[5 * COLS + 10] === 78,
+      'weighted field: the Frost penalty propagates up the corridor (43/59/78)');
+  }
+
+  // The per-tile penalty is capped at PENALTY_CAP: three Frosts around one tile would sum to 42, but
+  // the tile is entered for BASE_COST + PENALTY_CAP = 40, never 52.
+  {
+    const tiles = new Array(COLS * ROWS).fill('blocked');
+    for (let r = 3; r <= 7; r++) for (let c = 3; c <= 7; c++) tiles[r * COLS + c] = 'buildable';
+    const grid = { cols: COLS, rows: ROWS, tiles };
+    const exit = { col: 5, row: 7 };
+    const frosts = [4 * COLS + 5, 5 * COLS + 4, 5 * COLS + 6]; // north, west and east of (5,5)
+    const frostSet = new Set(frosts);
+    const field = buildField(grid, frostSet, exit, (idx) => (frostSet.has(idx) ? towerPenalty('frost') : 0));
+    check(field[6 * COLS + 5] === BASE_COST, `weighted field: the tile below the cage costs ${BASE_COST} (${field[6 * COLS + 5]})`);
+    check(field[5 * COLS + 5] === BASE_COST + BASE_COST + PENALTY_CAP,
+      `weighted field: a three-Frost cage is capped at +${PENALTY_CAP} (${field[5 * COLS + 5]})`);
+  }
+
+  // Determinism: the same placement and seed produce the same field and the same run trace.
+  {
+    const trace = (seed) => {
+      const s = allUnlocked('open-field');
+      s.economy.salvage = 10000;
+      placeTower(s, 'frost', 3, 5);
+      placeTower(s, 'wall', 8, 5);
+      s.rng = seed;
+      s.nextAdAttemptTick = Number.MAX_SAFE_INTEGER;
+      const field = Array.from(s.field);
+      startWave(s);
+      for (let i = 0; i < 300; i++) tick(s);
+      return JSON.stringify([field, s.enemies.map((e) => [e.kind, e.x, e.y, e.dist, e.lastDir]), s.rng]);
+    };
+    check(trace(12345) === trace(12345), 'weighted pathing: same placement and seed reproduce the same field and trace');
+    check(trace(12345) !== trace(54321), 'weighted pathing: a different seed produces a different trace');
+  }
+
+  // A Frost seated beside the corridor pushes the route at least one tile further away than the same
+  // Frost would by blocking alone, across every map that offers such a seat.
+  {
+    const distTo = (route, col, row) => {
+      let min = Infinity;
+      for (const t of route) min = Math.min(min, Math.abs(t.col - col) + Math.abs(t.row - row));
+      return min;
+    };
+    let shifted = false;
+    for (const level of LEVELS) {
+      const grid = createGrid(level);
+      const spawn = level.starts[0];
+      const exit = level.exits[0];
+      const plain = pathTiles(buildPlainField(grid, new Set(), exit), spawn);
+      const plainSet = new Set(plain.map((t) => t.row * COLS + t.col));
+      for (const t of plain) {
+        for (const [dc, dr] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nc = t.col + dc;
+          const nr = t.row + dr;
+          if (nc < 0 || nr < 0 || nc >= COLS || nr >= ROWS) continue;
+          const ni = nr * COLS + nc;
+          if (plainSet.has(ni)) continue;
+          if (tileAt(grid, nc, nr) !== 'buildable') continue;
+          const blocked = new Set([ni]);
+          const penalty = (idx) => (idx === ni ? towerPenalty('frost') : 0);
+          const before = pathTiles(buildPlainField(grid, blocked, exit), spawn);
+          const after = pathTiles(buildField(grid, blocked, exit, penalty), spawn);
+          if (distTo(after, nc, nr) > distTo(before, nc, nr)) {
+            shifted = true;
+            check(true, `weighted pathing: a Frost beside ${level.id} shifts the route away (${distTo(before, nc, nr)} -> ${distTo(after, nc, nr)})`);
+            break;
+          }
+        }
+        if (shifted) break;
+      }
+      if (shifted) break;
+    }
+    check(shifted, 'weighted pathing: a Frost beside the corridor moves the route at least one tile further');
   }
 }
 
@@ -3320,7 +3434,7 @@ function chokeWalls(gaps) {
   while (s.clock < 421) tick(s); // cross the direct gate's close at clock 420
   const closedLen = currentPath(s).length;
   check(openLen === 20, `turnstile: open route is 20 tiles (${openLen})`);
-  check(closedLen === 26, `turnstile: closed route is 26 tiles (${closedLen})`);
+  check(closedLen === 28, `turnstile: closed route is 28 tiles (${closedLen})`);
   check(closedLen > openLen, `turnstile: closing the gate measurably lengthens the route (${openLen} -> ${closedLen})`);
 }
 
@@ -14646,16 +14760,19 @@ function dailyState(date) {
   const SPEC = {
     comb: { buildable: 168, route: 70 },
     shelves: { buildable: 155, route: 73 },
-    pinwheel: { buildable: 198, route: 28 },
+    pinwheel: { buildable: 198, route: 30 },
     'twin-halls': { buildable: 206, route: 28 },
     ziggurat: { buildable: 174, route: 30 },
     gauntlet: { buildable: 196, route: 30 },
     quarry: { buildable: 128, route: 30 },
   };
+  // Route length is the number of edges in the drawn route (tiles minus one), measured through the
+  // real weighted field. Pinwheel grew two edges under weighted pathing: its route used to hug the
+  // inside of its L-blocks and now steps one tile off them (docs/WEIGHTED-PATHING.md).
   const routeLength = (level) => {
     const grid = createGrid(level);
     const field = buildField(grid, new Set(), level.exits[0]);
-    return field[level.starts[0].row * COLS + level.starts[0].col];
+    return pathTiles(field, level.starts[0]).length - 1;
   };
 
   // 1. Each new level validates and matches the doc's buildable and route numbers, measured through

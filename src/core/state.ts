@@ -18,7 +18,7 @@ import {
   type LevelToggle,
   type Route,
 } from './levels.ts';
-import { buildAirField, buildField, buildRouteField, isSealed, pathTiles, stepToward } from './pathfield.ts';
+import { buildAirField, buildField, buildPlainField, buildRouteField, isSealed, pathTiles, stepToward, towerPenalty, WALL_PENALTY } from './pathfield.ts';
 import {
   AUTOLOADER_INTERVAL_MULT,
   BOUNTY_HP_MULT,
@@ -694,11 +694,11 @@ export function createRunState(profile: Profile = defaultProfile(), level: Level
     level,
     toggles,
     routes,
-    routeFields: buildRouteFields(grid, initialGroundBlocked(toggles), exit, routes),
+    routeFields: buildRouteFields(grid, initialGroundBlocked(toggles), exit, routes, () => 0),
     routeCursor: 0,
     field: buildField(grid, initialGroundBlocked(toggles), exit),
-    breacherField: buildField(grid, blocked, exit),
-    ramField: buildField(grid, initialGroundBlocked(toggles), exit),
+    breacherField: buildPlainField(grid, blocked, exit),
+    ramField: buildPlainField(grid, initialGroundBlocked(toggles), exit),
     flyerField: buildAirField(grid.cols, grid.rows, blocked, exit),
     blocked,
     phase: 'build',
@@ -1245,18 +1245,44 @@ function flyerBlocked(s: RunState): Set<number> {
   return out;
 }
 
-/** One distance field per authored route, each over that route's tiles alone. */
-function buildRouteFields(grid: Grid, blocked: ReadonlySet<number>, exit: Tile, routes: readonly Route[]): Int32Array[] {
-  return routes.map((route) => buildRouteField(grid, blocked, exit, route));
+/**
+ * The per-neighbour penalty a tile contributes to the weighted ground field: a tower contributes by
+ * kind, a closed shutter contributes as a wall, everything else nothing. Terrain walls are handled
+ * inside `buildField` from the grid itself.
+ */
+function groundPenalty(s: RunState): (idx: number) => number {
+  const cols = s.grid.cols;
+  const kinds = new Map<number, TowerKind>();
+  for (const t of s.towers) kinds.set(t.row * cols + t.col, t.kind);
+  const shutters = new Set<number>();
+  for (const t of s.toggles) if (!toggleOpenAt(t, s.clock)) shutters.add(toggleIndex(t));
+  return (idx) => {
+    const kind = kinds.get(idx);
+    if (kind !== undefined) return towerPenalty(kind);
+    if (shutters.has(idx)) return WALL_PENALTY;
+    return 0;
+  };
+}
+
+/** One weighted field per authored route, each over that route's tiles alone. */
+function buildRouteFields(
+  grid: Grid,
+  blocked: ReadonlySet<number>,
+  exit: Tile,
+  routes: readonly Route[],
+  penalty: (idx: number) => number,
+): Int32Array[] {
+  return routes.map((route) => buildRouteField(grid, blocked, exit, route, penalty));
 }
 
 export function rebuildField(s: RunState): void {
   const exit = exitTile(s);
-  s.field = buildField(s.grid, groundBlocked(s), exit);
-  s.breacherField = buildField(s.grid, breacherBlocked(s), exit);
-  s.ramField = buildField(s.grid, ramBlocked(s), exit);
+  const penalty = groundPenalty(s);
+  s.field = buildField(s.grid, groundBlocked(s), exit, penalty);
+  s.breacherField = buildPlainField(s.grid, breacherBlocked(s), exit);
+  s.ramField = buildPlainField(s.grid, ramBlocked(s), exit);
   s.flyerField = buildAirField(s.grid.cols, s.grid.rows, flyerBlocked(s), exit);
-  s.routeFields = buildRouteFields(s.grid, groundBlocked(s), exit, s.routes);
+  s.routeFields = buildRouteFields(s.grid, groundBlocked(s), exit, s.routes, penalty);
 }
 
 export function upgradeTower(s: RunState, col: number, row: number): boolean {
