@@ -62,7 +62,7 @@ import { FLYER_OFF_KIND_DAMAGE,
 } from '../src/core/state.ts';
 import { TOWER_STATS, TOWER_KINDS, TOWER_UNLOCK_WAVE, towerUnlockWave, isTowerUnlocked, effectiveStats, upgradeCost, createTower, sellValue, wallMaxHp, wallBlocksFlyers, isGateLocked, isToggleGate, isRepairing, isOffline, isEmpDisabled, isDown, hasBranches, recomputeAuras, repairCost, repairDurationTicks, TOGGLE_LOCK_TICKS, CURSOR_REPAIR_THRESHOLD, cursorRadius, cursorClickRate, cursorClickIntervalTicks, cursorClickDamageFactor, isFullyUpgraded, repairHealingCount, repairHealTargets, isMinesweeper, isMortar, MINE_INTERVAL_TICKS, MINE_ARM_TICKS, MINE_EXPIRE_TICKS, MINE_LIVE_CAP, MINE_DAMAGE, MINE_BLAST_RADIUS, CURSOR_CLICK_DAMAGE_FACTOR, repairHealRate, repairRadius, MAX_TIER, TIERS, kindMaxTier, COMBAT_KINDS, BRANCH_TIER } from '../src/core/towers.ts';
 import { killReward, waveClearBonus } from '../src/core/economy.ts';
-import { AA_HOLD_CAP, AA_HOLD_WINDOW, AA_MIN_CLUSTER, buildSynergyLayout, leads, spotterGrant, SPOTTER_CAP, SYNERGIES, CHILL_SLOW_FACTOR, CHILL_SLOW_TICKS, SHATTER_BURST_DELAY_TICKS, SHATTER_BURST_SPLASH, SHATTER_BURST_DAMAGE_MULT, BUTTRESS_GROUP_CAP, isBulwark } from '../src/core/synergy.ts';
+import { AA_HOLD_CAP, AA_HOLD_WINDOW, AA_MIN_CLUSTER, buildSynergyLayout, leads, spotterGrant, SPOTTER_CAP, SYNERGIES, SYNERGY_HALO_CELLS, SYNERGY_HALO_AA_CELLS, synergyHaloCells, CHILL_SLOW_FACTOR, CHILL_SLOW_TICKS, SHATTER_BURST_DELAY_TICKS, SHATTER_BURST_SPLASH, SHATTER_BURST_DAMAGE_MULT, BUTTRESS_GROUP_CAP, isBulwark } from '../src/core/synergy.ts';
 import { formatNumber } from '../src/core/format.ts';
 import { WAVE_COUNT, EARLY_CALL_FLOOR, buildSchedule, earlyCallBonus, endlessCountBase, endlessIntervalScale, FLYER_FLIGHT_MEMBER_TICKS, FLYER_FLIGHT_SIZE, flyerSwarmFactor, isBossWave, isTypeBossWave, milestoneBossKind, MODIFIER_POOL, popupCountForWave, typeBossKindForWave, typeBossUnlockWave, waveDef, waveEnemyCount, waveKillValue, waveModifiers, WAVE_ENEMY_CAP } from '../src/core/waves.ts';
 import { TICK_HZ, TICK_MS, secondsToTicks } from '../src/core/time.ts';
@@ -7069,6 +7069,63 @@ check(BREACHER_TURRET_INTERVAL_TICKS === TICK_HZ, 'breacher turret fires once pe
     'tower base split: wall overlays are parented in towerBases');
 }
 
+// --- 37i.4 invalidateArt also empties the base layer and every pooled tower sprite (docs/AA-HALO-AND-BASE-CLEANUP.md) ---
+{
+  resetArt();
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  placeTower(s, 'gun', 3, 6);
+  placeTower(s, 'wall', 5, 6);
+  const view = new BoardView();
+  view.draw(s, computeLayout(1280, 800), 0, { col: 0, row: 0, onBoard: false, x: 0, y: 0 });
+  check(view.towerBaseSprites.length === 2 && view.towerTurretSprites.length === 2 &&
+    view.towerMarkSprites.length === 2 && view.wallOverlaySprites.length === 2,
+    'bases: a gun and a wall pool two of each tower sprite');
+  view.invalidateArt();
+  check(view.towerBases.children.length === 0, 'invalidateArt: towerBases has zero children');
+  check(view.towerSprites.children.length === 0, 'invalidateArt: towerSprites has zero children');
+  check(view.towerBaseSprites.length === 0 && view.towerTurretSprites.length === 0 &&
+    view.towerMarkSprites.length === 0 && view.wallOverlaySprites.length === 0,
+    'invalidateArt: all four pooled tower-sprite arrays are empty');
+  resetArt();
+}
+
+// --- 37i.5 deleting a tower hides every pooled sprite past the new count (docs/AA-HALO-AND-BASE-CLEANUP.md) ---
+{
+  resetArt();
+  injectArtTexture('gun-base', new Texture({ width: 4, height: 4 }));
+  injectArtTexture('gun-turret', new Texture({ width: 4, height: 4 }));
+  injectArtTexture('gun-marksman', new Texture({ width: 4, height: 4 }));
+  injectArtTexture('wall-t1', new Texture({ width: 4, height: 4 }));
+  injectArtTexture('wall-bulwark', new Texture({ width: 4, height: 4 }));
+
+  const s = stateOnLevel('open-field');
+  s.economy.salvage = 10000;
+  check(placeTower(s, 'gun', 3, 6), 'delete: place a branched gun');
+  check(placeTower(s, 'wall', 5, 6), 'delete: place a bulwark wall');
+  check(placeTower(s, 'gun', 7, 6), 'delete: place a third tower');
+  towerAt(s, 3, 6).branch = 'A';
+  towerAt(s, 5, 6).branch = 'A';
+  const view = new BoardView();
+  const layout = computeLayout(1280, 800);
+  const hover = { col: 0, row: 0, onBoard: false, x: 0, y: 0 };
+  view.draw(s, layout, 0, hover);
+
+  check(view.towerBaseSprites[2].visible, 'delete: three towers draw three base sprites');
+  check(view.towerTurretSprites[2].visible, 'delete: three towers draw three turret sprites');
+  check(view.towerMarkSprites[0].visible, 'delete: a branched gun draws its mark');
+  check(view.wallOverlaySprites[0].visible, 'delete: a bulwark wall draws its overlay');
+
+  check(sellTower(s, 5, 6), 'delete: sell the middle tower');
+  view.draw(s, layout, 0, hover);
+
+  check(!view.towerBaseSprites[2].visible, 'delete: no base sprite past the new count');
+  check(!view.towerTurretSprites[2].visible, 'delete: no turret sprite past the new count');
+  check(!view.towerMarkSprites[2].visible, 'delete: no mark sprite past the new count');
+  check(view.wallOverlaySprites.every((sp) => !sp.visible), 'delete: no wall overlay past the new count');
+  resetArt();
+}
+
 {
   // 39h. A boss variant death shakes like a boss (4 px), and a boss variant leak costs its integrity.
   check(shakeImpulseFor({ type: 'kill', kind: 'grunt-boss' }).amplitude === SHAKE_AMPLITUDE.bossDeath,
@@ -13364,6 +13421,29 @@ function dailyState(date) {
     if (cluster.members.indexOf(edge.lead) > cluster.members.indexOf(edge.follow)) ordered = false;
   }
   check(ordered, 'in a ring, every leader precedes its follower in the sorted member order');
+}
+
+// 3a. Per-row halo size: an all-AA cluster is drawn at the tighter AA size, everything else at the
+// default (docs/AA-HALO-AND-BASE-CLEANUP.md). The rule is keyed on member kinds, never on damage.
+{
+  const aa = allUnlocked();
+  aa.economy.salvage = 1e9;
+  placeTower(aa, 'aa', 5, 5);
+  placeTower(aa, 'aa', 5, 6);
+  const aaCluster = buildSynergyLayout(aa.towers).clusters[0];
+  check(aaCluster !== undefined && aaCluster.members.length === 2, 'an adjacent AA pair forms a cluster');
+  check(synergyHaloCells(aaCluster) === SYNERGY_HALO_AA_CELLS,
+    `an all-AA cluster uses the AA halo size (${synergyHaloCells(aaCluster)})`);
+  check(SYNERGY_HALO_AA_CELLS === 1.0, 'the AA halo size is 1.0 cells');
+
+  // No other kind forms a cluster today, so the default branch is exercised with a hand-built
+  // cluster of two Guns (the helper keys on member kinds, not the producing row).
+  const gunA = createTower(1, 'gun', 5, 5);
+  const gunB = createTower(2, 'gun', 5, 6);
+  const gunCluster = { members: [gunA, gunB], color: 0xffffff, leaders: [[], []] };
+  check(synergyHaloCells(gunCluster) === SYNERGY_HALO_CELLS,
+    `a non-AA cluster keeps the default halo size (${synergyHaloCells(gunCluster)})`);
+  check(SYNERGY_HALO_CELLS === 1.6, 'the default halo size stays 1.6 cells');
 }
 
 // 4. Propagation: a chain of five fires all five on one tick, in one lead-order pass.

@@ -17,7 +17,7 @@ import {
   type Mine,
   type RunState,
 } from '../core/state.ts';
-import { SYNERGIES, type SynergyEdge } from '../core/synergy.ts';
+import { SYNERGIES, SYNERGY_HALO_CELLS, synergyHaloCells, type SynergyEdge } from '../core/synergy.ts';
 import {
   baseEnemyKind,
   isBossKind,
@@ -710,7 +710,7 @@ export class BoardView {
         for (const cluster of layout.clusters) {
           for (const t of cluster.members) {
             const spr = this.synergyHaloSprite(haloIndex++);
-            const size = cell * SYNERGY_HALO_CELLS;
+            const size = cell * synergyHaloCells(cluster);
             spr.texture = haloTex;
             spr.tint = cluster.color;
             spr.width = size;
@@ -977,6 +977,7 @@ export class BoardView {
     this.staticKey = '';
 
     this.towerSprites.removeChildren();
+    this.towerBases.removeChildren();
     this.towerBaseSprites.length = 0;
     this.towerTurretSprites.length = 0;
     this.towerMarkSprites.length = 0;
@@ -1226,8 +1227,6 @@ export function dashedLine(
 const SYNERGY_ALPHA = 0.95;
 const SYNERGY_ALPHA_LEAN = 0.9;
 const SYNERGY_PULSE = 0.1;
-/** Diameter of the halo under a clustered tower, in cells. Bigger than a base, so it spills out. */
-const SYNERGY_HALO_CELLS = 1.6;
 const SYNERGY_HALO_ALPHA = 1;
 /** The link is taller than the old 2 px line so its shape reads at a glance. */
 const SYNERGY_LINK_HEIGHT = 0.5;
